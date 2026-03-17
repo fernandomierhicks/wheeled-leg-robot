@@ -119,6 +119,23 @@ Read this before starting work. Check `CLAUDE.md` for full design context.
 
 ---
 
+### 🚩 FUTURE TASK: Independent Leg Control (Asymmetric Gain Scheduling)
+
+**Status**: Not yet started; flagged for future implementation.
+
+**Context**: Current implementation uses single `q_hip` parameter → assumes both legs synchronized at identical angles. This works for symmetric balance, drive, and turning. However, terrain handling, differential jumping, and uneven ground may require independent `q_hip_L` and `q_hip_R`.
+
+**Future scope**:
+1. Extend `compute_lqr_gain()` to accept separate `q_hip_L, q_hip_R` parameters
+2. Compute `l_eff_L, l_eff_R` independently (may differ on slopes)
+3. Design gain interpolation for asymmetric leg pairs
+4. Test on simulated uneven terrain (>15° slope)
+5. Verify stability with independent hip angle commands
+
+**Why not now**: Current control architecture (hierarchical LQR + PI outer loops) is stable under symmetric operation. Asymmetric gains add complexity; tackle after symmetric version is proven on hardware.
+
+---
+
 ### 📋 Hardware Tasks (Independent, Can Proceed in Parallel)
 
 #### 1. Pick a specific 5065 130KV motor part

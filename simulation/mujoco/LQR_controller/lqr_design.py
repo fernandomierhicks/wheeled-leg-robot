@@ -276,22 +276,29 @@ print("\n** Step response confirms: system is stable and responsive **\n")
 # ───────────────────────────────────────────────────────────────────────────
 # REUSABLE FUNCTION: compute_lqr_gain
 # ───────────────────────────────────────────────────────────────────────────
-def compute_lqr_gain(Q_pitch=100.0, R=0.1):
+def compute_lqr_gain(Q_pitch=100.0, R=0.1, q_hip=Q_NEUTRAL):
     """
-    Compute LQR gain K for given Q[0,0] and R values.
+    Compute LQR gain K for given Q[0,0], R, and hip angle values.
+
+    DESIGN NOTE: Currently assumes SYMMETRIC leg operation (both legs at same hip angle).
+    This works for balance, drive, turning on flat ground. For terrain handling or
+    differential jumping, may need separate q_hip_L, q_hip_R in future.
+    See HANDOFF.md "FUTURE TASK: Independent Leg Control" for details.
 
     Args:
         Q_pitch: Weight on pitch error (Q[0,0])
         R: Control cost weight
+        q_hip: Hip joint angle [rad] for BOTH legs (default: Q_NEUTRAL for nominal stance)
+               FUTURE: Extend to (q_hip_L, q_hip_R) for asymmetric terrain
 
     Returns:
         1D numpy array K of shape (4,) with gains [k_pitch, k_pitch_rate, k_wheel_pos, k_wheel_vel]
     """
     from scipy.linalg import solve_continuous_are
 
-    # Recompute A, B with current parameters
+    # Recompute A, B with current parameters at given hip angle
     p = SimParams()
-    W_pos = solve_ik(Q_NEUTRAL, p)
+    W_pos = solve_ik(q_hip, p)
     W_x, W_z = W_pos['W']
     l_eff = abs(W_z)
 
@@ -338,7 +345,64 @@ def compute_lqr_gain(Q_pitch=100.0, R=0.1):
 
 
 if __name__ == "__main__":
-    # Test the function
-    K_test = compute_lqr_gain(Q_pitch=100.0, R=0.1)
-    print("\nTest compute_lqr_gain(Q_pitch=100, R=0.1):")
-    print(f"K = {K_test}")
+    # Test the function at different hip angles
+    print("\n" + "="*70)
+    print("TEST: compute_lqr_gain() at different hip angles")
+    print("="*70 + "\n")
+
+    # Test at retracted, neutral, and extended positions
+    test_cases = [
+        ("Q_RET (retracted)", Q_RET),
+        ("Q_NEUTRAL (nominal)", Q_NEUTRAL),
+        ("Q_EXT (extended)", Q_EXT),
+    ]
+
+    gains_by_angle = {}
+    l_eff_by_angle = {}
+
+    for label, q_hip in test_cases:
+        K_test = compute_lqr_gain(Q_pitch=100.0, R=0.1, q_hip=q_hip)
+
+        # Also compute l_eff to verify it changes with q_hip
+        p = SimParams()
+        W_pos = solve_ik(q_hip, p)
+        l_eff = abs(W_pos['W'][1])
+
+        gains_by_angle[label] = K_test
+        l_eff_by_angle[label] = l_eff
+
+        print(f"{label:30s} (q_hip={q_hip:.5f} rad)")
+        print(f"  l_eff = {l_eff:.5f} m")
+        print(f"  K = {K_test}")
+        print()
+
+    # Verify gains differ across leg heights
+    print("Verification:")
+    K_ret = gains_by_angle["Q_RET (retracted)"]
+    K_nom = gains_by_angle["Q_NEUTRAL (nominal)"]
+    K_ext = gains_by_angle["Q_EXT (extended)"]
+
+    ret_nom_diff = np.linalg.norm(K_ret - K_nom)
+    nom_ext_diff = np.linalg.norm(K_nom - K_ext)
+
+    print(f"  ||K_RET - K_NOM||   = {ret_nom_diff:.4f} (expect > 0.1)")
+    print(f"  ||K_NOM - K_EXT||   = {nom_ext_diff:.4f} (expect > 0.1)")
+
+    if ret_nom_diff > 0.1 and nom_ext_diff > 0.1:
+        print("\n[OK] SUCCESS: Gains differ across leg heights [PASSED]")
+    else:
+        print("\n[FAIL] Gains should differ across leg heights")
+
+    # Verify l_eff changes with hip angle
+    l_eff_ret = l_eff_by_angle["Q_RET (retracted)"]
+    l_eff_nom = l_eff_by_angle["Q_NEUTRAL (nominal)"]
+    l_eff_ext = l_eff_by_angle["Q_EXT (extended)"]
+
+    print(f"\n  l_eff_RET  = {l_eff_ret:.5f} m")
+    print(f"  l_eff_NOM  = {l_eff_nom:.5f} m")
+    print(f"  l_eff_EXT  = {l_eff_ext:.5f} m")
+
+    if l_eff_ret != l_eff_nom and l_eff_nom != l_eff_ext:
+        print("\n[OK] SUCCESS: l_eff changes with hip angle [PASSED]")
+    else:
+        print("\n[FAIL] l_eff should change with hip angle")
