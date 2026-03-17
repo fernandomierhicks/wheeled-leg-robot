@@ -237,14 +237,14 @@ def run_scenario_visual(scenario="self_balance", q_pitch=100.0, r_val=0.1, blend
             # PID
             u_pid = PITCH_KP * pitch_error + PITCH_KI * pitch_integral + PITCH_KD * pitch_rate
 
-            # LQR
+            # LQR (3-STATE: [pitch_err, pitch_rate, wheel_vel])
+            # wheel_pos removed — position tracking handled by outer Velocity PI loop
             if scenario == "drive":
                 # Drive: damp pitch rate only, allow pitch to vary for velocity tracking
-                # Use zero for pitch_error and wheel_pos to remove their constraints
-                _lqr_state = np.array([0.0, pitch_rate, 0.0, 0.0])
+                _lqr_state = np.array([0.0, pitch_rate, wheel_vel])
             else:
-                # Self-balance: full state with position holding
-                _lqr_state = np.array([pitch_error, pitch_rate, wheel_pos, wheel_vel])
+                # Self-balance: pitch + rate + velocity
+                _lqr_state = np.array([pitch_error, pitch_rate, wheel_vel])
             u_lqr = float(-K @ _lqr_state)
 
             # Blend
