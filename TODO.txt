@@ -5,3 +5,14 @@ Connect to personal GitHub?
 Load AK45 Arduino cad into model
 
 Check hub motor. Will it work. Get better one with documentation?
+
+lets start from scratch and implement the control architecture defined in docs/Control.MD
+
+Create a new folder in simulatin/mujoco/LQR_Control_optimization
+
+In there port any code from simulation\mujoco\baseline1_leg_analysis and simulation\mujoco\4bar_optimization_with_balancing that you  think will be useful 
+
+The features we will eventually need ( dont implement all of these now)
+-Evolutionary gain optimization
+-Several test scnearios to extract performance metrics
+-single CSV file with all runs 

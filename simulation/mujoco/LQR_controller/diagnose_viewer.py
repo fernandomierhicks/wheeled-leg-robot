@@ -8,7 +8,7 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 from sim_config import *
-from physics import build_xml, build_assets, solve_ik, SimParams
+from physics import build_xml, build_assets, solve_ik, SimParams, get_equilibrium_pitch
 from motor_models import MotorModel
 
 print("="*80)
@@ -30,10 +30,18 @@ except Exception as e:
 
 try:
     print("\n[2/5] Finding body/joint indices...")
-    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "body")
-    whl_L_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "whl_L")
-    whl_R_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "whl_R")
+    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "box")
+    whl_L_jid = model.jnt_dofadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "wheel_spin_L")]
+    whl_R_jid = model.jnt_dofadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "wheel_spin_R")]
     hip_L_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "hip_L")
+    # Validate that all IDs are valid (not -1)
+    missing = []
+    if body_id < 0: missing.append("body 'box'")
+    if whl_L_jid < 0: missing.append("joint 'wheel_spin_L'")
+    if whl_R_jid < 0: missing.append("joint 'wheel_spin_R'")
+    if hip_L_id < 0: missing.append("joint 'hip_L'")
+    if missing:
+        raise RuntimeError(f"Not found in model: {', '.join(missing)}")
     print("      OK - All indices found")
 
 except Exception as e:
@@ -119,14 +127,20 @@ try:
                 # Get state from quaternion (correct way)
                 q_quat = data.xquat[body_id]
                 pitch = np.arcsin(np.clip(2 * (q_quat[0]*q_quat[2] - q_quat[3]*q_quat[1]), -1, 1))
-                d_pitch = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_DOF, "root_free") + 4
+                d_pitch = model.jnt_dofadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "root_free")] + 4
                 pitch_rate = data.qvel[d_pitch]
                 wheel_vel_L = data.qvel[whl_L_jid]
                 wheel_vel_R = data.qvel[whl_R_jid]
                 wheel_vel_avg = (wheel_vel_L + wheel_vel_R) / 2.0
 
+                # Equilibrium pitch feedforward (robot leans slightly due to geometry)
+                hip_q = (data.qpos[model.jnt_qposadr[hip_L_id]] +
+                         data.qpos[model.jnt_qposadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "hip_R")]]) / 2.0
+                pitch_target = get_equilibrium_pitch(p, hip_q)
+                pitch_error = pitch - pitch_target
+
                 # LQR control (using dynamically computed K)
-                lqr_state = np.array([pitch, pitch_rate, wheel_vel_avg])
+                lqr_state = np.array([pitch_error, pitch_rate, wheel_vel_avg])
                 torque_cmd = float(-K_dyn @ lqr_state)
 
                 # Apply torques
@@ -142,7 +156,7 @@ try:
                 # Progress
                 if step_count % 1000 == 0:
                     sim_time = data.time
-                    print(f"      t={sim_time:.2f}s - pitch={np.degrees(pitch):6.2f}° u={torque_cmd:6.3f}Nm [OK]")
+                    print(f"      t={sim_time:.2f}s - pitch={np.degrees(pitch):6.2f}° err={np.degrees(pitch_error):6.2f}° u={torque_cmd:6.3f}Nm [OK]")
 
                 step_count += 1
 
