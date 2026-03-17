@@ -56,10 +56,11 @@ print("\nStep 2 complete: inertia parameters computed\n")
 
 # ── STEP 3: Build A, B matrices for linearised wheeled IP ────────────────────
 print("="*70)
-print("STEP 3: LINEARIZED SYSTEM MATRICES (A, B)")
+print("STEP 3: LINEARIZED SYSTEM MATRICES (A, B) — 3-STATE BALANCE LQR")
 print("="*70 + "\n")
 
 # Wheeled inverted pendulum linearization (Grasser et al. 2002)
+# 3-state version: remove wheel_pos feedback (outer PI loop handles position)
 r     = WHEEL_R
 denom = (M + 2*I_w/r**2) * (I_b + m_b*l_eff**2) - m_b**2 * l_eff**2
 
@@ -68,33 +69,36 @@ beta  = -m_b**2 * g * l_eff**2 / (r * denom)
 gamma = -(I_b + m_b*l_eff**2) / (r * denom)
 delta = (M + 2*I_w/r**2 + m_b*l_eff/r) / denom
 
+# 3-state system: [pitch, pitch_rate, wheel_vel] (removed wheel_pos)
+# This enables the hierarchical architecture:
+#   - Inner loop (500 Hz, 3-state LQR): stabilize pitch & track velocity
+#   - Outer loop (50 Hz, Velocity PI): command velocity setpoint
 A = np.array([
-    [0, 1, 0, 0],
-    [alpha, 0, 0, 0],
-    [0, 0, 0, 1],
-    [beta, 0, 0, 0]
+    [0,     1,   0],           # pitch_dot = pitch_rate
+    [alpha, 0,   0],           # pitch_rate_dot = alpha * pitch
+    [beta,  0,   0]            # wheel_vel_dot = beta * pitch
 ])
 
 B = np.array([
-    [0],
-    [gamma],
-    [0],
-    [delta]
+    [0],                       # pitch_dot not affected by torque
+    [gamma],                   # pitch_rate_dot = gamma * torque
+    [delta]                    # wheel_vel_dot = delta * torque
 ])
 
-print("System state: [pitch, pitch_rate, wheel_pos, wheel_vel]")
+print("System state: [pitch, pitch_rate, wheel_vel]")
+print("(wheel_pos removed — position tracking handled by outer Velocity PI)")
 print("Control input: wheel torque [N*m]\n")
 
-print("A matrix:")
+print("A matrix (3x3):")
 print(A)
-print("\nB matrix:")
+print("\nB matrix (3x1):")
 print(B)
 
 print("\nKey coefficients:")
 print(f"  alpha (pitch accel / pitch) = {alpha:.4f} (expect ~30-70)")
-print(f"  beta (wheel_pos accel / pitch) = {beta:.4f}")
+print(f"  beta (wheel_vel accel / pitch) = {beta:.4f}")
 print(f"  gamma (pitch accel / torque) = {gamma:.4f} (expect negative)")
-print(f"  delta (wheel_pos accel / torque) = {delta:.4f} (expect positive)")
+print(f"  delta (wheel_vel accel / torque) = {delta:.4f} (expect positive)")
 
 # Sanity checks
 ok = True
@@ -115,19 +119,20 @@ print("\nStep 3 complete: A, B matrices computed\n")
 
 # ── STEP 4: Solve CARE and compute LQR gains ──────────────────────────────────
 print("="*70)
-print("STEP 4: SOLVE CARE AND COMPUTE LQR GAINS")
+print("STEP 4: SOLVE CARE AND COMPUTE LQR GAINS (3-STATE)")
 print("="*70 + "\n")
 
 from scipy.linalg import solve_continuous_are
 
 # Cost matrices: penalize pitch error and torque
-# Q weights: pitch_err, pitch_rate, wheel_pos_err, wheel_vel
+# Q weights: pitch_err, pitch_rate, wheel_vel_err (removed wheel_pos)
 # R weights: control effort
-Q = np.diag([100.0, 1.0, 1.0, 0.1])
+Q = np.diag([100.0, 1.0, 0.1])
 R = np.array([[0.1]])
 
-print(f"Q (state cost): diag([100.0, 1.0, 1.0, 0.1])")
+print(f"Q (state cost): diag([100.0, 1.0, 0.1])")
 print(f"R (control cost): [[0.1]]")
+print(f"State order: [pitch_error, pitch_rate, wheel_vel_error]")
 print(f"(High Q[0,0] penalizes pitch error, low R penalizes control effort)\n")
 
 # Solve continuous-time algebraic Riccati equation
@@ -136,11 +141,10 @@ K = np.linalg.inv(R) @ B.T @ P       # shape (1, 4)
 
 print(f"LQR gain matrix K (shape {K.shape}):")
 print(f"K = {K[0]}")
-print(f"\nK components: [k_pitch, k_pitch_rate, k_wheel_pos, k_wheel_vel]")
+print(f"\nK components: [k_pitch, k_pitch_rate, k_wheel_vel]")
 print(f"  k_pitch       = {K[0, 0]:7.4f}")
 print(f"  k_pitch_rate  = {K[0, 1]:7.4f}")
-print(f"  k_wheel_pos   = {K[0, 2]:7.4f}")
-print(f"  k_wheel_vel   = {K[0, 3]:7.4f}")
+print(f"  k_wheel_vel   = {K[0, 2]:7.4f}")
 
 # Verify stability
 eigs = np.linalg.eigvals(A - B @ K)
@@ -178,24 +182,23 @@ print("  - Imaginary part gives oscillation frequency")
 print("  - Pole at -58.4 dominates transient (fastest)")
 print("  - Complex pair at -2.97±1.1j gives ~0.17 Hz natural frequency")
 
-# Check 2: Physical reasonableness
-print("\n\nCheck 2: System Gain Matrix B")
+# Check 2: Physical reasonableness (3-state)
+print("\n\nCheck 2: System Gain Matrix B (3-STATE)")
 print("-" * 70)
 print(f"B[1,0] (pitch accel per torque) = {B[1, 0]:.4f} rad/s^2/N*m")
-print(f"B[3,0] (wheel accel per torque)  = {B[3, 0]:.4f} m/s^2/N*m")
+print(f"B[2,0] (wheel_vel accel per torque) = {B[2, 0]:.4f} m/s^2/N*m")
 print("\nExpectation: Applying +1 N*m to wheels should:")
 print(f"  - Accelerate body backward (negative pitch): {B[1,0]:.4f} rad/s^2 [OK]")
-print(f"  - Accelerate wheels forward: {B[3,0]:.4f} m/s^2 [OK]")
+print(f"  - Accelerate wheels forward: {B[2,0]:.4f} m/s^2 [OK]")
 
 # Check 3: LQR gain structure
-print("\n\nCheck 3: LQR Feedback Structure")
+print("\n\nCheck 3: LQR Feedback Structure (3-STATE)")
 print("-" * 70)
-print("Control law: u = -K @ [pitch_err, pitch_rate, wheel_pos_err, wheel_vel]")
+print("Control law: u = -K @ [pitch_err, pitch_rate, wheel_vel_err]")
 print("\nGain interpretation:")
 print(f"  k_pitch      = {K[0,0]:7.2f} (pitch feedback) - Strong corrective action")
 print(f"  k_pitch_rate = {K[0,1]:7.2f} (rate damping) - Damps oscillations")
-print(f"  k_wheel_pos  = {K[0,2]:7.2f} (position feedback) - Limits drift")
-print(f"  k_wheel_vel  = {K[0,3]:7.2f} (velocity feedback) - Smooths acceleration")
+print(f"  k_wheel_vel  = {K[0,2]:7.2f} (velocity feedback) - Tracks velocity setpoint")
 
 # Check 4: Open-loop vs closed-loop stability
 print("\n\nCheck 4: Stability Comparison")
@@ -216,11 +219,11 @@ print("="*70 + "\n")
 
 # ── VERIFICATION: Step response simulation ──────────────────────────────────
 print("="*70)
-print("STEP RESPONSE SIMULATION (Linear closed-loop system)")
+print("STEP RESPONSE SIMULATION (Linear closed-loop system, 3-STATE)")
 print("="*70 + "\n")
 
 # Simulate: initial pitch error of 0.1 rad (~5.7 degrees), rest at zero
-x0 = np.array([0.1, 0.0, 0.0, 0.0])  # [pitch_err, pitch_rate, wheel_pos, wheel_vel]
+x0 = np.array([0.1, 0.0, 0.0])  # [pitch_err, pitch_rate, wheel_vel_err]
 dt_sim = 0.001  # 1 ms timestep
 t_sim = 5.0     # 5 second simulation
 n_steps = int(t_sim / dt_sim)
@@ -253,24 +256,25 @@ x_log = np.array(x_log)
 u_log = np.array(u_log)
 
 print(f"Simulation: 5 second response to 0.1 rad pitch error")
+print(f"State: [pitch_err, pitch_rate, wheel_vel_err]")
 print(f"Time steps: {len(t_log)}, dt={dt_sim*1000:.1f} ms\n")
 
 print("Key time points:")
-print(f"{'Time (s)':>10} {'Pitch (rad)':>14} {'Pitch Rate':>14} {'Wheel Pos':>14} {'Wheel Vel':>14}")
+print(f"{'Time (s)':>10} {'Pitch (rad)':>14} {'Pitch Rate':>14} {'Wheel Vel Err':>14}")
 print("-" * 70)
 for i in [0, 10, 50, 100, 200, 500]:
     if i < len(t_log):
-        print(f"{t_log[i]:10.3f} {x_log[i,0]:14.6f} {x_log[i,1]:14.6f} {x_log[i,2]:14.6f} {x_log[i,3]:14.6f}")
+        print(f"{t_log[i]:10.3f} {x_log[i,0]:14.6f} {x_log[i,1]:14.6f} {x_log[i,2]:14.6f}")
 
 # Final state
-print(f"{t_log[-1]:10.3f} {x_log[-1,0]:14.6f} {x_log[-1,1]:14.6f} {x_log[-1,2]:14.6f} {x_log[-1,3]:14.6f}")
+print(f"{t_log[-1]:10.3f} {x_log[-1,0]:14.6f} {x_log[-1,1]:14.6f} {x_log[-1,2]:14.6f}")
 
 print("\nInterpretation:")
 print(f"  Initial pitch error: {x0[0]:.6f} rad (5.7 degrees)")
 print(f"  Final pitch error:   {x_log[-1,0]:.6e} rad (nearly zero [OK])")
 print(f"  Peak control effort: {np.max(np.abs(u_log)):.2f} N*m")
 print(f"  System settles in ~3-4 seconds (realistic for 0.17 Hz natural frequency)")
-print("\n** Step response confirms: system is stable and responsive **\n")
+print("\n** Step response confirms: 3-state system is stable and responsive **\n")
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -278,7 +282,7 @@ print("\n** Step response confirms: system is stable and responsive **\n")
 # ───────────────────────────────────────────────────────────────────────────
 def compute_lqr_gain(Q_pitch=100.0, R=0.1, q_hip=Q_NEUTRAL):
     """
-    Compute LQR gain K for given Q[0,0], R, and hip angle values.
+    Compute 3-state LQR gain K for given Q[0,0], R, and hip angle values.
 
     DESIGN NOTE: Currently assumes SYMMETRIC leg operation (both legs at same hip angle).
     This works for balance, drive, turning on flat ground. For terrain handling or
@@ -292,11 +296,13 @@ def compute_lqr_gain(Q_pitch=100.0, R=0.1, q_hip=Q_NEUTRAL):
                FUTURE: Extend to (q_hip_L, q_hip_R) for asymmetric terrain
 
     Returns:
-        1D numpy array K of shape (4,) with gains [k_pitch, k_pitch_rate, k_wheel_pos, k_wheel_vel]
+        1D numpy array K of shape (3,) with gains [k_pitch, k_pitch_rate, k_wheel_vel]
+        for 3-state system: [pitch_err, pitch_rate, wheel_vel_err]
     """
     from scipy.linalg import solve_continuous_are
 
     # Recompute A, B with current parameters at given hip angle
+    # 3-STATE: [pitch, pitch_rate, wheel_vel]
     p = SimParams()
     W_pos = solve_ik(q_hip, p)
     W_x, W_z = W_pos['W']
@@ -318,29 +324,29 @@ def compute_lqr_gain(Q_pitch=100.0, R=0.1, q_hip=Q_NEUTRAL):
     gamma = -(I_b + m_b*l_eff**2) / (r * denom)
     delta = (M + 2*I_w/r**2 + m_b*l_eff/r) / denom
 
+    # 3-state matrices: removed wheel_pos row/column
     A = np.array([
-        [0, 1, 0, 0],
-        [alpha, 0, 0, 0],
-        [0, 0, 0, 1],
-        [beta, 0, 0, 0]
+        [0,     1,   0],           # pitch_dot = pitch_rate
+        [alpha, 0,   0],           # pitch_rate_dot = alpha * pitch
+        [beta,  0,   0]            # wheel_vel_dot = beta * pitch
     ])
 
     B = np.array([
-        [0],
-        [gamma],
-        [0],
-        [delta]
+        [0],                       # pitch not affected by torque
+        [gamma],                   # pitch_rate = gamma * torque
+        [delta]                    # wheel_vel = delta * torque
     ])
 
-    # Build Q matrix with given Q_pitch
-    Q = np.diag([Q_pitch, 1.0, 1.0, 0.1])
+    # Build 3x3 Q matrix with given Q_pitch
+    # State: [pitch_err, pitch_rate, wheel_vel_err]
+    Q = np.diag([Q_pitch, 1.0, 0.1])
     R_mat = np.array([[R]])
 
     # Solve CARE
     P = solve_continuous_are(A, B, Q, R_mat)
     K = np.linalg.inv(R_mat) @ B.T @ P
 
-    # Return flattened K (shape (4,))
+    # Return flattened K (shape (3,))
     return K[0]
 
 
@@ -376,8 +382,8 @@ if __name__ == "__main__":
         print(f"  K = {K_test}")
         print()
 
-    # Verify gains differ across leg heights
-    print("Verification:")
+    # Verify gains differ across leg heights (3-state format)
+    print("Verification (3-state: [k_pitch, k_pitch_rate, k_wheel_vel]):")
     K_ret = gains_by_angle["Q_RET (retracted)"]
     K_nom = gains_by_angle["Q_NEUTRAL (nominal)"]
     K_ext = gains_by_angle["Q_EXT (extended)"]
@@ -389,9 +395,9 @@ if __name__ == "__main__":
     print(f"  ||K_NOM - K_EXT||   = {nom_ext_diff:.4f} (expect > 0.1)")
 
     if ret_nom_diff > 0.1 and nom_ext_diff > 0.1:
-        print("\n[OK] SUCCESS: Gains differ across leg heights [PASSED]")
+        print("\n[OK] SUCCESS: 3-state gains differ across leg heights [PASSED]")
     else:
-        print("\n[FAIL] Gains should differ across leg heights")
+        print("\n[FAIL] 3-state gains should differ across leg heights")
 
     # Verify l_eff changes with hip angle
     l_eff_ret = l_eff_by_angle["Q_RET (retracted)"]

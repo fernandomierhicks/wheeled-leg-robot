@@ -82,11 +82,13 @@ ACCEL_NOISE_STD            = 0.2                  # [m/s²]
 PITCH_NOISE_STD_RAD        = math.radians(0.1)    # [rad]
 PITCH_RATE_NOISE_STD_RAD_S = math.radians(0.5)    # [rad/s]
 
-# ── LQR gains — computed by lqr_design.py ────────────────────────────────────
-# State order: [pitch_err, pitch_rate, wheel_pos_err, wheel_vel_err]
-# Computed for Q=diag([100, 1, 1, 0.1]), R=0.1
-LQR_K      = np.array([-108.9959, -19.2330, -3.1623, -2.3265])
-LQR_Q_DIAG = [100.0, 1.0, 1.0, 0.1]
+# ── LQR gains — computed by lqr_design.py (3-STATE VERSION) ──────────────────
+# 3-State system: [pitch_err, pitch_rate, wheel_vel_err]
+# (wheel_pos removed — position tracking handled by outer Velocity PI loop)
+# Computed for Q=diag([100, 1, 0.1]), R=0.1 at Q_NEUTRAL
+LQR_K      = np.array([-72.5637, -12.2037, -1.0000])
+LQR_Q_DIAG = [100.0, 1.0, 0.1]
 LQR_R_VAL  = 0.1
 
-# NOTE: PID gains (PITCH_KP, PITCH_KI, PITCH_KD above) are kept for rollback/blending
+# NOTE: Gain scheduling for different leg heights will be added in Phase 1.3/1.4
+# For now, use nominal (Q_NEUTRAL) gains for all leg heights
