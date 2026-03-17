@@ -1,0 +1,103 @@
+<mujoco model="femur_jump">
+
+  <option gravity="0 0 -9.81" timestep="0.00005"/>
+
+  <visual>
+    <global offwidth="1280" offheight="720" azimuth="270" elevation="0"/>
+  </visual>
+
+  <!--
+    Simplified version of 4bar_jump: only box, AK45-10 hip motor, and femur.
+    Tibia, coupler, wheel, and wheel motor removed.
+    Total mass kept equal to 4bar_jump (1.222 kg) — removed mass absorbed into box.
+
+    Masses:
+      box/body    : 0.937 kg  (4bar_jump total 1.222 minus AK45 0.260 minus femur 0.025)
+      AK45-10     : 0.260 kg  (hip motor)
+      femur link  : 0.025 kg
+      TOTAL       : 1.222 kg
+  -->
+
+  <worldbody>
+
+    <light name="main" pos="0 -1 1" dir="0 1 -1" diffuse="0.8 0.8 0.8"/>
+    <light name="fill" pos="0  1 1" dir="0 -1 -1" diffuse="0.3 0.3 0.3"/>
+
+    <!-- Ground plane -->
+    <geom name="ground" type="plane" pos="0 0 0" size="2 2 0.01"
+          rgba="0.3 0.3 0.3 1" contype="1" conaffinity="1" friction="0.8 0.005 0.0001"/>
+
+    <!-- XYZ axis markers at origin (visual only) -->
+    <geom name="axis_x" type="cylinder" fromto="0 0 0.001  0.06 0 0.001"
+          size="0.003" rgba="1 0 0 1" contype="0" conaffinity="0" mass="0"/>
+    <geom name="axis_y" type="cylinder" fromto="0 0 0.001  0 0.06 0.001"
+          size="0.003" rgba="0 1 0 1" contype="0" conaffinity="0" mass="0"/>
+    <geom name="axis_z" type="cylinder" fromto="0 0 0.001  0 0 0.061"
+          size="0.003" rgba="0 0 1 1" contype="0" conaffinity="0" mass="0"/>
+
+    <!-- ── Body box — slides vertically only ──────────────────────────── -->
+    <body name="box" pos="0 0 0.30">
+
+      <!-- Vertical slide joint: 1 DOF up/down, rotation locked at 0 -->
+      <joint name="body_slide" type="slide" axis="0 0 1" pos="0 0 0"/>
+
+      <!-- Box: 100 mm (X) × 200 mm (Y) × 100 mm (Z), semi-transparent
+           Mass absorbs all removed parts (tibia+coupler+wheel+motor) to keep
+           total sim mass equal to 4bar_jump (1.222 kg) -->
+      <geom name="box_geom" type="box"
+            size="0.05 0.10 0.05"
+            rgba="0.29 0.56 0.85 0.55"
+            contype="0" conaffinity="0"
+            mass="0.937"/>
+
+      <!-- Hip motor AK45-10: 260 g, Φ53 mm × 43 mm cylinder -->
+      <geom name="motor_geom" type="cylinder"
+            pos="0 0.1215 -0.0235"
+            euler="90 0 0"
+            size="0.0265 0.0215"
+            rgba="0.87 0.36 0.36 0.95"
+            contype="0" conaffinity="0"
+            mass="0.260"/>
+
+      <!-- ── Femur ─────────────────────────────────────────────────────── -->
+      <body name="femur" pos="0 0.1430 -0.0235">
+
+        <joint name="hip" type="hinge"
+               axis="0 1 0"
+               pos="0 0 0"
+               range="-180 180"
+               armature="0.01"
+               damping="0.05"/>
+
+        <geom type="cylinder" pos="0 0 0" euler="90 0 0" size="0.005 0.015"
+              rgba="1 1 0 0.9" contype="0" conaffinity="0" mass="0"/>
+
+        <!-- Femur collides with ground — frictionless, critically damped contact -->
+        <geom name="femur_geom" type="box"
+              pos="-0.05 0 0"
+              size="0.05 0.01 0.01"
+              rgba="0.94 0.75 0.25 1.0"
+              contype="1" conaffinity="1"
+              friction="0 0 0"
+              solref="0.01 1.0"
+              solimp="0.9 0.99 0.001"
+              mass="0.025"/>
+
+        <geom type="cylinder" pos="-0.1 0 0" euler="90 0 0" size="0.005 0.015"
+              rgba="1 1 1 0.9" contype="0" conaffinity="0" mass="0"/>
+
+      </body><!-- femur -->
+
+    </body><!-- box -->
+
+  </worldbody>
+
+  <!-- Torque actuator: PD-to-torque control implemented in Python -->
+  <actuator>
+    <motor name="hip_motor" joint="hip" ctrlrange="-7.0 7.0" gear="1"/>
+  </actuator>
+
+  <!-- Camera: side view -->
+  <statistic center="0 0 0.30" extent="0.75"/>
+
+</mujoco>

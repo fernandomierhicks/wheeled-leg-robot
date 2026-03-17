@@ -1,0 +1,77 @@
+# Bill of Materials — Wheeled Legged Robot
+# status: designed | ordered | received | tested | installed
+
+components:
+  - id: HIP_MOTOR
+    part: CubeMars AK45-10 KV75
+    qty: 2
+    mass_g: 260
+    cost_usd: 149
+    status: designed
+    notes: Integrated FOC, MIT CAN, 10:1 planetary, 7 Nm peak
+
+  - id: WHEEL_MOTOR
+    part: Maytech MTO7052HBM 60KV
+    qty: 2
+    mass_g: 380
+    cost_usd: 45
+    status: designed
+    notes: Hall sensors, outrunner hub motor
+
+  - id: WHEEL_CTRL
+    part: ODESC 3.6 Dual Drive
+    qty: 1
+    mass_g: 160
+    cost_usd: 60
+    notes: ODrive v0.5.x firmware, axis0=L axis1=R, CAN node_id=3
+
+  - id: MCU
+    part: Arduino UNO R4 WiFi
+    qty: 1
+    mass_g: 45
+    cost_usd: 28
+    notes: RA4M1 + ESP32-S3, native CAN, WiFi OTA
+
+  - id: IMU
+    part: BNO086
+    qty: 1
+    mass_g: 3
+    cost_usd: 20
+    notes: 500 Hz Game Rotation Vector, I2C
+
+  - id: CAN_XCVR
+    part: SN65HVD230
+    qty: 1
+    mass_g: 1
+    cost_usd: 4
+    notes: 3.3V CAN transceiver, CANH/CANL to bus
+
+  - id: BATTERY
+    part: 24V battery (TBD)
+    qty: 1
+    mass_g: 720
+    cost_usd: 35
+    notes: 24V nominal — part TBD
+
+  - id: BATT_ADAPTER
+    part: Power Wheels to XT60 adapter
+    qty: 1
+    mass_g: 45
+    cost_usd: 12
+
+  - id: BUCK_5V
+    part: DC-DC buck converter 24V→5V
+    qty: 1
+    mass_g: 20
+    cost_usd: 8
+    notes: Powers MCU and IMU from battery rail
+
+  - id: BEARING_608
+    part: 608 skateboard bearing
+    qty: 12
+    mass_g: 12
+    cost_usd: 8
+    notes: 8mm bore, used at all leg pivots
+
+total_cost_usd: 628
+total_mass_g: 3010

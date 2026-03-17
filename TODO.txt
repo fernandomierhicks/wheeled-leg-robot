@@ -1,0 +1,7 @@
+Fix cad that gemini broke. 
+
+Connect to personal GitHub?
+
+Load AK45 Arduino cad into model
+
+Check hub motor. Will it work. Get better one with documentation?

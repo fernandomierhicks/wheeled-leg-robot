@@ -1,0 +1,104 @@
+<mujoco model="step07_4bar">
+  <!--
+    Step07 4-bar mechanism in MuJoCo.
+    Chain topology:
+      ground(fixed) → femur(hinge_hip) → tibia(hinge_knee)
+      ground(fixed) → coupler(hinge_F)   ← coupler hangs from fixed F pivot
+      connect: coupler tip (E in coupler frame) → tibia at E
+
+    This way the cyan pivot at F is a real revolute joint (always correct visually).
+    The equality constraint closes the loop at E (red).
+
+    Link lengths from step07_4bar_proposed.py:
+      L_femur = 100 mm   A → C  (femur)
+      L_stub  =  15 mm   C → E  (tibia stub above knee)
+      L_tibia = 115 mm   C → W  (tibia knee to wheel)
+      Lc      = 110 mm   F → E  (coupler)
+      F = A + (15 mm, 0, 26 mm)  (body-fixed passive pivot)
+
+    Coordinate: X=forward, Z=up, Y=out of screen.
+    All joints rotate about Y.  Mechanism lives in XZ plane.
+
+    Note: connect anchors are set correctly in run_step07.py
+    (MuJoCo computes them from qpos=0 which is not a valid configuration).
+  -->
+
+  <option gravity="0 0 -9.81" timestep="0.0002" iterations="100" tolerance="1e-10"/>
+
+  <worldbody>
+    <light diffuse=".6 .6 .6" pos="0 -1 1" dir="0 1 -1"/>
+    <geom type="plane" size="0.5 0.5 0.01" pos="0 0 -0.3"
+          rgba="0.3 0.3 0.3 1" contype="0" conaffinity="0"/>
+
+    <!-- Fixed ground body — A at origin, F at (+15mm, 0, +26mm) -->
+    <body name="ground" pos="0 0 0">
+
+      <!-- Ground link A→F (visual only) -->
+      <geom type="cylinder" fromto="0 0 0  0.015 0 0.026"
+            size="0.001" rgba="0.7 0.7 0.7 0.8"
+            contype="0" conaffinity="0" mass="0"/>
+
+      <!-- Hinge pin at A (hip pivot) — cylinder along Y axis -->
+      <geom type="cylinder" pos="0 0 0" euler="90 0 0"
+            size="0.003 0.008" rgba="1 1 0 0.9"
+            contype="0" conaffinity="0" mass="0"/>
+      <!-- Hinge pin at F (coupler-ground pivot, ground side) -->
+      <geom type="cylinder" pos="0.015 0 0.026" euler="90 0 0"
+            size="0.003 0.008" rgba="0 1 1 0.9"
+            contype="0" conaffinity="0" mass="0"/>
+
+      <!-- Femur: hinge_hip at A, extends 100mm along +X at joint=0 -->
+      <body name="femur" pos="0 0 0">
+        <joint name="hinge_hip" type="hinge" axis="0 1 0" pos="0 0 0" damping="5"/>
+        <geom name="femur_geom" type="box"
+              pos="0.05 0 0" size="0.05 0.001 0.001"
+              rgba="0.94 0.75 0.25 1" contype="0" conaffinity="0" mass="0.025"/>
+        <!-- Hinge pin at C (knee pivot) -->
+        <geom type="cylinder" pos="0.1 0 0" euler="90 0 0"
+              size="0.003 0.008" rgba="1 1 1 0.9"
+              contype="0" conaffinity="0" mass="0"/>
+
+        <!-- Tibia: hinge_knee at C; stub +15mm (+Z), wheel -115mm (-Z) -->
+        <body name="tibia" pos="0.1 0 0">
+          <joint name="hinge_knee" type="hinge" axis="0 1 0" pos="0 0 0" damping="5"/>
+          <!-- Total 130mm, centre at z=(0.015−0.115)/2 = −0.05 -->
+          <geom name="tibia_geom" type="box"
+                pos="0 0 -0.05" size="0.001 0.001 0.065"
+                rgba="0.75 0.45 0.90 1" contype="0" conaffinity="0" mass="0.035"/>
+          <!-- Hinge pin at E (connect constraint point, tibia side) -->
+          <geom type="cylinder" pos="0 0 0.015" euler="90 0 0"
+                size="0.003 0.008" rgba="1 0.3 0.3 0.9"
+                contype="0" conaffinity="0" mass="0"/>
+        </body><!-- tibia -->
+      </body><!-- femur -->
+
+      <!-- Coupler: hinge_F at F (body origin), tip extends 110mm toward E -->
+      <body name="coupler" pos="0.015 0 0.026">
+        <joint name="hinge_F" type="hinge" axis="0 1 0" pos="0 0 0" damping="5"/>
+        <geom name="coupler_geom" type="box"
+              pos="0.055 0 0" size="0.055 0.001 0.001"
+              rgba="0.30 0.90 0.90 1" contype="0" conaffinity="0" mass="0.015"/>
+        <!-- Hinge pin at E (connect constraint point, coupler side) -->
+        <geom type="cylinder" pos="0.110 0 0" euler="90 0 0"
+              size="0.003 0.008" rgba="1 0.3 0.3 0.9"
+              contype="0" conaffinity="0" mass="0"/>
+      </body><!-- coupler -->
+
+    </body><!-- ground -->
+  </worldbody>
+
+  <!-- Closes the 4-bar loop: coupler tip (E) → tibia at E.
+       Both anchors are set correctly in run_step07.py. -->
+  <equality>
+    <connect name="4bar_close" body1="coupler" body2="tibia" anchor="0.110 0 0"
+             solref="0.002 1" solimp="0.9999 0.9999 0.001"/>
+  </equality>
+
+  <!-- hip_pos slider in Controls panel; ctrlrange matches step07 hip 0°–65° in MuJoCo qpos -->
+  <actuator>
+    <!-- ctrlrange maps step07 hip 10.5°–76° (2° margin inside singularity limits 8.5°–78°)
+         q = π/2 − hip_rad:  76° → 0.244 rad,  10.5° → 1.388 rad -->
+    <position name="hip_pos" joint="hinge_hip" kp="10000" ctrlrange="0.244 1.388"/>
+  </actuator>
+
+</mujoco>

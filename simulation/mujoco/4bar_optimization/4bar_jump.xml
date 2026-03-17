@@ -1,0 +1,190 @@
+<mujoco model="wheeled_leg_robot_drop">
+
+  <option gravity="0 0 -9.81" timestep="0.00005"/>
+
+  <visual>
+    <global offwidth="1280" offheight="720" azimuth="270" elevation="0"/>
+  </visual>
+
+  <!--
+    Same geometry as 4bar_leg_sim, with two additions:
+      1. body_slide joint on box — 1 DOF vertical only (no rotation)
+      2. wheel_tire_geom collides with ground plane
+
+    Chain from body:
+      A  (hip pivot, y=0.1430 from box centre)
+      │  femur 100 mm along −X in femur frame
+      C  (knee, at femur tip)
+      │  tibia 115 mm down / 15 mm stub up in tibia frame
+      W  (wheel centre, z=−0.115 in tibia frame)
+
+    Masses (single-leg half of robot):
+      box/body    : 0.477 kg  (half of: PLA+6S1500mAh LiPo+ODESC+wiring+bearings+mounts+MCU)
+      AK45-10     : 0.260 kg  (hip motor)
+      femur link  : 0.025 kg
+      tibia link  : 0.035 kg
+      coupler     : 0.015 kg
+      Maytech+tyre: 0.410 kg
+      TOTAL       : 1.222 kg
+  -->
+
+  <worldbody>
+
+    <light name="main" pos="0 -1 1" dir="0 1 -1" diffuse="0.8 0.8 0.8"/>
+    <light name="fill" pos="0  1 1" dir="0 -1 -1" diffuse="0.3 0.3 0.3"/>
+
+    <!-- Ground plane — collides with wheel -->
+    <geom name="ground" type="plane" pos="0 0 0" size="2 2 0.01"
+          rgba="0.3 0.3 0.3 1" contype="1" conaffinity="1" friction="0.8 0.005 0.0001"/>
+
+    <!-- XYZ axis markers at origin (visual only) -->
+    <geom name="axis_x" type="cylinder" fromto="0 0 0.001  0.06 0 0.001"
+          size="0.003" rgba="1 0 0 1" contype="0" conaffinity="0" mass="0"/>
+    <geom name="axis_y" type="cylinder" fromto="0 0 0.001  0 0.06 0.001"
+          size="0.003" rgba="0 1 0 1" contype="0" conaffinity="0" mass="0"/>
+    <geom name="axis_z" type="cylinder" fromto="0 0 0.001  0 0 0.061"
+          size="0.003" rgba="0 0 1 1" contype="0" conaffinity="0" mass="0"/>
+
+    <!-- ── Body box — slides vertically only ──────────────────────────── -->
+    <body name="box" pos="0 0 0.30">
+
+      <!-- Vertical slide joint: 1 DOF up/down, rotation locked at 0 -->
+      <joint name="body_slide" type="slide" axis="0 0 1" pos="0 0 0"/>
+
+      <!-- Box: 100 mm (X) × 200 mm (Y) × 100 mm (Z), semi-transparent
+           Mass = per-side half of: PLA body 105g + 6S 1500mAh LiPo 110g + ODESC 80g +
+           wiring 75g + bearings 27g + motor mounts 45g + UNO R4 22g +
+           DC-DC buck 10g + IMU 2g + CAN xcvr 1g = 477g -->
+      <geom name="box_geom" type="box"
+            size="0.05 0.10 0.05"
+            rgba="0.29 0.56 0.85 0.55"
+            contype="0" conaffinity="0"
+            mass="0.477"/>
+
+      <!-- Hip motor AK45-10: 260 g, Φ53 mm × 43 mm cylinder -->
+      <geom name="motor_geom" type="cylinder"
+            pos="0 0.1215 -0.0235"
+            euler="90 0 0"
+            size="0.0265 0.0215"
+            rgba="0.87 0.36 0.36 0.55"
+            contype="0" conaffinity="0"
+            mass="0.260"/>
+
+      <!-- ── Passive coupler pivot F ─────────────────────────────────── -->
+      <!-- F = A + (−15 mm X, +2.5 mm Z) in box frame -->
+      <body name="coupler" pos="-0.020 0.1430 0.01116">
+
+        <joint name="hinge_F" type="hinge"
+               axis="0 1 0"
+               pos="0 0 0"
+               damping="0.001"/>
+
+        <!-- 608 bearing at F: OD=22 mm, width=7 mm -->
+        <geom type="cylinder" pos="0 0 0" euler="90 0 0" size="0.011 0.010"
+              rgba="0 1 1 0.9" contype="0" conaffinity="0" mass="0"/>
+        <geom name="coupler_geom" type="box"
+              pos="-0.055 0 0"
+              size="0.055 0.01 0.01"
+              rgba="0.30 0.90 0.90 0.55"
+              contype="0" conaffinity="0"
+              mass="0.015"/>
+
+      </body><!-- coupler -->
+
+      <!-- ── Femur ─────────────────────────────────────────────────────── -->
+      <body name="femur" pos="0 0.1430 -0.0235">
+
+        <joint name="hip" type="hinge"
+               axis="0 1 0"
+               pos="0 0 0"
+               range="-180 180"
+               armature="0.01"
+               damping="0.05"/>
+
+        <geom type="cylinder" pos="0 0 0" euler="90 0 0" size="0.005 0.015"
+              rgba="1 1 0 0.9" contype="0" conaffinity="0" mass="0"/>
+        <geom name="femur_geom" type="box"
+              pos="-0.05 0 0"
+              size="0.05 0.01 0.01"
+              rgba="0.94 0.75 0.25 0.55"
+              contype="0" conaffinity="0"
+              mass="0.025"/>
+        <!-- 608 bearing at C (knee): OD=22 mm, width=7 mm -->
+        <geom type="cylinder" pos="-0.1 0 0" euler="90 0 0" size="0.011 0.010"
+              rgba="1 1 1 0.9" contype="0" conaffinity="0" mass="0"/>
+
+        <!-- ── Tibia ───────────────────────────────────────────────────── -->
+        <body name="tibia" pos="-0.1 0 0">
+
+          <joint name="knee_joint" type="hinge"
+                 axis="0 1 0"
+                 pos="0 0 0"
+                 range="-180 180"
+                 damping="0.001"/>
+
+          <geom name="tibia_geom" type="box"
+                pos="0 0 -0.05"
+                size="0.01 0.01 0.065"
+                rgba="0.75 0.45 0.90 0.55"
+                contype="0" conaffinity="0"
+                mass="0.035"/>
+          <!-- 608 bearing at E (tibia–coupler): OD=22 mm, width=7 mm -->
+          <geom type="cylinder" pos="0 0 0.025" euler="90 0 0" size="0.011 0.010"
+                rgba="1 0.3 0.3 0.9" contype="0" conaffinity="0" mass="0"/>
+
+          <!-- ── Wheel assembly ──────────────────────────────────────── -->
+          <body name="wheel_asm" pos="0 0 -0.115">
+
+            <joint name="wheel_spin" type="hinge"
+                   axis="0 1 0"
+                   pos="0 0 0"
+                   damping="0.001"/>
+
+            <!-- Maytech MTO7052 motor body: visual only -->
+            <geom name="motor_body_geom" type="cylinder"
+                  pos="0 0.036 0"
+                  euler="90 0 0"
+                  size="0.035 0.026"
+                  rgba="0.15 0.15 0.15 0.55"
+                  contype="0" conaffinity="0"
+                  mass="0.380"/>
+
+            <!-- TPU wheel tyre: Ø150 mm × 30 mm — collides with ground -->
+            <!-- friction: sliding=0.8, rolling=0.01, spin=0.001 (TPU on hard floor) -->
+            <!-- solref: 10ms time constant, critically damped (no bounce) -->
+            <geom name="wheel_tire_geom" type="cylinder"
+                  pos="0 0.036 0"
+                  euler="90 0 0"
+                  size="0.075 0.015"
+                  rgba="0.25 0.70 0.35 0.80"
+                  contype="1" conaffinity="1"
+                  friction="0.8 0.01 0.001"
+                  solref="0.01 1.0"
+                  solimp="0.9 0.99 0.001"
+                  mass="0.030"/>
+
+          </body><!-- wheel_asm -->
+
+        </body><!-- tibia -->
+
+      </body><!-- femur -->
+
+    </body><!-- box -->
+
+  </worldbody>
+
+  <!-- 4-bar closure: coupler tip E → tibia at E. eq_data anchors set in Python. -->
+  <equality>
+    <connect name="4bar_close" body1="coupler" body2="tibia" anchor="0.11 0 0"
+             solref="0.0005 1" solimp="0.9999 0.9999 0.001"/>
+  </equality>
+
+  <!-- Torque actuator: PD-to-torque control implemented in Python -->
+  <actuator>
+    <motor name="hip_motor" joint="hip" ctrlrange="-7.0 7.0" gear="1"/>
+  </actuator>
+
+  <!-- Camera: side view -->
+  <statistic center="0 0 0.30" extent="0.75"/>
+
+</mujoco>

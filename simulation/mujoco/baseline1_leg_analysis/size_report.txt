@@ -1,0 +1,81 @@
+========================================================================
+  Structural Sizing Report — Wheeled-Leg Robot
+  Source: c:\Dropbox\Personal Projects\Robotics\Wheeled leg robot Claude\simulation\mujoco\baseline1_leg_analysis\force_log.csv
+========================================================================
+  Material     : 6061-T6 aluminium  sy=276 MPa  E=69000 MPa
+  Load SF      : 2.0×  (simulation peaks × 2.0 before sizing)
+  Min SF yield : 2.0    Min SF buckling : 5.0
+  Min bearing s0 : 2.0
+
+  PEAK LOADS FROM SIMULATION
+  --------------------------------------------------------------------
+  Femur axial                     459.5 N
+  Femur lateral                   139.8 N
+  Tibia axial                     616.7 N
+  Tibia lateral                   209.6 N
+  Coupler axial                   550.9 N
+  Bearing A  (hip)                470.7 N
+  Bearing C  (knee)               471.6 N
+  Bearing E  (4-bar)             1045.4 N
+  Bearing F  (coupler)           1045.4 N
+  Bearing W  (wheel)              126.0 N
+  GRF L  (wheel contact)          105.3 N
+
+  LINK TUBE RECOMMENDATION  (6061-T6 aluminium, thin-walled round tube)
+  --------------------------------------------------------------------
+  FEMUR  (hip A → knee C, driven by AK45-10)
+    L = 174 mm   F_ax_peak = 459.5 N   F_lat_peak = 139.8 N
+    Recommended : OD 14 × 1.0 mm wall  (ID = 12 mm)
+    sigma = 121 MPa   SF_yield = 2.29   SF_buck = 21
+    Area = 40.8 mm²   I = 868 mm⁴   mass ≈ 19.2 g/link
+    Next up     : OD 16 × 1.0 mm  SF_y=2.98  SF_b=33  m=22.1 g
+
+  TIBIA  (knee C → wheel W (plus 15 mm stub C → E))
+    L = 144 mm   F_ax_peak = 616.7 N   F_lat_peak = 209.6 N
+    Recommended : OD 16 × 1.0 mm wall  (ID = 14 mm)
+    sigma = 117 MPa   SF_yield = 2.36   SF_buck = 35
+    Area = 47.1 mm²   I = 1331 mm⁴   mass ≈ 18.3 g/link
+    Next up     : OD 14 × 1.5 mm  SF_y=2.48  SF_b=31  m=22.9 g
+
+  COUPLER  (body pivot F → stub tip E  (4-bar closing link))
+    L = 151 mm   F_ax_peak = 550.9 N  (two-force — no lateral)
+    Recommended : OD 10 × 0.8 mm wall  (ID = 8 mm)
+    sigma = 48 MPa   SF_yield = 5.79   SF_buck = 7
+    Area = 23.1 mm²   I = 246 mm⁴   mass ≈ 9.4 g/link
+    Next up     : OD 10 × 1.0 mm  SF_y=7.08  SF_b=8  m=11.5 g
+
+  BEARING RECOMMENDATION  (all pivots currently sized as 608)
+  Catalog: 608 (bore 8mm, C0=1370N)  |  6000 (bore 10mm, C0=1960N)  |  6001 (bore 12mm, C0=2850N)  |  6200 (bore 10mm, C0=2850N)
+  --------------------------------------------------------------------
+  Bearing A  (hip pivot  (femur drive end))
+    F_peak = 471 N  →  608  (bore 8mm, OD 22mm, C0=1370N)  s0=2.91  ✓
+
+  Bearing C  (knee pivot (femur/tibia junction))
+    F_peak = 472 N  →  608  (bore 8mm, OD 22mm, C0=1370N)  s0=2.91  ✓
+
+  Bearing E  (4-bar closure  (stub tip / coupler end))
+    F_peak = 1045 N  →  6001  (bore 12mm, OD 28mm, C0=2850N)  s0=2.73  ✓
+
+  Bearing F  (coupler body pivot  (≈ E by symmetry))
+    F_peak = 1045 N  →  6001  (bore 12mm, OD 28mm, C0=2850N)  s0=2.73  ✓
+
+  Bearing W  (wheel axle)
+    F_peak = 126 N  →  608  (bore 8mm, OD 22mm, C0=1370N)  s0=10.87  ✓
+
+  SUMMARY
+  --------------------------------------------------------------------
+  Link         Tube (OD×t)        SF_y   SF_b  mass/link
+  ----------------------------------------------------
+  femur        14×1.0 mm            2.29     21     19.2 g
+  tibia        16×1.0 mm            2.36     35     18.3 g
+  coupler      10×0.8 mm            5.79      7      9.4 g
+
+  Joint    Bearing    C0 [N]  F_peak [N]     s0
+  ----------------------------------------------
+  A        608          1370         471   2.91
+  C        608          1370         472   2.91
+  E        6001         2850        1045   2.73
+  F        6001         2850        1045   2.73
+  W        608          1370         126  10.87
+
+========================================================================

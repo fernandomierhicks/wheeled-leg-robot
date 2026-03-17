@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# CAD binary files — too large for GitHub (vendor STEPs/STLs are 65–115 MB)
+# Store these locally or use Git LFS if you need version control for CAD
+*.stl
+*.STL
+*.step
+*.STEP
+*.stp
+*.STP
+*.f3d
+*.f3z
+
+# Generated / large data files
+*.npz
+*.bak
+data/logs/
+data/test_results/
+data/tuning/
+
+# MuJoCo generated
+*.mjb
+
+# PlatformIO build artifacts
+firmware/.pio/
+firmware/.pioenvs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# VSCode workspace (keep settings.json for Claude permissions)
+*.code-workspace
+
+# Secrets / local config overrides
+.env
+secrets.*

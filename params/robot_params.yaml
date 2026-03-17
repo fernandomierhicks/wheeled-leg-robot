@@ -1,0 +1,50 @@
+# Robot physical parameters
+# Source of truth for simulation, firmware, and CAD
+
+robot:
+  total_mass_kg: 3.4
+  body_mass_kg: 1.2
+  leg_assembly_mass_kg: 0.6   # per leg (motor + links)
+  wheel_mass_kg: 0.41         # per wheel (motor + printed wheel)
+
+geometry:
+  link_length_m: 0.140        # femur = tibia = 140 mm
+  wheel_radius_m: 0.075       # 150 mm diameter
+  wheel_width_m: 0.030
+  body_width_m: 0.130
+  body_height_m: 0.090
+  body_depth_m: 0.130
+  hip_joint_range_deg: [-160, -70]   # measured from vertical
+
+motors:
+  hip:
+    part: CubeMars AK45-10
+    gear_ratio: 10
+    peak_torque_Nm: 7.0
+    kv: 75
+    mass_g: 260
+    outer_diameter_mm: 53     # confirmed from CubeMars datasheet (Φ53×43mm)
+    length_mm: 43
+    can_ids: [1, 2]           # left=1, right=2
+    protocol: MIT_CAN
+    voltage_min: 12
+    voltage_max: 36
+
+  wheel:
+    part: Maytech MTO7052HBM
+    kv: 60
+    mass_g: 380
+    continuous_current_A: 22
+    voltage_min: 12
+    voltage_max: 42
+
+electronics:
+  battery_voltage_V: 24.0     # 24V nominal
+  battery_capacity_Wh: 72
+  can_baud_bps: 1000000
+  control_loop_hz: 500
+
+performance:
+  target_jump_height_m: 0.286
+  practical_top_speed_ms: 4.5
+  max_achievable_rotation_deg: 70   # airborne flip angle

@@ -1,0 +1,196 @@
+<mujoco model="wheeled_leg_robot">
+
+  <option gravity="0 0 -9.81" timestep="0.00005"/>
+
+  <visual>
+    <global offwidth="1280" offheight="720" azimuth="270" elevation="0"/>
+  </visual>
+
+  <!--
+    Coordinate convention (MuJoCo default):
+      Z = up,  X = forward,  Y = out of screen
+    Robot lives in the XZ plane.  All hinge joints rotate about Y.
+
+    Chain from body:
+      A  (hip pivot, y=0.1430 from box centre)
+      │  femur capsule  100 mm along +X in femur frame
+      C  (knee,  at femur tip,  x=0.10 in femur frame)
+      │  tibia capsule  stub 15 mm up (+Z) / 115 mm down (-Z) in tibia frame
+      W  (wheel centre, z=−0.115 in tibia frame)
+
+    Masses (single-leg half of robot):
+      box/body    : 1.260 kg  (structure + battery + electronics + hip motor)
+      femur link  : 0.025 kg  (PLA, 100 mm)
+      tibia link  : 0.035 kg  (PLA, 130 mm total stub+leg)
+      wheel asm   : 0.410 kg  (Maytech MTO7052 380 g + TPU wheel 30 g)
+
+    Wheel motor: Maytech MTO7052HBM  Ø70 mm × 52 mm outrunner hub motor
+      modelled as two cylinders sharing the wheel_asm body:
+        motor_body : radius=35 mm, half-length=26 mm  mass=0.380 kg
+        wheel_tire : radius=75 mm, half-length=15 mm  mass=0.030 kg
+  -->
+
+  <worldbody>
+
+    <light name="main" pos="0 -1 1" dir="0 1 -1" diffuse="0.8 0.8 0.8"/>
+    <light name="fill" pos="0  1 1" dir="0 -1 -1" diffuse="0.3 0.3 0.3"/>
+
+    <!-- Ground plane — no collision for this kinematic demo -->
+    <geom name="ground" type="plane" pos="0 0 0" size="1 1 0.01"
+          rgba="0.3 0.3 0.3 1" contype="0" conaffinity="0"/>
+
+    <!-- XYZ axis markers at origin (visual only) -->
+    <!-- X = red, Y = green, Z = blue  |  length 60 mm, radius 3 mm -->
+    <geom name="axis_x" type="cylinder" fromto="0 0 0.001  0.06 0 0.001"
+          size="0.003" rgba="1 0 0 1" contype="0" conaffinity="0" mass="0"/>
+    <geom name="axis_y" type="cylinder" fromto="0 0 0.001  0 0.06 0.001"
+          size="0.003" rgba="0 1 0 1" contype="0" conaffinity="0" mass="0"/>
+    <geom name="axis_z" type="cylinder" fromto="0 0 0.001  0 0 0.061"
+          size="0.003" rgba="0 0 1 1" contype="0" conaffinity="0" mass="0"/>
+
+    <!-- ── Body box ── FIXED to world (no joint) ──────────────────────── -->
+    <body name="box" pos="0 0 0.30">
+
+      <!-- Box: 100 mm (X) × 200 mm (Y) × 100 mm (Z), semi-transparent -->
+      <geom name="box_geom" type="box"
+            size="0.05 0.10 0.05"
+            rgba="0.29 0.56 0.85 0.55"
+            contype="0" conaffinity="0"
+            mass="1.260"/>
+
+      <!-- Hip motor AK45-10: Ø53 mm × 43 mm, mounted on +Y face of box.
+           Box +Y face at y=+0.10.  Motor half-length=21.5 mm → centre y=0.1215.
+           Outer face (femur pivot A) at y=0.1430. -->
+      <geom name="motor_geom" type="cylinder"
+            pos="0 0.1215 -0.0235"
+            euler="90 0 0"
+            size="0.0265 0.0215"
+            rgba="0.87 0.36 0.36 0.95"
+            contype="0" conaffinity="0"
+            mass="0"/>
+
+      <!-- ── Passive coupler pivot F ─────────────────────────────────── -->
+      <!-- F = A + (−15 mm, 0, +26 mm)  →  box frame: (−0.015, 0.1430, +0.0025) -->
+      <body name="coupler" pos="-0.015 0.1430 0.0025">
+
+        <joint name="hinge_F" type="hinge"
+               axis="0 1 0"
+               pos="0 0 0"
+               damping="25"/>
+
+        <!-- Hinge pin at F (cyan) -->
+        <geom type="cylinder" pos="0 0 0" euler="90 0 0" size="0.005 0.015"
+              rgba="0 1 1 0.9" contype="0" conaffinity="0" mass="0"/>
+        <!-- Coupler link: 110 mm along −X, 10 mm cross-section, cyan -->
+        <geom name="coupler_geom" type="box"
+              pos="-0.055 0 0"
+              size="0.055 0.01 0.01"
+              rgba="0.30 0.90 0.90 1.0"
+              contype="0" conaffinity="0"
+              mass="0.015"/>
+
+      </body><!-- coupler -->
+
+      <!-- ── Femur ─────────────────────────────────────────────────────── -->
+      <!-- pivot A at outer face of motor (y=0.1430, z=−0.0235 in box frame) -->
+      <body name="femur" pos="0 0.1430 -0.0235">
+
+        <joint name="hip" type="hinge"
+               axis="0 1 0"
+               pos="0 0 0"
+               range="-180 180"
+               armature="0.01"
+               damping="5"/>
+
+        <!-- Hinge pin at A (yellow) -->
+        <geom type="cylinder" pos="0 0 0" euler="90 0 0" size="0.005 0.015"
+              rgba="1 1 0 0.9" contype="0" conaffinity="0" mass="0"/>
+        <!-- Femur box: pivot A → knee C, 100 mm along −X, 10 mm cross-section -->
+        <geom name="femur_geom" type="box"
+              pos="-0.05 0 0"
+              size="0.05 0.01 0.01"
+              rgba="0.94 0.75 0.25 1.0"
+              contype="0" conaffinity="0"
+              mass="0.025"/>
+        <!-- Hinge pin at C/knee (white) -->
+        <geom type="cylinder" pos="-0.1 0 0" euler="90 0 0" size="0.005 0.015"
+              rgba="1 1 1 0.9" contype="0" conaffinity="0" mass="0"/>
+
+        <!-- ── Tibia ───────────────────────────────────────────────────── -->
+        <!-- Origin at knee C (0.10, 0, 0) in femur frame.
+             When knee_joint=0 and femur frame is world-aligned the tibia
+             fromto goes vertically (±Z_world): stub 15 mm up, leg 115 mm down. -->
+        <body name="tibia" pos="-0.1 0 0">
+
+          <joint name="knee_joint" type="hinge"
+                 axis="0 1 0"
+                 pos="0 0 0"
+                 range="-180 180"
+                 damping="5"/>
+
+          <!-- Tibia box: stub 15 mm (+Z) / leg 115 mm (−Z), 10 mm cross-section
+               Total 130 mm, centre at z = (0.015 − 0.115)/2 = −0.05 -->
+          <geom name="tibia_geom" type="box"
+                pos="0 0 -0.05"
+                size="0.01 0.01 0.065"
+                rgba="0.75 0.45 0.90 1.0"
+                contype="0" conaffinity="0"
+                mass="0.035"/>
+          <!-- Hinge pin at E (red) -->
+          <geom type="cylinder" pos="0 0 0.015" euler="90 0 0" size="0.005 0.015"
+                rgba="1 0.3 0.3 0.9" contype="0" conaffinity="0" mass="0"/>
+
+          <!-- ── Wheel assembly ──────────────────────────────────────── -->
+          <!-- Origin at wheel centre W (0, 0, −0.115) in tibia frame. -->
+          <body name="wheel_asm" pos="0 0 -0.115">
+
+            <!-- Free-spinning axle — wheel rolls/swings without drive torque -->
+            <joint name="wheel_spin" type="hinge"
+                   axis="0 1 0"
+                   pos="0 0 0"
+                   damping="0.05"/>
+
+            <!-- Maytech MTO7052 motor body: Ø70 mm × 52 mm, mass 380 g
+                 Tibia +Y face at y=+0.010; motor -Y face flush there
+                 → motor centre y = 0.010 + 0.026 = 0.036 -->
+            <geom name="motor_body_geom" type="cylinder"
+                  pos="0 0.036 0"
+                  euler="90 0 0"
+                  size="0.035 0.026"
+                  rgba="0.15 0.15 0.15 0.95"
+                  contype="0" conaffinity="0"
+                  mass="0.380"/>
+
+            <!-- TPU wheel tyre: Ø150 mm × 30 mm, mass 30 g — concentric with motor -->
+            <geom name="wheel_tire_geom" type="cylinder"
+                  pos="0 0.036 0"
+                  euler="90 0 0"
+                  size="0.075 0.015"
+                  rgba="0.25 0.70 0.35 0.60"
+                  contype="0" conaffinity="0"
+                  mass="0.030"/>
+
+          </body><!-- wheel_asm -->
+
+        </body><!-- tibia -->
+
+      </body><!-- femur -->
+
+    </body><!-- box -->
+
+  </worldbody>
+
+  <!-- Coupler tip (E in coupler frame) → tibia at E. Anchors set in step01_viewer.py. -->
+  <equality>
+    <connect name="4bar_close" body1="coupler" body2="tibia" anchor="0.11 0 0"
+             solref="0.002 1" solimp="0.9999 0.9999 0.001"/>
+  </equality>
+
+  <actuator>
+    <position name="hip_pos" joint="hip" kp="10000" ctrlrange="-1.27 -0.58"/>
+  </actuator>
+
+  <!-- Camera: side view (XZ plane) -->
+  <statistic center="0 0 0.20" extent="0.55"/>
+
+</mujoco>
