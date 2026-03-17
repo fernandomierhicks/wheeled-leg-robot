@@ -20,7 +20,7 @@ ROBOT = dict(
     m_tibia   = 0.0183,     # [kg] tibia link (was 0.035)
     m_coupler = 0.0094,     # [kg] coupler link (was 0.015)
     m_bearing = 0.012,      # [kg] 608 bearing
-    m_wheel   = 0.410,      # [kg] Maytech 380g + TPU tyre 30g
+    m_wheel   = 0.270,      # [kg] 5065 130KV 200g + PLA hub 45g + TPU tread 25g
 )
 
 # ── Stroke angles (computed by find_stroke, verified against CSV) ─────────────
@@ -45,7 +45,7 @@ PITCH_KD          = 5.0    # [N·m·s/rad]
 POSITION_KP       = 0.30   # [rad/m]   wheel position → pitch correction
 VELOCITY_KP       = 0.30   # [rad/(m/s)] wheel velocity → pitch correction
 MAX_PITCH_CMD     = 0.25   # [rad] saturation on position/velocity feedback
-WHEEL_TORQUE_LIMIT = 7.0   # [N·m]
+WHEEL_TORQUE_LIMIT = 3.67  # [N·m]  5065 130KV: Kt=0.0735 Nm/A × 50A ODESC limit
 
 # ── Hip / jump controller ─────────────────────────────────────────────────────
 HIP_KP           = 30.0    # [N·m/rad]   full stiffness (jump)
@@ -63,6 +63,18 @@ SIM_DURATION_S   = 8.0
 NEUTRAL_HOLD_S   = 2.0     # balance stabilisation before crouch
 CROUCH_START_S   = 2.0     # time at which crouch begins
 JUMP_TRIGGER_S   = 3.5     # time at which jump fires
+
+# ── Motor electrical models ───────────────────────────────────────────────────
+# Wheel: 5065 130KV outrunner, 24 V, direct drive
+#   ω_noload = 130 KV × 24 V × 2π/60 = 326.7 rad/s  →  24.5 m/s at wheel rim
+#   T_peak   = Kt × I_max = (9.55/130) × 50 A = 3.67 N·m
+WHEEL_OMEGA_NOLOAD = 326.7   # [rad/s]
+WHEEL_TAU_ELEC     = 0.002   # [s]  CAN transport (<0.5 ms) + ODrive FOC rise (~1 ms)
+WHEEL_B_FRICTION   = 0.02    # [N·m·s/rad]  outrunner bearing drag (less than hub motor)
+
+# Hip: AK45-10  KV75, 24 V, 10:1 planetary  (ω_noload identical to OMEGA_MAX)
+HIP_TAU_ELEC       = 0.002   # [s]  CAN transport (<0.5 ms) + integrated FOC rise (~1 ms)
+HIP_B_FRICTION     = 0.02    # [N·m·s/rad]  planetary gearbox viscous drag
 
 # ── Sensor noise (realistic IMU model) ───────────────────────────────────────
 ACCEL_NOISE_STD            = 0.2                  # [m/s²]

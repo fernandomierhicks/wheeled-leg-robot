@@ -11,12 +11,20 @@ components:
     notes: Integrated FOC, MIT CAN, 10:1 planetary, 7 Nm peak
 
   - id: WHEEL_MOTOR
-    part: Maytech MTO7052HBM 60KV
+    part: 5065 130KV outrunner (generic)
     qty: 2
-    mass_g: 380
-    cost_usd: 45
+    mass_g: 200
+    cost_usd: 30
     status: designed
-    notes: Hall sensors, outrunner hub motor
+    notes: Direct-drive outrunner, Hall sensors required for ODESC, Kt=0.074 Nm/A, T_peak=3.67 Nm at 50A, no-load 326.7 rad/s (24.5 m/s at rim).
+
+  - id: WHEEL_TYRE
+    part: 3D printed wheel — PLA hub + TPU tread
+    qty: 2
+    mass_g: 70
+    cost_usd: 2
+    status: designed
+    notes: 150mm OD. PLA spoked hub (~45g, ~20% infill, 30mm wide) bolts to motor D-shaft. TPU tread band ~5mm thick (~25g) pressed/glued over hub OD.
 
   - id: WHEEL_CTRL
     part: ODESC 3.6 Dual Drive
@@ -66,12 +74,43 @@ components:
     cost_usd: 8
     notes: Powers MCU and IMU from battery rail
 
-  - id: BEARING_608
-    part: 608 skateboard bearing
-    qty: 12
-    mass_g: 12
-    cost_usd: 8
-    notes: 8mm bore, used at all leg pivots
+  # Structural links — 6061-T6 aluminium tube (sized by baseline1 force analysis)
+  - id: FEMUR_TUBE
+    part: 6061-T6 Al tube OD14×1.0mm
+    qty: 2
+    mass_g: 19.2
+    cost_usd: 5
+    notes: L=174mm, A→C, SF_yield=2.29 SF_buck=21
 
-total_cost_usd: 628
-total_mass_g: 3010
+  - id: TIBIA_TUBE
+    part: 6061-T6 Al tube OD16×1.0mm
+    qty: 2
+    mass_g: 18.3
+    cost_usd: 5
+    notes: L=144mm, C→W (+stub C→E), SF_yield=2.36 SF_buck=35
+
+  - id: COUPLER_TUBE
+    part: 6061-T6 Al tube OD10×0.8mm
+    qty: 2
+    mass_g: 9.4
+    cost_usd: 4
+    notes: L=151mm, F→E two-force link, SF_yield=5.79 SF_buck=7
+
+  # Bearings — pivot-specific sizing from force analysis
+  - id: BRG_608
+    part: 608 bearing (8mm bore, OD 22mm)
+    qty: 6
+    mass_g: 12
+    cost_usd: 1
+    notes: Pivots A (hip), C (knee), W (wheel) — 1 per pivot per leg, s0≥2.91
+
+  - id: BRG_6001
+    part: 6001 bearing (12mm bore, OD 28mm)
+    qty: 4
+    mass_g: 17
+    cost_usd: 3
+    notes: Pivots E and F (4-bar high-load, 1045N peak) — s0=2.73
+
+# Source of truth: components/COMPONENTS.md
+total_cost_usd: 625
+total_mass_g: 2798
