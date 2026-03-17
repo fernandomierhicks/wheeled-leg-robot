@@ -305,6 +305,67 @@ def build_xml(p: dict) -> str:
         </body>
       </body>"""
 
+    # ── Arena features: platforms and ramps ────────────────────────────────
+    # Platforms: (cx, cy, half_x, half_y, half_z, "r g b")
+    #   Platform sits on the ground — geom pos z = half_z.
+    # Ramps: (cx, cy, half_len, half_width, half_thickness, euler_deg, "r g b")
+    #   Tilted box, euler="0 pitch_deg 0".  pitch_deg>0 rises in +X direction.
+    _platforms = [
+        # Short/low platforms (3–5 cm tall)
+        ( 0.85,  0.60, 0.25, 0.20, 0.015, "0.55 0.44 0.32"),   # 3 cm
+        (-0.80,  1.10, 0.30, 0.22, 0.020, "0.50 0.43 0.34"),   # 4 cm
+        ( 1.60, -0.55, 0.28, 0.25, 0.018, "0.53 0.41 0.30"),   # 3.5 cm
+        (-1.25, -0.90, 0.22, 0.18, 0.013, "0.52 0.46 0.35"),   # 2.5 cm
+        ( 0.50,  1.85, 0.35, 0.28, 0.025, "0.55 0.44 0.32"),   # 5 cm
+        # Taller platforms (7–11 cm)
+        ( 1.20,  1.55, 0.30, 0.28, 0.040, "0.42 0.34 0.24"),   # 8 cm
+        (-1.00,  0.90, 0.28, 0.25, 0.045, "0.40 0.33 0.26"),   # 9 cm
+        ( 1.70, -1.50, 0.32, 0.28, 0.038, "0.44 0.36 0.26"),   # 7.5 cm
+        (-1.55, -1.60, 0.25, 0.22, 0.055, "0.40 0.33 0.26"),   # 11 cm
+        ( 2.00,  0.15, 0.30, 0.26, 0.035, "0.42 0.34 0.24"),   # 7 cm
+        (-2.00,  1.80, 0.28, 0.24, 0.043, "0.40 0.33 0.26"),   # 8.5 cm
+        ( 0.15, -2.05, 0.35, 0.30, 0.048, "0.42 0.34 0.24"),   # 9.5 cm
+    ]
+
+    # Ramps: box tilted on Y-axis.  Ramp base flush with floor.
+    # half_len = half the slope length, half_w = half width (Y), half_t = half thickness.
+    # pitch_deg: positive tilts +X end upward.
+    # Ramp centre z = half_t / cos(pitch) lifted so underside just touches floor.
+    _ramps = [
+        # (cx,   cy,  half_len, half_w, half_t, pitch_deg, "r g b")
+        ( 1.00, -1.50, 0.28, 0.20, 0.020,   6, "0.38 0.50 0.35"),  # gentle ~6°
+        (-1.60,  0.00, 0.32, 0.22, 0.020,  -7, "0.36 0.48 0.33"),  # faces -X
+        ( 0.00,  1.30, 0.26, 0.20, 0.020,   5, "0.38 0.50 0.35"),  # gentle
+        (-0.80, -1.80, 0.30, 0.22, 0.020,   8, "0.36 0.48 0.33"),  # moderate
+        ( 1.90,  1.60, 0.28, 0.20, 0.020,  -6, "0.38 0.50 0.35"),  # faces -X
+    ]
+
+    def _env_xml(platforms, ramps):
+        import math as _math
+        lines = ["    <!-- ── Arena platforms ──────────────────────────────────────────── -->"]
+        for i, (cx, cy, hx, hy, hz, rgb) in enumerate(platforms):
+            lines.append(
+                f'    <geom name="plat_{i}" type="box" '
+                f'pos="{cx:.3f} {cy:.3f} {hz:.4f}" '
+                f'size="{hx:.3f} {hy:.3f} {hz:.4f}" '
+                f'rgba="{rgb} 1.0" '
+                f'friction="0.8 0.01 0.001" solref="0.02 1"/>'
+            )
+        lines.append("    <!-- ── Arena ramps ───────────────────────────────────────────────── -->")
+        for i, (cx, cy, hl, hw, ht, pitch_deg, rgb) in enumerate(ramps):
+            pitch_r = _math.radians(pitch_deg)
+            # Lift centre so the bottom face (at -ht in local Z) just clears z=0
+            cz = ht / _math.cos(pitch_r) + hl * abs(_math.sin(pitch_r))
+            lines.append(
+                f'    <geom name="ramp_{i}" type="box" '
+                f'pos="{cx:.3f} {cy:.3f} {cz:.4f}" '
+                f'size="{hl:.3f} {hw:.3f} {ht:.4f}" '
+                f'euler="{0} {pitch_deg} {0}" '
+                f'rgba="{rgb} 1.0" '
+                f'friction="0.8 0.01 0.001" solref="0.02 1"/>'
+            )
+        return "\n".join(lines)
+
     return f"""<mujoco model="baseline1_2leg">
   <option gravity="0 0 -9.81" timestep="0.0005" solver="Newton"
           iterations="200" tolerance="1e-10"/>
@@ -326,10 +387,26 @@ def build_xml(p: dict) -> str:
     <light name="front" pos="0 -3 2.5" dir="0  1 -0.8" diffuse="0.40 0.40 0.45"/>
     <light name="back"  pos="0  3 2.5" dir="0 -1 -0.8" diffuse="0.40 0.40 0.45"/>
 
-    <!-- ── Ground: soft checkerboard 10 m × 10 m ──────────────────────── -->
+    <!-- ── Ground: soft checkerboard 5 m × 5 m arena ──────────────────── -->
     <geom name="ground" type="plane" size="5 5 0.1"
           material="floor_mat" condim="3" friction="0.8 0.01 0.001"
           solref="0.04 1" solimp="0.9 0.95 0.001"/>
+
+    <!-- ── Arena walls: 5 m × 5 m enclosure, 0.5 m tall ──────────────── -->
+    <!-- North wall (+X face, inner edge at x=+2.5) -->
+    <geom name="wall_N" type="box" pos=" 2.55 0 0.25" size="0.05 2.60 0.25"
+          material="wall_mat" friction="0.6 0.01 0.001" solref="0.02 1"/>
+    <!-- South wall (-X face) -->
+    <geom name="wall_S" type="box" pos="-2.55 0 0.25" size="0.05 2.60 0.25"
+          material="wall_mat" friction="0.6 0.01 0.001" solref="0.02 1"/>
+    <!-- East wall (+Y face) -->
+    <geom name="wall_E" type="box" pos="0  2.55 0.25" size="2.50 0.05 0.25"
+          material="wall_mat" friction="0.6 0.01 0.001" solref="0.02 1"/>
+    <!-- West wall (-Y face) -->
+    <geom name="wall_W" type="box" pos="0 -2.55 0.25" size="2.50 0.05 0.25"
+          material="wall_mat" friction="0.6 0.01 0.001" solref="0.02 1"/>
+
+{_env_xml(_platforms, _ramps)}
 
     <!-- ── Body ───────────────────────────────────────────────────────── -->
     <body name="box" pos="0 0 0.45">
