@@ -326,27 +326,28 @@ def _plot_process(q: mp.Queue, cmd_q: mp.Queue, window_s: float) -> None:
     for b in [btn_fwd, btn_maxspd, btn_bwd, btn_rst, btn_neu, btn_crch, btn_jmp, btn_clear]:
         b.label.set_color("white"); b.label.set_fontsize(9)
 
-    # ── LQR blend slider ──────────────────────────────────────────────────────
-    from matplotlib.widgets import Slider
-    ax_blend = fig.add_axes([0.05, 0.105, 0.90, 0.035])
-    slider_blend = Slider(ax_blend, "LQR Blend", 0.0, 1.0, valinit=0.0,
-                          color="#60d0ff", valstep=0.05)
-    ax_blend.tick_params(colors="lightgray", labelsize=8)
-    ax_blend.xaxis.set_label_position("top")
-    ax_blend.xaxis.tick_top()
-    for sp in ax_blend.spines.values(): sp.set_edgecolor("#555")
-
-    # Display current blend value as text
-    blend_text = ax_blend.text(1.08, 0.5, "0.00", transform=ax_blend.transAxes,
-                               color="#60d0ff", fontsize=9, fontweight="bold",
-                               va="center")
-
-    def _on_blend_change(val):
-        _send(f"BLEND:{val:.3f}")
-        blend_text.set_text(f"{val:.2f}")
-        fig.canvas.draw_idle()
-
-    slider_blend.on_changed(_on_blend_change)
+    # ── LQR blend slider (DISABLED — using 100% LQR control) ──────────────────
+    # (Blending code commented out; blend_factor = 1.0 in control loop)
+    # from matplotlib.widgets import Slider
+    # ax_blend = fig.add_axes([0.05, 0.105, 0.90, 0.035])
+    # slider_blend = Slider(ax_blend, "LQR Blend", 0.0, 1.0, valinit=0.0,
+    #                       color="#60d0ff", valstep=0.05)
+    # ax_blend.tick_params(colors="lightgray", labelsize=8)
+    # ax_blend.xaxis.set_label_position("top")
+    # ax_blend.xaxis.tick_top()
+    # for sp in ax_blend.spines.values(): sp.set_edgecolor("#555")
+    #
+    # # Display current blend value as text
+    # blend_text = ax_blend.text(1.08, 0.5, "0.00", transform=ax_blend.transAxes,
+    #                            color="#60d0ff", fontsize=9, fontweight="bold",
+    #                            va="center")
+    #
+    # def _on_blend_change(val):
+    #     _send(f"BLEND:{val:.3f}")
+    #     blend_text.set_text(f"{val:.2f}")
+    #     fig.canvas.draw_idle()
+    #
+    # slider_blend.on_changed(_on_blend_change)
 
     driving        = [0]
     max_spd_active = [False]
@@ -887,8 +888,8 @@ def run_viewer():
                         turn_offset = -TURN_TORQUE
                     elif cmd == "TURN_OFF":
                         turn_offset = 0.0
-                    elif cmd.startswith("BLEND:"):
-                        blend_factor = float(cmd.split(":")[1])
+                    # elif cmd.startswith("BLEND:"):  # Blending slider disabled
+                    #     blend_factor = float(cmd.split(":")[1])
                     elif cmd == "NEUTRAL":
                         neutral_ramp_start_t = sim_t
                         neutral_ramp_start_q = data.qpos[s_hip_L]
@@ -1010,21 +1011,20 @@ def run_viewer():
                 kd    = PITCH_KD * (2.0 if not grounded else 1.0)
                 u_pid = kp * pitch_error + PITCH_KI * pitch_integral + kd * pitch_rate
 
-                # === LQR Control (new) ===
-                # State: [pitch_err, pitch_rate, wheel_pos_err, wheel_vel_err]
-                # wheel_pos_err = wheel_pos - equilibrium (assume equilibrium at 0 for now)
+                # === LQR Control (3-STATE VERSION) ===
+                # State: [pitch_err, pitch_rate, wheel_vel_err]
+                # (wheel_pos removed — position tracking handled by outer loop)
                 # wheel_vel_err = wheel_vel - target (target = 0 for balance)
                 _lqr_state = np.array([
                     pitch_error,
                     pitch_rate,
-                    wheel_pos,
                     wheel_vel
                 ])
                 u_lqr = float(-LQR_K @ _lqr_state)
 
                 # === Blending: fade from PID to LQR ===
                 # Adjust blend_factor from 0.0 (full PID) to 1.0 (full LQR)
-                blend_factor = 0.0  # Start with PID only
+                blend_factor = 1.0  # Use pure 3-state LQR for testing
                 u_bal = (1.0 - blend_factor) * u_pid + blend_factor * u_lqr
 
                 data.ctrl[2] = motor_whl_L.step(u_bal - turn_offset, data.qvel[d_whl_L], _dt)
