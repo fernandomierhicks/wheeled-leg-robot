@@ -195,8 +195,15 @@ class SimParams:
         return self.d.items()
 
 
-def build_xml(p: dict) -> str:
-    """Generate MJCF XML for two-leg balanced sim with realistic component models."""
+def build_xml(p: dict, extra_ramps: list = None) -> str:
+    """Generate MJCF XML for two-leg balanced sim with realistic component models.
+
+    Args:
+        p: Robot parameters dict
+        extra_ramps: Optional list of additional ramps to add to arena
+    """
+    if extra_ramps is None:
+        extra_ramps = []
     L_f = p['L_femur']; L_s = p['L_stub']; L_t = p['L_tibia']
     Lc  = p['Lc'];      F_X = p['F_X'];    F_Z = p['F_Z']; A_Z = p['A_Z']
 
@@ -351,6 +358,10 @@ def build_xml(p: dict) -> str:
         (-0.80, -1.80, 0.30, 0.22, 0.020,   8, "0.36 0.48 0.33"),  # moderate
         ( 1.90,  1.60, 0.28, 0.20, 0.020,  -6, "0.38 0.50 0.35"),  # faces -X
     ]
+
+    # Add extra ramps (e.g., obstacles for scenarios)
+    if extra_ramps:
+        _ramps.extend(extra_ramps)
 
     def _env_xml(platforms, ramps):
         import math as _math

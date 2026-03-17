@@ -271,3 +271,74 @@ print(f"  Final pitch error:   {x_log[-1,0]:.6e} rad (nearly zero [OK])")
 print(f"  Peak control effort: {np.max(np.abs(u_log)):.2f} N*m")
 print(f"  System settles in ~3-4 seconds (realistic for 0.17 Hz natural frequency)")
 print("\n** Step response confirms: system is stable and responsive **\n")
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# REUSABLE FUNCTION: compute_lqr_gain
+# ───────────────────────────────────────────────────────────────────────────
+def compute_lqr_gain(Q_pitch=100.0, R=0.1):
+    """
+    Compute LQR gain K for given Q[0,0] and R values.
+
+    Args:
+        Q_pitch: Weight on pitch error (Q[0,0])
+        R: Control cost weight
+
+    Returns:
+        1D numpy array K of shape (4,) with gains [k_pitch, k_pitch_rate, k_wheel_pos, k_wheel_vel]
+    """
+    from scipy.linalg import solve_continuous_are
+
+    # Recompute A, B with current parameters
+    p = SimParams()
+    W_pos = solve_ik(Q_NEUTRAL, p)
+    W_x, W_z = W_pos['W']
+    l_eff = abs(W_z)
+
+    m_w = 2 * p['m_wheel']
+    m_b = p['m_box'] + 2*(p['m_femur'] + p['m_tibia'] + p['m_coupler'] + p['m_bearing'] + MOTOR_MASS)
+    M = m_b + m_w
+
+    I_w = 0.5 * p['m_wheel'] * WHEEL_R**2
+    I_b = m_b * l_eff**2
+    g = 9.81
+
+    r = WHEEL_R
+    denom = (M + 2*I_w/r**2) * (I_b + m_b*l_eff**2) - m_b**2 * l_eff**2
+
+    alpha = (M + 2*I_w/r**2) * m_b * g * l_eff / denom
+    beta = -m_b**2 * g * l_eff**2 / (r * denom)
+    gamma = -(I_b + m_b*l_eff**2) / (r * denom)
+    delta = (M + 2*I_w/r**2 + m_b*l_eff/r) / denom
+
+    A = np.array([
+        [0, 1, 0, 0],
+        [alpha, 0, 0, 0],
+        [0, 0, 0, 1],
+        [beta, 0, 0, 0]
+    ])
+
+    B = np.array([
+        [0],
+        [gamma],
+        [0],
+        [delta]
+    ])
+
+    # Build Q matrix with given Q_pitch
+    Q = np.diag([Q_pitch, 1.0, 1.0, 0.1])
+    R_mat = np.array([[R]])
+
+    # Solve CARE
+    P = solve_continuous_are(A, B, Q, R_mat)
+    K = np.linalg.inv(R_mat) @ B.T @ P
+
+    # Return flattened K (shape (4,))
+    return K[0]
+
+
+if __name__ == "__main__":
+    # Test the function
+    K_test = compute_lqr_gain(Q_pitch=100.0, R=0.1)
+    print("\nTest compute_lqr_gain(Q_pitch=100, R=0.1):")
+    print(f"K = {K_test}")
