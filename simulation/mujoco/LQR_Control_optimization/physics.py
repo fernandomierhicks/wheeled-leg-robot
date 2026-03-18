@@ -185,16 +185,19 @@ def find_stroke(p: dict = None):
 # ---------------------------------------------------------------------------
 # MJCF XML builder
 # ---------------------------------------------------------------------------
-def build_xml(p: dict = None) -> str:
+def build_xml(p: dict = None, obstacle_height: float = 0.0) -> str:
     """Generate MJCF XML for the two-leg balance robot.
 
     p: robot geometry dict (defaults to ROBOT from sim_config).
-    Arena: flat floor + walls only (no platforms/ramps — keeps sim fast).
+    obstacle_height: if > 0, add a floor step at x=OBSTACLE_X of this height [m].
+    Arena: flat floor, open (no walls — robot can roll freely).
     """
     if p is None: p = ROBOT
 
     L_f = p['L_femur']; L_s = p['L_stub']; L_t = p['L_tibia']
     Lc  = p['Lc'];      F_X = p['F_X'];    F_Z = p['F_Z']; A_Z = p['A_Z']
+
+    from sim_config import OBSTACLE_X  # local import to avoid circular at module level
 
     tib_cz  = (L_s - L_t) / 2.0
     tib_hsz = (L_s + L_t) / 2.0
@@ -302,9 +305,10 @@ def build_xml(p: dict = None) -> str:
     <light name="front" pos="0 -3 2.5" dir="0  1 -0.8" diffuse="0.40 0.40 0.45"/>
     <light name="back"  pos="0  3 2.5" dir="0 -1 -0.8" diffuse="0.40 0.40 0.45"/>
 
-    <geom name="ground" type="plane" size="5 5 0.1"
+    <geom name="ground" type="plane" size="10 5 0.1"
           material="floor_mat" condim="3" friction="0.8 0.01 0.001"
           solref="0.04 1" solimp="0.9 0.95 0.001"/>
+    {f'<geom name="floor_step" type="box" pos="{OBSTACLE_X + 2.0:.3f} 0 {obstacle_height/2:.5f}" size="2.0 5.0 {obstacle_height/2:.5f}" rgba="0.75 0.50 0.20 1.0" condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>' if obstacle_height > 0.0 else ''}
 
 
     <!-- ── Body ───────────────────────────────────────────────────────── -->

@@ -19,9 +19,15 @@ CSV_COLS = [
     "run_id", "scenario", "label", "timestamp",
     # LQR cost weights (optimizer search space)
     "Q_PITCH", "Q_PITCH_RATE", "Q_VEL", "R",
+    # Velocity PI gains (optimizer search space — Phase 2+)
+    "KP_V", "KI_V",
     # Performance metrics (lower is better except survived_s)
     "rms_pitch_deg", "max_pitch_deg", "wheel_travel_m", "wheel_liftoff_s",
+    "vel_track_rms_ms",   # RMS velocity tracking error [m/s] (drive scenarios)
     "settle_time_s", "survived_s",
+    # Per-scenario fitness breakdown
+    "fitness_balance", "fitness_disturbance",
+    "fitness_drive_slow", "fitness_drive_med", "fitness_obstacle",
     "fitness",
     # Run status
     "status", "fail_reason",

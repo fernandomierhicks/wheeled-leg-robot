@@ -16,6 +16,11 @@ from sim_config import (
     PITCH_NOISE_STD_RAD, PITCH_RATE_NOISE_STD_RAD_S, ACCEL_NOISE_STD,
     CTRL_STEPS,
     LQR_Q_PITCH, LQR_Q_PITCH_RATE, LQR_Q_VEL, LQR_R,
+    VELOCITY_PI_KP as _DEFAULT_KP_V,
+    VELOCITY_PI_KI as _DEFAULT_KI_V,
+    VELOCITY_PI_THETA_MAX, VELOCITY_PI_INT_MAX,
+    DRIVE_SLOW_SPEED, DRIVE_MEDIUM_SPEED, DRIVE_DURATION, DRIVE_REV_TIME,
+    OBSTACLE_HEIGHT, OBSTACLE_DURATION,
 )
 from physics import build_xml, build_assets, solve_ik, get_equilibrium_pitch
 from run_log import log_run, next_run_id, CSV_PATH
@@ -23,6 +28,12 @@ from lqr_design import interpolate_gains, compute_gain_table
 
 # ── Controller mode ──────────────────────────────────────────────────────────
 USE_PD_CONTROLLER = True  # Toggle between PD (True) and LQR (False)
+
+# ── Velocity PI gains — mutable module globals (overridden by optimizer worker) ─
+# Outer loop: velocity error → theta_ref (lean angle command for LQR).
+# Positive theta_ref = lean forward = drive forward.
+VELOCITY_PI_KP = _DEFAULT_KP_V   # [rad/(m/s)]
+VELOCITY_PI_KI = _DEFAULT_KI_V   # [rad/m]
                           # When False, uses 3-state LQR with gain scheduling
                           # Phase 1 (Step 2) implementation
 
@@ -54,8 +65,49 @@ W_LIFTOFF  = 50.0    # penalty per second any wheel is off the ground (bouncing)
 LIFTOFF_THRESHOLD = WHEEL_R + 0.005   # 5 mm above nominal contact = airborne
 
 # ── Combined scenario weights (for LQR optimization) ────────────────────────
-W_BALANCE = 0.2    # weight on balance scenario fitness
-W_DISTURBANCE = 0.8  # weight on disturbance scenario fitness
+# Phase 2 combined: balance (gate) + disturbance + drive-slow + drive-medium + obstacle
+W_BALANCE      = 0.10   # still balance (just a gate really)
+W_DISTURBANCE  = 0.35   # disturbance recovery (proven)
+W_DRIVE_SLOW   = 0.20   # 0.3 m/s fwd+bwd tracking
+W_DRIVE_MED    = 0.20   # 0.8 m/s fwd+bwd tracking (harder)
+W_DRIVE_STEP   = 0.15   # 3 cm floor step crossing robustness
+# Sum = 1.00
+
+# ── Drive/obstacle fitness weights ───────────────────────────────────────────
+W_VEL_ERR  = 1.0    # RMS velocity tracking error [m/s] — same scale as W_RMS
+
+
+# ---------------------------------------------------------------------------
+# VelocityPI — outer loop: velocity error → lean angle command
+# ---------------------------------------------------------------------------
+class VelocityPI:
+    """Converts velocity error into a lean-angle setpoint (theta_ref) for LQR.
+
+    theta_ref > 0  →  lean forward  →  drive forward
+    theta_ref < 0  →  lean backward →  drive backward
+
+    The LQR state becomes: [pitch - pitch_ff + theta_ref, pitch_rate, wheel_vel - v_ref]
+    so positive theta_ref shifts the equilibrium forward, making the LQR apply
+    forward wheel torque to compensate.
+    """
+    def __init__(self, kp: float, ki: float, dt: float):
+        self.kp  = kp
+        self.ki  = ki
+        self.dt  = dt
+        self.integral = 0.0
+
+    def update(self, v_desired_ms: float, v_measured_ms: float) -> float:
+        v_err = v_desired_ms - v_measured_ms
+        self.integral = float(np.clip(
+            self.integral + v_err * self.dt,
+            -VELOCITY_PI_INT_MAX, VELOCITY_PI_INT_MAX))
+        theta_ref = float(np.clip(
+            self.kp * v_err + self.ki * self.integral,
+            -VELOCITY_PI_THETA_MAX, VELOCITY_PI_THETA_MAX))
+        return theta_ref
+
+    def reset(self):
+        self.integral = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -96,19 +148,28 @@ def balance_torque(pitch: float, pitch_rate: float, pitch_integral: float,
 
 
 def lqr_torque(pitch: float, pitch_rate: float, wheel_vel: float,
-               hip_q_avg: float, v_ref: float = 0.0) -> float:
+               hip_q_avg: float, v_ref: float = 0.0,
+               theta_ref: float = 0.0) -> float:
     """3-state LQR balance controller with gain scheduling.
 
-    State: [pitch − pitch_ff, pitch_rate, wheel_vel − v_ref]
-    K is interpolated online based on hip angle (leg position).
+    State: [pitch − pitch_ff + theta_ref, pitch_rate, wheel_vel − v_ref]
 
+    theta_ref (lean command from VelocityPI):
+      +  → lean forward  → drive forward  (positive = forward)
+      0  → static balance (default)
+      −  → lean backward → drive backward
+    v_ref: wheel angular velocity feedforward [rad/s] (v_desired_ms / WHEEL_R)
+
+    K is interpolated online based on hip angle (leg position).
     Returns tau_wheel (symmetric) for both wheels.
     """
     pitch_ff = get_equilibrium_pitch(ROBOT, hip_q_avg)
     K = interpolate_gains(LQR_K_TABLE, hip_q_avg)
 
-    # State vector: [pitch_error, pitch_rate, wheel_vel_error]
-    x = np.array([pitch - pitch_ff, pitch_rate, wheel_vel - v_ref])
+    # State vector: pitch_error with lean command, pitch_rate, wheel_vel_error
+    # theta_ref > 0 = forward drive command; subtract to create negative torque = forward motion
+    # (empirically verified: negative wheel torque drives robot forward in this geometry)
+    x = np.array([pitch - pitch_ff - theta_ref, pitch_rate, wheel_vel - v_ref])
 
     # Control: u = -K @ x
     u = float(-np.dot(K, x))
@@ -122,9 +183,9 @@ def lqr_torque(pitch: float, pitch_rate: float, wheel_vel: float,
 # ---------------------------------------------------------------------------
 # Model initialisation
 # ---------------------------------------------------------------------------
-def _build_model_and_data(p=None):
+def _build_model_and_data(p=None, obstacle_height=0.0):
     if p is None: p = ROBOT
-    xml    = build_xml(p)
+    xml    = build_xml(p, obstacle_height=obstacle_height)
     assets = build_assets()
     model  = mujoco.MjModel.from_xml_string(xml, assets)
     data   = mujoco.MjData(model)
@@ -183,6 +244,280 @@ def init_sim(model, data, p=None, q_hip_init=None):
 
 
 # ---------------------------------------------------------------------------
+# Shared LQR simulation loop (drive + obstacle scenarios)
+# ---------------------------------------------------------------------------
+def _run_sim_loop(model, data, duration: float, v_profile_fn,
+                  dist_time=None, dist_force=0.0, dist_dur=0.2,
+                  add_noise: bool = True, rng=None) -> dict:
+    """Core LQR simulation loop used by drive and obstacle scenarios.
+
+    v_profile_fn(t: float) -> v_target_ms [float]
+        Returns desired linear velocity [m/s] at time t.
+        Use lambda t: 0.0 for static balance.
+
+    dist_time: if not None, apply horizontal impulse at this time.
+    Returns a metrics dict with keys compatible with run_balance_* returns.
+    """
+    if rng is None:
+        rng = np.random.default_rng(None)
+
+    # ── Address lookups ─────────────────────────────────────────────────────
+    def _jqp(name): return model.jnt_qposadr[mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_JOINT, name)]
+    def _jdof(name): return model.jnt_dofadr[mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_JOINT, name)]
+    def _act(name):  return mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+    def _bid(name):  return mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_BODY, name)
+
+    d_root  = _jdof("root_free")
+    d_pitch = d_root + 4
+    s_root  = _jqp("root_free")
+
+    s_hip_L = _jqp("hip_L");   s_hip_R = _jqp("hip_R")
+    d_hip_L = _jdof("hip_L");  d_hip_R = _jdof("hip_R")
+    d_whl_L = _jdof("wheel_spin_L"); d_whl_R = _jdof("wheel_spin_R")
+
+    act_hip_L   = _act("hip_act_L");   act_hip_R   = _act("hip_act_R")
+    act_wheel_L = _act("wheel_act_L"); act_wheel_R = _act("wheel_act_R")
+
+    box_bid     = _bid("box")
+    wheel_bid_L = _bid("wheel_asm_L")
+    wheel_bid_R = _bid("wheel_asm_R")
+
+    # ── Controller state ────────────────────────────────────────────────────
+    dt = model.opt.timestep * CTRL_STEPS
+    vel_pi = VelocityPI(kp=VELOCITY_PI_KP, ki=VELOCITY_PI_KI, dt=dt)
+
+    # 1-step sensor delay buffer (0 ms — update before use)
+    _pitch_d      = get_equilibrium_pitch(ROBOT, Q_NOM)
+    _pitch_rate_d = 0.0
+    _wheel_vel_d  = 0.0
+
+    # ── Metric accumulators ─────────────────────────────────────────────────
+    pitch_sq_sum      = 0.0
+    pitch_sq_sum_post = 0.0   # post-disturbance
+    vel_sq_sum        = 0.0   # velocity tracking error
+    max_pitch         = 0.0
+    wheel_travel_m    = 0.0
+    wheel_liftoff_s   = 0.0
+    n_samples         = 0
+    n_post            = 0
+    n_vel             = 0
+    survived_s        = duration
+    settle_time       = duration
+    settled           = False
+    settle_start      = None
+
+    VEL_ERR_START = 0.5   # skip first 0.5 s (ramp transient)
+    prev_v_target = 0.0
+
+    # ── Simulation loop ─────────────────────────────────────────────────────
+    step = 0
+    while data.time < duration:
+        if step % CTRL_STEPS == 0:
+            # ── Sensors ──────────────────────────────────────────────────────
+            q_quat = data.xquat[box_bid]
+            pitch_true = math.asin(max(-1.0, min(1.0,
+                2.0 * (q_quat[0] * q_quat[2] - q_quat[3] * q_quat[1]))))
+            pitch_rate_true = data.qvel[d_pitch]
+
+            if add_noise:
+                pitch      = pitch_true      + rng.normal(0, PITCH_NOISE_STD_RAD)
+                pitch_rate = pitch_rate_true + rng.normal(0, PITCH_RATE_NOISE_STD_RAD_S)
+            else:
+                pitch, pitch_rate = pitch_true, pitch_rate_true
+
+            wheel_vel = (data.qvel[d_whl_L] + data.qvel[d_whl_R]) / 2.0
+            hip_q_avg = (data.qpos[s_hip_L] + data.qpos[s_hip_R]) / 2.0
+            pitch_ff  = get_equilibrium_pitch(ROBOT, hip_q_avg)
+
+            # ── Velocity profile & PI ─────────────────────────────────────────
+            v_target_ms = v_profile_fn(data.time)
+            v_measured_ms = wheel_vel * WHEEL_R
+            v_ref_rads    = v_target_ms / WHEEL_R
+
+            # Reset PI integrator on direction reversal (prevents windup carryover)
+            if (prev_v_target != 0.0 and
+                    math.copysign(1, v_target_ms) != math.copysign(1, prev_v_target)):
+                vel_pi.reset()
+            prev_v_target = v_target_ms
+
+            theta_ref = vel_pi.update(v_target_ms, v_measured_ms)
+
+            # ── Delay buffer (0 ms: update before use) ────────────────────────
+            _pitch_d, _pitch_rate_d, _wheel_vel_d = pitch, pitch_rate, wheel_vel
+
+            # ── LQR controller ────────────────────────────────────────────────
+            tau_wheel = lqr_torque(
+                _pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
+                v_ref=v_ref_rads, theta_ref=theta_ref)
+
+            data.ctrl[act_wheel_L] = tau_wheel
+            data.ctrl[act_wheel_R] = tau_wheel
+
+            # ── Leg impedance: hold Q_NOM ─────────────────────────────────────
+            for s_hip, d_hip, act_hip in [
+                (s_hip_L, d_hip_L, act_hip_L),
+                (s_hip_R, d_hip_R, act_hip_R),
+            ]:
+                q_hip  = data.qpos[s_hip]
+                dq_hip = data.qvel[d_hip]
+                tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
+                data.ctrl[act_hip] = np.clip(
+                    tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+
+            # ── Metrics ───────────────────────────────────────────────────────
+            pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff))
+            pitch_sq_sum += pitch_err_deg ** 2
+            max_pitch     = max(max_pitch, pitch_err_deg)
+            vel_est       = (wheel_vel + pitch_rate_true) * WHEEL_R
+            wheel_travel_m += abs(vel_est) * dt
+            n_samples += 1
+
+            if dist_time is not None and data.time >= dist_time + dist_dur:
+                pitch_sq_sum_post += pitch_err_deg ** 2
+                n_post += 1
+
+            if data.time >= VEL_ERR_START:
+                vel_sq_sum += (v_target_ms - v_measured_ms) ** 2
+                n_vel += 1
+
+            if (data.xpos[wheel_bid_L][2] > LIFTOFF_THRESHOLD or
+                    data.xpos[wheel_bid_R][2] > LIFTOFF_THRESHOLD):
+                wheel_liftoff_s += dt
+
+            if not settled:
+                if pitch_err_deg < SETTLE_THRESHOLD:
+                    if settle_start is None:
+                        settle_start = data.time
+                    elif data.time - settle_start >= SETTLE_WINDOW:
+                        settle_time = settle_start
+                        settled     = True
+                else:
+                    settle_start = None
+
+            if abs(pitch_true) > FALL_THRESHOLD:
+                survived_s = data.time
+                break
+
+        # ── Disturbance impulse ───────────────────────────────────────────────
+        if dist_time is not None:
+            if dist_time <= data.time < dist_time + dist_dur:
+                data.xfrc_applied[box_bid, 0] = dist_force
+            else:
+                data.xfrc_applied[box_bid, 0] = 0.0
+
+        mujoco.mj_step(model, data)
+        step += 1
+
+    # ── Compute final metrics ────────────────────────────────────────────────
+    rms_pitch_deg  = math.sqrt(pitch_sq_sum / max(1, n_samples))
+    rms_pitch_post = (math.sqrt(pitch_sq_sum_post / max(1, n_post))
+                      if n_post > 0 else 0.0)
+    rms_vel_ms     = (math.sqrt(vel_sq_sum / max(1, n_vel))
+                      if n_vel > 0 else 0.0)
+    final_x        = data.qpos[s_root]
+    fell           = survived_s < duration - 0.05
+
+    return dict(
+        rms_pitch_deg           = round(rms_pitch_deg,  4),
+        rms_pitch_post_dist_deg = round(rms_pitch_post, 4),
+        vel_track_rms_ms        = round(rms_vel_ms,     4),
+        max_pitch_deg           = round(max_pitch,       4),
+        wheel_travel_m          = round(wheel_travel_m,  4),
+        wheel_liftoff_s         = round(wheel_liftoff_s, 4),
+        final_x_m               = round(final_x,         3),
+        settle_time_s           = round(settle_time,     3),
+        survived_s              = round(survived_s,      3),
+        fell                    = fell,
+        status                  = "FAIL" if fell else "PASS",
+        fail_reason             = "fell over" if fell else "",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Drive scenarios — forward then backward
+# ---------------------------------------------------------------------------
+def run_drive_slow_scenario(gains: dict, duration: float = DRIVE_DURATION,
+                             add_noise: bool = True, rng_seed: int = None) -> dict:
+    """Drive at 0.3 m/s forward for first half, backward for second half.
+
+    Uses VelocityPI outer loop + 3-state LQR. VELOCITY_PI_KP/KI taken from
+    module-level globals (set by optimizer worker).
+    """
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data()
+        init_sim(model, data)
+    except Exception as e:
+        return _fail_result(f"model init: {e}")
+
+    v_fn = lambda t: DRIVE_SLOW_SPEED if t < DRIVE_REV_TIME else -DRIVE_SLOW_SPEED
+    raw = _run_sim_loop(model, data, duration, v_fn, add_noise=add_noise, rng=rng)
+
+    fitness = (
+        W_RMS     * raw['rms_pitch_deg']
+        + W_VEL_ERR * raw['vel_track_rms_ms']
+        + W_LIFTOFF * raw['wheel_liftoff_s']
+        + (W_FALL if raw['fell'] else 0.0)
+    )
+    raw['fitness'] = round(fitness, 4)
+    return raw
+
+
+def run_drive_medium_scenario(gains: dict, duration: float = DRIVE_DURATION,
+                               add_noise: bool = True, rng_seed: int = None) -> dict:
+    """Drive at 0.8 m/s forward for first half, backward for second half."""
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data()
+        init_sim(model, data)
+    except Exception as e:
+        return _fail_result(f"model init: {e}")
+
+    v_fn = lambda t: DRIVE_MEDIUM_SPEED if t < DRIVE_REV_TIME else -DRIVE_MEDIUM_SPEED
+    raw = _run_sim_loop(model, data, duration, v_fn, add_noise=add_noise, rng=rng)
+
+    fitness = (
+        W_RMS     * raw['rms_pitch_deg']
+        + W_VEL_ERR * raw['vel_track_rms_ms']
+        + W_LIFTOFF * raw['wheel_liftoff_s']
+        + (W_FALL if raw['fell'] else 0.0)
+    )
+    raw['fitness'] = round(fitness, 4)
+    return raw
+
+
+def run_obstacle_scenario(gains: dict, duration: float = OBSTACLE_DURATION,
+                           add_noise: bool = True, rng_seed: int = None) -> dict:
+    """Drive forward at 0.3 m/s and cross a 3 cm floor step at x=0.5 m.
+
+    Robot starts at x=0, hits step at ~t=1.7 s, must not fall.
+    """
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data(obstacle_height=OBSTACLE_HEIGHT)
+        init_sim(model, data)
+    except Exception as e:
+        return _fail_result(f"model init: {e}")
+
+    v_fn = lambda t: DRIVE_SLOW_SPEED  # constant forward drive
+    raw = _run_sim_loop(model, data, duration, v_fn, add_noise=add_noise, rng=rng)
+
+    # Higher liftoff penalty for obstacle — bouncing over step is bad
+    fitness = (
+        W_RMS         * raw['rms_pitch_deg']
+        + W_VEL_ERR   * raw['vel_track_rms_ms']
+        + W_LIFTOFF * 2.0 * raw['wheel_liftoff_s']
+        + (W_FALL if raw['fell'] else 0.0)
+    )
+    raw['fitness'] = round(fitness, 4)
+    return raw
+
+
+# ---------------------------------------------------------------------------
 # Balance scenario — headless runner
 # ---------------------------------------------------------------------------
 def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
@@ -227,6 +562,12 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
     pitch_integral = 0.0
     odo_x          = 0.0
 
+    # 1-step sensor delay buffer — models ~2 ms BNO086 I2C + CAN latency.
+    # Controller always acts on readings from the previous 500 Hz tick.
+    _pitch_d      = get_equilibrium_pitch(ROBOT, Q_NOM)
+    _pitch_rate_d = 0.0
+    _wheel_vel_d  = 0.0
+
     # ── Metric accumulators ─────────────────────────────────────────────────
     pitch_sq_sum   = 0.0
     max_pitch      = 0.0
@@ -258,17 +599,20 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
 
             wheel_vel = (data.qvel[d_whl_L] + data.qvel[d_whl_R]) / 2.0
 
-            # ── Balance controller ───────────────────────────────────────────
+            # ── Balance controller (uses delayed readings) ───────────────────
             hip_q_avg = (data.qpos[s_hip_L] + data.qpos[s_hip_R]) / 2.0
             pitch_ff  = get_equilibrium_pitch(ROBOT, hip_q_avg)
 
+            # Rotate delay buffer (set to 0ms: update before use)
+            _pitch_d, _pitch_rate_d, _wheel_vel_d = pitch, pitch_rate, wheel_vel
+
             if USE_PD_CONTROLLER:
                 tau_wheel, pitch_integral, odo_x = balance_torque(
-                    pitch, pitch_rate, pitch_integral, odo_x,
-                    wheel_vel, hip_q_avg, dt, gains)
+                    _pitch_d, _pitch_rate_d, pitch_integral, odo_x,
+                    _wheel_vel_d, hip_q_avg, dt, gains)
             else:
                 # LQR controller (pitch_integral, odo_x not used but kept for compatibility)
-                tau_wheel = lqr_torque(pitch, pitch_rate, wheel_vel, hip_q_avg, v_ref=0.0)
+                tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg, v_ref=0.0)
 
             data.ctrl[act_wheel_L] = tau_wheel
             data.ctrl[act_wheel_R] = tau_wheel
@@ -384,6 +728,11 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
     pitch_integral = 0.0
     odo_x          = 0.0
 
+    # 1-step sensor delay buffer — models ~2 ms BNO086 I2C + CAN latency.
+    _pitch_d      = get_equilibrium_pitch(ROBOT, Q_NOM)
+    _pitch_rate_d = 0.0
+    _wheel_vel_d  = 0.0
+
     # ── Metric accumulators ─────────────────────────────────────────────────
     pitch_sq_sum   = 0.0
     pitch_sq_sum_post_dist = 0.0  # RMS pitch AFTER disturbance
@@ -418,17 +767,20 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
 
             wheel_vel = (data.qvel[d_whl_L] + data.qvel[d_whl_R]) / 2.0
 
-            # ── Balance controller ───────────────────────────────────────────
+            # ── Balance controller (uses delayed readings) ───────────────────
             hip_q_avg = (data.qpos[s_hip_L] + data.qpos[s_hip_R]) / 2.0
             pitch_ff  = get_equilibrium_pitch(ROBOT, hip_q_avg)
 
+            # Rotate delay buffer (set to 0ms: update before use)
+            _pitch_d, _pitch_rate_d, _wheel_vel_d = pitch, pitch_rate, wheel_vel
+
             if USE_PD_CONTROLLER:
                 tau_wheel, pitch_integral, odo_x = balance_torque(
-                    pitch, pitch_rate, pitch_integral, odo_x,
-                    wheel_vel, hip_q_avg, dt, gains)
+                    _pitch_d, _pitch_rate_d, pitch_integral, odo_x,
+                    _wheel_vel_d, hip_q_avg, dt, gains)
             else:
                 # LQR controller (pitch_integral, odo_x not used but kept for compatibility)
-                tau_wheel = lqr_torque(pitch, pitch_rate, wheel_vel, hip_q_avg, v_ref=0.0)
+                tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg, v_ref=0.0)
 
             data.ctrl[act_wheel_L] = tau_wheel
             data.ctrl[act_wheel_R] = tau_wheel
@@ -519,57 +871,87 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
 
 
 # ---------------------------------------------------------------------------
-# Combined balance + disturbance scenario (for LQR optimization)
+# Combined scenario v2 (balance + disturbance + drive-slow + drive-med + obstacle)
 # ---------------------------------------------------------------------------
 def run_combined_scenario(gains: dict, duration: float = BALANCE_DURATION,
                           add_noise: bool = True, rng_seed: int = None) -> dict:
-    """Run balance + disturbance, combine fitness with 20%/80% weighting.
+    """Run all 5 scenarios, combine with weighted fitness.
 
-    1. Run balance scenario
-    2. If passes, run disturbance scenario
-    3. Combined fitness = 0.2 * fit_balance + 0.8 * fit_disturbance
-    4. If balance fails, return high fitness (robot must survive balance first)
+    Weights: balance=0.10, disturbance=0.35, drive_slow=0.20,
+             drive_medium=0.20, obstacle=0.15.
+
+    Gates on balance: if balance FAIL, returns 9999 immediately.
+    Module globals VELOCITY_PI_KP/KI are used for VelocityPI in drive scenarios.
 
     gains keys: KP, KD, KP_pos, KP_vel (dummy for LQR, not used)
     """
-    # Run balance scenario first
-    metrics_balance = run_balance_scenario(gains, duration, add_noise, rng_seed)
-
-    if metrics_balance['status'] != 'PASS':
-        # Failed balance scenario — immediately return high fitness
+    # --- 1. Balance gate ---
+    m_bal = run_balance_scenario(gains, duration, add_noise, rng_seed)
+    if m_bal['status'] != 'PASS':
         return dict(
-            rms_pitch_deg=metrics_balance['rms_pitch_deg'],
+            rms_pitch_deg=m_bal['rms_pitch_deg'],
             rms_pitch_post_dist_deg=0.0,
-            max_pitch_deg=metrics_balance['max_pitch_deg'],
-            wheel_travel_m=metrics_balance['wheel_travel_m'],
-            settle_time_s=metrics_balance['settle_time_s'],
-            survived_s=metrics_balance['survived_s'],
-            fitness_balance=metrics_balance['fitness'],
+            max_pitch_deg=m_bal['max_pitch_deg'],
+            wheel_travel_m=m_bal['wheel_travel_m'],
+            vel_track_rms_ms=0.0,
+            settle_time_s=m_bal['settle_time_s'],
+            survived_s=m_bal['survived_s'],
+            fitness_balance=m_bal['fitness'],
             fitness_disturbance=9999.0,
-            fitness=9999.0,  # penalty: didn't survive balance
+            fitness_drive_slow=9999.0,
+            fitness_drive_med=9999.0,
+            fitness_obstacle=9999.0,
+            fitness=9999.0,
             status='FAIL',
             fail_reason='failed balance scenario',
         )
 
-    # Balance passed — now run disturbance scenario
-    metrics_dist = run_balance_with_disturbance_scenario(gains, duration, add_noise, rng_seed)
+    # --- 2. All other scenarios ---
+    m_dist = run_balance_with_disturbance_scenario(gains, duration, add_noise, rng_seed)
+    m_slow = run_drive_slow_scenario(gains, DRIVE_DURATION, add_noise, rng_seed)
+    m_med  = run_drive_medium_scenario(gains, DRIVE_DURATION, add_noise, rng_seed)
+    m_step = run_obstacle_scenario(gains, OBSTACLE_DURATION, add_noise, rng_seed)
 
-    fit_balance = metrics_balance['fitness']
-    fit_dist = metrics_dist['fitness']
-    combined_fit = W_BALANCE * fit_balance + W_DISTURBANCE * fit_dist
+    fit_balance = m_bal['fitness']
+    fit_dist    = m_dist['fitness']
+    fit_slow    = m_slow['fitness']
+    fit_med     = m_med['fitness']
+    fit_step    = m_step['fitness']
+
+    combined_fit = (
+        W_BALANCE    * fit_balance
+        + W_DISTURBANCE * fit_dist
+        + W_DRIVE_SLOW  * fit_slow
+        + W_DRIVE_MED   * fit_med
+        + W_DRIVE_STEP  * fit_step
+    )
+
+    all_pass = all(m['status'] == 'PASS'
+                   for m in [m_dist, m_slow, m_med, m_step])
 
     return dict(
-        rms_pitch_deg=metrics_balance['rms_pitch_deg'],
-        rms_pitch_post_dist_deg=metrics_dist['rms_pitch_post_dist_deg'],
-        max_pitch_deg=max(metrics_balance['max_pitch_deg'], metrics_dist['max_pitch_deg']),
-        wheel_travel_m=metrics_balance['wheel_travel_m'] + metrics_dist['wheel_travel_m'],
-        settle_time_s=metrics_balance['settle_time_s'],
-        survived_s=metrics_dist['survived_s'],
-        fitness_balance=round(fit_balance, 4),
-        fitness_disturbance=round(fit_dist, 4),
-        fitness=round(combined_fit, 4),
-        status='PASS' if metrics_dist['status'] == 'PASS' else 'FAIL',
-        fail_reason='',
+        rms_pitch_deg           = m_bal['rms_pitch_deg'],
+        rms_pitch_post_dist_deg = m_dist.get('rms_pitch_post_dist_deg', 0.0),
+        max_pitch_deg           = max(m_bal['max_pitch_deg'],
+                                      m_dist['max_pitch_deg'],
+                                      m_slow['max_pitch_deg'],
+                                      m_med['max_pitch_deg'],
+                                      m_step['max_pitch_deg']),
+        wheel_travel_m          = m_bal['wheel_travel_m'],
+        vel_track_rms_ms        = m_slow.get('vel_track_rms_ms', 0.0),
+        settle_time_s           = m_bal['settle_time_s'],
+        survived_s              = min(m_dist['survived_s'],
+                                      m_slow['survived_s'],
+                                      m_med['survived_s'],
+                                      m_step['survived_s']),
+        fitness_balance         = round(fit_balance, 4),
+        fitness_disturbance     = round(fit_dist,    4),
+        fitness_drive_slow      = round(fit_slow,    4),
+        fitness_drive_med       = round(fit_med,     4),
+        fitness_obstacle        = round(fit_step,    4),
+        fitness                 = round(combined_fit, 4),
+        status                  = 'PASS' if all_pass else 'FAIL',
+        fail_reason             = '' if all_pass else 'one or more scenarios failed',
     )
 
 
@@ -590,6 +972,12 @@ def evaluate(gains: dict, scenario: str = "balance", label: str = "",
         metrics = run_balance_scenario(gains)
     elif scenario == "balance_disturbance":
         metrics = run_balance_with_disturbance_scenario(gains)
+    elif scenario == "drive_slow":
+        metrics = run_drive_slow_scenario(gains)
+    elif scenario == "drive_medium":
+        metrics = run_drive_medium_scenario(gains)
+    elif scenario == "obstacle":
+        metrics = run_obstacle_scenario(gains)
     elif scenario == "lqr_combined":
         metrics = run_combined_scenario(gains)
     else:

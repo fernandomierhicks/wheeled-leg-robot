@@ -1,12 +1,15 @@
-"""optimize_lqr.py — LQR cost weight optimizer (Q/R search)
+"""optimize_lqr.py — LQR + VelocityPI optimizer (Q/R/Kp_v/Ki_v search)
 
-Searches over Q_pitch, Q_pitch_rate, Q_vel, R weights via (1+8)-ES.
-For each candidate, computes LQR gain table and evaluates on combined scenario
-(balance 20% + disturbance 80%).
+Searches over 6 parameters via (1+8)-ES:
+  Q_PITCH, Q_PITCH_RATE, Q_VEL, R  — LQR cost weights
+  KP_V, KI_V                        — VelocityPI lean-angle gains
+
+Combined fitness: balance(0.10) + disturbance(0.35) + drive_slow(0.20)
+                  + drive_medium(0.20) + obstacle(0.15)
 
 Run:
     python optimize_lqr.py --iters 100 --workers 4
-    python optimize_lqr.py --hours 2 --workers 8
+    python optimize_lqr.py --hours 1.5 --workers 8
 """
 import argparse
 import copy
@@ -28,13 +31,16 @@ from lqr_design import compute_gain_table
 from sim_config import ROBOT
 
 # ── Search space ──────────────────────────────────────────────────────────────
-# LQR cost weights in log10 space.
-# Conservative region: Q=[0.1, 0.01, 0.001] works; expand search around it
+# All parameters searched in log10 space.
+# LQR Q/R: weight balance quality (existing Phase 1 tuning)
+# KP_V/KI_V: VelocityPI lean-angle gains (new Phase 2 drive scenarios)
 PARAM_RANGES = {
-    "Q_PITCH":       (0.01,    1.0),     # pitch error weight (conservative region)
-    "Q_PITCH_RATE":  (0.001,   0.1),     # pitch rate weight
-    "Q_VEL":         (0.0001,  0.01),    # wheel velocity weight
-    "R":             (0.1,     10.0),    # control effort weight
+    "Q_PITCH":       (0.01,    1.0),     # pitch error weight
+    "Q_PITCH_RATE":  (0.001,   1.0),     # pitch rate damping
+    "Q_VEL":         (0.0001,  0.1),     # wheel velocity weight (may increase for drive)
+    "R":             (0.1,     50.0),    # control effort
+    "KP_V":          (0.01,    0.5),     # VelocityPI Kp [rad/(m/s)] — lean angle per vel error
+    "KI_V":          (0.001,   0.2),     # VelocityPI Ki [rad/m]
 }
 
 # ── (1+λ)-ES hyper-parameters ────────────────────────────────────────────────
@@ -66,11 +72,28 @@ def _default_weights() -> dict:
 
 
 def _load_best_weights() -> tuple:
-    """Seed from best CSV result, or use centre-of-range defaults."""
+    """Seed from best CSV result, or use centre-of-range defaults.
+
+    Falls back gracefully when CSV lacks new KP_V/KI_V columns
+    (e.g., if seeding from a Phase 1 results file).
+    """
+    from sim_config import VELOCITY_PI_KP as _kp_default, VELOCITY_PI_KI as _ki_default
     row = get_best_run(scenario="lqr_combined")
     if row is None:
         return _default_weights(), float("inf")
-    weights = {k: float(row.get(k, 0)) for k in PARAM_RANGES}
+    defaults = _default_weights()
+    weights = {}
+    for k in PARAM_RANGES:
+        raw = row.get(k, "") or row.get(k.lower(), "")
+        try:
+            weights[k] = float(raw)
+        except (ValueError, TypeError):
+            weights[k] = defaults[k]
+    # Use sim_config defaults for KP_V/KI_V if missing or zero
+    if weights.get("KP_V", 0.0) <= 0.0:
+        weights["KP_V"] = _kp_default
+    if weights.get("KI_V", 0.0) <= 0.0:
+        weights["KI_V"] = _ki_default
     fitness = float(row.get("fitness", float("inf")))
     return weights, fitness
 
@@ -79,8 +102,8 @@ def _load_best_weights() -> tuple:
 # Multiprocessing worker
 # ---------------------------------------------------------------------------
 def _eval_worker(args):
-    """Evaluate one Q/R candidate in a subprocess."""
-    Q_pitch, Q_pitch_rate, Q_vel, R, label, run_id, csv_path = args
+    """Evaluate one Q/R/Kp_v/Ki_v candidate in a subprocess."""
+    Q_pitch, Q_pitch_rate, Q_vel, R, Kp_v, Ki_v, label, run_id, csv_path = args
 
     import os, sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -90,8 +113,10 @@ def _eval_worker(args):
     from sim_config import ROBOT
     import scenarios
 
-    # Temporarily switch to LQR controller
+    # Temporarily switch to LQR controller + set velocity PI gains
     scenarios.USE_PD_CONTROLLER = False
+    scenarios.VELOCITY_PI_KP = Kp_v
+    scenarios.VELOCITY_PI_KI = Ki_v
 
     # Compute LQR gains for this Q/R candidate
     try:
@@ -107,9 +132,11 @@ def _eval_worker(args):
             run_id=run_id, scenario="lqr_combined", label=label,
             timestamp="",
             Q_PITCH=Q_pitch, Q_PITCH_RATE=Q_pitch_rate, Q_VEL=Q_vel, R=R,
+            KP_V=Kp_v, KI_V=Ki_v,
             rms_pitch_deg=999.0, max_pitch_deg=999.0, wheel_travel_m=999.0,
             settle_time_s=999.0, survived_s=0.0,
             fitness_balance=9999.0, fitness_disturbance=9999.0,
+            fitness_drive_slow=9999.0, fitness_drive_med=9999.0, fitness_obstacle=9999.0,
             fitness=9999.0,
             status="FAIL", fail_reason=f"gain computation: {e}",
         )
@@ -117,7 +144,7 @@ def _eval_worker(args):
     # Dummy gains dict (not used by LQR controller)
     gains = dict(KP=0, KD=0, KP_pos=0, KP_vel=0)
 
-    # Run combined scenario
+    # Run combined scenario (balance + disturbance + drive_slow + drive_med + obstacle)
     metrics = scenarios.run_combined_scenario(gains)
 
     import datetime
@@ -132,6 +159,8 @@ def _eval_worker(args):
         Q_PITCH_RATE=round(Q_pitch_rate, 4),
         Q_VEL=round(Q_vel, 4),
         R=round(R, 4),
+        KP_V=round(Kp_v, 4),
+        KI_V=round(Ki_v, 4),
     )
     row.update(metrics)
 
@@ -140,9 +169,14 @@ def _eval_worker(args):
     log_run(row, csv_path)
 
     fit_str = f"{row.get('fitness', 9999.0):.3f}"
+    f_slow = row.get('fitness_drive_slow', '?')
+    f_med  = row.get('fitness_drive_med', '?')
+    f_step = row.get('fitness_obstacle', '?')
     print(f"[{run_id:5d}] {label:<28}  {row.get('status', 'FAIL'):<5}  "
-          f"fitness={fit_str}  "
-          f"Q=[{Q_pitch:.1f},{Q_pitch_rate:.2f},{Q_vel:.2f}] R={R:.2f}")
+          f"fit={fit_str}  "
+          f"Q=[{Q_pitch:.3f},{Q_pitch_rate:.3f},{Q_vel:.4f}] R={R:.2f}  "
+          f"Kp_v={Kp_v:.3f} Ki_v={Ki_v:.3f}  "
+          f"drv_s={f_slow} drv_m={f_med} obs={f_step}")
 
     return row
 
@@ -166,7 +200,8 @@ def run_evo(hours: float = None, max_iters: int = None,
         print("No prior results found — evaluating default weights first...")
         row = _eval_worker(
             (parent['Q_PITCH'], parent['Q_PITCH_RATE'], parent['Q_VEL'],
-             parent['R'], "evo_seed", next_run_id(csv_path), csv_path)
+             parent['R'], parent['KP_V'], parent['KI_V'],
+             "evo_seed", next_run_id(csv_path), csv_path)
         )
         parent_fit = float(row.get("fitness", float("inf")))
         print(f"Seed fitness: {parent_fit:.3f}\n")
@@ -217,6 +252,7 @@ def run_evo(hours: float = None, max_iters: int = None,
 
             args = [
                 (c['Q_PITCH'], c['Q_PITCH_RATE'], c['Q_VEL'], c['R'],
+                 c['KP_V'], c['KI_V'],
                  lbl, rid, csv_path)
                 for c, lbl, rid in zip(children, labels, ids)
             ]

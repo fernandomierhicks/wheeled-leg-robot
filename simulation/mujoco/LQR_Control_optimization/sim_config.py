@@ -78,6 +78,27 @@ SIM_TIMESTEP = 0.0005                                     # [s] MuJoCo timestep 
 CTRL_HZ      = 500                                        # [Hz] balance controller rate
 CTRL_STEPS   = round(1.0 / (SIM_TIMESTEP * CTRL_HZ))     # MuJoCo steps per control call = 4
 
+# ── Velocity PI outer loop (drive mode) ─────────────────────────────────────
+# Outer loop converts velocity error → lean angle command (theta_ref).
+# theta_ref is added to pitch_ff inside lqr_torque: state[0] = pitch - pitch_ff + theta_ref.
+# Positive theta_ref = lean forward command = drive forward.
+# Starting gains from Control.MD; optimizer will tune via (1+8)-ES.
+VELOCITY_PI_KP = 0.04    # [rad/(m/s)] proportional gain
+VELOCITY_PI_KI = 0.008   # [rad/m]     integral gain
+VELOCITY_PI_THETA_MAX = 0.26   # [rad] ±15° hard clamp on theta_ref output
+VELOCITY_PI_INT_MAX   = 2.0    # [rad·s] integrator anti-windup clamp
+
+# ── Drive scenario parameters ────────────────────────────────────────────────
+DRIVE_SLOW_SPEED   = 0.3    # [m/s] slow scenario target speed
+DRIVE_MEDIUM_SPEED = 0.8    # [m/s] medium scenario target speed
+DRIVE_DURATION     = 7.0    # [s] total drive scenario: 3.5 s fwd + 3.5 s bwd
+DRIVE_REV_TIME     = 3.5    # [s] time to switch from forward to backward
+
+# ── Obstacle scenario parameters ─────────────────────────────────────────────
+OBSTACLE_DURATION  = 5.0    # [s] drive-forward-only, robot hits step at ~t=1.7 s
+OBSTACLE_HEIGHT    = 0.03   # [m] 3 cm floor step
+OBSTACLE_X         = 0.50   # [m] step front face X position (1 m in front of start)
+
 # ── LQR Gain Scheduling Table ────────────────────────────────────────────────
 # Computed in scenarios.py to avoid circular import with lqr_design.py
 # Will be initialized on first use.
