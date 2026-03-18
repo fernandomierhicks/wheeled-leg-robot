@@ -18,9 +18,12 @@ from sim_config import (
     LQR_Q_PITCH, LQR_Q_PITCH_RATE, LQR_Q_VEL, LQR_R,
     VELOCITY_PI_KP as _DEFAULT_KP_V,
     VELOCITY_PI_KI as _DEFAULT_KI_V,
-    VELOCITY_PI_THETA_MAX, VELOCITY_PI_INT_MAX,
+    VELOCITY_PI_THETA_MAX, VELOCITY_PI_INT_MAX, THETA_REF_RATE_LIMIT,
     DRIVE_SLOW_SPEED, DRIVE_MEDIUM_SPEED, DRIVE_DURATION, DRIVE_REV_TIME,
     OBSTACLE_HEIGHT, OBSTACLE_DURATION,
+    PITCH_STEP_RAD, SCENARIO_1_DURATION, SCENARIO_2_DURATION, SCENARIO_3_DURATION,
+    S2_DIST1_TIME, S2_DIST1_FORCE, S2_DIST1_DUR,
+    S2_DIST2_TIME, S2_DIST2_FORCE, S2_DIST2_DUR,
 )
 from physics import build_xml, build_assets, solve_ik, get_equilibrium_pitch
 from run_log import log_run, next_run_id, CSV_PATH
@@ -57,12 +60,21 @@ DISTURBANCE_TIME  = 2.5    # [s] when to apply the impulse (mid-run, after settl
 DISTURBANCE_FORCE = 1.0    # [N] horizontal (X) impulse magnitude
 DISTURBANCE_DUR   = 0.2    # [s] duration of force application
 
+# ── Scenario 1 mid-run disturbances ───────────────────────────────────────────
+S1_DIST1_TIME  = 2.0   # [s] first kick (forward)
+S1_DIST1_FORCE = 4.0   # [N] horizontal (+X)
+S1_DIST1_DUR   = 0.2   # [s]
+S1_DIST2_TIME  = 3.0   # [s] second kick (backward, opposite direction)
+S1_DIST2_FORCE = -4.0  # [N] horizontal (−X)
+S1_DIST2_DUR   = 0.2   # [s]
+
 # ── Fitness weights ──────────────────────────────────────────────────────────
 W_RMS      = 1.0     # RMS pitch error [deg]
 W_TRAVEL   = 1.0     # wheel travel [m] — penalise drifting/oscillating wheels
 W_FALL     = 200.0   # fell-over penalty
 W_RECOVERY = 1.0     # recovery from disturbance (RMS pitch error post-disturbance)
 W_LIFTOFF  = 50.0    # penalty per second any wheel is off the ground (bouncing)
+W_PITCH_RATE = 0.05   # 1_LQR_pitch_step: weight on ISE_pitch_rate (damps oscillation)
 
 LIFTOFF_THRESHOLD = WHEEL_R + 0.005   # 5 mm above nominal contact = airborne
 
@@ -249,7 +261,7 @@ def init_sim(model, data, p=None, q_hip_init=None):
 # Shared LQR simulation loop (drive + obstacle scenarios)
 # ---------------------------------------------------------------------------
 def _run_sim_loop(model, data, duration: float, v_profile_fn,
-                  dist_time=None, dist_force=0.0, dist_dur=0.2,
+                  dist_fn=None,
                   add_noise: bool = True, rng=None) -> dict:
     """Core LQR simulation loop used by drive and obstacle scenarios.
 
@@ -291,6 +303,7 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
     # ── Controller state ────────────────────────────────────────────────────
     dt = model.opt.timestep * CTRL_STEPS
     vel_pi = VelocityPI(kp=VELOCITY_PI_KP, ki=VELOCITY_PI_KI, dt=dt)
+    _prev_theta_ref = 0.0
 
     # 1-step sensor delay buffer (0 ms — update before use)
     _pitch_d      = get_equilibrium_pitch(ROBOT, Q_NOM)
@@ -299,20 +312,18 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
 
     # ── Metric accumulators ─────────────────────────────────────────────────
     pitch_sq_sum      = 0.0
-    pitch_sq_sum_post = 0.0   # post-disturbance
     vel_sq_sum        = 0.0   # velocity tracking error
     max_pitch         = 0.0
     wheel_travel_m    = 0.0
     wheel_liftoff_s   = 0.0
     n_samples         = 0
-    n_post            = 0
     n_vel             = 0
     survived_s        = duration
     settle_time       = duration
     settled           = False
     settle_start      = None
 
-    VEL_ERR_START = 0.5   # skip first 0.5 s (ramp transient)
+    VEL_ERR_START = 1.0   # skip first 1.0 s (settle period)
     prev_v_target = 0.0
 
     # ── Simulation loop ─────────────────────────────────────────────────────
@@ -347,6 +358,10 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
             prev_v_target = v_target_ms
 
             theta_ref = vel_pi.update(v_target_ms, v_measured_ms)
+            _d_max = THETA_REF_RATE_LIMIT * dt
+            theta_ref = float(np.clip(
+                theta_ref, _prev_theta_ref - _d_max, _prev_theta_ref + _d_max))
+            _prev_theta_ref = theta_ref
 
             # ── Delay buffer (0 ms: update before use) ────────────────────────
             _pitch_d, _pitch_rate_d, _wheel_vel_d = pitch, pitch_rate, wheel_vel
@@ -378,10 +393,6 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
             wheel_travel_m += abs(vel_est) * dt
             n_samples += 1
 
-            if dist_time is not None and data.time >= dist_time + dist_dur:
-                pitch_sq_sum_post += pitch_err_deg ** 2
-                n_post += 1
-
             if data.time >= VEL_ERR_START:
                 vel_sq_sum += (v_target_ms - v_measured_ms) ** 2
                 n_vel += 1
@@ -405,19 +416,13 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
                 break
 
         # ── Disturbance impulse ───────────────────────────────────────────────
-        if dist_time is not None:
-            if dist_time <= data.time < dist_time + dist_dur:
-                data.xfrc_applied[box_bid, 0] = dist_force
-            else:
-                data.xfrc_applied[box_bid, 0] = 0.0
+        data.xfrc_applied[box_bid, 0] = dist_fn(data.time) if dist_fn else 0.0
 
         mujoco.mj_step(model, data)
         step += 1
 
     # ── Compute final metrics ────────────────────────────────────────────────
     rms_pitch_deg  = math.sqrt(pitch_sq_sum / max(1, n_samples))
-    rms_pitch_post = (math.sqrt(pitch_sq_sum_post / max(1, n_post))
-                      if n_post > 0 else 0.0)
     rms_vel_ms     = (math.sqrt(vel_sq_sum / max(1, n_vel))
                       if n_vel > 0 else 0.0)
     final_x        = data.qpos[s_root]
@@ -425,7 +430,6 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
 
     return dict(
         rms_pitch_deg           = round(rms_pitch_deg,  4),
-        rms_pitch_post_dist_deg = round(rms_pitch_post, 4),
         vel_track_rms_ms        = round(rms_vel_ms,     4),
         max_pitch_deg           = round(max_pitch,       4),
         wheel_travel_m          = round(wheel_travel_m,  4),
@@ -1019,6 +1023,436 @@ def run_combined_scenario(gains: dict, duration: float = BALANCE_DURATION,
     )
 
 
+# ---------------------------------------------------------------------------
+# 1_LQR_pitch_step — LQR pitch controller, step-response from perturbed pitch
+# ---------------------------------------------------------------------------
+def run_1_LQR_pitch_step(gains: dict, duration: float = BALANCE_DURATION,
+                         add_noise: bool = True, rng_seed: int = None) -> dict:
+    """1_LQR_pitch_step — LQR pitch step response.
+
+    Controller under test : Balance LQR (inner loop only)
+    VelocityPI            : OFF — theta_ref = 0 always
+    Initial condition     : pitch = equilibrium + PITCH_STEP_RAD (~5°)
+    Metric / Fitness      : ISE = integral of squared pitch error [rad²·s]
+                            lower is better; W_FALL penalty if robot falls
+    """
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data()
+        init_sim(model, data)
+    except Exception as e:
+        return dict(ise_rad2s=9999.0, rms_pitch_deg=999.0, max_pitch_deg=999.0,
+                    settle_time_s=999.0, survived_s=0.0,
+                    fitness=9999.0, status="FAIL", fail_reason=str(e))
+
+    def _jqp(name):  return model.jnt_qposadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)]
+    def _jdof(name): return model.jnt_dofadr [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)]
+    def _act(name):  return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+    def _bid(name):  return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
+
+    # Apply pitch perturbation on top of equilibrium
+    s_root   = _jqp("root_free")
+    theta    = get_equilibrium_pitch(ROBOT, Q_NOM) + PITCH_STEP_RAD
+    data.qpos[s_root + 3] = math.cos(theta / 2.0)
+    data.qpos[s_root + 4] = 0.0
+    data.qpos[s_root + 5] = math.sin(theta / 2.0)
+    data.qpos[s_root + 6] = 0.0
+    mujoco.mj_forward(model, data)
+
+    d_root      = _jdof("root_free");    d_pitch = d_root + 4
+    s_hip_L     = _jqp("hip_L");        s_hip_R = _jqp("hip_R")
+    d_hip_L     = _jdof("hip_L");       d_hip_R = _jdof("hip_R")
+    d_whl_L     = _jdof("wheel_spin_L"); d_whl_R = _jdof("wheel_spin_R")
+    act_hip_L   = _act("hip_act_L");    act_hip_R   = _act("hip_act_R")
+    act_wheel_L = _act("wheel_act_L");  act_wheel_R = _act("wheel_act_R")
+    box_bid     = _bid("box")
+
+    dt = model.opt.timestep * CTRL_STEPS
+    pitch_ff_nom = get_equilibrium_pitch(ROBOT, Q_NOM)   # fixed reference
+
+    # Accumulators
+    ise_pitch      = 0.0   # ∫ (pitch - pitch_ff_nom)² dt  — rewards returning to target
+    ise_pitch_rate = 0.0   # ∫ pitch_rate² dt              — rewards killing oscillation
+    pitch_sq_sum   = 0.0
+    max_pitch_deg  = 0.0
+    n_samples      = 0
+    survived_s     = duration
+    settle_time    = duration   # logged only, not used in fitness
+    settled        = False
+    settle_start   = None
+
+    step = 0
+    while data.time < duration:
+        if step % CTRL_STEPS == 0:
+            q_quat = data.xquat[box_bid]
+            pitch_true = math.asin(max(-1.0, min(1.0,
+                2.0 * (q_quat[0] * q_quat[2] - q_quat[3] * q_quat[1]))))
+            pitch_rate_true = data.qvel[d_pitch]
+
+            if add_noise:
+                pitch      = pitch_true      + rng.normal(0, PITCH_NOISE_STD_RAD)
+                pitch_rate = pitch_rate_true + rng.normal(0, PITCH_RATE_NOISE_STD_RAD_S)
+            else:
+                pitch, pitch_rate = pitch_true, pitch_rate_true
+
+            wheel_vel = (data.qvel[d_whl_L] + data.qvel[d_whl_R]) / 2.0
+            hip_q_avg = (data.qpos[s_hip_L] + data.qpos[s_hip_R]) / 2.0
+
+            # LQR — VelocityPI OFF (theta_ref = 0)
+            tau_wheel = lqr_torque(pitch, pitch_rate, wheel_vel, hip_q_avg,
+                                   v_ref=0.0, theta_ref=0.0)
+            data.ctrl[act_wheel_L] = tau_wheel
+            data.ctrl[act_wheel_R] = tau_wheel
+
+            # Leg impedance: hold Q_NOM
+            for s_hip, d_hip, act_hip in [
+                (s_hip_L, d_hip_L, act_hip_L),
+                (s_hip_R, d_hip_R, act_hip_R),
+            ]:
+                q_hip  = data.qpos[s_hip]
+                dq_hip = data.qvel[d_hip]
+                data.ctrl[act_hip] = np.clip(
+                    -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip),
+                    -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+
+            # Metrics — error vs fixed Q_NOM reference (not live hip)
+            pitch_err_rad = pitch_true - pitch_ff_nom
+            pitch_err_deg = math.degrees(abs(pitch_err_rad))
+            pitch_sq_sum += pitch_err_deg ** 2
+            max_pitch_deg = max(max_pitch_deg, pitch_err_deg)
+            n_samples    += 1
+
+            # ISE: pitch error and pitch rate (full window, no split)
+            ise_pitch      += pitch_err_rad ** 2 * dt
+            ise_pitch_rate += pitch_rate_true ** 2 * dt
+
+            # Settle detection for logging only (not used in fitness)
+            if not settled:
+                if pitch_err_deg < SETTLE_THRESHOLD:
+                    if settle_start is None:
+                        settle_start = data.time
+                    elif data.time - settle_start >= SETTLE_WINDOW:
+                        settle_time = settle_start
+                        settled     = True
+                else:
+                    settle_start = None
+
+            # Mid-run disturbances: +4N at t=2s, −4N at t=3s
+            if S1_DIST1_TIME <= data.time < S1_DIST1_TIME + S1_DIST1_DUR:
+                data.xfrc_applied[box_bid, 0] = S1_DIST1_FORCE
+            elif S1_DIST2_TIME <= data.time < S1_DIST2_TIME + S1_DIST2_DUR:
+                data.xfrc_applied[box_bid, 0] = S1_DIST2_FORCE
+            else:
+                data.xfrc_applied[box_bid, 0] = 0.0
+
+            if abs(pitch_true) > FALL_THRESHOLD:
+                survived_s = data.time
+                break
+
+        mujoco.mj_step(model, data)
+        step += 1
+
+    fell          = survived_s < duration - 0.05
+    rms_pitch_deg = math.sqrt(pitch_sq_sum / max(1, n_samples))
+    fitness = (ise_pitch
+               + W_PITCH_RATE * ise_pitch_rate
+               + (W_FALL if fell else 0.0))
+
+    return dict(
+        ise_pitch      = round(ise_pitch,      6),
+        ise_pitch_rate = round(ise_pitch_rate, 6),
+        rms_pitch_deg  = round(rms_pitch_deg,  4),
+        max_pitch_deg  = round(max_pitch_deg,  4),
+        settle_time_s  = round(settle_time,    3),
+        survived_s     = round(survived_s,     3),
+        fitness        = round(fitness,        6),
+        status         = "FAIL" if fell else "PASS",
+        fail_reason    = "fell over" if fell else "",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 2_LQR_impulse_recovery — LQR disturbance rejection, VelocityPI OFF
+# ---------------------------------------------------------------------------
+def run_2_LQR_impulse_recovery(gains: dict, duration: float = BALANCE_DURATION,
+                                add_noise: bool = True, rng_seed: int = None) -> dict:
+    """2_LQR_impulse_recovery — LQR rejection of a horizontal impulse.
+
+    Controller under test : Balance LQR (inner loop only)
+    VelocityPI            : OFF — theta_ref = 0 always
+    Initial condition     : nominal equilibrium
+    Disturbance           : DISTURBANCE_FORCE [N] at t=DISTURBANCE_TIME for DISTURBANCE_DUR [s]
+    Metric / Fitness      : ISE_post = integral of squared pitch error after impulse [rad²·s]
+                            lower is better; W_FALL penalty if robot falls
+    """
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data()
+        init_sim(model, data)
+    except Exception as e:
+        return dict(ise_post_rad2s=9999.0, rms_pitch_pre_deg=999.0,
+                    rms_pitch_post_deg=999.0, max_pitch_post_deg=999.0,
+                    settle_time_post_s=999.0, survived_s=0.0,
+                    fitness=9999.0, status="FAIL", fail_reason=str(e))
+
+    def _jqp(name):  return model.jnt_qposadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)]
+    def _jdof(name): return model.jnt_dofadr [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)]
+    def _act(name):  return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+    def _bid(name):  return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
+
+    d_root      = _jdof("root_free");     d_pitch = d_root + 4
+    s_hip_L     = _jqp("hip_L");         s_hip_R = _jqp("hip_R")
+    d_hip_L     = _jdof("hip_L");        d_hip_R = _jdof("hip_R")
+    d_whl_L     = _jdof("wheel_spin_L"); d_whl_R = _jdof("wheel_spin_R")
+    act_hip_L   = _act("hip_act_L");     act_hip_R   = _act("hip_act_R")
+    act_wheel_L = _act("wheel_act_L");   act_wheel_R = _act("wheel_act_R")
+    box_bid     = _bid("box")
+
+    dt       = model.opt.timestep * CTRL_STEPS
+    dist_end = DISTURBANCE_TIME + DISTURBANCE_DUR
+
+    # Accumulators — pre and post disturbance tracked separately
+    pitch_sq_sum_pre   = 0.0;  n_pre  = 0
+    ise_post_rad2s     = 0.0
+    pitch_sq_sum_post  = 0.0;  n_post = 0
+    max_pitch_post_deg = 0.0
+    survived_s         = duration
+    settle_time_post   = duration
+    settled_post       = False
+    settle_start_post  = None
+
+    step = 0
+    while data.time < duration:
+        if step % CTRL_STEPS == 0:
+            q_quat = data.xquat[box_bid]
+            pitch_true = math.asin(max(-1.0, min(1.0,
+                2.0 * (q_quat[0] * q_quat[2] - q_quat[3] * q_quat[1]))))
+            pitch_rate_true = data.qvel[d_pitch]
+
+            if add_noise:
+                pitch      = pitch_true      + rng.normal(0, PITCH_NOISE_STD_RAD)
+                pitch_rate = pitch_rate_true + rng.normal(0, PITCH_RATE_NOISE_STD_RAD_S)
+            else:
+                pitch, pitch_rate = pitch_true, pitch_rate_true
+
+            wheel_vel = (data.qvel[d_whl_L] + data.qvel[d_whl_R]) / 2.0
+            hip_q_avg = (data.qpos[s_hip_L] + data.qpos[s_hip_R]) / 2.0
+            pitch_ff  = get_equilibrium_pitch(ROBOT, hip_q_avg)
+
+            # LQR — VelocityPI OFF (theta_ref = 0)
+            tau_wheel = lqr_torque(pitch, pitch_rate, wheel_vel, hip_q_avg,
+                                   v_ref=0.0, theta_ref=0.0)
+            data.ctrl[act_wheel_L] = tau_wheel
+            data.ctrl[act_wheel_R] = tau_wheel
+
+            # Leg impedance: hold Q_NOM
+            for s_hip, d_hip, act_hip in [
+                (s_hip_L, d_hip_L, act_hip_L),
+                (s_hip_R, d_hip_R, act_hip_R),
+            ]:
+                q_hip  = data.qpos[s_hip]
+                dq_hip = data.qvel[d_hip]
+                data.ctrl[act_hip] = np.clip(
+                    -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip),
+                    -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+
+            # Metrics — split pre / post disturbance
+            pitch_err_rad = pitch_true - pitch_ff
+            pitch_err_deg = math.degrees(abs(pitch_err_rad))
+
+            if data.time < DISTURBANCE_TIME:
+                pitch_sq_sum_pre += pitch_err_deg ** 2
+                n_pre += 1
+            elif data.time >= dist_end:
+                ise_post_rad2s    += pitch_err_rad ** 2 * dt
+                pitch_sq_sum_post += pitch_err_deg ** 2
+                max_pitch_post_deg = max(max_pitch_post_deg, pitch_err_deg)
+                n_post += 1
+
+                if not settled_post:
+                    if pitch_err_deg < SETTLE_THRESHOLD:
+                        if settle_start_post is None:
+                            settle_start_post = data.time
+                        elif data.time - settle_start_post >= SETTLE_WINDOW:
+                            settle_time_post = settle_start_post
+                            settled_post     = True
+                    else:
+                        settle_start_post = None
+
+            if abs(pitch_true) > FALL_THRESHOLD:
+                survived_s = data.time
+                break
+
+        # Disturbance impulse
+        if DISTURBANCE_TIME <= data.time < dist_end:
+            data.xfrc_applied[box_bid, 0] = DISTURBANCE_FORCE
+        else:
+            data.xfrc_applied[box_bid, 0] = 0.0
+
+        mujoco.mj_step(model, data)
+        step += 1
+
+    fell               = survived_s < duration - 0.05
+    rms_pitch_pre_deg  = math.sqrt(pitch_sq_sum_pre  / max(1, n_pre))
+    rms_pitch_post_deg = math.sqrt(pitch_sq_sum_post / max(1, n_post))
+    fitness            = ise_post_rad2s + (W_FALL if fell else 0.0)
+
+    return dict(
+        ise_post_rad2s     = round(ise_post_rad2s,     5),
+        rms_pitch_pre_deg  = round(rms_pitch_pre_deg,  4),
+        rms_pitch_post_deg = round(rms_pitch_post_deg, 4),
+        max_pitch_post_deg = round(max_pitch_post_deg, 4),
+        settle_time_post_s = round(settle_time_post,   3),
+        survived_s         = round(survived_s,         3),
+        fitness            = round(fitness,             5),
+        status             = "FAIL" if fell else "PASS",
+        fail_reason        = "fell over" if fell else "",
+    )
+
+
+# ── VelocityPI combined scenario weights ─────────────────────────────────────
+# Used by run_combined_PI_scenario. Both sub-fitnesses are normalized to [m/s].
+W_PI_DISTURBANCE = 0.50   # weight on 2_VEL_PI_disturbance fitness (position hold)
+W_PI_STAIRCASE   = 0.50   # weight on 3_VEL_PI_staircase fitness  (setpoint tracking)
+
+# ---------------------------------------------------------------------------
+# 2_VEL_PI_disturbance — VelocityPI outer loop, disturbance rejection
+# ---------------------------------------------------------------------------
+def run_2_VEL_PI_disturbance(gains: dict, duration: float = SCENARIO_2_DURATION,
+                              add_noise: bool = True, rng_seed: int = None) -> dict:
+    """2_VEL_PI_disturbance — VelocityPI position-hold under two impulse kicks.
+
+    Controller under test : VelocityPI (outer) + Balance LQR (inner)
+    Initial condition     : equilibrium pitch — no perturbation
+    Disturbances          : +1N at t=2s, −1N at t=3s, 0.2s each
+    Metric / Fitness      : total absolute wheel travel [m]  (lower = better position hold)
+                            Fall → simulation killed immediately, W_FALL penalty
+    Duration              : 6 s (gives PI 2.8 s to recover after last kick at t=3.2 s)
+    """
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data()
+        init_sim(model, data)
+    except Exception as e:
+        return dict(rms_pitch_deg=999.0, max_pitch_deg=999.0,
+                    wheel_travel_m=999.0, survived_s=0.0,
+                    fitness=9999.0, status="FAIL", fail_reason=str(e))
+
+    def dist_fn(t: float) -> float:
+        if S2_DIST1_TIME <= t < S2_DIST1_TIME + S2_DIST1_DUR:
+            return S2_DIST1_FORCE
+        if S2_DIST2_TIME <= t < S2_DIST2_TIME + S2_DIST2_DUR:
+            return S2_DIST2_FORCE
+        return 0.0
+
+    raw = _run_sim_loop(model, data, duration,
+                        v_profile_fn=lambda t: 0.0,
+                        dist_fn=dist_fn,
+                        add_noise=add_noise, rng=rng)
+
+    fell    = raw['fell']
+    # Normalize by duration → units [m/s], comparable to vel_track_rms_ms in S3.
+    fitness = (raw['wheel_travel_m'] + (W_FALL if fell else 0.0)) / duration
+    return dict(
+        rms_pitch_deg  = raw['rms_pitch_deg'],
+        max_pitch_deg  = raw['max_pitch_deg'],
+        wheel_travel_m = raw['wheel_travel_m'],
+        survived_s     = raw['survived_s'],
+        fitness        = round(fitness, 4),
+        status         = raw['status'],
+        fail_reason    = raw['fail_reason'],
+    )
+
+
+# ---------------------------------------------------------------------------
+# 3_VEL_PI_staircase — VelocityPI setpoint tracking across four speed steps
+# ---------------------------------------------------------------------------
+def run_3_VEL_PI_staircase(gains: dict, duration: float = SCENARIO_3_DURATION,
+                            add_noise: bool = True, rng_seed: int = None) -> dict:
+    """3_VEL_PI_staircase — VelocityPI tracking of a six-step velocity profile.
+
+    Controller under test : VelocityPI (outer) + Balance LQR (inner)
+    Velocity profile      : 0 → +0.3 → +0.6 → +1.0 → −0.5 → −1.0 → 0 m/s
+    Metric / Fitness      : vel_track_rms_ms [m/s] — lower is better
+                            +0.1×rms_pitch_deg penalty (secondary)
+                            Fall → W_FALL penalty, simulation killed
+    Duration              : 13 s
+
+    Profile timing:
+        t =  0.0 –  1.0 s  →  0.0  m/s  (settle; excluded from VEL_ERR metric)
+        t =  1.0 –  3.0 s  → +0.3  m/s  gentle forward
+        t =  3.0 –  5.0 s  → +0.6  m/s  step up
+        t =  5.0 –  7.0 s  → +1.0  m/s  high-speed forward
+        t =  7.0 –  9.0 s  → −0.5  m/s  direction reversal — integrator reset
+        t =  9.0 – 11.0 s  → −1.0  m/s  high-speed backward
+        t = 11.0 – 13.0 s  →  0.0  m/s  return to stop
+    """
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data()
+        init_sim(model, data)
+    except Exception as e:
+        return _fail_result(f"model init: {e}")
+
+    def v_fn(t: float) -> float:
+        if   t <  1.0: return  0.0
+        elif t <  3.0: return  0.3
+        elif t <  5.0: return  0.6
+        elif t <  7.0: return  1.0
+        elif t <  9.0: return -0.5
+        elif t < 11.0: return -1.0
+        else:          return  0.0
+
+    raw = _run_sim_loop(model, data, duration, v_fn, add_noise=add_noise, rng=rng)
+
+    fitness = (
+        W_VEL_ERR        * raw['vel_track_rms_ms']
+        + 0.1 * W_RMS    * raw['rms_pitch_deg']
+        + (W_FALL if raw['fell'] else 0.0)
+    )
+    raw['fitness'] = round(fitness, 4)
+    return raw
+
+
+# ---------------------------------------------------------------------------
+# combined_PI — weighted combination of S2 (hold) + S3 (tracking)
+# ---------------------------------------------------------------------------
+def run_combined_PI_scenario(gains: dict, add_noise: bool = True,
+                              rng_seed: int = None) -> dict:
+    """combined_PI — simultaneous PI position-hold and setpoint-tracking fitness.
+
+    Runs both sub-scenarios and returns a weighted sum.
+    Both sub-fitnesses are normalized to [m/s] units before weighting.
+
+    Fitness = W_PI_DISTURBANCE × s2_fitness + W_PI_STAIRCASE × s3_fitness
+    """
+    rng_seed = int(np.random.default_rng(rng_seed).integers(0, 2**31))
+    s2 = run_2_VEL_PI_disturbance(gains, add_noise=add_noise, rng_seed=rng_seed)
+    s3 = run_3_VEL_PI_staircase(  gains, add_noise=add_noise, rng_seed=rng_seed)
+
+    s2_fell = s2['status'] == 'FAIL'
+    s3_fell = s3.get('fell', s3['status'] == 'FAIL')
+    fell    = s2_fell or s3_fell
+    fitness = W_PI_DISTURBANCE * s2['fitness'] + W_PI_STAIRCASE * s3['fitness']
+
+    fail_parts = []
+    if s2_fell: fail_parts.append("s2 fell")
+    if s3_fell: fail_parts.append("s3 fell")
+
+    return dict(
+        s2_fitness          = s2['fitness'],
+        s3_fitness          = s3['fitness'],
+        s2_wheel_travel_m   = s2['wheel_travel_m'],
+        s3_vel_track_rms_ms = s3['vel_track_rms_ms'],
+        s2_rms_pitch_deg    = s2['rms_pitch_deg'],
+        s3_rms_pitch_deg    = s3['rms_pitch_deg'],
+        survived_s          = round(min(s2['survived_s'], s3['survived_s']), 3),
+        fitness             = round(fitness, 4),
+        status              = "FAIL" if fell else "PASS",
+        fail_reason         = "; ".join(fail_parts),
+    )
+
+
 def _fail_result(reason: str) -> dict:
     return dict(
         rms_pitch_deg=999.0, max_pitch_deg=999.0, wheel_travel_m=999.0,
@@ -1044,6 +1478,16 @@ def evaluate(gains: dict, scenario: str = "balance", label: str = "",
         metrics = run_obstacle_scenario(gains)
     elif scenario == "lqr_combined":
         metrics = run_combined_scenario(gains)
+    elif scenario == "1_LQR_pitch_step":
+        metrics = run_1_LQR_pitch_step(gains, duration=SCENARIO_1_DURATION)
+    elif scenario == "2_LQR_impulse_recovery":
+        metrics = run_2_LQR_impulse_recovery(gains)
+    elif scenario == "2_VEL_PI_disturbance":
+        metrics = run_2_VEL_PI_disturbance(gains, duration=SCENARIO_2_DURATION)
+    elif scenario == "3_VEL_PI_staircase":
+        metrics = run_3_VEL_PI_staircase(gains, duration=SCENARIO_3_DURATION)
+    elif scenario == "combined_PI":
+        metrics = run_combined_PI_scenario(gains)
     else:
         raise ValueError(f"Unknown scenario: '{scenario}'")
 
@@ -1076,21 +1520,18 @@ if __name__ == "__main__":
     gains = dict(KP=60.0, KD=5.0, KP_pos=0.30, KP_vel=0.30)
 
     print("=" * 70)
-    print("BALANCE SCENARIO (still balance, no disturbance)")
+    print("1_LQR_pitch_step  (LQR only, +5° initial perturbation)")
     print("=" * 70)
-    result = run_balance_scenario(gains, add_noise=False, rng_seed=0)
+    result = run_1_LQR_pitch_step(gains, add_noise=False, rng_seed=0)
     for k, v in result.items():
         print(f"  {k:<30} = {v}")
 
     print("\n" + "=" * 70)
-    print("BALANCE+DISTURBANCE SCENARIO (with mid-run horizontal impulse)")
+    print("2_LQR_impulse_recovery  (LQR only, horizontal impulse at t={:.1f}s)".format(
+        DISTURBANCE_TIME))
     print("=" * 70)
-    result = run_balance_with_disturbance_scenario(gains, add_noise=False, rng_seed=0)
+    result = run_2_LQR_impulse_recovery(gains, add_noise=False, rng_seed=0)
     for k, v in result.items():
         print(f"  {k:<30} = {v}")
-
-    print("\n" + "=" * 70)
-    print("Note: Disturbance applied at t={:.1f}s for {:.0f}ms with {:.0f}N force".format(
-        DISTURBANCE_TIME, DISTURBANCE_DUR * 1000, DISTURBANCE_FORCE))
     print("Baseline gains are brittle under disturbance (high pitch error post-impact)")
     print("=" * 70)

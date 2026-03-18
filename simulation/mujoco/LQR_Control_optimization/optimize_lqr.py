@@ -1,15 +1,14 @@
-"""optimize_lqr.py — LQR + VelocityPI optimizer (Q/R/Kp_v/Ki_v search)
+"""optimize_lqr.py — LQR Cost Weight Optimizer (Q/R search)
 
-Searches over 6 parameters via (1+8)-ES:
+Searches over 4 LQR cost parameters via (1+8)-ES:
   Q_PITCH, Q_PITCH_RATE, Q_VEL, R  — LQR cost weights
-  KP_V, KI_V                        — VelocityPI lean-angle gains
 
-Combined fitness: balance(0.10) + disturbance(0.35) + drive_slow(0.20)
-                  + drive_medium(0.20) + obstacle(0.15)
+Optimizes on a single scenario (ACTIVE_SCENARIO).
+VelocityPI gains are held fixed during LQR optimization.
 
 Run:
-    python optimize_lqr.py --iters 100 --workers 4
-    python optimize_lqr.py --hours 1.5 --workers 8
+    python optimize_lqr.py --hours 0.033  # 2 minutes
+    python optimize_lqr.py --hours 1 --workers 8
 """
 import argparse
 import copy
@@ -25,42 +24,42 @@ import numpy as np
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
-from run_log import CSV_PATH, get_best_run, next_run_id, log_run
+from progress_window import ProgressWindow
+
+from run_log import CSV_PATH, get_best_run, next_run_id, log_run, get_scenario_csv_path
 import scenarios
 from lqr_design import compute_gain_table
 from sim_config import ROBOT
 
-# ── Fixed LQR gains (not searched — use Phase 2 best: run_id=2904) ────────────
-# To also optimize Q/R, move these back into PARAM_RANGES.
-FIXED_LQR_PARAMS = {
-    "Q_PITCH":      0.654,
-    "Q_PITCH_RATE": 0.134,
-    "Q_VEL":        0.0269,
-    "R":            9.275,
+# ── Fixed VelocityPI gains (not searched during LQR optimization) ────────────
+FIXED_VELOCITY_PI_PARAMS = {
+    "KP_V":  0.299,
+    "KI_V":  0.500,
 }
 
-# ── Search space: VelocityPI outer loop only ──────────────────────────────────
-# Wider ranges than before — allow more aggressive position-hold gains.
+# ── Search space: LQR Q/R cost weights ────────────────────────────────────────
 PARAM_RANGES = {
-    "KP_V":  (0.001,  2.0),   # VelocityPI Kp [rad/(m/s)]
-    "KI_V":  (0.001,  0.5),   # VelocityPI Ki [rad/m]
+    "Q_PITCH":      (0.001,  100.0),    # weight on pitch error  (wide exploration)
+    "Q_PITCH_RATE": (0.0001, 10.0),     # weight on pitch rate
+    "Q_VEL":        (0.00001, 1.0),     # weight on wheel velocity error
+    "R":            (0.01,   1000.0),   # weight on control effort
 }
 
 # ── Active scenarios ─────────────────────────────────────────────────────────
-# Controls which scenarios contribute to the combined fitness.
-# Options: 'balance', 'disturbance', 'drive_slow', 'drive_med', 'obstacle'
-# Set to None to run all 5 (Phase 2 default).
-ACTIVE_SCENARIOS = ['balance']
+# For LQR optimization: use '1_LQR_pitch_step' (scenario 1 only)
+ACTIVE_SCENARIO = "1_LQR_pitch_step"
 
 # ── Seed weights (used when CSV is empty — fresh start) ──────────────────────
 SEED_WEIGHTS = {
-    "KP_V":  0.04,    # Control.MD recommended starting gain [rad/(m/s)]
-    "KI_V":  0.008,   # Control.MD recommended starting gain [rad/m]
+    "Q_PITCH":      0.654,   # Prior opt (unvalidated per HANDOFF)
+    "Q_PITCH_RATE": 0.134,   # Prior opt (unvalidated per HANDOFF)
+    "Q_VEL":        0.0269,  # Prior opt (unvalidated per HANDOFF)
+    "R":            9.275,   # Prior opt (unvalidated per HANDOFF)
 }
 
 # ── (1+λ)-ES hyper-parameters ────────────────────────────────────────────────
 LAMBDA           = 8      # offspring per generation
-SIGMA_LOG_INIT   = 0.50   # initial step size in log10 space (wider spread for fresh start)
+SIGMA_LOG_INIT   = 1.00   # initial step size in log10 space (large exploration)
 SIGMA_LOG_MIN    = 0.01
 SIGMA_LOG_MAX    = 1.00
 SUCCESS_TARGET   = 1.0 / 5.0
@@ -87,13 +86,8 @@ def _default_weights() -> dict:
 
 
 def _load_best_weights() -> tuple:
-    """Seed from best CSV result, or use SEED_WEIGHTS when CSV is empty.
-
-    Falls back gracefully when CSV lacks new KP_V/KI_V columns
-    (e.g., if seeding from a Phase 1 results file).
-    """
-    from sim_config import VELOCITY_PI_KP as _kp_default, VELOCITY_PI_KI as _ki_default
-    row = get_best_run(scenario="lqr_combined")
+    """Seed from best CSV result, or use SEED_WEIGHTS when CSV is empty."""
+    row = get_best_run(scenario=ACTIVE_SCENARIO)
     if row is None:
         return dict(SEED_WEIGHTS), float("inf")
     defaults = _default_weights()
@@ -104,11 +98,6 @@ def _load_best_weights() -> tuple:
             weights[k] = float(raw)
         except (ValueError, TypeError):
             weights[k] = defaults[k]
-    # Use sim_config defaults for KP_V/KI_V if missing or zero
-    if weights.get("KP_V", 0.0) <= 0.0:
-        weights["KP_V"] = _kp_default
-    if weights.get("KI_V", 0.0) <= 0.0:
-        weights["KI_V"] = _ki_default
     fitness = float(row.get("fitness", float("inf")))
     return weights, fitness
 
@@ -117,8 +106,8 @@ def _load_best_weights() -> tuple:
 # Multiprocessing worker
 # ---------------------------------------------------------------------------
 def _eval_worker(args):
-    """Evaluate one Q/R/Kp_v/Ki_v candidate in a subprocess."""
-    Q_pitch, Q_pitch_rate, Q_vel, R, Kp_v, Ki_v, label, run_id, csv_path, active_scenarios = args
+    """Evaluate one Q/R candidate (LQR only) in a subprocess."""
+    Q_pitch, Q_pitch_rate, Q_vel, R, label, run_id, csv_path, scenario_name = args
 
     import os, sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -128,11 +117,11 @@ def _eval_worker(args):
     from sim_config import ROBOT
     import scenarios
 
-    # Temporarily switch to LQR controller + outer VelocityPI + set gains
+    # Configure: LQR controller ON, VelocityPI OFF (or set to fixed values)
     scenarios.USE_PD_CONTROLLER = False
-    scenarios.USE_VELOCITY_PI   = True   # outer loop active during optimization
-    scenarios.VELOCITY_PI_KP = Kp_v
-    scenarios.VELOCITY_PI_KI = Ki_v
+    scenarios.USE_VELOCITY_PI   = False  # LQR-only optimization
+    scenarios.VELOCITY_PI_KP = 0.0
+    scenarios.VELOCITY_PI_KI = 0.0
 
     # Compute LQR gains for this Q/R candidate
     try:
@@ -145,14 +134,11 @@ def _eval_worker(args):
         scenarios.LQR_K_TABLE = K_table
     except Exception as e:
         return dict(
-            run_id=run_id, scenario="lqr_combined", label=label,
+            run_id=run_id, scenario=scenario_name, label=label,
             timestamp="",
             Q_PITCH=Q_pitch, Q_PITCH_RATE=Q_pitch_rate, Q_VEL=Q_vel, R=R,
-            KP_V=Kp_v, KI_V=Ki_v,
             rms_pitch_deg=999.0, max_pitch_deg=999.0, wheel_travel_m=999.0,
             settle_time_s=999.0, survived_s=0.0,
-            fitness_balance=9999.0, fitness_disturbance=9999.0,
-            fitness_drive_slow=9999.0, fitness_drive_med=9999.0, fitness_obstacle=9999.0,
             fitness=9999.0,
             status="FAIL", fail_reason=f"gain computation: {e}",
         )
@@ -160,23 +146,21 @@ def _eval_worker(args):
     # Dummy gains dict (not used by LQR controller)
     gains = dict(KP=0, KD=0, KP_pos=0, KP_vel=0)
 
-    # Run combined scenario (subset controlled by active_scenarios)
-    metrics = scenarios.run_combined_scenario(gains, active_scenarios=active_scenarios)
+    # Run the specified scenario
+    metrics = scenarios.evaluate(gains, scenario=scenario_name)
 
     import datetime
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     row = dict(
         run_id=run_id,
-        scenario="lqr_combined",
+        scenario=scenario_name,
         label=label,
         timestamp=ts,
-        Q_PITCH=round(Q_pitch, 4),
-        Q_PITCH_RATE=round(Q_pitch_rate, 4),
-        Q_VEL=round(Q_vel, 4),
-        R=round(R, 4),
-        KP_V=round(Kp_v, 4),
-        KI_V=round(Ki_v, 4),
+        Q_PITCH=round(Q_pitch, 6),
+        Q_PITCH_RATE=round(Q_pitch_rate, 6),
+        Q_VEL=round(Q_vel, 6),
+        R=round(R, 6),
     )
     row.update(metrics)
 
@@ -185,14 +169,9 @@ def _eval_worker(args):
     log_run(row, csv_path)
 
     fit_str = f"{row.get('fitness', 9999.0):.3f}"
-    f_slow = row.get('fitness_drive_slow', '?')
-    f_med  = row.get('fitness_drive_med', '?')
-    f_step = row.get('fitness_obstacle', '?')
     print(f"[{run_id:5d}] {label:<28}  {row.get('status', 'FAIL'):<5}  "
           f"fit={fit_str}  "
-          f"Q=[{Q_pitch:.3f},{Q_pitch_rate:.3f},{Q_vel:.4f}] R={R:.2f}  "
-          f"Kp_v={Kp_v:.3f} Ki_v={Ki_v:.3f}  "
-          f"drv_s={f_slow} drv_m={f_med} obs={f_step}")
+          f"Q=[{Q_pitch:.3f},{Q_pitch_rate:.3f},{Q_vel:.4f}] R={R:.2f}")
 
     return row
 
@@ -202,7 +181,7 @@ def _eval_worker(args):
 # ---------------------------------------------------------------------------
 def run_evo(hours: float = None, max_iters: int = None,
             seed: int = None, n_workers: int = None,
-            csv_path: str = CSV_PATH):
+            csv_path: str = None, win: "ProgressWindow | None" = None):
 
     if hours is None and max_iters is None:
         hours = 1.0
@@ -210,17 +189,15 @@ def run_evo(hours: float = None, max_iters: int = None,
         n_workers = min(LAMBDA, multiprocessing.cpu_count())
     if seed is not None:
         np.random.seed(seed)
+    if csv_path is None:
+        csv_path = get_scenario_csv_path(ACTIVE_SCENARIO)
 
     parent, parent_fit = _load_best_weights()
     if parent_fit == float("inf"):
-        print("No prior results found — evaluating default weights first...")
+        print("No prior results found — evaluating seed weights first...")
         row = _eval_worker(
-            (parent.get('Q_PITCH',      FIXED_LQR_PARAMS['Q_PITCH']),
-             parent.get('Q_PITCH_RATE', FIXED_LQR_PARAMS['Q_PITCH_RATE']),
-             parent.get('Q_VEL',        FIXED_LQR_PARAMS['Q_VEL']),
-             parent.get('R',            FIXED_LQR_PARAMS['R']),
-             parent['KP_V'], parent['KI_V'],
-             "evo_seed", next_run_id(csv_path), csv_path, ACTIVE_SCENARIOS)
+            (parent['Q_PITCH'], parent['Q_PITCH_RATE'], parent['Q_VEL'], parent['R'],
+             "evo_seed", next_run_id(csv_path), csv_path, ACTIVE_SCENARIO)
         )
         parent_fit = float(row.get("fitness", float("inf")))
         print(f"Seed fitness: {parent_fit:.3f}\n")
@@ -240,6 +217,7 @@ def run_evo(hours: float = None, max_iters: int = None,
 
     print("=" * 80)
     print(f"LQR Cost Weight Optimizer (1+{LAMBDA})-ES")
+    print(f"  Scenario: {ACTIVE_SCENARIO}")
     print(f"  workers={n_workers}  |  params={list(PARAM_RANGES)}")
     if hours:
         print(f"  Duration: {hours:.1f} h")
@@ -270,12 +248,8 @@ def run_evo(hours: float = None, max_iters: int = None,
             labels = [f"evo_g{gen:06d}_c{i}" for i in range(LAMBDA)]
 
             args = [
-                (c.get('Q_PITCH',      FIXED_LQR_PARAMS['Q_PITCH']),
-                 c.get('Q_PITCH_RATE', FIXED_LQR_PARAMS['Q_PITCH_RATE']),
-                 c.get('Q_VEL',        FIXED_LQR_PARAMS['Q_VEL']),
-                 c.get('R',            FIXED_LQR_PARAMS['R']),
-                 c['KP_V'], c['KI_V'],
-                 lbl, rid, csv_path, ACTIVE_SCENARIOS)
+                (c['Q_PITCH'], c['Q_PITCH_RATE'], c['Q_VEL'], c['R'],
+                 lbl, rid, csv_path, ACTIVE_SCENARIO)
                 for c, lbl, rid in zip(children, labels, ids)
             ]
 
@@ -311,13 +285,41 @@ def run_evo(hours: float = None, max_iters: int = None,
 
             gen += 1
 
+            # ── Progress update (every generation for window; print every 5) ──
+            elapsed_s = time.perf_counter() - t_start
+            if deadline:
+                total_s  = hours * 3600.0
+                pct      = min(100.0, elapsed_s / total_s * 100.0)
+                remain_s = max(0.0, total_s - elapsed_s)
+            else:
+                pct      = min(100.0, gen / max_iters * 100.0)
+                remain_s = 0.0
+
+            sr = sum(success_window) / len(success_window) if success_window else 0.0
+            gains_str = _gains_to_str(parent)
+
+            if win is not None:
+                win.update(
+                    pct=pct, elapsed_s=elapsed_s, remaining_s=remain_s,
+                    n_evals=n_evals, gen=gen,
+                    best_fit=best_fit,
+                    best_gains=gains_str,
+                    success_rate=sr,
+                    status="running",
+                )
+
             if gen % 5 == 0:
-                elapsed = (time.perf_counter() - t_start) / 60.0
-                sigma_str = "  ".join(f"{k}={v:.2f}" for k, v in sigmas.items())
-                print(f"\n[gen {gen:5d}]  best={best_fit:.3f}  parent={parent_fit:.3f}  "
-                      f"evals={n_evals}  elapsed={elapsed:.1f}min")
-                print(f"  parent: {_gains_to_str(parent)}")
-                print(f"  sigma:  {sigma_str}")
+                elapsed_min = elapsed_s / 60.0
+                if deadline:
+                    remain_str   = f"{int(remain_s // 60):02d}:{int(remain_s % 60):02d}"
+                    progress_str = f"{pct:5.1f}%  remaining={remain_str}"
+                else:
+                    progress_str = f"{pct:5.1f}%  gen {gen}/{max_iters}"
+                filled = int(pct / 100 * 40)
+                bar = "[" + "#" * filled + "-" * (40 - filled) + "]"
+                print(f"\n{bar} {progress_str}  evals={n_evals}  elapsed={elapsed_min:.1f}min")
+                print(f"  best={best_fit:.4f}  parent={parent_fit:.4f}  best_at_gen={best_gen}")
+                print(f"  gains: {gains_str}")
 
     elapsed_min = (time.perf_counter() - t_start) / 60.0
     print("\n" + "=" * 80)
@@ -351,8 +353,12 @@ Examples:
                     help="RNG seed for reproducibility")
     args = ap.parse_args()
 
-    run_evo(hours=args.hours, max_iters=args.iters,
-            seed=args.seed, n_workers=args.workers)
+    win = ProgressWindow(f"LQR Optimizer — {ACTIVE_SCENARIO}")
+    try:
+        run_evo(hours=args.hours, max_iters=args.iters,
+                seed=args.seed, n_workers=args.workers, win=win)
+    finally:
+        win.finish()
 
 
 if __name__ == "__main__":

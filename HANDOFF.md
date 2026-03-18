@@ -1,94 +1,106 @@
 # HANDOFF.md — Project Status & Next Steps
 
-Read this before starting work. Check `CLAUDE.md` for full design context.
+Read this before starting work. Check `CLAUDE.md` for full design context and `docs/Control.MD` for controller architecture and full scenario specs.
 
 ---
 
 ## Current Status (2026-03-18)
 
-### Phase 1 — 3-State LQR + Gain Scheduling ✅ COMPLETE
+### Phase 1 — Balance LQR ✅ COMPLETE & BASELINED
 
-Best result (run_id=6288, 8496 evals):
+- **Scenario:** `1_LQR_pitch_step` — 5° pitch step + two ±4N kicks, VelocityPI OFF
+- **Optimizer:** `optimize_lqr.py` — searches Q_PITCH, Q_PITCH_RATE, Q_VEL, R
+- **Best run:** 4448 evals, 5-min run
 
 | Param | Value |
 |-------|-------|
-| Q_PITCH | 0.654 |
-| Q_PITCH_RATE | 0.134 |
-| Q_VEL | 0.0269 |
-| R | 9.275 |
-| K_nominal | [-12.672, -1.754, -0.003] |
+| Q_PITCH | 0.138282 |
+| Q_PITCH_RATE | 0.023379 |
+| Q_VEL | 0.004591 |
+| R | 9.998298 |
+| fitness | 0.003267 |
+| rms_pitch | 0.926° |
 
-Balance-only fitness: **2.94 m** wheel travel (before VelocityPI).
+Gains in `sim_config.py` and `results_1_LQR_pitch_step.csv`.
 
----
-
-### Phase 2a — VelocityPI Wired + Optimized ✅ COMPLETE
-
-VelocityPI outer loop (v_desired=0 in BALANCE mode) is wired into all balance scenarios.
-
-Best result (3032 evals, 2 min, balance-only):
-
-| Param | Value | Notes |
-|-------|-------|-------|
-| KP_V | 0.299 | rad/(m/s) |
-| KI_V | 0.500 | rad/m — **at upper bound** |
-| fitness | **0.142 m** | wheel travel over 5s (was 2.94 m) |
-
-20× improvement in position hold. KI_V hit the 0.5 upper bound — there may be more gain from widening to 1.0–2.0.
-
-**Sign convention confirmed:** `vel_est_ms = wheel_vel * WHEEL_R` — positive wheel_vel = forward body motion.
-
-**Simulator capability:** `replay.py` with v_desired slider (±1 m/s) feeding VelocityPI allows manual drive control. Robot balances and drives forward/backward stably.
+**Character:** Low Q_PITCH relative to Q_PITCH_RATE → controller damps pitch rate, not pitch angle. Steady-state offset is intentional — handled by VelocityPI outer loop.
 
 ---
 
-## What Was Done This Session (2026-03-18, evening)
+### Phase 2 — VelocityPI Outer Loop ✅ FULLY BASELINED
 
-| Area | Change |
-|------|--------|
-| `scenarios.py` | VelocityPI wired with correct sign (`vel_est_ms = wheel_vel * WHEEL_R`) |
-| `replay.py` | 4-panel telemetry (Pitch + commanded pitch overlay, Wheel Torque, Hip Angle, Robot Velocity m/s) |
-| `replay.py` | v_desired slider (±1.0 m/s) → feeds VelocityPI directly; Drive ON/OFF toggle |
-| `replay.py` | XYZ world frame axes in MuJoCo viewer (red=+X forward, green=+Y left, blue=+Z up) |
-| `sim_config.py` | VELOCITY_PI_KP=0.299, VELOCITY_PI_KI=0.500 updated from optimization |
-| `results.csv` | Cleared — fresh start after sign fix; 3032 new runs logged |
+S2 and S3 jointly optimised via `combined_PI`. S3 extended to ±1 m/s with forced direction reversal. `theta_ref` rate-limited at 2.0 rad/s to suppress pitch-rate spikes on lean command steps.
+
+**S2 — `2_VEL_PI_disturbance`** — position hold under disturbance kicks
+- Equilibrium start, `v_desired = 0`, ±1N kicks at t=2/3s, 6s duration
+- Metric: absolute wheel travel [m] / duration → units m/s
+
+**S3 — `3_VEL_PI_staircase`** — velocity setpoint tracking
+- Staircase: 0 → +0.3 → +0.6 → +1.0 → −0.5 → −1.0 → 0 m/s, 13s duration
+- 1s settle window before first step (excluded from metric)
+- Metric: `vel_track_rms_ms` [m/s] + 0.1 × rms_pitch_deg penalty
+
+**Combined PI — `combined_PI`** — optimizer target
+- fitness = 0.5 × S2_fitness + 0.5 × S3_fitness
+- Results in `results_combined_PI.csv`
+
+**Baselined gains (combined_PI, 30-min / 5488 evals, 2026-03-18):**
+| Param | Value |
+|-------|-------|
+| KP_V | 0.502932 |
+| KI_V | 0.012678 |
+| fitness | 0.61 (on extended ±1 m/s S3) |
+| THETA_REF_RATE_LIMIT | 2.0 rad/s |
 
 ---
 
-## Next Task: Re-run Optimizer with All Scenarios
+## Scenario Reference
 
-### Before optimizing tomorrow:
+| # | Name | Controller | VelocityPI | v_desired | Disturbance | Metric | Status |
+|---|------|------------|------------|-----------|-------------|--------|--------|
+| 1 | `1_LQR_pitch_step` | LQR only | OFF | 0 | ±4N at t=2/3s | ISE pitch [rad²·s] | ✅ Optimised |
+| 2 | `2_VEL_PI_disturbance` | VelocityPI + LQR | ON | 0 (hold) | ±1N at t=2/3s | wheel travel / duration [m/s] | ✅ Baselined |
+| 3 | `3_VEL_PI_staircase` | VelocityPI + LQR | ON | 0→+0.3→+0.6→+1.0→−0.5→−1.0→0 | none | vel_track_rms_ms [m/s] | ✅ Baselined |
+| — | `combined_PI` | VelocityPI + LQR | ON | S2+S3 | S2 kicks | 0.5×S2 + 0.5×S3 | ✅ Baselined |
 
-1. **Check scenario metrics** — run each scenario individually and review output metrics (rms_pitch, wheel_travel, survived_s, fail_reason) to verify they're meaningful before combining:
-   ```
-   python -c "import scenarios; scenarios.run_balance_scenario({}) "
-   python -c "import scenarios; scenarios.run_balance_with_disturbance_scenario({})"
-   # etc. for drive_slow, drive_med, obstacle
-   ```
-   Confirm:
-   - Balance: robot holds position <0.5m drift over 5s ✓
-   - Disturbance: robot recovers from 1N push at t=2.5s
-   - Drive slow (0.3 m/s): robot reaches and holds speed
-   - Drive medium (0.8 m/s): same
-   - Obstacle (3cm step): robot crosses without falling
+Full details (timing, disturbance forces, fitness formulas) in `docs/Control.MD → Optimizer Scenarios`.
 
-2. **Widen KI_V range** in `optimize_lqr.py`:
-   ```python
-   PARAM_RANGES = {
-       "KP_V": (0.001, 2.0),
-       "KI_V": (0.001, 2.0),   # was 0.5 — KI hit ceiling last run
-   }
-   ```
+---
 
-3. **Enable all scenarios** in `optimize_lqr.py`:
-   ```python
-   ACTIVE_SCENARIOS = None  # runs all 5: balance, disturbance, drive_slow, drive_med, obstacle
-   ```
+## Replay Usage
 
-4. **Run 1–2 hour optimization:**
-   ```
-   python optimize_lqr.py --hours 2 --workers 8
-   ```
+```bash
+# View current gains in any scenario
+python replay.py --baseline --scenario 1_LQR_pitch_step
+python replay.py --baseline --scenario 2_VEL_PI_disturbance
+python replay.py --baseline --scenario 3_VEL_PI_staircase
+
+# Replay a specific run from CSV
+python replay.py 42
+python replay.py --top 3    # 3rd-best run by fitness
+python replay.py --list     # list all runs
+```
+
+Telemetry panels: pitch + pitch cmd, wheel torque, pitch rate, robot velocity + commanded velocity (dashed orange). S3 staircase is auto-scheduled — no slider interaction needed.
+
+---
+
+## Next Steps
+
+### Immediate — Phase 3: Yaw PI
+
+Phase 2 is complete. Next step is Phase 3 — Yaw PI + Turn Mode. See `docs/Control.MD → Phase 3`.
+
+To re-run the PI optimizer (e.g. after further S3 changes):
+```bash
+# Clear CSV first (scenario params changed)
+rm results_combined_PI.csv
+python optimize_vel_pi.py --hours 0.5
+```
+
+### Phase 3 — Yaw PI
+
+See `docs/Control.MD → Phase 3`.
 
 ---
 
@@ -96,15 +108,16 @@ Best result (3032 evals, 2 min, balance-only):
 
 | File | Purpose |
 |------|---------|
-| `simulation/mujoco/LQR_Control_optimization/sim_config.py` | All geometry + tunable params (source of truth) |
-| `simulation/mujoco/LQR_Control_optimization/scenarios.py` | Headless scenarios + fitness functions |
-| `simulation/mujoco/LQR_Control_optimization/optimize_lqr.py` | (1+8)-ES optimizer; set ACTIVE_SCENARIOS and PARAM_RANGES here |
-| `simulation/mujoco/LQR_Control_optimization/replay.py` | MuJoCo viewer (`--top`, `--baseline`, `--slowmo`, `--freefall`) |
-| `simulation/mujoco/LQR_Control_optimization/lqr_design.py` | LQR solver + gain scheduling |
-| `simulation/mujoco/LQR_Control_optimization/physics.py` | XML builder + IK + CoM |
-| `simulation/mujoco/LQR_Control_optimization/run_log.py` | CSV logging |
-| `simulation/mujoco/LQR_Control_optimization/results.csv` | Run history |
-| `docs/Control.MD` | Full 4-controller architecture + phase plans |
+| `sim_config.py` | Single source of truth — all gains, durations, disturbance forces |
+| `scenarios.py` | All scenario runners + `_run_sim_loop` shared physics backend |
+| `optimize_lqr.py` | (1+8)-ES — searches Q_PITCH, Q_PITCH_RATE, Q_VEL, R |
+| `optimize_vel_pi.py` | (1+8)-ES — searches KP_V, KI_V; supports `--scenario combined_PI` |
+| `replay.py` | MuJoCo viewer + 4-panel matplotlib telemetry, staircase auto-schedule |
+| `progress_window.py` | Floating tkinter progress window during optimizer runs |
+| `lqr_design.py` | LQR solver + gain scheduling at 3 leg positions |
+| `results_1_LQR_pitch_step.csv` | Scenario 1 run history |
+| `results.csv` | Scenario 2/3/combined run history (clear before re-optimising after param changes) |
+| `docs/Control.MD` | Full architecture, scenario specs, LQI rationale, phase plans |
 
 ---
 
@@ -119,7 +132,3 @@ Best result (3032 evals, 2 min, balance-only):
 ## Future Phase Plans
 
 See `docs/Control.MD` for Phases 3–5 (Yaw PI, Leg Suspension, Jump Recovery).
-
-Key tuning notes:
-- `HIP_IMPEDANCE_TORQUE_LIMIT` (2 N·m): tune properly in Phase 4.
-- `DISTURBANCE_FORCE` (1 N) and `DISTURBANCE_TIME` (2.5s): fixed; may increase force in Phase 3.

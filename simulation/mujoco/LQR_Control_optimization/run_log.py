@@ -11,7 +11,16 @@ import os
 
 # ── File location ───────────────────────────────────────────────────────────
 _HERE    = os.path.dirname(os.path.abspath(__file__))
-CSV_PATH = os.path.join(_HERE, "results.csv")
+CSV_PATH = os.path.join(_HERE, "results.csv")  # Default (legacy)
+
+def get_scenario_csv_path(scenario: str) -> str:
+    """Return scenario-specific CSV path to isolate configs.
+
+    Example: scenario='1_LQR_pitch_step' → 'results_1_LQR_pitch_step.csv'
+    Ensures scenario config changes don't contaminate old runs.
+    """
+    safe_name = scenario.replace(" ", "_").replace("/", "_")
+    return os.path.join(_HERE, f"results_{safe_name}.csv")
 
 # ── Schema ──────────────────────────────────────────────────────────────────
 CSV_COLS = [
