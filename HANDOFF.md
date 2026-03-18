@@ -6,96 +6,62 @@ Read this before starting work. Check `CLAUDE.md` for full design context.
 
 ## Current Status (2026-03-17, updated)
 
-### Phase 1 — 3-State LQR + Gain Scheduling ✅ COMPLETE & RE-BASELINED
+### Phase 1 — 3-State LQR + Gain Scheduling ✅ COMPLETE (superseded by Phase 2 baseline)
+
+Phase 1 v2 result (run_id=6288): Q=[0.0438, 0.0021, 0.0001], R=9.027, fitness=0.400
+Superseded — Phase 2 uses a combined 5-scenario fitness; Phase 1 gains performed poorly on drive scenarios.
+
+---
+
+### Phase 2 — Velocity PI + Drive Mode ✅ COMPLETE & BASELINED
 
 **Active folder:** `simulation/mujoco/LQR_Control_optimization/`
 
-Optimized Q/R weights — **Phase 1 v2** (1062 gen / 8496 evals, 10 min, 8 workers):
+Optimized Q/R/KP_V/KI_V — **Phase 2** (2346 gen / 18768 evals, 90 min, 8 workers):
 
 | Param | Value | Notes |
 |-------|-------|-------|
-| Q_PITCH | 0.0438 | ~3.6× lower than v1 |
-| Q_PITCH_RATE | 0.0021 | ~2× lower than v1 |
-| Q_VEL | 0.0001 | ~20× lower than v1 |
-| R | 9.0266 | ~20× higher than v1 — prefers low effort |
+| Q_PITCH | 0.8168 | ~19× higher than Phase 1 v2 — needs stronger pitch control when driving |
+| Q_PITCH_RATE | 0.2553 | ~122× higher than Phase 1 v2 — more damping |
+| Q_VEL | 0.0001 | unchanged — velocity still unpenalised by LQR |
+| R | 48.565 | at ceiling (50.0 max) — optimizer wants even higher R |
+| KP_V | 0.010 | at lower bound (0.01 min) — tiny lean command preferred |
+| KI_V | 0.001 | at lower bound (0.001 min) |
 
-K_nominal (at Q_NOM) = [-12.672, -1.754, -0.003]
+**Phase 2 Performance (run_id=13493, combined 5-scenario fitness):**
 
-**Phase 1 v2 Performance (run_id=6288, new equilibrium-relative metric):**
+| Scenario | Fitness | Notes |
+|----------|---------|-------|
+| Balance | 0.249 | |
+| Disturbance | 0.424 | |
+| Drive slow | 0.486 | vel_track_rms ≈ 0.286 m/s |
+| Drive medium | **1.346** | dominant term — velocity error large |
+| Obstacle | 0.526 | |
+| **Combined** | **0.619** | weights: 10/35/20/20/15% |
 
-| Metric | Value |
-|--------|-------|
-| RMS pitch | 0.113° |
-| Max pitch | 0.363° |
-| Wheel travel | 0.856 m |
-| Wheel liftoff | 0 s |
-| Settle time | 0.0 s (settled immediately) |
-| Survived | 5.0 s (full duration) |
-| Combined fitness | **0.400** |
+Other metrics: RMS pitch 0.115°, max pitch 0.665°, wheel_travel 0.268 m, liftoff=0s, survived 5.0s.
 
-**Visual quality (replay.py --top 1):** Robot stands essentially still at equilibrium. Lean is sub-half-degree throughout. Disturbance impulse at t=2.5s causes brief pitch excursion, robot recovers cleanly with no liftoff.
-
-**Optimizer notes:**
-- R upper bound (10.0) was hit repeatedly — optimizer wants even higher R. Expand to 50 for next long run.
-- Sigmas collapsed to minimum (0.01) by gen ~1000 — search converged to local optimum. Re-seed from multiple starts next run.
-- `Q_VEL` is near-zero (0.0001) — wheel velocity barely penalised. Robot accepts drift in exchange for smooth pitch.
+**Key findings:**
+- Optimizer converged fully — all sigmas hit minimum (0.01) by gen ~1637, no improvement after.
+- R ceiling (50.0) was hit repeatedly → **expand R to 100–200 for next run**.
+- KP_V/KI_V at lower bounds → robot prefers minimal lean commands; drive accuracy via LQR v_ref term only.
+- `fitness_drive_med = 1.346` is the dominant weakness — 0.8 m/s tracking needs a stronger velocity loop.
+- Possible next step: increase `W_VEL_ERR` weight or reduce `KP_V` floor to 0.001 to allow optimizer more freedom.
 
 **Phase 2–6** not yet started. See `docs/Control.MD` for full implementation plan.
 
 ---
 
-## Phase 2 Optimizer Run — IN PROGRESS (2026-03-17)
+Suggested next optimizer run to improve drive medium tracking:
 
-### New Scenarios (implemented, committed, optimizer running)
-
-Three new headless scenarios added to `scenarios.py`:
-
-| Scenario | Description | Fitness formula |
-|----------|-------------|-----------------|
-| `drive_slow` | 0.3 m/s fwd for 3.5 s then -0.3 m/s | `rms_pitch + 1.0*vel_error + 50*liftoff + 200*fell` |
-| `drive_medium` | 0.8 m/s fwd for 3.5 s then -0.8 m/s | same formula |
-| `obstacle` | 0.3 m/s fwd + 3 cm floor step at x=0.5 m | same + 2× liftoff penalty |
-
-**Combined v2 fitness weights:** balance(10%) + disturbance(35%) + drive_slow(20%) + drive_medium(20%) + obstacle(15%)
-
-**VelocityPI outer loop** added:
-- class `VelocityPI` in scenarios.py: velocity_error → theta_ref (lean angle command)
-- `lqr_torque()` extended with `theta_ref=0.0` parameter (backward compatible)
-- Sign convention: **positive theta_ref = forward drive** (empirically verified — wheel torque sign is reversed from naive expectation in this geometry)
-- Module globals `VELOCITY_PI_KP / VELOCITY_PI_KI` overridden by optimizer worker
-
-**Optimizer search space expanded to 6 params:** Q_PITCH, Q_PITCH_RATE, Q_VEL, R, KP_V, KI_V
-
-**Baseline performance with Phase 1 gains + default PI (KP_V=0.04, KI_V=0.008):**
-| Scenario | Status | Fitness |
-|----------|--------|---------|
-| Balance | PASS | 0.249 |
-| Disturbance | PASS | 0.450 |
-| Drive slow | PASS | 1.157 (vel_err 0.277 m/s) |
-| Drive medium | PASS | 3.143 (vel_err 0.757 m/s) |
-| Obstacle | PASS | 0.985 (final_x=0.445 m) |
-| **Combined** | **PASS** | **1.190** |
-
-### Optimizer Run Status
-
-**Command:** `python optimize_lqr.py --hours 1.5 --workers 8`
-
-**Early results (~110 gen):**
-- Best combined fitness: **0.621** (from 1.190 baseline with default PI)
-- Q_PITCH ≈ 0.8 (stronger pitch control than Phase 1 v2)
-- Q_PITCH_RATE ≈ 0.25 (more damping)
-- Q_VEL still ≈ 0.0001 (velocity essentially uncontrolled by LQR)
-- R ≈ 49 (hitting upper ceiling again — optimizer still wants very low effort)
-- KP_V ≈ 0.010, KI_V ≈ 0.001 (at lower bounds — tiny PI gains are preferred)
-
-**Key finding:** Optimizer drives KP_V/KI_V to their minimum bounds. Minimal lean commands are preferred because they minimize pitch disturbance during drive. The robot achieves modest velocity tracking via the LQR v_ref term alone (K_vel ≈ -0.003). Drive fitness is dominated by velocity error in the medium scenario.
-
-**TODO after optimizer finishes:**
-1. `python replay.py --top 1` to visualize best found gains
-2. If R is still at upper bound → expand R range to 100 in next run
-3. If KP_V at lower bound → consider reducing floor to 0.001 for KP_V in next run
-4. Baseline the new Q/R/KP_V/KI_V into `sim_config.py`
-5. Update CLAUDE.md and this file with new baseline
+```bash
+cd simulation/mujoco/LQR_Control_optimization
+# In optimize_lqr.py, change PARAM_RANGES:
+#   "R": (0.1, 100.0)      — was (0.1, 50.0), R kept hitting ceiling
+#   "KP_V": (0.001, 0.5)   — was (0.01, 0.5), allow smaller lean commands
+python optimize_lqr.py --hours 2 --workers 8
+python replay.py --top 1
+```
 
 ---
 

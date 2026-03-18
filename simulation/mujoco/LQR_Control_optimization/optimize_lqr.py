@@ -38,14 +38,33 @@ PARAM_RANGES = {
     "Q_PITCH":       (0.01,    1.0),     # pitch error weight
     "Q_PITCH_RATE":  (0.001,   1.0),     # pitch rate damping
     "Q_VEL":         (0.0001,  0.1),     # wheel velocity weight (may increase for drive)
-    "R":             (0.1,     50.0),    # control effort
-    "KP_V":          (0.01,    0.5),     # VelocityPI Kp [rad/(m/s)] — lean angle per vel error
+    "R":             (0.1,     100.0),   # control effort (expanded from 50 — Phase 2 hit ceiling)
+    "KP_V":          (0.001,   0.5),     # VelocityPI Kp [rad/(m/s)] — expanded floor from 0.01
     "KI_V":          (0.001,   0.2),     # VelocityPI Ki [rad/m]
+}
+
+# ── Active scenarios ─────────────────────────────────────────────────────────
+# Controls which scenarios contribute to the combined fitness.
+# Options: 'balance', 'disturbance', 'drive_slow', 'drive_med', 'obstacle'
+# Set to None to run all 5 (Phase 2 default).
+ACTIVE_SCENARIOS = ['balance']
+
+# ── Seed weights (used when CSV is empty — fresh start) ──────────────────────
+# Rationale for balance-only: Q_VEL=0.02 actively damps wheel velocity so the
+# robot stops drifting (previous runs had Q_VEL≈0.0001 → wheels ignored by LQR).
+# R=5 allows generous torque; Q_PITCH/Q_PITCH_RATE tuned for stable balance.
+SEED_WEIGHTS = {
+    "Q_PITCH":      0.30,
+    "Q_PITCH_RATE": 0.10,
+    "Q_VEL":        0.02,
+    "R":            5.0,
+    "KP_V":         0.01,
+    "KI_V":         0.001,
 }
 
 # ── (1+λ)-ES hyper-parameters ────────────────────────────────────────────────
 LAMBDA           = 8      # offspring per generation
-SIGMA_LOG_INIT   = 0.30   # initial step size in log10 space
+SIGMA_LOG_INIT   = 0.50   # initial step size in log10 space (wider spread for fresh start)
 SIGMA_LOG_MIN    = 0.01
 SIGMA_LOG_MAX    = 1.00
 SUCCESS_TARGET   = 1.0 / 5.0
@@ -72,7 +91,7 @@ def _default_weights() -> dict:
 
 
 def _load_best_weights() -> tuple:
-    """Seed from best CSV result, or use centre-of-range defaults.
+    """Seed from best CSV result, or use SEED_WEIGHTS when CSV is empty.
 
     Falls back gracefully when CSV lacks new KP_V/KI_V columns
     (e.g., if seeding from a Phase 1 results file).
@@ -80,7 +99,7 @@ def _load_best_weights() -> tuple:
     from sim_config import VELOCITY_PI_KP as _kp_default, VELOCITY_PI_KI as _ki_default
     row = get_best_run(scenario="lqr_combined")
     if row is None:
-        return _default_weights(), float("inf")
+        return dict(SEED_WEIGHTS), float("inf")
     defaults = _default_weights()
     weights = {}
     for k in PARAM_RANGES:
@@ -103,7 +122,7 @@ def _load_best_weights() -> tuple:
 # ---------------------------------------------------------------------------
 def _eval_worker(args):
     """Evaluate one Q/R/Kp_v/Ki_v candidate in a subprocess."""
-    Q_pitch, Q_pitch_rate, Q_vel, R, Kp_v, Ki_v, label, run_id, csv_path = args
+    Q_pitch, Q_pitch_rate, Q_vel, R, Kp_v, Ki_v, label, run_id, csv_path, active_scenarios = args
 
     import os, sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -144,8 +163,8 @@ def _eval_worker(args):
     # Dummy gains dict (not used by LQR controller)
     gains = dict(KP=0, KD=0, KP_pos=0, KP_vel=0)
 
-    # Run combined scenario (balance + disturbance + drive_slow + drive_med + obstacle)
-    metrics = scenarios.run_combined_scenario(gains)
+    # Run combined scenario (subset controlled by active_scenarios)
+    metrics = scenarios.run_combined_scenario(gains, active_scenarios=active_scenarios)
 
     import datetime
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -201,7 +220,7 @@ def run_evo(hours: float = None, max_iters: int = None,
         row = _eval_worker(
             (parent['Q_PITCH'], parent['Q_PITCH_RATE'], parent['Q_VEL'],
              parent['R'], parent['KP_V'], parent['KI_V'],
-             "evo_seed", next_run_id(csv_path), csv_path)
+             "evo_seed", next_run_id(csv_path), csv_path, ACTIVE_SCENARIOS)
         )
         parent_fit = float(row.get("fitness", float("inf")))
         print(f"Seed fitness: {parent_fit:.3f}\n")
@@ -253,7 +272,7 @@ def run_evo(hours: float = None, max_iters: int = None,
             args = [
                 (c['Q_PITCH'], c['Q_PITCH_RATE'], c['Q_VEL'], c['R'],
                  c['KP_V'], c['KI_V'],
-                 lbl, rid, csv_path)
+                 lbl, rid, csv_path, ACTIVE_SCENARIOS)
                 for c, lbl, rid in zip(children, labels, ids)
             ]
 

@@ -175,7 +175,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 # ---------------------------------------------------------------------------
 # Main replay
 # ---------------------------------------------------------------------------
-def replay(run_id: int = None, baseline: bool = False, scenario_override: str = None):
+def replay(run_id: int = None, baseline: bool = False, scenario_override: str = None,
+           freefall: bool = False, slowmo: float = 1.0):
     """Launch MuJoCo viewer for the given run_id (best run if None).
 
     Pass baseline=True to skip CSV and use the baselined LQR gains from
@@ -275,6 +276,12 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                           model, mujoco.mjtObj.mjOBJ_JOINT, "root_free")] + 4
     disturbance_applied = False
 
+    # 1-step sensor delay buffer — models ~2 ms BNO086 I2C + CAN latency.
+    from physics import get_equilibrium_pitch as _gep
+    _pitch_d      = _gep(ROBOT, Q_NOM)
+    _pitch_rate_d = 0.0
+    _wheel_vel_d  = 0.0
+
     with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.cam.azimuth   = 35
         viewer.cam.elevation = -15
@@ -283,9 +290,11 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
 
         def _reset_state():
             nonlocal step, prev_sim_t, pitch_integral, odo_x
+            nonlocal _pitch_d, _pitch_rate_d, _wheel_vel_d
             _init()
             step = 0; prev_sim_t = 0.0
             pitch_integral = 0.0; odo_x = 0.0
+            _pitch_d = _gep(ROBOT, Q_NOM); _pitch_rate_d = 0.0; _wheel_vel_d = 0.0
             if not data_q.full(): data_q.put_nowait("RESET")
 
         while viewer.is_running():
@@ -312,24 +321,41 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
 
                     q_hip_avg = (data.qpos[qpos_hip_L] + data.qpos[qpos_hip_R]) / 2.0
 
-                    if use_lqr:
-                        tau_wheel = lqr_torque(pitch, pitch_rate, wheel_vel, q_hip_avg, v_ref=0.0)
+                    # Rotate delay buffer (0ms: update before use)
+                    _pitch_d, _pitch_rate_d, _wheel_vel_d = pitch, pitch_rate, wheel_vel
+
+                    if freefall:
+                        # No controller — all actuators zeroed, robot falls freely
+                        data.ctrl[act_wheel_L] = 0.0
+                        data.ctrl[act_wheel_R] = 0.0
+                        data.ctrl[act_hip_L]   = 0.0
+                        data.ctrl[act_hip_R]   = 0.0
+                    elif use_lqr:
+                        tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, q_hip_avg, v_ref=0.0)
+                        data.ctrl[act_wheel_L] = tau_wheel
+                        data.ctrl[act_wheel_R] = tau_wheel
+                        for qpos_hip, dof_hip, act_hip in [
+                            (qpos_hip_L, dof_hip_L, act_hip_L),
+                            (qpos_hip_R, dof_hip_R, act_hip_R),
+                        ]:
+                            q_hip   = data.qpos[qpos_hip]
+                            dq_hip  = data.qvel[dof_hip]
+                            tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
+                            data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
                     else:
                         tau_wheel, pitch_integral, odo_x = balance_torque(
-                            pitch, pitch_rate, pitch_integral, odo_x,
-                            wheel_vel, q_hip_avg, dt, gains)
-
-                    data.ctrl[act_wheel_L] = tau_wheel
-                    data.ctrl[act_wheel_R] = tau_wheel
-
-                    for qpos_hip, dof_hip, act_hip in [
-                        (qpos_hip_L, dof_hip_L, act_hip_L),
-                        (qpos_hip_R, dof_hip_R, act_hip_R),
-                    ]:
-                        q_hip   = data.qpos[qpos_hip]
-                        dq_hip  = data.qvel[dof_hip]
-                        tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
-                        data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+                            _pitch_d, _pitch_rate_d, pitch_integral, odo_x,
+                            _wheel_vel_d, q_hip_avg, dt, gains)
+                        data.ctrl[act_wheel_L] = tau_wheel
+                        data.ctrl[act_wheel_R] = tau_wheel
+                        for qpos_hip, dof_hip, act_hip in [
+                            (qpos_hip_L, dof_hip_L, act_hip_L),
+                            (qpos_hip_R, dof_hip_R, act_hip_R),
+                        ]:
+                            q_hip   = data.qpos[qpos_hip]
+                            dq_hip  = data.qvel[dof_hip]
+                            tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
+                            data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
 
                 # Apply disturbance impulse if this is a disturbance scenario
                 if scenario in ("balance_disturbance", "lqr_combined"):
@@ -366,7 +392,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
             viewer.user_scn.ngeom = 1
 
             elapsed = time.perf_counter() - frame_start
-            sleep_t = 1.0 / RENDER_HZ - elapsed
+            sleep_t = slowmo / RENDER_HZ - elapsed
             if sleep_t > 0:
                 time.sleep(sleep_t)
 
@@ -417,6 +443,10 @@ Examples:
                     help="Replay baselined LQR gains from sim_config (disturbance scenario)")
     ap.add_argument("--scenario", type=str, default=None,
                     help="Override scenario: balance | balance_disturbance | lqr_combined")
+    ap.add_argument("--freefall", action="store_true",
+                    help="Seed robot and run with zero torque — no controller active")
+    ap.add_argument("--slowmo", type=float, default=1.0,
+                    help="Slow-motion factor (e.g. 10 = 10x slower than real-time)")
     args = ap.parse_args()
 
     if args.list:
@@ -427,8 +457,13 @@ Examples:
         resim(args.resim)
         return
 
+    if args.freefall:
+        replay(baseline=True, scenario_override="balance", freefall=True,
+               slowmo=args.slowmo)
+        return
+
     if args.baseline:
-        replay(baseline=True, scenario_override=args.scenario)
+        replay(baseline=True, scenario_override=args.scenario, slowmo=args.slowmo)
         return
 
     run_id = args.run_id
@@ -436,7 +471,7 @@ Examples:
         run_id = _get_best_run_id(rank=args.top)
         print(f"Top-{args.top} run -> run_id={run_id}")
 
-    replay(run_id, scenario_override=args.scenario)
+    replay(run_id, scenario_override=args.scenario, slowmo=args.slowmo)
 
 
 if __name__ == "__main__":

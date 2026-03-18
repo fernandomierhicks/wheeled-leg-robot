@@ -57,7 +57,7 @@ DISTURBANCE_DUR   = 0.2    # [s] duration of force application
 
 # ── Fitness weights ──────────────────────────────────────────────────────────
 W_RMS      = 1.0     # RMS pitch error [deg]
-W_TRAVEL   = 0.5     # wheel travel [m] — penalise drifting/oscillating wheels
+W_TRAVEL   = 1.0     # wheel travel [m] — penalise drifting/oscillating wheels
 W_FALL     = 200.0   # fell-over penalty
 W_RECOVERY = 1.0     # recovery from disturbance (RMS pitch error post-disturbance)
 W_LIFTOFF  = 50.0    # penalty per second any wheel is off the ground (bouncing)
@@ -573,6 +573,7 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
     max_pitch      = 0.0
     wheel_travel_m = 0.0
     wheel_liftoff_s = 0.0
+    liftoff_kill   = False
     n_samples      = 0
     survived_s     = duration
     settle_time    = duration
@@ -637,7 +638,9 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
 
             if (data.xpos[wheel_bid_L][2] > LIFTOFF_THRESHOLD or
                     data.xpos[wheel_bid_R][2] > LIFTOFF_THRESHOLD):
-                wheel_liftoff_s += dt
+                survived_s   = data.time
+                liftoff_kill = True
+                break  # instant kill — any wheel liftoff fails the balance scenario
 
             if not settled:
                 if pitch_err_deg < SETTLE_THRESHOLD:
@@ -660,11 +663,11 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
     rms_pitch_deg = math.sqrt(pitch_sq_sum / max(1, n_samples))
     fell = survived_s < duration - 0.05
 
+    # Fitness: wheel travel only — pitch is implicit (still wheels = maintained pitch).
+    # Liftoff in balance = instant kill (see break above), so W_LIFTOFF not needed here.
     fitness = (
-        W_RMS    * rms_pitch_deg
-        + W_TRAVEL * wheel_travel_m
-        + W_LIFTOFF * wheel_liftoff_s
-        + (W_FALL if fell else 0.0)
+        W_TRAVEL * wheel_travel_m
+        + (W_FALL if (fell or liftoff_kill) else 0.0)
     )
 
     return dict(
@@ -675,8 +678,8 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
         settle_time_s   = round(settle_time,      3),
         survived_s      = round(survived_s,       3),
         fitness         = round(fitness,          4),
-        status          = "FAIL" if fell else "PASS",
-        fail_reason     = "fell over" if fell else "",
+        status          = "FAIL" if (fell or liftoff_kill) else "PASS",
+        fail_reason     = ("liftoff" if liftoff_kill else "fell over") if (fell or liftoff_kill) else "",
     )
 
 
@@ -874,18 +877,26 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
 # Combined scenario v2 (balance + disturbance + drive-slow + drive-med + obstacle)
 # ---------------------------------------------------------------------------
 def run_combined_scenario(gains: dict, duration: float = BALANCE_DURATION,
-                          add_noise: bool = True, rng_seed: int = None) -> dict:
-    """Run all 5 scenarios, combine with weighted fitness.
+                          add_noise: bool = True, rng_seed: int = None,
+                          active_scenarios: list = None) -> dict:
+    """Run scenarios and combine with weighted fitness.
 
-    Weights: balance=0.10, disturbance=0.35, drive_slow=0.20,
-             drive_medium=0.20, obstacle=0.15.
+    active_scenarios: list of names to include, e.g. ['balance'] or
+        ['balance', 'disturbance', 'drive_slow', 'drive_med', 'obstacle'].
+        None = all 5 (default, backward-compatible).
 
-    Gates on balance: if balance FAIL, returns 9999 immediately.
+    Balance always runs as a gate. If it fails, returns 9999 immediately.
+    When active_scenarios == ['balance'], returns immediately after balance
+    with fitness = fitness_balance (skips remaining 4 scenarios).
+    Weights for active scenarios are renormalized to sum to 1.0.
+
     Module globals VELOCITY_PI_KP/KI are used for VelocityPI in drive scenarios.
-
     gains keys: KP, KD, KP_pos, KP_vel (dummy for LQR, not used)
     """
-    # --- 1. Balance gate ---
+    if active_scenarios is None:
+        active_scenarios = ['balance', 'disturbance', 'drive_slow', 'drive_med', 'obstacle']
+
+    # --- 1. Balance gate (always runs) ---
     m_bal = run_balance_scenario(gains, duration, add_noise, rng_seed)
     if m_bal['status'] != 'PASS':
         return dict(
@@ -906,11 +917,47 @@ def run_combined_scenario(gains: dict, duration: float = BALANCE_DURATION,
             fail_reason='failed balance scenario',
         )
 
-    # --- 2. All other scenarios ---
-    m_dist = run_balance_with_disturbance_scenario(gains, duration, add_noise, rng_seed)
-    m_slow = run_drive_slow_scenario(gains, DRIVE_DURATION, add_noise, rng_seed)
-    m_med  = run_drive_medium_scenario(gains, DRIVE_DURATION, add_noise, rng_seed)
-    m_step = run_obstacle_scenario(gains, OBSTACLE_DURATION, add_noise, rng_seed)
+    # --- 2. Balance-only short-circuit ---
+    if set(active_scenarios) == {'balance'}:
+        return dict(
+            rms_pitch_deg           = m_bal['rms_pitch_deg'],
+            rms_pitch_post_dist_deg = 0.0,
+            max_pitch_deg           = m_bal['max_pitch_deg'],
+            wheel_travel_m          = m_bal['wheel_travel_m'],
+            vel_track_rms_ms        = 0.0,
+            settle_time_s           = m_bal['settle_time_s'],
+            survived_s              = m_bal['survived_s'],
+            fitness_balance         = round(m_bal['fitness'], 4),
+            fitness_disturbance     = 0.0,
+            fitness_drive_slow      = 0.0,
+            fitness_drive_med       = 0.0,
+            fitness_obstacle        = 0.0,
+            fitness                 = round(m_bal['fitness'], 4),
+            status                  = 'PASS',
+            fail_reason             = '',
+        )
+
+    # --- 3. Active non-balance scenarios ---
+    _dummy = dict(fitness=0.0, status='PASS', survived_s=duration,
+                  max_pitch_deg=0.0, rms_pitch_post_dist_deg=0.0, vel_track_rms_ms=0.0)
+    m_dist = run_balance_with_disturbance_scenario(gains, duration, add_noise, rng_seed) \
+             if 'disturbance' in active_scenarios else _dummy
+    m_slow = run_drive_slow_scenario(gains, DRIVE_DURATION, add_noise, rng_seed) \
+             if 'drive_slow' in active_scenarios else _dummy
+    m_med  = run_drive_medium_scenario(gains, DRIVE_DURATION, add_noise, rng_seed) \
+             if 'drive_med' in active_scenarios else _dummy
+    m_step = run_obstacle_scenario(gains, OBSTACLE_DURATION, add_noise, rng_seed) \
+             if 'obstacle' in active_scenarios else _dummy
+
+    # Renormalize weights for active scenarios only
+    w = {
+        'balance':     W_BALANCE     if 'balance'     in active_scenarios else 0.0,
+        'disturbance': W_DISTURBANCE if 'disturbance' in active_scenarios else 0.0,
+        'drive_slow':  W_DRIVE_SLOW  if 'drive_slow'  in active_scenarios else 0.0,
+        'drive_med':   W_DRIVE_MED   if 'drive_med'   in active_scenarios else 0.0,
+        'obstacle':    W_DRIVE_STEP  if 'obstacle'    in active_scenarios else 0.0,
+    }
+    total_w = sum(w.values()) or 1.0
 
     fit_balance = m_bal['fitness']
     fit_dist    = m_dist['fitness']
@@ -919,15 +966,16 @@ def run_combined_scenario(gains: dict, duration: float = BALANCE_DURATION,
     fit_step    = m_step['fitness']
 
     combined_fit = (
-        W_BALANCE    * fit_balance
-        + W_DISTURBANCE * fit_dist
-        + W_DRIVE_SLOW  * fit_slow
-        + W_DRIVE_MED   * fit_med
-        + W_DRIVE_STEP  * fit_step
+        w['balance']     / total_w * fit_balance
+        + w['disturbance'] / total_w * fit_dist
+        + w['drive_slow']  / total_w * fit_slow
+        + w['drive_med']   / total_w * fit_med
+        + w['obstacle']    / total_w * fit_step
     )
 
     all_pass = all(m['status'] == 'PASS'
-                   for m in [m_dist, m_slow, m_med, m_step])
+                   for m in [m_dist, m_slow, m_med, m_step]
+                   if m is not _dummy)
 
     return dict(
         rms_pitch_deg           = m_bal['rms_pitch_deg'],

@@ -144,6 +144,16 @@ def get_equilibrium_pitch(p: dict, q_hip: float) -> float:
     mx    += n * p['m_tibia'] * (C_x + off * math.sin(alpha))
     mz    += n * p['m_tibia'] * (C_z + off * math.cos(alpha))
 
+    # Bearing pins (4 per leg × 2 legs):
+    #   F-pin  (coupler body, at coupler origin = F position)
+    #   E-pin  (coupler body, at far end = E position)
+    #   C-knee (femur body, at knee pivot = C position)
+    #   E-stub (tibia body, at stub tip = E position)
+    # All 4 positions already in scope from IK output above.
+    m_sys += n * p['m_bearing'] * 4
+    mx    += n * p['m_bearing'] * (F_X + 2.0 * E_x + C_x)
+    mz    += n * p['m_bearing'] * (F_Z + 2.0 * E_z + C_z)
+
     # Wheel at W
     W_x, W_z = ik['W']
     m_sys += n * p['m_wheel']
