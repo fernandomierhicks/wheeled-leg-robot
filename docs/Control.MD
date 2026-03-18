@@ -158,46 +158,57 @@ while θ_ref ≈ 0), reduce K_s by 30% for 200ms to absorb impact passively.
 
 ## Implementation Phases
 
-### Phase 1 — 3-State LQR + Gain Scheduling ✅ COMPLETE
+### Phase 1 — 3-State LQR + Gain Scheduling ✅ COMPLETE & RE-BASELINED
 
-**Status:** Implemented, optimized, and baselined (2026-03-17).
+**Status:** Implemented, optimized, and re-baselined (2026-03-17).
 
 **Implementation Files:**
 - `simulation/mujoco/LQR_Control_optimization/lqr_design.py` — LQR solver with gain scheduling
 - `simulation/mujoco/LQR_Control_optimization/scenarios.py` — 3-state controller + combined scenario
 - `simulation/mujoco/LQR_Control_optimization/optimize_lqr.py` — (1+8)-ES Q/R optimizer
+- `simulation/mujoco/LQR_Control_optimization/replay.py` — visual replay (fixed LQR gain loading from CSV)
 
-**Baseline Q/R Weights (optimized, 50 gen / 400 evals):**
+**Baseline Q/R Weights — v2 (1062 gen / 8496 evals, 10 min):**
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| Q_PITCH | 0.158 | Conservative → stable |
-| Q_PITCH_RATE | 0.00419 | Pitch damping |
-| Q_VEL | 0.00196 | Velocity feedback |
-| R | 0.451 | Control effort |
+| Q_PITCH | 0.0438 | Lower than v1 — trusts pitch more |
+| Q_PITCH_RATE | 0.0021 | Low damping penalty |
+| Q_VEL | 0.0001 | Near-zero — velocity effectively uncontrolled |
+| R | 9.0266 | High — strong preference for low torque |
 
-**Performance Metrics (Run 819):**
-| Scenario | RMS Pitch | Max Pitch | Fitness | Status |
-|----------|-----------|-----------|---------|--------|
-| Balance (5s still) | 1.44° | 5.19° | 2.01 | ✅ PASS |
-| + Disturbance (1N, 1s) | 9.09° | 35.82° | 29.93 | ✅ PASS |
-| **Combined (20/80)** | — | — | **5.428** | ✅ PASS |
+**LQR Gain at Nominal Leg Position (Q_NOM):**
+```
+K_nominal = [-12.672, -1.754, -0.003]  [pitch, pitch_rate, wheel_vel]
+```
 
-**LQR Gain at Nominal Leg Position:**
-```
-K_nominal = [-12.965, -2.177, -0.066]  [pitch, pitch_rate, wheel_vel]
-```
+**Performance Metrics (run_id=6288, new equilibrium-relative metric):**
+| Metric | Value |
+|--------|-------|
+| RMS pitch (5s balance) | 0.113° |
+| Max pitch | 0.363° |
+| Wheel travel | 0.856 m |
+| Wheel liftoff | 0 s |
+| Settle time | 0.0 s |
+| Combined fitness | **0.400** |
+
+**Visual quality:** Robot stands essentially motionless at equilibrium. Lean sub-half-degree. Disturbance at t=2.5s causes brief excursion, robot recovers cleanly.
+
+**Fitness metric (current):**
+| Scenario | Formula |
+|----------|---------|
+| Balance | `1.0×rms_pitch + 0.5×wheel_travel + 50×liftoff + 200×(fell)` |
+| Disturbance | `1.0×rms_pitch + 1.0×rms_pitch_post_dist + 0.5×wheel_travel + 50×liftoff + 200×(fell)` |
+| Combined | `0.2×balance + 0.8×disturbance` |
+
+**Known limitation — Q_VEL ≈ 0:** Wheel velocity is barely penalised. Robot will drift freely in drive mode. Phase 2 Velocity PI is designed to compensate, but Q_VEL may need to increase once drive mode is added.
+
+**Next optimizer run:** Expand `R` upper bound from 10 → 50 (`optimize_lqr.py` PARAM_RANGES); optimizer hit ceiling in this run.
 
 **Key Findings:**
-1. ✅ Conservative Q region (0.01–1.0) yields stable control
-2. ✅ Disturbance recovery excellent (survives 1N push for 1 second)
+1. ✅ New metric (equilibrium-relative pitch, liftoff penalty) far more discriminating than old metric
+2. ✅ High R (≈9) yields quieter, lower-torque control vs low R
 3. ✅ Gain scheduling via interpolation works smoothly across leg stroke
-4. ✅ Combined balance+disturbance fitness is robust optimization metric
-
-**Lessons Learned:**
-- Initial Q/R [100, 10, 1] → instability (robot fell at 56ms)
-- Required 100× smaller Q weights for stability
-- Optimizer converged in ~5 generations within conservative region
-- Disturbance robustness now built into baseline (not afterthought)
+4. ✅ `replay.py` now correctly loads Q/R from CSV and recomputes K_table (was broken — used PD defaults)
 
 ---
 

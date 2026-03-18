@@ -34,8 +34,12 @@ LEG_Y      = 0.1430   # [m] Y-offset of leg plane from body centre
 MOTOR_MASS = 0.260    # [kg] AK45-10 hip motor
 
 # ── Motor limits ────────────────────────────────────────────────────────────
-HIP_TORQUE_LIMIT   = 7.0    # [N·m] AK45-10 peak
-WHEEL_TORQUE_LIMIT = 3.67   # [N·m] 5065 130KV @ 50 A ODESC limit
+HIP_TORQUE_LIMIT            = 7.0   # [N·m] AK45-10 peak (physical spec — never exceed)
+HIP_IMPEDANCE_TORQUE_LIMIT  = 2.0   # [N·m] max torque the impedance controller may use
+                                     # for position-holding.  Keeps the hip backdrivable:
+                                     # any disturbance > this will move the leg.
+                                     # Tune this later; full 7 N·m reserved for jump/recovery.
+WHEEL_TORQUE_LIMIT          = 3.67  # [N·m] 5065 130KV @ 50 A ODESC limit
 
 # ── Balance PD controller (optimized via (1+8)-ES, run_id=221) ─────────────
 # Optimized gains for smooth, efficient balance.
@@ -47,16 +51,18 @@ POSITION_KP   =  2.16  # [rad/m]    wheel odometry → pitch lean correction (wa
 VELOCITY_KP   =  0.497 # [rad/(m/s)] wheel velocity feedback (was 0.30)
 MAX_PITCH_CMD =  0.25  # [rad] clamp on position/velocity feedback
 
-# ── LQR cost weights — optimized via Phase 1 (50 gen, 400 evals) ──────────
+# ── LQR cost weights — optimized via Phase 1 (1062 gen / 8496 evals, 10 min) ─
 # State: x = [pitch − θ_ref,  pitch_rate,  wheel_vel_avg − v_ref]
 # u = −K @ x,  K solved from Q, R via scipy.linalg.solve_continuous_are
-# Baseline (Phase 1): fitness=5.428 (balance 20% + disturbance 80%)
-#   Balances cleanly: RMS pitch 1.44° over 5s
-#   Recovers from disturbance: survives 1N force for 1s at t=2.5s
-LQR_Q_PITCH      =   0.158  # weight on pitch error (optimized)
-LQR_Q_PITCH_RATE =  0.00419 # weight on pitch rate (optimized)
-LQR_Q_VEL        = 0.00196  # weight on wheel velocity error (optimized)
-LQR_R            =   0.451  # weight on control effort (optimized)
+# Baseline (Phase 1 v2): fitness=0.400 (balance 20% + disturbance 80%, new metric)
+#   RMS pitch 0.113° over 5s (equilibrium-relative)
+#   Max pitch 0.363°, settled instantly (settle_time=0.0s)
+#   Survives 1N push for 0.2s at t=2.5s, liftoff=0s
+#   K_nominal = [-12.672, -1.754, -0.003]  at Q_NOM
+LQR_Q_PITCH      =  0.0438  # weight on pitch error (optimized, run_id=6288)
+LQR_Q_PITCH_RATE =  0.0021  # weight on pitch rate (optimized)
+LQR_Q_VEL        =  0.0001  # weight on wheel velocity error (optimized)
+LQR_R            =  9.0266  # weight on control effort (optimized — prefers low effort)
 
 # ── Leg impedance (held at Q_NOM; decoupled from balance loop) ─────────────
 LEG_K_S = 8.0    # [N·m/rad] spring stiffness  (matches baseline1 HIP_KP_SUSP)
