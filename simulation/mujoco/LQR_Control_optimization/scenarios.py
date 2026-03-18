@@ -19,6 +19,9 @@ from sim_config import (
     VELOCITY_PI_KP as _DEFAULT_KP_V,
     VELOCITY_PI_KI as _DEFAULT_KI_V,
     VELOCITY_PI_THETA_MAX, VELOCITY_PI_INT_MAX, THETA_REF_RATE_LIMIT,
+    YAW_PI_KP as _DEFAULT_KP_YAW,
+    YAW_PI_KI as _DEFAULT_KI_YAW,
+    YAW_PI_TORQUE_MAX, YAW_PI_INT_MAX,
     DRIVE_SLOW_SPEED, DRIVE_MEDIUM_SPEED, DRIVE_DURATION, DRIVE_REV_TIME,
     OBSTACLE_HEIGHT, OBSTACLE_DURATION,
     PITCH_STEP_RAD, SCENARIO_1_DURATION, SCENARIO_2_DURATION, SCENARIO_3_DURATION, SCENARIO_5_DURATION,
@@ -26,6 +29,8 @@ from sim_config import (
     S2_DIST2_TIME, S2_DIST2_FORCE, S2_DIST2_DUR,
     SCENARIO_4_DURATION, LEG_CYCLE_PERIOD, LEG_CYCLE_Q_RET,
     S5_BUMPS,
+    SCENARIO_6_DURATION, YAW_TURN_RATE, YAW_ERR_START,
+    SCENARIO_7_DURATION, DRIVE_TURN_SPEED, DRIVE_TURN_YAW_RATE,
 )
 from physics import build_xml, build_assets, solve_ik, get_equilibrium_pitch
 from run_log import log_run, next_run_id, CSV_PATH
@@ -35,14 +40,20 @@ from lqr_design import interpolate_gains, compute_gain_table
 USE_PD_CONTROLLER = True  # Toggle between PD (True) and LQR (False)
 USE_VELOCITY_PI   = True  # When True, outer VelocityPI loop provides theta_ref for LQR
                            # Set False to optimize LQR gains only (no outer loop)
+USE_YAW_PI        = True  # When True, YawPI provides differential tau_yaw
+                           # Set False to run symmetric torque only (no turning)
 
 # ── Velocity PI gains — mutable module globals (overridden by optimizer worker) ─
 # Outer loop: velocity error → theta_ref (lean angle command for LQR).
 # Positive theta_ref = lean forward = drive forward.
 VELOCITY_PI_KP = _DEFAULT_KP_V   # [rad/(m/s)]
 VELOCITY_PI_KI = _DEFAULT_KI_V   # [rad/m]
-                          # When False, uses 3-state LQR with gain scheduling
-                          # Phase 1 (Step 2) implementation
+
+# ── Yaw PI gains — mutable module globals (overridden by optimizer worker) ────
+# Differential torque: tau_yaw = YawPI(omega_desired - omega_measured)
+# tau_L = tau_sym + tau_yaw,  tau_R = tau_sym − tau_yaw
+YAW_PI_KP_GAIN = _DEFAULT_KP_YAW   # [N·m / (rad/s)]
+YAW_PI_KI_GAIN = _DEFAULT_KI_YAW   # [N·m / rad]
 
 # ── Initialize LQR gain table at module load ────────────────────────────────
 LQR_K_TABLE = compute_gain_table(
@@ -136,6 +147,7 @@ W_DRIVE_STEP   = 0.15   # 3 cm floor step crossing robustness
 
 # ── Drive/obstacle fitness weights ───────────────────────────────────────────
 W_VEL_ERR  = 3.0    # RMS velocity tracking error [m/s] — 3× to penalise steady-state offset harder
+W_YAW_ERR  = 3.0    # RMS yaw rate tracking error [rad/s] — same weight as velocity
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +178,38 @@ class VelocityPI:
             self.kp * v_err + self.ki * self.integral,
             -VELOCITY_PI_THETA_MAX, VELOCITY_PI_THETA_MAX))
         return theta_ref
+
+    def reset(self):
+        self.integral = 0.0
+
+
+# ---------------------------------------------------------------------------
+# YawPI — outer loop: yaw rate error → differential wheel torque
+# ---------------------------------------------------------------------------
+class YawPI:
+    """Converts yaw rate error into differential wheel torque (tau_yaw).
+
+    tau_yaw > 0  →  tau_L += tau_yaw, tau_R -= tau_yaw  →  left turn (CCW)
+    tau_yaw < 0  →  tau_L -= |tau_yaw|, tau_R += |tau_yaw|  →  right turn (CW)
+
+    Yaw rate measured from data.qvel[5] (world-frame ωz).
+    Positive ωz = CCW = left turn when viewed from above.
+
+    Orthogonal to LQR/VelocityPI: average wheel torque (tau_sym) is unaffected.
+    """
+    def __init__(self, kp: float, ki: float, dt: float):
+        self.kp  = kp
+        self.ki  = ki
+        self.dt  = dt
+        self.integral = 0.0
+
+    def update(self, omega_desired: float, omega_measured: float) -> float:
+        err = omega_desired - omega_measured
+        self.integral = float(np.clip(
+            self.integral + err * self.dt,
+            -YAW_PI_INT_MAX, YAW_PI_INT_MAX))
+        tau_yaw = self.kp * err + self.ki * self.integral
+        return float(np.clip(tau_yaw, -YAW_PI_TORQUE_MAX, YAW_PI_TORQUE_MAX))
 
     def reset(self):
         self.integral = 0.0
@@ -310,12 +354,18 @@ def init_sim(model, data, p=None, q_hip_init=None):
 def _run_sim_loop(model, data, duration: float, v_profile_fn,
                   dist_fn=None,
                   add_noise: bool = True, rng=None,
-                  target_hip_q=None) -> dict:
+                  target_hip_q=None,
+                  omega_profile_fn=None) -> dict:
     """Core LQR simulation loop used by drive and obstacle scenarios.
 
     v_profile_fn(t: float) -> v_target_ms [float]
         Returns desired linear velocity [m/s] at time t.
         Use lambda t: 0.0 for static balance.
+
+    omega_profile_fn(t: float) -> omega_desired_rads [float]  (optional)
+        Returns desired yaw rate [rad/s] at time t.
+        None (default) → omega_desired = 0.0 → tau_yaw = 0.0 → symmetric drive.
+        Positive = CCW = left turn when viewed from above.
 
     target_hip_q: float, callable(t)->float, or None.
         Sets the impedance controller's target hip angle each step.
@@ -346,6 +396,7 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
 
     d_root  = _jdof("root_free")
     d_pitch = d_root + 4
+    d_yaw   = d_root + 5   # world-frame ωz; positive = CCW = left turn
     s_root  = _jqp("root_free")
 
     s_hip_L = _jqp("hip_L");   s_hip_R = _jqp("hip_R")
@@ -362,6 +413,7 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
     # ── Controller state ────────────────────────────────────────────────────
     dt = model.opt.timestep * CTRL_STEPS
     vel_pi = VelocityPI(kp=VELOCITY_PI_KP, ki=VELOCITY_PI_KI, dt=dt)
+    yaw_pi = YawPI(kp=YAW_PI_KP_GAIN, ki=YAW_PI_KI_GAIN, dt=dt)
     _prev_theta_ref = 0.0
 
     # 1-step sensor delay buffer (0 ms — update before use)
@@ -384,6 +436,8 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
 
     VEL_ERR_START = 1.0   # skip first 1.0 s (settle period)
     prev_v_target = 0.0
+    yaw_sq_sum    = 0.0   # yaw rate tracking error accumulator
+    n_yaw         = 0
 
     # ── Simulation loop ─────────────────────────────────────────────────────
     step = 0
@@ -425,13 +479,25 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
             # ── Delay buffer (0 ms: update before use) ────────────────────────
             _pitch_d, _pitch_rate_d, _wheel_vel_d = pitch, pitch_rate, wheel_vel
 
-            # ── LQR controller ────────────────────────────────────────────────
-            tau_wheel = lqr_torque(
+            # ── LQR controller (symmetric torque) ─────────────────────────────
+            tau_sym = lqr_torque(
                 _pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
                 v_ref=v_ref_rads, theta_ref=theta_ref)
 
-            data.ctrl[act_wheel_L] = tau_wheel
-            data.ctrl[act_wheel_R] = tau_wheel
+            # ── Yaw PI (differential torque) ──────────────────────────────────
+            # tau_yaw > 0 → left turn (CCW); orthogonal to tau_sym (avg unchanged)
+            yaw_rate    = data.qvel[d_yaw]   # world-frame ωz [rad/s]
+            omega_tgt   = omega_profile_fn(data.time) if omega_profile_fn else 0.0
+            tau_yaw     = yaw_pi.update(omega_tgt, yaw_rate) if USE_YAW_PI else 0.0
+
+            # tau_yaw > 0 = left turn: right wheel gets more torque than left
+            data.ctrl[act_wheel_L] = np.clip(tau_sym - tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
+            data.ctrl[act_wheel_R] = np.clip(tau_sym + tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
+
+            # ── Yaw tracking error ─────────────────────────────────────────────
+            if omega_profile_fn and data.time >= YAW_ERR_START:
+                yaw_sq_sum += (omega_tgt - yaw_rate) ** 2
+                n_yaw      += 1
 
             # ── Leg impedance: track target hip angle (default Q_NOM) ────────
             _q_hip_tgt = _hip_fn(data.time)
@@ -482,21 +548,24 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
         step += 1
 
     # ── Compute final metrics ────────────────────────────────────────────────
-    rms_pitch_deg  = math.sqrt(pitch_sq_sum / max(1, n_samples))
-    rms_vel_ms     = (math.sqrt(vel_sq_sum / max(1, n_vel))
-                      if n_vel > 0 else 0.0)
-    final_x        = data.qpos[s_root]
-    fell           = survived_s < duration - 0.05
+    rms_pitch_deg      = math.sqrt(pitch_sq_sum / max(1, n_samples))
+    rms_vel_ms         = (math.sqrt(vel_sq_sum / max(1, n_vel))
+                          if n_vel > 0 else 0.0)
+    yaw_track_rms_rads = (math.sqrt(yaw_sq_sum / max(1, n_yaw))
+                          if n_yaw > 0 else 0.0)
+    final_x            = data.qpos[s_root]
+    fell               = survived_s < duration - 0.05
 
     return dict(
-        rms_pitch_deg           = round(rms_pitch_deg,  4),
-        vel_track_rms_ms        = round(rms_vel_ms,     4),
-        max_pitch_deg           = round(max_pitch,       4),
-        wheel_travel_m          = round(wheel_travel_m,  4),
-        wheel_liftoff_s         = round(wheel_liftoff_s, 4),
-        final_x_m               = round(final_x,         3),
-        settle_time_s           = round(settle_time,     3),
-        survived_s              = round(survived_s,      3),
+        rms_pitch_deg           = round(rms_pitch_deg,      4),
+        vel_track_rms_ms        = round(rms_vel_ms,         4),
+        yaw_track_rms_rads      = round(yaw_track_rms_rads, 4),
+        max_pitch_deg           = round(max_pitch,           4),
+        wheel_travel_m          = round(wheel_travel_m,      4),
+        wheel_liftoff_s         = round(wheel_liftoff_s,     4),
+        final_x_m               = round(final_x,             3),
+        settle_time_s           = round(settle_time,         3),
+        survived_s              = round(survived_s,          3),
         fell                    = fell,
         status                  = "FAIL" if fell else "PASS",
         fail_reason             = "fell over" if fell else "",
@@ -1651,6 +1720,79 @@ def run_5_VEL_PI_leg_cycling(gains: dict, duration: float = SCENARIO_5_DURATION,
     return raw
 
 
+def run_6_YAW_PI_turn(gains: dict, duration: float = SCENARIO_6_DURATION,
+                      add_noise: bool = True, rng_seed: int = None) -> dict:
+    """6_YAW_PI_turn — YawPI tuning: pure 360° CCW turn at 1 rad/s.
+
+    Controller under test : YawPI (differential) + VelocityPI (v=0 position hold) + LQR
+    v_desired             : 0.0 throughout (position hold, VelocityPI active)
+    omega_desired         : +1.0 rad/s from t=1.0s → one full CCW revolution (6.28s)
+    Duration              : 8.0s (1s settle + 6.28s turn + 0.72s tail)
+    Metric / Fitness      : W_YAW_ERR × yaw_track_rms_rads + 0.1×rms_pitch_deg + W_FALL×fell
+
+    Pure yaw test — isolates YawPI from velocity coupling. Because tau_yaw is differential
+    (average wheel velocity unchanged), LQR/VelocityPI are not directly affected by the
+    yaw command. Any coupling is through centripetal physics.
+    """
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data()
+        init_sim(model, data)
+    except Exception as e:
+        return _fail_result(f"model init: {e}")
+
+    # Settle for 1s at omega=0, then command YAW_TURN_RATE (1 rad/s CCW)
+    omega_fn = lambda t: YAW_TURN_RATE if t >= 1.0 else 0.0
+
+    raw = _run_sim_loop(model, data, duration,
+                        v_profile_fn=lambda t: 0.0,
+                        omega_profile_fn=omega_fn,
+                        add_noise=add_noise, rng=rng)
+
+    fitness = (
+        W_YAW_ERR     * raw['yaw_track_rms_rads']
+        + 0.1 * W_RMS * raw['rms_pitch_deg']
+        + (W_FALL if raw['fell'] else 0.0)
+    )
+    raw['fitness'] = round(fitness, 4)
+    return raw
+
+
+def run_7_DRIVE_TURN(gains: dict, duration: float = SCENARIO_7_DURATION,
+                     add_noise: bool = True, rng_seed: int = None) -> dict:
+    """7_DRIVE_TURN — Cross-coupling check: simultaneous drive + turn.
+
+    Controller under test : YawPI + VelocityPI + LQR
+    v_desired             : +0.3 m/s constant (gentle forward drive)
+    omega_desired         : +0.5 rad/s constant (gentle left turn → curved path)
+    Duration              : 8.0s
+    Metric / Fitness      : 0.5×W_VEL_ERR×vel_rms + 0.5×W_YAW_ERR×yaw_rms + 0.1×rms_pitch + W_FALL×fell
+
+    Verifies that yaw torque does not destabilize the VelocityPI or vice-versa.
+    If pitch spikes during this scenario, joint re-optimization of LQR Q/R may be needed.
+    """
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data()
+        init_sim(model, data)
+    except Exception as e:
+        return _fail_result(f"model init: {e}")
+
+    raw = _run_sim_loop(model, data, duration,
+                        v_profile_fn=lambda t: DRIVE_TURN_SPEED,
+                        omega_profile_fn=lambda t: DRIVE_TURN_YAW_RATE,
+                        add_noise=add_noise, rng=rng)
+
+    fitness = (
+        0.5 * W_VEL_ERR * raw['vel_track_rms_ms']
+        + 0.5 * W_YAW_ERR * raw['yaw_track_rms_rads']
+        + 0.1 * W_RMS     * raw['rms_pitch_deg']
+        + (W_FALL if raw['fell'] else 0.0)
+    )
+    raw['fitness'] = round(fitness, 4)
+    return raw
+
+
 def _fail_result(reason: str) -> dict:
     return dict(
         rms_pitch_deg=999.0, max_pitch_deg=999.0, wheel_travel_m=999.0,
@@ -1690,6 +1832,10 @@ def evaluate(gains: dict, scenario: str = "balance", label: str = "",
         metrics = run_4_leg_height_gain_sched(gains, duration=SCENARIO_4_DURATION)
     elif scenario == "5_VEL_PI_leg_cycling":
         metrics = run_5_VEL_PI_leg_cycling(gains, duration=SCENARIO_5_DURATION)
+    elif scenario == "6_YAW_PI_turn":
+        metrics = run_6_YAW_PI_turn(gains, duration=SCENARIO_6_DURATION)
+    elif scenario == "7_DRIVE_TURN":
+        metrics = run_7_DRIVE_TURN(gains, duration=SCENARIO_7_DURATION)
     else:
         raise ValueError(f"Unknown scenario: '{scenario}'")
 

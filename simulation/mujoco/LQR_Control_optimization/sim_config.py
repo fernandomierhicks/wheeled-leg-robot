@@ -138,6 +138,26 @@ LEG_CYCLE_Q_RET      = Q_RET - math.radians(5.0)  # [rad] S4 crouched setpoint �
                                                    # crouched than Q_RET to avoid 4-bar
                                                    # instability at fully-retracted position
 
+# ── Scenario 6 parameters (YawPI pure turn) ──────────────────────────────────
+SCENARIO_6_DURATION  = 8.0    # [s] 1s settle + 6.28s turn + 0.72s tail
+YAW_TURN_RATE        = 1.0    # [rad/s] target yaw rate (one full revolution in 6.28s)
+YAW_ERR_START        = 1.0    # [s] skip first 1s settle period from yaw error metric
+
+# ── Scenario 7 parameters (drive+turn cross-coupling check) ──────────────────
+SCENARIO_7_DURATION  = 8.0    # [s]
+DRIVE_TURN_SPEED     = 0.3    # [m/s] forward drive during combined scenario
+DRIVE_TURN_YAW_RATE  = 0.5    # [rad/s] simultaneous yaw rate during combined scenario
+
+# ── Yaw PI outer loop ────────────────────────────────────────────────────────
+# Differential torque: tau_L = tau_sym + tau_yaw,  tau_R = tau_sym − tau_yaw
+# Yaw rate measured from data.qvel[5] (world-frame ωz, positive = CCW = left turn).
+# Independent of pitch — symmetric (LQR/VelocityPI) and differential (YawPI) modes
+# are orthogonal in control space; the average wheel velocity is unaffected by tau_yaw.
+YAW_PI_KP         = 0.3     # [N·m / (rad/s)] proportional gain — starting value (Control.MD §Phase 3)
+YAW_PI_KI         = 0.05    # [N·m / rad]     integral gain     — starting value
+YAW_PI_TORQUE_MAX = 0.5     # [N·m] differential torque clamp (±0.5 N·m each wheel)
+YAW_PI_INT_MAX    = 0.5     # [N·m·s] integrator anti-windup
+
 # ── LQR Gain Scheduling Table ────────────────────────────────────────────────
 # Computed in scenarios.py to avoid circular import with lqr_design.py
 # Will be initialized on first use.
