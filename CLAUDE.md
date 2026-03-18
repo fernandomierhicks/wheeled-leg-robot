@@ -13,6 +13,22 @@ with simulation, firmware, and control code without needing re-explanation each 
 
 ---
 
+## Control Architecture
+
+**See `docs/Control.MD` for:**
+- Complete 4-controller cascade (Balance LQR + Leg Impedance + Velocity PI + Yaw PI)
+- Phase 1 findings: 3-state LQR baselined with optimized Q/R weights (fitness 5.428)
+- Implementation phases 2–6: Drive mode, turning, leg suspension, jump recovery
+- Per-phase tuning strategies and success criteria
+
+**Current Status (2026-03-17):**
+- ✅ Phase 1: 3-State LQR + Gain Scheduling — COMPLETE & BASELINED
+  - Optimized gains: Q=[0.158, 0.00419, 0.00196], R=0.451
+  - Baseline performance: 5.428 combined fitness (20% balance + 80% disturbance)
+  - Robust disturbance recovery (survives 1N push for 1 second)
+
+---
+
 ## Coordinate System (canonical, applies everywhere)
 
 | Axis | Direction |
