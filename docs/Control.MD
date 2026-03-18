@@ -1,6 +1,5 @@
 # Control Architecture — Wheeled-Leg Robot
 
-**Status:** Design complete. Implementation starts Phase 1 (3-state LQR).
 **Reference robot:** Ascento (ETH Zurich, ICRA 2019) — same cascade architecture.
 
 ---
@@ -10,23 +9,23 @@
 ### 4 Controllers — 2 LQRs + 2 PIDs
 
 ```
-Outer loops (50 Hz)                 Inner loop (500 Hz)          Actuators
-─────────────────────               ───────────────────          ─────────
-[Velocity PI] ──θ_ref──▶            [Balance LQR] ──τ_sym─▶     τ_L = τ_sym + τ_yaw
-[Yaw PI]      ──τ_yaw──▶────────────────────────────────────▶   τ_R = τ_sym − τ_yaw
-                                    State: [φ−θ_ref, φ̇, v−v_ref]
+Outer loops (500 Hz, same rate as inner)    Inner loop (500 Hz)          Actuators
+────────────────────────────────────────    ───────────────────          ─────────
+[Velocity PI] ──θ_ref──▶                   [Balance LQR] ──τ_sym─▶     τ_L = τ_sym + τ_yaw
+[Yaw PI]      ──τ_yaw──▶────────────────────────────────────────────▶   τ_R = τ_sym − τ_yaw
+                                            State: [φ−θ_ref, φ̇, v−v_ref]
 
-Independent (100 Hz)
+Independent (500 Hz)
 ──────────────────────
-[Leg Impedance PD] ──────────────────────────────────────────▶  τ_hip (both legs)
+[Leg Impedance PD] ──────────────────────────────────────────────────▶  τ_hip (both legs)
 ```
 
 | # | Controller | Type | State / Input | Output | Rate |
 |---|------------|------|--------------|--------|------|
 | 1 | Balance LQR | LQR 3-state | [pitch−θ_ref, pitch_rate, wheel_vel_avg−v_ref] | τ_sym | 500 Hz |
-| 2 | Leg Impedance | PD impedance | [q_hip−q_nom, dq_hip] | τ_hip | 100 Hz |
-| 3 | Velocity | PI | v_desired − v_measured | θ_ref (lean cmd) | 50 Hz |
-| 4 | Yaw | PI | ω_yaw_desired − ω_yaw_measured | τ_yaw | 50 Hz |
+| 2 | Leg Impedance | PD impedance | [q_hip−q_nom, dq_hip] | τ_hip | 500 Hz |
+| 3 | Velocity PI | PI | v_desired − v_measured | θ_ref (lean cmd) | 500 Hz |
+| 4 | Yaw PI | PI | ω_yaw_desired − ω_yaw_measured | τ_yaw | 500 Hz |
 
 ---
 
@@ -34,23 +33,29 @@ Independent (100 Hz)
 
 ### 1. Balance LQR (inner, 500 Hz)
 
-**State vector change from Session 4:**
-
+**State vector:**
 ```
-OLD (broken for drive):  x = [pitch_err, pitch_rate, wheel_pos, wheel_vel]   ← 4-state
-NEW:                     x = [pitch − θ_ref, pitch_rate, wheel_vel_avg − v_ref]  ← 3-state
+x = [pitch − θ_ref, pitch_rate, wheel_vel_avg − v_ref]   ← 3-state
 ```
 
-Removing `wheel_pos` eliminates the restoring force that fights intentional motion.
-Position hold in BALANCE mode is handled by the outer loop (θ_ref derived from drift).
+`wheel_pos` is NOT in the state. Position hold in BALANCE mode is the outer loop's job (θ_ref from VelocityPI). This keeps the LQR compatible with intentional forward motion in DRIVE mode.
 
 **LQR formulation:**
 ```
 u = −K @ x
-K = [K_pitch, K_pitch_rate, K_vel]   ← expected ~[-35, -7, -3]
+K = [K_pitch, K_pitch_rate, K_vel]
 Q = diag([Q_pitch, Q_pitch_rate, Q_vel])
 R = scalar
 ```
+
+**Optimized gains (balance-only run, 8496 evals):**
+| Parameter | Value |
+|-----------|-------|
+| Q_PITCH | 0.654 |
+| Q_PITCH_RATE | 0.134 |
+| Q_VEL | 0.0269 |
+| R | 9.275 |
+| K_nominal (at Q_NOM) | [-12.672, -1.754, -0.003] |
 
 **Gain Scheduling (Ascento-style):**
 
@@ -73,24 +78,35 @@ l_eff is computed via `physics.get_equilibrium_pitch(p, q_hip)` at each table en
 
 ---
 
-### 2. Velocity PI (outer, 50 Hz)
+### 2. Velocity PI (outer, 500 Hz)
 
 Converts velocity command into a lean angle setpoint for the LQR:
 
 ```python
-v_err = v_desired − v_measured
+vel_est_ms = wheel_vel * WHEEL_R          # +wheel_vel = forward body motion
+v_err = v_desired − vel_est_ms
 θ_ref = Kp_v * v_err + Ki_v * integral(v_err)
 θ_ref = clamp(θ_ref, −0.26 rad, +0.26 rad)   # ±15° hard limit
 ```
 
-In BALANCE mode: `θ_ref = K_pos * wheel_pos_drift` (gentle position hold), `v_ref = 0`.
-In DRIVE mode: `θ_ref` from PI above, `v_ref = v_desired` (feedforward to LQR).
+**BALANCE mode:** `v_desired = 0` → PI integrates any drift into a restoring lean.
+**DRIVE mode:** `v_desired = slider / joystick command` → PI drives to target speed.
 
-Starting gains: Kp_v = 0.04 rad/(m/s), Ki_v = 0.008 rad/m.
+**Sign convention:** positive `wheel_vel` = forward body motion = positive `vel_est_ms`.
+Positive `θ_ref` = lean forward = drive forward.
+
+**Optimized gains (balance-only, 3032 evals, sign-corrected 2026-03-18):**
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Kp_v | 0.299 | rad/(m/s) |
+| Ki_v | 0.500 | rad/m — may benefit from wider range (was at upper bound) |
+| fitness | 0.142 m | wheel travel over 5s balance (was 2.94 m without PI) |
+
+**Flag:** `USE_VELOCITY_PI` in `scenarios.py` — set `False` to disable outer loop for LQR-only tests.
 
 ---
 
-### 3. Yaw PI (outer, 50 Hz)
+### 3. Yaw PI (outer, 500 Hz)
 
 Produces differential torque for turning. Blends with drive.
 
@@ -103,11 +119,11 @@ yaw_err = ω_yaw_desired − ω_yaw_measured   # from BNO086 gyro Z
 τ_R = τ_sym − τ_yaw
 ```
 
-Starting gains: Kp_yaw = 0.3, Ki_yaw = 0.05.
+Starting gains: Kp_yaw = 0.3, Ki_yaw = 0.05. **Not yet implemented.**
 
 ---
 
-### 4. Leg Impedance PD (independent, 100 Hz)
+### 4. Leg Impedance PD (independent, 500 Hz)
 
 Decoupled from balance. Controls hip motor as a spring-damper:
 
@@ -115,17 +131,12 @@ Decoupled from balance. Controls hip motor as a spring-damper:
 τ_hip = −K_s * (q_hip − q_nom) − B_s * dq_hip
 ```
 
-| Setting | K_s (N·m/rad) | B_s (N·m·s/rad) |
-|---------|--------------|-----------------|
-| Soft    | 1.0          | 0.3             |
-| Medium  | 5.0          | 0.8             |
-| Stiff   | 15.0         | 1.5             |
+Current simulation values (matched to baseline1):
+- K_s = 8.0 N·m/rad
+- B_s = 4.0 N·m·s/rad
+- Torque limit: 2.0 N·m (HIP_IMPEDANCE_TORQUE_LIMIT) — keeps hips backdrivable
 
-`SUSPENSION_SOFTNESS` scalar 0→1 interpolates K_s and B_s.
-`q_nom` = commanded leg height (adjustable by user).
-
-**Terrain adaptation:** When unexpected pitch disturbance detected (|pitch − θ_ref| > 0.05 rad
-while θ_ref ≈ 0), reduce K_s by 30% for 200ms to absorb impact passively.
+`q_nom` = Q_NOM (30% of stroke) — fixed in current sim, user-adjustable later.
 
 ---
 
@@ -144,92 +155,46 @@ while θ_ref ≈ 0), reduce K_s by 30% for 200ms to absorb impact passively.
     [SETTLED] ◀── stable 500ms ── [LANDING] ◀──┘
 ```
 
-| Mode | Balance LQR | Leg K_s | Entry Trigger |
-|------|-------------|---------|---------------|
-| BALANCE | Normal | User setting | default / stop |
-| DRIVE | Normal + v_ref | User setting | drive command |
-| TURN | Normal + v_ref | User setting | turn command |
-| JUMP | Active, stiff | K_S_STIFF | jump command |
-| FLYING | K_pitch × 2 | Neutral q_nom | contact force < 0.1 N for 50ms |
-| LANDING | K_pitch × 2 | K_s × 0.3 | IMU Z accel > 1.5g |
-| SETTLED | Normal | Ramp to user over 1s | |pitch| < 2° for 500ms |
+| Mode | Balance LQR | v_desired | Entry Trigger |
+|------|-------------|-----------|---------------|
+| BALANCE | Normal | 0 (position hold) | default / stop |
+| DRIVE | Normal + v_ref feedforward | slider/joystick | drive command |
+| TURN | Normal + v_ref | slider/joystick | turn command |
+| JUMP | Active, stiff legs | 0 | jump command |
+| FLYING | K_pitch × 2 | 0 | contact force < 0.1 N for 50ms |
+| LANDING | K_pitch × 2, soft legs | 0 | IMU Z accel > 1.5g |
+| SETTLED | Normal | 0 | |pitch| < 2° for 500ms |
 
 ---
 
 ## Implementation Phases
 
-### Phase 1 — 3-State LQR + Gain Scheduling ✅ COMPLETE & RE-BASELINED
+### Phase 1 — 3-State LQR + Gain Scheduling ✅ COMPLETE
 
-**Status:** Implemented, optimized, and re-baselined (2026-03-17).
+**Files:** `lqr_design.py`, `scenarios.py`, `optimize_lqr.py`, `replay.py`
 
-**Implementation Files:**
-- `simulation/mujoco/LQR_Control_optimization/lqr_design.py` — LQR solver with gain scheduling
-- `simulation/mujoco/LQR_Control_optimization/scenarios.py` — 3-state controller + combined scenario
-- `simulation/mujoco/LQR_Control_optimization/optimize_lqr.py` — (1+8)-ES Q/R optimizer
-- `simulation/mujoco/LQR_Control_optimization/replay.py` — visual replay (fixed LQR gain loading from CSV)
-
-**Baseline Q/R Weights — v2 (1062 gen / 8496 evals, 10 min):**
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| Q_PITCH | 0.0438 | Lower than v1 — trusts pitch more |
-| Q_PITCH_RATE | 0.0021 | Low damping penalty |
-| Q_VEL | 0.0001 | Near-zero — velocity effectively uncontrolled |
-| R | 9.0266 | High — strong preference for low torque |
-
-**LQR Gain at Nominal Leg Position (Q_NOM):**
-```
-K_nominal = [-12.672, -1.754, -0.003]  [pitch, pitch_rate, wheel_vel]
-```
-
-**Performance Metrics (run_id=6288, new equilibrium-relative metric):**
-| Metric | Value |
-|--------|-------|
-| RMS pitch (5s balance) | 0.113° |
-| Max pitch | 0.363° |
-| Wheel travel | 0.856 m |
-| Wheel liftoff | 0 s |
-| Settle time | 0.0 s |
-| Combined fitness | **0.400** |
-
-**Visual quality:** Robot stands essentially motionless at equilibrium. Lean sub-half-degree. Disturbance at t=2.5s causes brief excursion, robot recovers cleanly.
-
-**Fitness metric (current):**
-| Scenario | Formula |
-|----------|---------|
-| Balance | `1.0×rms_pitch + 0.5×wheel_travel + 50×liftoff + 200×(fell)` |
-| Disturbance | `1.0×rms_pitch + 1.0×rms_pitch_post_dist + 0.5×wheel_travel + 50×liftoff + 200×(fell)` |
-| Combined | `0.2×balance + 0.8×disturbance` |
-
-**Known limitation — Q_VEL ≈ 0:** Wheel velocity is barely penalised. Robot will drift freely in drive mode. Phase 2 Velocity PI is designed to compensate, but Q_VEL may need to increase once drive mode is added.
-
-**Next optimizer run:** Expand `R` upper bound from 10 → 50 (`optimize_lqr.py` PARAM_RANGES); optimizer hit ceiling in this run.
-
-**Key Findings:**
-1. ✅ New metric (equilibrium-relative pitch, liftoff penalty) far more discriminating than old metric
-2. ✅ High R (≈9) yields quieter, lower-torque control vs low R
-3. ✅ Gain scheduling via interpolation works smoothly across leg stroke
-4. ✅ `replay.py` now correctly loads Q/R from CSV and recomputes K_table (was broken — used PD defaults)
+- LQR solver with gain scheduling at 3 leg positions (retracted/nominal/extended)
+- (1+8)-ES optimizer over Q/R weights
+- Best: Q=[0.654, 0.134, 0.0269], R=9.275, K_nominal=[-12.672, -1.754, -0.003]
+- RMS pitch 0.113°, max pitch 0.363°, zero liftoff
 
 ---
 
-### Phase 2 — Velocity PI + Drive Mode
-**Files:** `run_scenario_visual.py`, `viewer.py`
+### Phase 2 — Velocity PI + Balance Position Hold ✅ COMPLETE
 
-| Step | Action | Pass Criterion |
-|------|--------|---------------|
-| 2.1 | Add `VelocityPI` class with integrator, ±15° clamp, 0.5 rad/s rate limit | Unit test: θ_ref ramps then decays |
-| 2.2 | Add v_ref feedforward to LQR state | — |
-| 2.3 | Create DRIVE scenario: v_desired=0.5 m/s at t=2s | Reach 0.5 m/s in <3s, pitch < 3° |
-| 2.4 | Add W/S keys + HUD (v_desired, v_measured, θ_ref) to viewer | Manual drive works |
-| 2.5 | Add v_desired ramp 0.5 m/s² on key hold/release | Smooth accel/decel |
+**Files:** `scenarios.py`, `optimize_lqr.py`, `replay.py`, `sim_config.py`
 
-**Tuning:** 5×5 grid sweep Kp_v ∈ [0.01, 0.1], Ki_v ∈ [0.001, 0.05].
-Fitness = settle_time + overshoot + oscillation_count.
+- `VelocityPI` class wired into all balance scenarios (v_desired=0)
+- Correct sign: `vel_est_ms = wheel_vel * WHEEL_R` (positive = forward)
+- (1+8)-ES optimizer over KP_V/KI_V with fixed LQR Q/R
+- Best: KP_V=0.299, KI_V=0.500, fitness=0.142 m (20× improvement)
+- `replay.py`: 4-panel telemetry, v_desired slider (±1 m/s), Drive ON/OFF toggle, XYZ world frame
+
+**Next step for Phase 2:** Re-run optimizer with all 5 scenarios active (balance, disturbance, drive_slow, drive_med, obstacle) and wider KI_V range (up to 2.0). See HANDOFF.md.
 
 ---
 
 ### Phase 3 — Yaw PI + Turn Mode
-**Files:** `run_scenario_visual.py`, `viewer.py`
 
 | Step | Action | Pass Criterion |
 |------|--------|---------------|
@@ -237,90 +202,39 @@ Fitness = settle_time + overshoot + oscillation_count.
 | 3.2 | Apply differential mixing τ_L/τ_R | — |
 | 3.3 | TURN scenario: ω=1 rad/s for 6.28s | 360° with < 10cm drift |
 | 3.4 | DRIVE+TURN scenario: v=0.3 + ω=0.5 | Curved path, pitch < 3° |
-| 3.5 | Add A/D keys + yaw HUD to viewer | Manual turn works |
 
-**Tuning:** Manual Kp_yaw/Ki_yaw — start [0.3, 0.05], adjust to eliminate oscillation.
-Check cross-coupling: turning must not disturb pitch by more than 2°.
+Tuning: manual Kp_yaw/Ki_yaw — start [0.3, 0.05]. Check cross-coupling (turning must not disturb pitch > 2°).
 
 ---
 
 ### Phase 4 — Leg Impedance Suspension
-**Files:** `run_scenario_visual.py`, `viewer.py`, `sim_config.py`
 
 | Step | Action | Pass Criterion |
 |------|--------|---------------|
-| 4.1 | Add K_S/B_S params + SUSPENSION_SOFTNESS to sim_config | — |
-| 4.2 | Add `ImpedanceController` class | Returns to q_nom after perturbation |
-| 4.3 | Run at 100 Hz (every 5 timesteps), apply to both hips | Balance holds while legs move |
-| 4.4 | Terrain disturbance: reduce K_s 30% for 200ms on unexpected pitch | 5N impulse → Z deflect < 2cm |
-| 4.5 | Add Q/E (leg height) + [ / ] (softness) keys to viewer | Manual control works |
-
-**Tuning:** Verify critical damping: B_s > 2√(K_s × I_leg). No optimization needed.
+| 4.1 | Add SUSPENSION_SOFTNESS param, multiple K_s/B_s presets | — |
+| 4.2 | Terrain disturbance: reduce K_s 30% for 200ms on unexpected pitch | 5N impulse → Z deflect < 2cm |
+| 4.3 | Tune HIP_IMPEDANCE_TORQUE_LIMIT (currently 2 N·m placeholder) | Balance holds while legs deflect |
 
 ---
 
 ### Phase 5 — Jump Recovery State Machine
-**Files:** `run_scenario_visual.py`, `viewer.py`
 
 | Step | Action | Pass Criterion |
 |------|--------|---------------|
 | 5.1 | Add `RobotMode` enum (BALANCE/DRIVE/TURN/JUMP/FLYING/LANDING/SETTLED) | — |
 | 5.2 | FLYING detection: contact force < 0.1N for 50ms | Mode switches on 5cm drop |
-| 5.3 | LANDING detection: IMU Z accel > 1.5g after FLYING | Spike triggers LANDING |
-| 5.4 | LANDING: K_s × 0.3 for 500ms, K_pitch × 2.0 | Land from 15cm, stable in 2s |
-| 5.5 | SETTLED: |pitch| < 2° for 500ms → BALANCE, ramp K_s over 1s | Stable recovery |
-| 5.6 | JUMP: stiffen legs, extend hips, enter FLYING on liftoff | Jump height ≈ baseline1 |
-| 5.7 | Add SPACE key for jump, show mode in HUD | Manual jump-land works |
-
-**Tuning:** 1D search on landing K_s multiplier [0.1–0.5]. Minimize time-to-stable from 10cm drop.
+| 5.3 | LANDING: K_s × 0.3 for 500ms, K_pitch × 2.0 | Land from 15cm, stable in 2s |
+| 5.4 | JUMP: stiffen legs, extend hips, enter FLYING on liftoff | Jump height ≈ baseline1 (283mm) |
 
 ---
 
-### Phase 6 — End-to-End Optimization
-**Files:** `optimize_self_balance.py`, `test_behavioral.py`
+## Tuning Summary
 
-| Step | Action |
-|------|--------|
-| 6.1 | Create compound scenario: balance 5s → drive 5s → turn 3s → stop 5s |
-| 6.2 | Multi-objective fitness: RMS pitch + velocity error + yaw error + control effort |
-| 6.3 | Differential evolution on 6 params: Q_pitch, Q_pitch_rate, Q_vel, R, Kp_v, Ki_v |
-| 6.4 | Validate at 3 leg heights |
-| 6.5 | Write final gains to sim_config.py with comments |
-
----
-
-## Haiku Agent Prompt Template
-
-Use this when spawning a Haiku agent for a single implementation step:
-
-```
-Robot: 2-wheel inverted pendulum, 4-bar legs, MuJoCo simulation (Windows)
-Working dir: simulation/mujoco/LQR_controller/
-
-Context: [paste relevant architecture section above]
-Files already modified: [list]
-
-Phase [N], Step [M.K]:
-File: [filename]
-Action: [exact action from step table]
-Success criterion: [test from step table]
-
-Rules:
-- Only modify the specified file
-- Run the file after editing and report output
-- Do not add features beyond what the step describes
-```
-
----
-
-## Tuning Summary Table
-
-| Controller | Method | Parameters | Tool |
-|------------|--------|-----------|------|
-| Balance LQR | Differential evolution | Q_pitch, Q_pitch_rate, Q_vel, R | `optimize_self_balance.py` |
-| Gain scheduling | Offline at 3 points | l_eff at Q_RET/NOM/EXT | `lqr_design.py` |
-| Velocity PI | 5×5 grid sweep | Kp_v, Ki_v | `lqr_parameter_sweep.py` |
-| Yaw PI | Manual visual | Kp_yaw, Ki_yaw | viewer |
-| Leg impedance | Critical damping formula | K_s, B_s | manual check |
-| Jump recovery | 1D search | Landing K_s multiplier | `test_behavioral.py` |
-| All together | Differential evolution 6D | Q×4 + Kp_v + Ki_v | compound scenario |
+| Controller | Method | Parameters | Status |
+|------------|--------|-----------|--------|
+| Balance LQR | (1+8)-ES | Q_pitch, Q_pitch_rate, Q_vel, R | ✅ Done |
+| Gain scheduling | Offline at 3 points | l_eff at Q_RET/NOM/EXT | ✅ Done |
+| Velocity PI | (1+8)-ES | Kp_v, Ki_v | ✅ Balance-only done; combined scenarios next |
+| Yaw PI | Manual visual | Kp_yaw, Ki_yaw | Not started |
+| Leg impedance | Critical damping formula | K_s, B_s | Placeholder values only |
+| Jump recovery | 1D search | Landing K_s multiplier | Not started |

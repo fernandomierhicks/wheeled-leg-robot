@@ -41,6 +41,7 @@ from run_log import (
 import scenarios as _scenarios
 from scenarios import (
     init_sim, get_pitch_and_rate, balance_torque, lqr_torque, evaluate,
+    VelocityPI,
     FALL_THRESHOLD, BALANCE_DURATION,
     DISTURBANCE_TIME, DISTURBANCE_FORCE, DISTURBANCE_DUR,
 )
@@ -97,20 +98,21 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     import matplotlib
     matplotlib.use("TkAgg")
     import matplotlib.pyplot as plt
-    from matplotlib.widgets import Button
+    from matplotlib.widgets import Button, Slider
 
     MAXLEN = int(window_s * TELEMETRY_HZ) + 500
-    t_buf, pitch_buf, torque_buf, hip_buf = (deque(maxlen=MAXLEN) for _ in range(4))
+    t_buf, pitch_buf, theta_ref_buf, torque_buf, hip_buf, vel_buf = (deque(maxlen=MAXLEN) for _ in range(6))
 
     plt.ion()
-    fig, axes = plt.subplots(3, 1, figsize=(6, 7))
+    fig, axes = plt.subplots(4, 1, figsize=(6, 9))
     fig.patch.set_facecolor("#1e1e2e")
-    plt.subplots_adjust(hspace=0.50, top=0.91, bottom=0.13, left=0.18, right=0.96)
+    plt.subplots_adjust(hspace=0.60, top=0.91, bottom=0.22, left=0.18, right=0.96)
 
     specs = [
-        ("Pitch",        "deg",  "#60d0ff"),
-        ("Wheel Torque", "N·m",  "#f08040"),
-        ("Hip Angle",    "rad",  "#b060ff"),
+        ("Pitch",         "deg",   "#60d0ff"),
+        ("Wheel Torque",  "N·m",   "#f08040"),
+        ("Hip Angle",     "rad",   "#b060ff"),
+        ("Robot Velocity","m/s",   "#50e080"),
     ]
     lines = []
     for ax, (ttl, unit, col) in zip(axes, specs):
@@ -123,9 +125,48 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ax.set_xlabel("sim time [s]", color="lightgray", fontsize=7)
         ln, = ax.plot([], [], color=col, linewidth=1.5)
         lines.append(ln)
+    # Second line on pitch axes: θ_ref commanded by VelocityPI or slider
+    ln_theta_ref, = axes[0].plot([], [], color="#ff6060", linewidth=1.0,
+                                 linestyle="--")
+    axes[0].legend(handles=[lines[0], ln_theta_ref],
+                   labels=["pitch", "pitch cmd (ff+θ_ref)"],
+                   loc="upper right", fontsize=6,
+                   facecolor="#2a2a3e", edgecolor="#555", labelcolor="lightgray")
+
+    # ── Widgets ─────────────────────────────────────────────────────────────
+    # θ_ref slider  [left, bottom, width, height]
+    ax_sld = fig.add_axes([0.18, 0.13, 0.60, 0.03])
+    ax_sld.set_facecolor("#2a2a3e")
+    sld = Slider(ax_sld, "v_desired (m/s)", -1.0, 1.0, valinit=0.0, color="#50e080")
+    sld.label.set_color("lightgray"); sld.label.set_fontsize(8)
+    sld.valtext.set_color("#ff6060"); sld.valtext.set_fontsize(8)
+
+    # Override toggle button
+    override_active = [False]
+    ax_tog = fig.add_axes([0.05, 0.04, 0.28, 0.05])
+    btn_tog = Button(ax_tog, "Drive OFF", color="#3a3a5e", hovercolor="#5a5a9e")
+    btn_tog.label.set_color("white"); btn_tog.label.set_fontsize(8)
+
+    def _toggle(_):
+        override_active[0] = not override_active[0]
+        if override_active[0]:
+            btn_tog.label.set_text("Drive ON")
+            btn_tog.ax.set_facecolor("#2a5e3a")
+            cmd_q.put_nowait(("V_DESIRED", sld.val))
+        else:
+            btn_tog.label.set_text("Drive OFF")
+            btn_tog.ax.set_facecolor("#3a3a5e")
+            cmd_q.put_nowait(("V_DESIRED", 0.0))
+        fig.canvas.draw_idle()
+    btn_tog.on_clicked(_toggle)
+
+    def _on_slider(_):
+        if override_active[0]:
+            cmd_q.put_nowait(("V_DESIRED", sld.val))
+    sld.on_changed(_on_slider)
 
     # Restart button
-    ax_btn = fig.add_axes([0.35, 0.03, 0.30, 0.05])
+    ax_btn = fig.add_axes([0.68, 0.04, 0.25, 0.05])
     btn    = Button(ax_btn, "Restart", color="#3a3a5e", hovercolor="#5a5a9e")
     btn.label.set_color("white"); btn.label.set_fontsize(9)
     btn.on_clicked(lambda _: cmd_q.put_nowait("RESTART"))
@@ -145,14 +186,15 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         for item in items:
             if item is None: return
             if item == "RESET":
-                for buf in [t_buf, pitch_buf, torque_buf, hip_buf]:
+                for buf in [t_buf, pitch_buf, theta_ref_buf, torque_buf, hip_buf, vel_buf]:
                     buf.clear()
                 for ln in lines: ln.set_data([], [])
+                ln_theta_ref.set_data([], [])
                 fig.canvas.flush_events()
                 continue
-            t, p, trq, hip = item
-            t_buf.append(t); pitch_buf.append(p)
-            torque_buf.append(trq); hip_buf.append(hip)
+            t, p, th_ref, trq, hip, vel = item
+            t_buf.append(t); pitch_buf.append(p); theta_ref_buf.append(th_ref)
+            torque_buf.append(trq); hip_buf.append(hip); vel_buf.append(vel)
 
         if len(t_buf) < 2: continue
         tb     = list(t_buf)
@@ -161,14 +203,23 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         idx    = next((i for i, t in enumerate(tb) if t >= t0), 0)
         tw     = tb[idx:]
 
-        for ln, ax, buf in zip(lines, axes, [pitch_buf, torque_buf, hip_buf]):
+        for i, (ln, ax, buf) in enumerate(zip(lines, axes, [pitch_buf, torque_buf, hip_buf, vel_buf])):
             bw = list(buf)[idx:]
             ln.set_data(tw, bw)
             ax.set_xlim(t0, sim_t + 0.5)
             if len(bw) > 1:
-                lo, hi = min(bw), max(bw)
+                if i == 0:
+                    # Autoscale pitch axes to both pitch and θ_ref signals
+                    tr_bw = list(theta_ref_buf)[idx:]
+                    all_vals = bw + (tr_bw if tr_bw else [])
+                    lo, hi = min(all_vals), max(all_vals)
+                else:
+                    lo, hi = min(bw), max(bw)
                 span = max(hi - lo, 0.1)
                 ax.set_ylim(lo - span * 0.15, hi + span * 0.15)
+        # Update θ_ref line on pitch axes
+        tr_bw = list(theta_ref_buf)[idx:]
+        ln_theta_ref.set_data(tw, tr_bw)
         fig.canvas.flush_events()
 
 
@@ -211,12 +262,15 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     q_pitch_rate = _safe_float(row.get("Q_PITCH_RATE"), LQR_Q_PITCH_RATE)
     q_vel        = _safe_float(row.get("Q_VEL"),        LQR_Q_VEL)
     r_val        = _safe_float(row.get("R"),             LQR_R)
+    kp_v         = _safe_float(row.get("KP_V"),          _scenarios.VELOCITY_PI_KP)
+    ki_v         = _safe_float(row.get("KI_V"),          _scenarios.VELOCITY_PI_KI)
     _scenarios.LQR_K_TABLE = compute_gain_table(
         ROBOT, Q_diag=[q_pitch, q_pitch_rate, q_vel], R_val=r_val
     )
     _scenarios.USE_PD_CONTROLLER = False
     use_lqr = True
     print(f"  LQR weights: Q=[{q_pitch:.4g}, {q_pitch_rate:.4g}, {q_vel:.4g}]  R={r_val:.4g}")
+    print(f"  VelocityPI:  Kp_v={kp_v:.4g}  Ki_v={ki_v:.4g}")
 
     print(f"\nReplaying run {run_id}  [{label}]  scenario={scenario}")
     print(f"  Logged fitness: {logged_fit}")
@@ -281,6 +335,13 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     _pitch_d      = _gep(ROBOT, Q_NOM)
     _pitch_rate_d = 0.0
     _wheel_vel_d  = 0.0
+    _theta_ref  = 0.0   # last θ_ref sent to controller (for telemetry)
+    _vel_est_ms = 0.0   # last velocity estimate fed into VelocityPI (m/s)
+    _v_desired  = [0.0] # velocity setpoint [m/s]; slider writes here via cmd_q
+
+    # Outer Velocity PI (v_desired=0 in balance mode → position hold)
+    _dt_ctrl = model.opt.timestep * CTRL_STEPS
+    vel_pi = VelocityPI(kp=kp_v, ki=ki_v, dt=_dt_ctrl)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.cam.azimuth   = 35
@@ -290,11 +351,14 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
 
         def _reset_state():
             nonlocal step, prev_sim_t, pitch_integral, odo_x
-            nonlocal _pitch_d, _pitch_rate_d, _wheel_vel_d
+            nonlocal _pitch_d, _pitch_rate_d, _wheel_vel_d, _theta_ref, _vel_est_ms
             _init()
             step = 0; prev_sim_t = 0.0
             pitch_integral = 0.0; odo_x = 0.0
             _pitch_d = _gep(ROBOT, Q_NOM); _pitch_rate_d = 0.0; _wheel_vel_d = 0.0
+            _theta_ref = 0.0; _vel_est_ms = 0.0
+            _v_desired[0] = 0.0
+            vel_pi.reset()
             if not data_q.full(): data_q.put_nowait("RESET")
 
         while viewer.is_running():
@@ -303,7 +367,10 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
 
             try:
                 cmd = cmd_q.get_nowait()
-                if cmd == "RESTART": _reset_state()
+                if cmd == "RESTART":
+                    _reset_state()
+                elif isinstance(cmd, tuple) and cmd[0] == "V_DESIRED":
+                    _v_desired[0] = float(cmd[1])
             except Exception:
                 pass
             if sim_t < prev_sim_t - 0.01:
@@ -331,7 +398,11 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                         data.ctrl[act_hip_L]   = 0.0
                         data.ctrl[act_hip_R]   = 0.0
                     elif use_lqr:
-                        tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, q_hip_avg, v_ref=0.0)
+                        _vel_est_ms = _wheel_vel_d * WHEEL_R   # +wheel_vel = forward body
+                        theta_ref   = vel_pi.update(_v_desired[0], _vel_est_ms)
+                        _theta_ref  = theta_ref
+                        tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, q_hip_avg,
+                                               v_ref=0.0, theta_ref=theta_ref)
                         data.ctrl[act_wheel_L] = tau_wheel
                         data.ctrl[act_wheel_R] = tau_wheel
                         for qpos_hip, dof_hip, act_hip in [
@@ -374,22 +445,54 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
             if wall_now - last_push >= 1.0 / TELEMETRY_HZ and not data_q.full():
                 pitch_true, _ = get_pitch_and_rate(data, box_bid, d_pitch)
                 q_hip_avg = (data.qpos[qpos_hip_L] + data.qpos[qpos_hip_R]) / 2.0
+                _pitch_ff_now = _gep(ROBOT, q_hip_avg)
+                # Send absolute commanded pitch (pitch_ff + theta_ref) so it
+                # overlays the actual pitch line when balanced and no correction needed.
                 data_q.put_nowait((sim_t,
                                    math.degrees(pitch_true),
+                                   math.degrees(_pitch_ff_now + _theta_ref),
                                    float(data.ctrl[act_wheel_L]),
-                                   q_hip_avg))
+                                   q_hip_avg,
+                                   _vel_est_ms))
                 last_push = wall_now
 
-            # HUD overlay: show run info
+            # HUD overlay + world frame axes
             viewer.user_scn.ngeom = 0
-            g = viewer.user_scn.geoms[0]
+            # XYZ frame at world origin (just above floor).
+            # Cylinders are aligned along their local Z, so we rotate to each world axis.
+            _r   = 0.007          # shaft radius [m]
+            _hl  = 0.10           # half-length [m]
+            _o   = np.array([0.0, 0.0, 0.01])   # origin, 1 cm above floor
+            _ax  = [
+                # (center offset,  rotation matrix rows,                rgba)
+                (np.array([_hl, 0,  0  ]),  # +X  red
+                 np.array([[0,0,1],[0,1,0],[-1,0,0]], dtype=np.float32),
+                 np.array([1.0, 0.1, 0.1, 1.0], dtype=np.float32)),
+                (np.array([0,  _hl, 0  ]),  # +Y  green
+                 np.array([[1,0,0],[0,0,1],[0,-1,0]], dtype=np.float32),
+                 np.array([0.1, 1.0, 0.1, 1.0], dtype=np.float32)),
+                (np.array([0,  0,  _hl ]),  # +Z  blue
+                 np.eye(3, dtype=np.float32),
+                 np.array([0.1, 0.4, 1.0, 1.0], dtype=np.float32)),
+            ]
+            for i, (off, mat, rgba) in enumerate(_ax):
+                g = viewer.user_scn.geoms[i]
+                mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_CYLINDER,
+                                    [_r, _hl, 0],
+                                    (_o + off).tolist(),
+                                    mat.flatten().tolist(),
+                                    rgba)
+                g.label = (b"+X" if i==0 else b"+Y" if i==1 else b"+Z")
+            viewer.user_scn.ngeom = 3
+            # HUD label on invisible sphere
+            g = viewer.user_scn.geoms[3]
             hud = f"run {run_id} | {label[:20]}"
             mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_SPHERE,
                                 [0.006, 0, 0], [-0.30, 0.15, 0.65],
                                 np.eye(3).flatten(),
-                                np.array([0.4, 1.0, 0.4, 1.0], dtype=np.float32))
+                                np.array([0.4, 1.0, 0.4, 0.0], dtype=np.float32))  # alpha=0: invisible
             g.label = hud.encode()[:99]
-            viewer.user_scn.ngeom = 1
+            viewer.user_scn.ngeom = 4
 
             elapsed = time.perf_counter() - frame_start
             sleep_t = slowmo / RENDER_HZ - elapsed

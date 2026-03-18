@@ -28,6 +28,8 @@ from lqr_design import interpolate_gains, compute_gain_table
 
 # ── Controller mode ──────────────────────────────────────────────────────────
 USE_PD_CONTROLLER = True  # Toggle between PD (True) and LQR (False)
+USE_VELOCITY_PI   = True  # When True, outer VelocityPI loop provides theta_ref for LQR
+                           # Set False to optimize LQR gains only (no outer loop)
 
 # ── Velocity PI gains — mutable module globals (overridden by optimizer worker) ─
 # Outer loop: velocity error → theta_ref (lean angle command for LQR).
@@ -584,6 +586,7 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
     # Physics: 2000 Hz.  Controller (IMU + torque cmd): 500 Hz = every CTRL_STEPS steps.
     step = 0
     dt   = model.opt.timestep * CTRL_STEPS   # 0.002 s controller dt
+    vel_pi = VelocityPI(kp=VELOCITY_PI_KP, ki=VELOCITY_PI_KI, dt=dt)
     while data.time < duration:
         if step % CTRL_STEPS == 0:
             # ── Sensors (500 Hz) ─────────────────────────────────────────────
@@ -612,8 +615,14 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
                     _pitch_d, _pitch_rate_d, pitch_integral, odo_x,
                     _wheel_vel_d, hip_q_avg, dt, gains)
             else:
-                # LQR controller (pitch_integral, odo_x not used but kept for compatibility)
-                tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg, v_ref=0.0)
+                # LQR + optional outer VelocityPI (v_desired=0 → position hold)
+                if USE_VELOCITY_PI:
+                    vel_est_ms = _wheel_vel_d * WHEEL_R   # +wheel_vel = forward body
+                    theta_ref  = vel_pi.update(0.0, vel_est_ms)
+                else:
+                    theta_ref = 0.0
+                tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
+                                       v_ref=0.0, theta_ref=theta_ref)
 
             data.ctrl[act_wheel_L] = tau_wheel
             data.ctrl[act_wheel_R] = tau_wheel
@@ -754,6 +763,7 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
     # ── Simulation loop ─────────────────────────────────────────────────────
     step = 0
     dt   = model.opt.timestep * CTRL_STEPS   # 0.002 s controller dt
+    vel_pi = VelocityPI(kp=VELOCITY_PI_KP, ki=VELOCITY_PI_KI, dt=dt)
     while data.time < duration:
         if step % CTRL_STEPS == 0:
             # ── Sensors (500 Hz) ─────────────────────────────────────────────
@@ -782,8 +792,14 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
                     _pitch_d, _pitch_rate_d, pitch_integral, odo_x,
                     _wheel_vel_d, hip_q_avg, dt, gains)
             else:
-                # LQR controller (pitch_integral, odo_x not used but kept for compatibility)
-                tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg, v_ref=0.0)
+                # LQR + optional outer VelocityPI (v_desired=0 → position hold)
+                if USE_VELOCITY_PI:
+                    vel_est_ms = _wheel_vel_d * WHEEL_R   # +wheel_vel = forward body
+                    theta_ref  = vel_pi.update(0.0, vel_est_ms)
+                else:
+                    theta_ref = 0.0
+                tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
+                                       v_ref=0.0, theta_ref=theta_ref)
 
             data.ctrl[act_wheel_L] = tau_wheel
             data.ctrl[act_wheel_R] = tau_wheel

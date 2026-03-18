@@ -51,22 +51,15 @@ POSITION_KP   =  2.16  # [rad/m]    wheel odometry → pitch lean correction (wa
 VELOCITY_KP   =  0.497 # [rad/(m/s)] wheel velocity feedback (was 0.30)
 MAX_PITCH_CMD =  0.25  # [rad] clamp on position/velocity feedback
 
-# ── LQR cost weights — optimized via Phase 2 (2346 gen / 18768 evals, 90 min) ─
+# ── LQR cost weights — optimized via balance-only 2-min run (2026-03-18) ──────
 # State: x = [pitch − pitch_ff − θ_ref,  pitch_rate,  wheel_vel_avg − v_ref]
 # u = −K @ x,  K solved from Q, R via scipy.linalg.solve_continuous_are
-# Baseline (Phase 2): fitness=0.6186 (combined: balance 10% + disturbance 35%
-#   + drive_slow 20% + drive_medium 20% + obstacle 15%)
-#   run_id=13493, found at gen 1637 / 2346 total
-#   RMS pitch 0.115°, max pitch 0.665°, wheel_travel 0.268 m
-#   vel_track_rms 0.286 m/s, survived 5.0s, liftoff=0s
-#   fitness_balance=0.249, fitness_disturbance=0.424
-#   fitness_drive_slow=0.486, fitness_drive_med=1.346, fitness_obstacle=0.526
-#   NOTE: R hits ceiling (48.6/50.0) and KP_V/KI_V at lower bounds (0.010/0.001)
-#   → next run: expand R range to 100, reduce KP_V floor to 0.001
-LQR_Q_PITCH      =  0.8168  # weight on pitch error (Phase 2, run_id=13493)
-LQR_Q_PITCH_RATE =  0.2553  # weight on pitch rate (Phase 2)
-LQR_Q_VEL        =  0.0001  # weight on wheel velocity error (Phase 2)
-LQR_R            = 48.565   # weight on control effort (Phase 2 — very high, at ceiling)
+# Balance-only run: fitness=2.94 (wheel_travel_m, VelocityPI not yet active)
+#   run_id=2904, Q_VEL=0.0269 key insight (vs Phase 2 Q_VEL≈0.0001 → drift)
+LQR_Q_PITCH      =  0.654   # weight on pitch error
+LQR_Q_PITCH_RATE =  0.134   # weight on pitch rate
+LQR_Q_VEL        =  0.0269  # weight on wheel velocity (actively damps drift)
+LQR_R            =  9.275   # weight on control effort
 
 # ── Leg impedance (held at Q_NOM; decoupled from balance loop) ─────────────
 LEG_K_S = 8.0    # [N·m/rad] spring stiffness  (matches baseline1 HIP_KP_SUSP)
@@ -87,8 +80,8 @@ CTRL_STEPS   = round(1.0 / (SIM_TIMESTEP * CTRL_HZ))     # MuJoCo steps per cont
 # theta_ref is added to pitch_ff inside lqr_torque: state[0] = pitch - pitch_ff + theta_ref.
 # Positive theta_ref = lean forward command = drive forward.
 # Starting gains from Control.MD; optimizer will tune via (1+8)-ES.
-VELOCITY_PI_KP = 0.010   # [rad/(m/s)] proportional gain (Phase 2 optimized — at lower bound)
-VELOCITY_PI_KI = 0.001   # [rad/m]     integral gain (Phase 2 optimized — at lower bound)
+VELOCITY_PI_KP = 0.299   # [rad/(m/s)] proportional gain (balance-only opt, 2026-03-18, sign-fixed)
+VELOCITY_PI_KI = 0.500   # [rad/m]     integral gain  (balance-only opt, 2026-03-18, sign-fixed; at upper bound)
 VELOCITY_PI_THETA_MAX = 0.26   # [rad] ±15° hard clamp on theta_ref output
 VELOCITY_PI_INT_MAX   = 2.0    # [rad·s] integrator anti-windup clamp
 

@@ -30,17 +30,20 @@ import scenarios
 from lqr_design import compute_gain_table
 from sim_config import ROBOT
 
-# ── Search space ──────────────────────────────────────────────────────────────
-# All parameters searched in log10 space.
-# LQR Q/R: weight balance quality (existing Phase 1 tuning)
-# KP_V/KI_V: VelocityPI lean-angle gains (new Phase 2 drive scenarios)
+# ── Fixed LQR gains (not searched — use Phase 2 best: run_id=2904) ────────────
+# To also optimize Q/R, move these back into PARAM_RANGES.
+FIXED_LQR_PARAMS = {
+    "Q_PITCH":      0.654,
+    "Q_PITCH_RATE": 0.134,
+    "Q_VEL":        0.0269,
+    "R":            9.275,
+}
+
+# ── Search space: VelocityPI outer loop only ──────────────────────────────────
+# Wider ranges than before — allow more aggressive position-hold gains.
 PARAM_RANGES = {
-    "Q_PITCH":       (0.01,    1.0),     # pitch error weight
-    "Q_PITCH_RATE":  (0.001,   1.0),     # pitch rate damping
-    "Q_VEL":         (0.0001,  0.1),     # wheel velocity weight (may increase for drive)
-    "R":             (0.1,     100.0),   # control effort (expanded from 50 — Phase 2 hit ceiling)
-    "KP_V":          (0.001,   0.5),     # VelocityPI Kp [rad/(m/s)] — expanded floor from 0.01
-    "KI_V":          (0.001,   0.2),     # VelocityPI Ki [rad/m]
+    "KP_V":  (0.001,  2.0),   # VelocityPI Kp [rad/(m/s)]
+    "KI_V":  (0.001,  0.5),   # VelocityPI Ki [rad/m]
 }
 
 # ── Active scenarios ─────────────────────────────────────────────────────────
@@ -50,16 +53,9 @@ PARAM_RANGES = {
 ACTIVE_SCENARIOS = ['balance']
 
 # ── Seed weights (used when CSV is empty — fresh start) ──────────────────────
-# Rationale for balance-only: Q_VEL=0.02 actively damps wheel velocity so the
-# robot stops drifting (previous runs had Q_VEL≈0.0001 → wheels ignored by LQR).
-# R=5 allows generous torque; Q_PITCH/Q_PITCH_RATE tuned for stable balance.
 SEED_WEIGHTS = {
-    "Q_PITCH":      0.30,
-    "Q_PITCH_RATE": 0.10,
-    "Q_VEL":        0.02,
-    "R":            5.0,
-    "KP_V":         0.01,
-    "KI_V":         0.001,
+    "KP_V":  0.04,    # Control.MD recommended starting gain [rad/(m/s)]
+    "KI_V":  0.008,   # Control.MD recommended starting gain [rad/m]
 }
 
 # ── (1+λ)-ES hyper-parameters ────────────────────────────────────────────────
@@ -132,8 +128,9 @@ def _eval_worker(args):
     from sim_config import ROBOT
     import scenarios
 
-    # Temporarily switch to LQR controller + set velocity PI gains
+    # Temporarily switch to LQR controller + outer VelocityPI + set gains
     scenarios.USE_PD_CONTROLLER = False
+    scenarios.USE_VELOCITY_PI   = True   # outer loop active during optimization
     scenarios.VELOCITY_PI_KP = Kp_v
     scenarios.VELOCITY_PI_KI = Ki_v
 
@@ -218,8 +215,11 @@ def run_evo(hours: float = None, max_iters: int = None,
     if parent_fit == float("inf"):
         print("No prior results found — evaluating default weights first...")
         row = _eval_worker(
-            (parent['Q_PITCH'], parent['Q_PITCH_RATE'], parent['Q_VEL'],
-             parent['R'], parent['KP_V'], parent['KI_V'],
+            (parent.get('Q_PITCH',      FIXED_LQR_PARAMS['Q_PITCH']),
+             parent.get('Q_PITCH_RATE', FIXED_LQR_PARAMS['Q_PITCH_RATE']),
+             parent.get('Q_VEL',        FIXED_LQR_PARAMS['Q_VEL']),
+             parent.get('R',            FIXED_LQR_PARAMS['R']),
+             parent['KP_V'], parent['KI_V'],
              "evo_seed", next_run_id(csv_path), csv_path, ACTIVE_SCENARIOS)
         )
         parent_fit = float(row.get("fitness", float("inf")))
@@ -270,7 +270,10 @@ def run_evo(hours: float = None, max_iters: int = None,
             labels = [f"evo_g{gen:06d}_c{i}" for i in range(LAMBDA)]
 
             args = [
-                (c['Q_PITCH'], c['Q_PITCH_RATE'], c['Q_VEL'], c['R'],
+                (c.get('Q_PITCH',      FIXED_LQR_PARAMS['Q_PITCH']),
+                 c.get('Q_PITCH_RATE', FIXED_LQR_PARAMS['Q_PITCH_RATE']),
+                 c.get('Q_VEL',        FIXED_LQR_PARAMS['Q_VEL']),
+                 c.get('R',            FIXED_LQR_PARAMS['R']),
                  c['KP_V'], c['KI_V'],
                  lbl, rid, csv_path, ACTIVE_SCENARIOS)
                 for c, lbl, rid in zip(children, labels, ids)
