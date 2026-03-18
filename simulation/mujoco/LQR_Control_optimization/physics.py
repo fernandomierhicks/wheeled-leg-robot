@@ -196,15 +196,21 @@ def find_stroke(p: dict = None):
 # MJCF XML builder
 # ---------------------------------------------------------------------------
 def build_xml(p: dict = None, obstacle_height: float = 0.0,
-              bumps: list = None) -> str:
+              bumps: list = None,
+              sandbox_obstacles: list = None,
+              floor_size: tuple = None) -> str:
     """Generate MJCF XML for the two-leg balance robot.
 
     p: robot geometry dict (defaults to ROBOT from sim_config).
     obstacle_height: if > 0, add a floor step at x=OBSTACLE_X of this height [m].
     bumps: list of (x, height) tuples — thin box speed-bumps (4 cm wide, 1 m across).
+    sandbox_obstacles: list of dicts with keys: shape ('box'|'cyl'), x, y, h,
+        and for box: rx, ry; for cyl: r.  Placed as static geoms in the world.
+    floor_size: (sx, sy) half-sizes for the ground plane.  Default: (10, 5).
     Arena: flat floor, open (no walls — robot can roll freely).
     """
     if p is None: p = ROBOT
+    if floor_size is None: floor_size = (10, 5)
 
     L_f = p['L_femur']; L_s = p['L_stub']; L_t = p['L_tibia']
     Lc  = p['Lc'];      F_X = p['F_X'];    F_Z = p['F_Z']; A_Z = p['A_Z']
@@ -317,7 +323,7 @@ def build_xml(p: dict = None, obstacle_height: float = 0.0,
     <light name="front" pos="0 -3 2.5" dir="0  1 -0.8" diffuse="0.40 0.40 0.45"/>
     <light name="back"  pos="0  3 2.5" dir="0 -1 -0.8" diffuse="0.40 0.40 0.45"/>
 
-    <geom name="ground" type="plane" size="10 5 0.1"
+    <geom name="ground" type="plane" size="{floor_size[0]} {floor_size[1]} 0.1"
           material="floor_mat" condim="3" friction="0.8 0.01 0.001"
           solref="0.04 1" solimp="0.9 0.95 0.001"/>
     {f'<geom name="floor_step" type="box" pos="{OBSTACLE_X + 2.0:.3f} 0 {obstacle_height/2:.5f}" size="2.0 5.0 {obstacle_height/2:.5f}" rgba="0.75 0.50 0.20 1.0" condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>' if obstacle_height > 0.0 else ''}
@@ -329,6 +335,20 @@ def build_xml(p: dict = None, obstacle_height: float = 0.0,
         f'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>'
         for i, (x, h) in enumerate(bumps)
     ) if bumps else ''}
+    {''.join(
+        (f'<geom name="sbox_{i}" type="box" '
+         f'pos="{o["x"]:.3f} {o["y"]:.3f} {o["h"]/2:.5f}" '
+         f'size="{o["rx"]:.4f} {o["ry"]:.4f} {o["h"]/2:.5f}" '
+         f'rgba="{("0.85 0.85 0.20" if o["h"]<=0.02 else "0.90 0.55 0.10" if o["h"]<=0.04 else "0.90 0.30 0.10" if o["h"]<=0.06 else "0.85 0.10 0.10")} 1.0" '
+         f'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>'
+         if o["shape"] == "box" else
+         f'<geom name="scyl_{i}" type="cylinder" '
+         f'pos="{o["x"]:.3f} {o["y"]:.3f} {o["h"]/2:.5f}" '
+         f'size="{o["r"]:.4f} {o["h"]/2:.5f}" '
+         f'rgba="{("0.85 0.85 0.20" if o["h"]<=0.02 else "0.90 0.55 0.10" if o["h"]<=0.04 else "0.90 0.30 0.10" if o["h"]<=0.06 else "0.85 0.10 0.10")} 1.0" '
+         f'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>')
+        for i, o in enumerate(sandbox_obstacles)
+    ) if sandbox_obstacles else ''}
 
 
     <!-- ── Body ───────────────────────────────────────────────────────── -->

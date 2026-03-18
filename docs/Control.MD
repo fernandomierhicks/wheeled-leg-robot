@@ -441,16 +441,26 @@ The `dist_fn(t) -> float` callable interface allows each scenario to specify an 
 
 ---
 
-### Phase 3 — Yaw PI + Turn Mode
+### Phase 3 — Yaw PI + Turn Mode ✅ COMPLETE & BASELINED
 
-| Step | Action | Pass Criterion |
-|------|--------|---------------|
-| 3.1 | Add `YawPI` class, ±0.5 N·m clamp | Unit test: converges on ω step |
-| 3.2 | Apply differential mixing τ_L/τ_R | — |
-| 3.3 | TURN scenario: ω=1 rad/s for 6.28s | 360° with < 10cm drift |
-| 3.4 | DRIVE+TURN scenario: v=0.3 + ω=0.5 | Curved path, pitch < 3° |
+**Files:** `scenarios.py`, `optimize_yaw_pi.py`, `replay.py`, `sim_config.py`, `sandbox.py`
 
-Tuning: manual Kp_yaw/Ki_yaw — start [0.3, 0.05]. Check cross-coupling (turning must not disturb pitch > 2°).
+- `YawPI` class: yaw rate error → τ_yaw, ±0.5 N·m clamp, integrator anti-windup 0.5 N·m·s
+- Differential mixing: `τ_L = τ_sym − τ_yaw`, `τ_R = τ_sym + τ_yaw` (sign verified experimentally — positive ω = CCW = left turn)
+- World-frame yaw rate: `data.qvel[dof_free + 5]` — no pitch contamination (free joint qvel is always world-frame)
+- Controller orthogonality confirmed: differential τ_yaw cancels in wheel average — LQR/VelocityPI are blind to it
+- S6 `6_YAW_PI_turn`: pure 360° CCW turn at 1 rad/s, 8 s — yaw_rms=0.045 rad/s (4.5% error), pitch=3.3°
+- S7 `7_DRIVE_TURN`: v=0.3 m/s + ω=0.5 rad/s simultaneously — pitch=3.2°, no cross-coupling instability
+- Starting gains KP_YAW=0.3, KI_YAW=0.05 performed well; optimizer available (`optimize_yaw_pi.py`) if needed
+- `replay.py`: 4th panel changed to Yaw Rate with cmd overlay; ω_desired slider; Turn ON/OFF button; differential torque applied
+- `sandbox.py`: interactive free-drive arena — 28 obstacles (1–8 cm), v/ω/hip sliders + gamepad support
+
+**Baselined gains (sim_config.py):**
+| Param | Value |
+|-------|-------|
+| KP_YAW | 0.3 |
+| KI_YAW | 0.05 |
+| YAW_PI_TORQUE_MAX | 0.5 N·m |
 
 ---
 

@@ -81,6 +81,7 @@ from sim_config import (
     PITCH_NOISE_STD_RAD, PITCH_RATE_NOISE_STD_RAD_S,
     CTRL_STEPS, PITCH_STEP_RAD, THETA_REF_RATE_LIMIT,
     S5_BUMPS,
+    YAW_PI_KP, YAW_PI_KI,
 )
 from physics import build_xml, build_assets, get_equilibrium_pitch
 from run_log import (
@@ -90,7 +91,7 @@ from run_log import (
 import scenarios as _scenarios
 from scenarios import (
     init_sim, get_pitch_and_rate, balance_torque, lqr_torque, evaluate,
-    VelocityPI,
+    VelocityPI, YawPI,
     FALL_THRESHOLD, BALANCE_DURATION,
     DISTURBANCE_TIME, DISTURBANCE_FORCE, DISTURBANCE_DUR,
     s1_dist_fn, s2_dist_fn, s3_velocity_profile, _leg_cycle_profile,
@@ -151,16 +152,16 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     from matplotlib.widgets import Button, Slider
 
     MAXLEN = int(window_s * TELEMETRY_HZ) + 500
-    t_buf, pitch_buf, theta_ref_buf, torque_buf, pitch_rate_buf, vel_buf, v_cmd_buf = (deque(maxlen=MAXLEN) for _ in range(7))
+    t_buf, pitch_buf, theta_ref_buf, yaw_rate_buf, pitch_rate_buf, vel_buf, v_cmd_buf, omega_cmd_buf = (deque(maxlen=MAXLEN) for _ in range(8))
 
     plt.ion()
     fig, axes = plt.subplots(4, 1, figsize=(6, 9))
     fig.patch.set_facecolor("#1e1e2e")
-    plt.subplots_adjust(hspace=0.60, top=0.91, bottom=0.22, left=0.18, right=0.96)
+    plt.subplots_adjust(hspace=0.60, top=0.91, bottom=0.28, left=0.18, right=0.96)
 
     specs = [
         ("Pitch",         "deg",     "#60d0ff"),
-        ("Hip Angle",     "deg",     "#f08040"),
+        ("Yaw Rate",      "rad/s",   "#f08040"),
         ("Pitch Rate",    "deg/s",   "#b060ff"),
         ("Robot Velocity","m/s",     "#50e080"),
     ]
@@ -177,11 +178,19 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         lines.append(ln)
     # Zero reference line on pitch rate panel
     axes[2].axhline(0.0, color="#666688", linewidth=0.8, linestyle="--")
+    # Zero reference line on yaw rate panel
+    axes[1].axhline(0.0, color="#666688", linewidth=0.8, linestyle="--")
     # Second line on pitch axes: θ_ref commanded by VelocityPI or slider
     ln_theta_ref, = axes[0].plot([], [], color="#ff6060", linewidth=1.0,
                                  linestyle="--")
     axes[0].legend(handles=[lines[0], ln_theta_ref],
                    labels=["pitch", "pitch cmd (ff+θ_ref)"],
+                   loc="upper right", fontsize=6,
+                   facecolor="#2a2a3e", edgecolor="#555", labelcolor="lightgray")
+    # Second line on yaw axes: commanded yaw rate (omega_desired)
+    ln_omega_cmd, = axes[1].plot([], [], color="#ffb060", linewidth=1.0, linestyle="--")
+    axes[1].legend(handles=[lines[1], ln_omega_cmd],
+                   labels=["yaw rate", "cmd ω"],
                    loc="upper right", fontsize=6,
                    facecolor="#2a2a3e", edgecolor="#555", labelcolor="lightgray")
     # Second line on velocity axes: commanded velocity (staircase / slider)
@@ -192,16 +201,23 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                    facecolor="#2a2a3e", edgecolor="#555", labelcolor="lightgray")
 
     # ── Widgets ─────────────────────────────────────────────────────────────
-    # θ_ref slider  [left, bottom, width, height]
-    ax_sld = fig.add_axes([0.18, 0.13, 0.60, 0.03])
+    # v_desired slider  [left, bottom, width, height]
+    ax_sld = fig.add_axes([0.18, 0.19, 0.60, 0.03])
     ax_sld.set_facecolor("#2a2a3e")
     sld = Slider(ax_sld, "v_desired (m/s)", -1.2, 1.2, valinit=0.0, color="#50e080")
     sld.label.set_color("lightgray"); sld.label.set_fontsize(8)
     sld.valtext.set_color("#ff6060"); sld.valtext.set_fontsize(8)
 
+    # ω_desired slider
+    ax_sld_omega = fig.add_axes([0.18, 0.13, 0.60, 0.03])
+    ax_sld_omega.set_facecolor("#2a2a3e")
+    sld_omega = Slider(ax_sld_omega, "ω_desired (rad/s)", -2.0, 2.0, valinit=0.0, color="#f08040")
+    sld_omega.label.set_color("lightgray"); sld_omega.label.set_fontsize(8)
+    sld_omega.valtext.set_color("#ffb060"); sld_omega.valtext.set_fontsize(8)
+
     # Drive ON/OFF toggle
     override_active = [False]
-    ax_tog = fig.add_axes([0.05, 0.04, 0.20, 0.05])
+    ax_tog = fig.add_axes([0.05, 0.06, 0.18, 0.05])
     btn_tog = Button(ax_tog, "Drive OFF", color="#3a3a5e", hovercolor="#5a5a9e")
     btn_tog.label.set_color("white"); btn_tog.label.set_fontsize(8)
 
@@ -223,9 +239,33 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             cmd_q.put_nowait(("V_DESIRED", sld.val))
     sld.on_changed(_on_slider)
 
+    # Turn ON/OFF toggle
+    turn_active = [False]
+    ax_turn = fig.add_axes([0.26, 0.06, 0.18, 0.05])
+    btn_turn = Button(ax_turn, "Turn OFF", color="#3a3a5e", hovercolor="#5a5a9e")
+    btn_turn.label.set_color("white"); btn_turn.label.set_fontsize(8)
+
+    def _toggle_turn(_):
+        turn_active[0] = not turn_active[0]
+        if turn_active[0]:
+            btn_turn.label.set_text("Turn ON")
+            btn_turn.ax.set_facecolor("#5e3a2a")
+            cmd_q.put_nowait(("OMEGA_DESIRED", sld_omega.val))
+        else:
+            btn_turn.label.set_text("Turn OFF")
+            btn_turn.ax.set_facecolor("#3a3a5e")
+            cmd_q.put_nowait(("OMEGA_DESIRED", 0.0))
+        fig.canvas.draw_idle()
+    btn_turn.on_clicked(_toggle_turn)
+
+    def _on_omega_slider(_):
+        if turn_active[0]:
+            cmd_q.put_nowait(("OMEGA_DESIRED", sld_omega.val))
+    sld_omega.on_changed(_on_omega_slider)
+
     # Staircase override toggle (S3 manual mode)
     staircase_manual = [False]
-    ax_sc = fig.add_axes([0.28, 0.04, 0.22, 0.05])
+    ax_sc = fig.add_axes([0.47, 0.06, 0.18, 0.05])
     btn_sc = Button(ax_sc, "Staircase", color="#3a3a5e", hovercolor="#5a5a9e")
     btn_sc.label.set_color("white"); btn_sc.label.set_fontsize(8)
 
@@ -252,7 +292,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     btn_sc.on_clicked(_toggle_staircase)
 
     # Restart button
-    ax_btn = fig.add_axes([0.74, 0.04, 0.20, 0.05])
+    ax_btn = fig.add_axes([0.78, 0.06, 0.18, 0.05])
     btn    = Button(ax_btn, "Restart", color="#3a3a5e", hovercolor="#5a5a9e")
     btn.label.set_color("white"); btn.label.set_fontsize(9)
     btn.on_clicked(lambda _: cmd_q.put_nowait("RESTART"))
@@ -286,16 +326,17 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         for item in items:
             if item is None: return
             if item == "RESET":
-                for buf in [t_buf, pitch_buf, theta_ref_buf, torque_buf, pitch_rate_buf, vel_buf, v_cmd_buf]:
+                for buf in [t_buf, pitch_buf, theta_ref_buf, yaw_rate_buf, pitch_rate_buf, vel_buf, v_cmd_buf, omega_cmd_buf]:
                     buf.clear()
                 for ln in lines: ln.set_data([], [])
                 ln_theta_ref.set_data([], [])
+                ln_omega_cmd.set_data([], [])
                 fig.canvas.flush_events()
                 continue
-            t, p, th_ref, trq, pitch_rate, vel, v_cmd = item
+            t, p, th_ref, yaw_rate, pitch_rate, vel, v_cmd, omega_cmd = item
             t_buf.append(t); pitch_buf.append(p); theta_ref_buf.append(th_ref)
-            torque_buf.append(trq); pitch_rate_buf.append(pitch_rate); vel_buf.append(vel)
-            v_cmd_buf.append(v_cmd)
+            yaw_rate_buf.append(yaw_rate); pitch_rate_buf.append(pitch_rate)
+            vel_buf.append(vel); v_cmd_buf.append(v_cmd); omega_cmd_buf.append(omega_cmd)
 
         if len(t_buf) < 2: continue
         tb     = list(t_buf)
@@ -304,7 +345,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         idx    = next((i for i, t in enumerate(tb) if t >= t0), 0)
         tw     = tb[idx:]
 
-        for i, (ln, ax, buf) in enumerate(zip(lines, axes, [pitch_buf, torque_buf, pitch_rate_buf, vel_buf])):
+        for i, (ln, ax, buf) in enumerate(zip(lines, axes, [pitch_buf, yaw_rate_buf, pitch_rate_buf, vel_buf])):
             bw = list(buf)[idx:]
             ln.set_data(tw, bw)
             ax.set_xlim(t0, sim_t + 0.5)
@@ -313,6 +354,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                     # Autoscale pitch axes to both pitch and θ_ref signals
                     tr_bw = list(theta_ref_buf)[idx:]
                     all_vals = bw + (tr_bw if tr_bw else [])
+                    lo, hi = min(all_vals), max(all_vals)
+                elif i == 1:
+                    # Autoscale yaw axes to both measured and commanded yaw rate
+                    oc_bw = list(omega_cmd_buf)[idx:]
+                    all_vals = bw + (oc_bw if oc_bw else [])
                     lo, hi = min(all_vals), max(all_vals)
                 elif i == 3:
                     # Autoscale velocity axes to both actual and commanded velocity
@@ -326,6 +372,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         # Update θ_ref line on pitch axes
         tr_bw = list(theta_ref_buf)[idx:]
         ln_theta_ref.set_data(tw, tr_bw)
+        # Update commanded yaw rate line on yaw axes
+        oc_bw = list(omega_cmd_buf)[idx:]
+        ln_omega_cmd.set_data(tw, oc_bw)
         # Update commanded velocity line on velocity axes
         vc_bw = list(v_cmd_buf)[idx:]
         ln_v_cmd.set_data(tw, vc_bw)
@@ -372,8 +421,10 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     q_pitch_rate = max(1e-6, _safe_float(row.get("Q_PITCH_RATE"), LQR_Q_PITCH_RATE))
     q_vel        = max(1e-6, _safe_float(row.get("Q_VEL"),        LQR_Q_VEL))
     r_val        = max(1e-6, _safe_float(row.get("R"),             LQR_R))
-    kp_v         = _safe_float(row.get("KP_V"),          _scenarios.VELOCITY_PI_KP)
-    ki_v         = _safe_float(row.get("KI_V"),          _scenarios.VELOCITY_PI_KI)
+    kp_v         = _safe_float(row.get("KP_V"),    _scenarios.VELOCITY_PI_KP)
+    ki_v         = _safe_float(row.get("KI_V"),    _scenarios.VELOCITY_PI_KI)
+    kp_yaw       = _safe_float(row.get("KP_YAW"),  YAW_PI_KP)
+    ki_yaw       = _safe_float(row.get("KI_YAW"),  YAW_PI_KI)
     _scenarios.LQR_K_TABLE = compute_gain_table(
         ROBOT, Q_diag=[q_pitch, q_pitch_rate, q_vel], R_val=r_val
     )
@@ -381,6 +432,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     use_lqr = True
     print(f"  LQR weights: Q=[{q_pitch:.4g}, {q_pitch_rate:.4g}, {q_vel:.4g}]  R={r_val:.4g}")
     print(f"  VelocityPI:  Kp_v={kp_v:.4g}  Ki_v={ki_v:.4g}")
+    print(f"  YawPI:       Kp_yaw={kp_yaw:.4g}  Ki_yaw={ki_yaw:.4g}")
 
     print(f"\nReplaying run {run_id}  [{label}]  scenario={scenario}")
     print(f"  Logged fitness: {logged_fit}")
@@ -403,6 +455,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     def _qpos(name): return model.jnt_qposadr[mujoco.mj_name2id(
         model, mujoco.mjtObj.mjOBJ_JOINT, name)]
 
+    d_yaw       = dof_free + 5   # world-frame ωz; positive = CCW = left turn
     dof_hip_L   = _dof("hip_L");          dof_hip_R   = _dof("hip_R")
     qpos_hip_L  = _qpos("hip_L");         qpos_hip_R  = _qpos("hip_R")
     dof_whl_L   = _dof("wheel_spin_L");   dof_whl_R   = _dof("wheel_spin_R")
@@ -473,11 +526,13 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     _prev_theta_ref     = [0.0] # rate-limiter state (mutable for nested scope)
     _vel_est_ms         = 0.0   # last velocity estimate fed into VelocityPI (m/s)
     _v_desired          = [0.0] # velocity setpoint [m/s]; slider writes here via cmd_q
+    _omega_desired      = [0.0] # yaw rate setpoint [rad/s]; slider writes here via cmd_q
     _staircase_active   = [True]  # False when user switches to manual slider control
 
     # Outer Velocity PI (v_desired=0 in balance mode → position hold)
     _dt_ctrl = model.opt.timestep * CTRL_STEPS
     vel_pi = VelocityPI(kp=kp_v, ki=ki_v, dt=_dt_ctrl)
+    yaw_pi = YawPI(kp=kp_yaw, ki=ki_yaw, dt=_dt_ctrl)
 
     # Snap MuJoCo window to right half once it appears
     threading.Thread(target=_position_mujoco_right, args=(1.5,), daemon=True).start()
@@ -499,7 +554,9 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
             _prev_theta_ref[0] = 0.0
             _staircase_active[0] = True
             _v_desired[0] = 0.0
+            _omega_desired[0] = 0.0
             vel_pi.reset()
+            yaw_pi.reset()
             if not data_q.full(): data_q.put_nowait("RESET")
 
         while viewer.is_running():
@@ -512,6 +569,8 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                     _reset_state()
                 elif isinstance(cmd, tuple) and cmd[0] == "V_DESIRED":
                     _v_desired[0] = float(cmd[1])
+                elif isinstance(cmd, tuple) and cmd[0] == "OMEGA_DESIRED":
+                    _omega_desired[0] = float(cmd[1])
                 elif cmd == "STAIRCASE_OFF":
                     _staircase_active[0] = False
                 elif cmd == "STAIRCASE_ON":
@@ -573,10 +632,12 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                             _prev_theta_ref[0] = theta_ref
                         _theta_ref  = theta_ref
                         v_ref_rads = _v_desired[0] / WHEEL_R
-                        tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, q_hip_avg,
-                                               v_ref=v_ref_rads, theta_ref=theta_ref)
-                        data.ctrl[act_wheel_L] = tau_wheel
-                        data.ctrl[act_wheel_R] = tau_wheel
+                        tau_sym = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, q_hip_avg,
+                                             v_ref=v_ref_rads, theta_ref=theta_ref)
+                        yaw_rate = data.qvel[d_yaw]
+                        tau_yaw = yaw_pi.update(_omega_desired[0], yaw_rate) if _scenarios.USE_YAW_PI else 0.0
+                        data.ctrl[act_wheel_L] = np.clip(tau_sym - tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
+                        data.ctrl[act_wheel_R] = np.clip(tau_sym + tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
                         _q_hip_tgt = (_leg_cycle_profile(float(data.time))
                                       if scenario in ("4_leg_height_gain_sched",
                                                        "5_VEL_PI_leg_cycling")
@@ -633,10 +694,11 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                 data_q.put_nowait((sim_t,
                                    math.degrees(pitch_true),
                                    math.degrees(_pitch_ref_display),
-                                   math.degrees(hip_q_avg_tel),
+                                   data.qvel[d_yaw],
                                    math.degrees(pitch_rate_true),
                                    _vel_est_ms,
-                                   _v_desired[0]))
+                                   _v_desired[0],
+                                   _omega_desired[0]))
                 last_push = wall_now
 
             # HUD overlay + world frame axes
