@@ -80,6 +80,7 @@ from sim_config import (
     LQR_Q_PITCH, LQR_Q_PITCH_RATE, LQR_Q_VEL, LQR_R,
     PITCH_NOISE_STD_RAD, PITCH_RATE_NOISE_STD_RAD_S,
     CTRL_STEPS, PITCH_STEP_RAD, THETA_REF_RATE_LIMIT,
+    S5_BUMPS,
 )
 from physics import build_xml, build_assets, get_equilibrium_pitch
 from run_log import (
@@ -92,6 +93,7 @@ from scenarios import (
     VelocityPI,
     FALL_THRESHOLD, BALANCE_DURATION,
     DISTURBANCE_TIME, DISTURBANCE_FORCE, DISTURBANCE_DUR,
+    s1_dist_fn, s2_dist_fn, s3_velocity_profile, _leg_cycle_profile,
 )
 from lqr_design import compute_gain_table
 
@@ -158,7 +160,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
     specs = [
         ("Pitch",         "deg",     "#60d0ff"),
-        ("Wheel Torque",  "N·m",     "#f08040"),
+        ("Hip Angle",     "deg",     "#f08040"),
         ("Pitch Rate",    "deg/s",   "#b060ff"),
         ("Robot Velocity","m/s",     "#50e080"),
     ]
@@ -384,8 +386,9 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     print(f"  Logged fitness: {logged_fit}")
     print(f"  Gains: {gains}")
 
-    # Build model
-    xml    = build_xml()
+    # Build model — S5 gets bump obstacles in the world
+    _bumps = S5_BUMPS if scenario == "5_VEL_PI_leg_cycling" else None
+    xml    = build_xml(bumps=_bumps)
     assets = build_assets()
     model  = mujoco.MjModel.from_xml_string(xml, assets)
     data   = mujoco.MjData(model)
@@ -446,6 +449,20 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     d_pitch         = model.jnt_dofadr[mujoco.mj_name2id(
                           model, mujoco.mjtObj.mjOBJ_JOINT, "root_free")] + 4
     disturbance_applied = False
+
+    # Resolve disturbance function once from scenarios.py (single source of truth)
+    _generic_dist = lambda t: (DISTURBANCE_FORCE
+                               if DISTURBANCE_TIME <= t < DISTURBANCE_TIME + DISTURBANCE_DUR
+                               else 0.0)
+    _scenario_dist_fn = {
+        "1_LQR_pitch_step":          s1_dist_fn,
+        "4_leg_height_gain_sched":   s1_dist_fn,
+        "2_VEL_PI_disturbance":      s2_dist_fn,
+        "5_VEL_PI_leg_cycling":      s2_dist_fn,
+        "balance_disturbance":       _generic_dist,
+        "lqr_combined":              _generic_dist,
+        "2_LQR_impulse_recovery":    _generic_dist,
+    }.get(scenario, lambda t: 0.0)
 
     # 1-step sensor delay buffer — models ~2 ms BNO086 I2C + CAN latency.
     from physics import get_equilibrium_pitch as _gep
@@ -526,21 +543,27 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                         data.ctrl[act_hip_L]   = 0.0
                         data.ctrl[act_hip_R]   = 0.0
                     elif use_lqr:
-                        if scenario in ("1_LQR_pitch_step", "2_LQR_impulse_recovery"):
+                        if scenario in ("1_LQR_pitch_step", "2_LQR_impulse_recovery",
+                                        "4_leg_height_gain_sched"):
                             # LQR isolation scenarios — VelocityPI disabled
                             theta_ref   = 0.0
                             _vel_est_ms = _wheel_vel_d * WHEEL_R
+                        elif scenario == "5_VEL_PI_leg_cycling" and _staircase_active[0]:
+                            # S5: auto-run staircase profile (can switch to manual via button)
+                            _vel_est_ms = _wheel_vel_d * WHEEL_R
+                            _v_desired[0] = s3_velocity_profile(float(data.time))
+                            theta_ref   = vel_pi.update(_v_desired[0], _vel_est_ms)
+                            _d_max = THETA_REF_RATE_LIMIT * _dt_ctrl
+                            theta_ref = float(np.clip(
+                                theta_ref,
+                                _prev_theta_ref[0] - _d_max,
+                                _prev_theta_ref[0] + _d_max))
+                            _prev_theta_ref[0] = theta_ref
+                            _theta_ref  = theta_ref
                         else:
                             _vel_est_ms = _wheel_vel_d * WHEEL_R
                             if scenario == "3_VEL_PI_staircase" and _staircase_active[0]:
-                                t_s = float(data.time)
-                                if   t_s <  1.0: _v_desired[0] =  0.0
-                                elif t_s <  3.0: _v_desired[0] =  0.3
-                                elif t_s <  5.0: _v_desired[0] =  0.6
-                                elif t_s <  7.0: _v_desired[0] =  1.0
-                                elif t_s <  9.0: _v_desired[0] = -0.5
-                                elif t_s < 11.0: _v_desired[0] = -1.0
-                                else:            _v_desired[0] =  0.0
+                                _v_desired[0] = s3_velocity_profile(float(data.time))
                             theta_ref   = vel_pi.update(_v_desired[0], _vel_est_ms)
                             _d_max = THETA_REF_RATE_LIMIT * _dt_ctrl
                             theta_ref = float(np.clip(
@@ -554,13 +577,17 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                                                v_ref=v_ref_rads, theta_ref=theta_ref)
                         data.ctrl[act_wheel_L] = tau_wheel
                         data.ctrl[act_wheel_R] = tau_wheel
+                        _q_hip_tgt = (_leg_cycle_profile(float(data.time))
+                                      if scenario in ("4_leg_height_gain_sched",
+                                                       "5_VEL_PI_leg_cycling")
+                                      else Q_NOM)
                         for qpos_hip, dof_hip, act_hip in [
                             (qpos_hip_L, dof_hip_L, act_hip_L),
                             (qpos_hip_R, dof_hip_R, act_hip_R),
                         ]:
                             q_hip   = data.qpos[qpos_hip]
                             dq_hip  = data.qvel[dof_hip]
-                            tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
+                            tau_hip = -(LEG_K_S * (q_hip - _q_hip_tgt) + LEG_B_S * dq_hip)
                             data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
                     else:
                         tau_wheel, pitch_integral, odo_x = balance_torque(
@@ -577,35 +604,18 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                             tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
                             data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
 
-                # Apply disturbance impulse
-                if scenario in ("balance_disturbance", "lqr_combined", "2_LQR_impulse_recovery"):
-                    if (DISTURBANCE_TIME <= data.time < DISTURBANCE_TIME + DISTURBANCE_DUR):
-                        data.xfrc_applied[box_bid, 0] = DISTURBANCE_FORCE
-                    else:
-                        data.xfrc_applied[box_bid, 0] = 0.0
-                elif scenario == "1_LQR_pitch_step":
-                    from scenarios import (S1_DIST1_TIME, S1_DIST1_FORCE, S1_DIST1_DUR,
-                                           S1_DIST2_TIME, S1_DIST2_FORCE, S1_DIST2_DUR)
-                    if S1_DIST1_TIME <= data.time < S1_DIST1_TIME + S1_DIST1_DUR:
-                        data.xfrc_applied[box_bid, 0] = S1_DIST1_FORCE
-                    elif S1_DIST2_TIME <= data.time < S1_DIST2_TIME + S1_DIST2_DUR:
-                        data.xfrc_applied[box_bid, 0] = S1_DIST2_FORCE
-                    else:
-                        data.xfrc_applied[box_bid, 0] = 0.0
-                elif scenario == "2_VEL_PI_disturbance":
-                    from scenarios import (S2_DIST1_TIME, S2_DIST1_FORCE, S2_DIST1_DUR,
-                                           S2_DIST2_TIME, S2_DIST2_FORCE, S2_DIST2_DUR)
-                    if S2_DIST1_TIME <= data.time < S2_DIST1_TIME + S2_DIST1_DUR:
-                        data.xfrc_applied[box_bid, 0] = S2_DIST1_FORCE
-                    elif S2_DIST2_TIME <= data.time < S2_DIST2_TIME + S2_DIST2_DUR:
-                        data.xfrc_applied[box_bid, 0] = S2_DIST2_FORCE
-                    else:
-                        data.xfrc_applied[box_bid, 0] = 0.0
+                # Apply disturbance impulse — function resolved once before the loop
+                data.xfrc_applied[box_bid, 0] = _scenario_dist_fn(data.time)
 
                 mujoco.mj_step(model, data)
                 step += 1
 
             viewer.sync()
+
+            # Camera follow — track robot XY, keep Z fixed at body height
+            robot_pos = data.xpos[box_bid]
+            viewer.cam.lookat[0] = robot_pos[0]
+            viewer.cam.lookat[1] = robot_pos[1]
 
             # Push telemetry
             wall_now = time.perf_counter()
@@ -616,13 +626,14 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                 # For LQR isolation scenarios use fixed Q_NOM reference so the
                 # reference line is a clean horizontal (hip barely moves anyway).
                 if scenario in ("1_LQR_pitch_step", "2_LQR_impulse_recovery"):
-                    _pitch_ref_display = _gep(ROBOT, Q_NOM)
+                    _pitch_ref_display = _gep(ROBOT, Q_NOM)  # fixed reference — hip doesn't move
                 else:
                     _pitch_ref_display = _pitch_ff_now + _theta_ref
+                hip_q_avg_tel = (data.qpos[qpos_hip_L] + data.qpos[qpos_hip_R]) / 2.0
                 data_q.put_nowait((sim_t,
                                    math.degrees(pitch_true),
                                    math.degrees(_pitch_ref_display),
-                                   float(data.ctrl[act_wheel_L]),
+                                   math.degrees(hip_q_avg_tel),
                                    math.degrees(pitch_rate_true),
                                    _vel_est_ms,
                                    _v_desired[0]))

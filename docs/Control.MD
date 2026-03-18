@@ -50,20 +50,29 @@ R = scalar
 
 **Important — `v_ref` coupling:** The LQR third state is `(wheel_vel − v_ref)`, where `v_ref = v_desired / WHEEL_R`. This means the LQR does not penalise wheel velocity when the robot is intentionally moving at the commanded speed. Both the headless simulation and the replay must pass `v_ref = v_desired / WHEEL_R` — passing `v_ref=0.0` during drive incorrectly penalises the wheel velocity and fights the PI's lean command.
 
-**Optimized gains (scenario 1_LQR_pitch_step, 5-min / 4448 evals, 2026-03-18) — CURRENT BASELINE:**
+**Optimized gains (scenario 4_leg_height_gain_sched, 5-min / 1896 evals, 2026-03-18) — CURRENT BASELINE:**
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| Q_PITCH | 0.138282 | soft pitch weight |
-| Q_PITCH_RATE | 0.023379 | dominant damping term |
-| Q_VEL | 0.004591 | minimal velocity correction |
-| R | 9.998298 | moderate torque cost |
-| fitness | 0.003267 | RMS pitch 0.926°, survived 5 s |
+| Q_PITCH | 0.014168 | soft pitch weight — ~10× lower than S1 |
+| Q_PITCH_RATE | 0.033720 | dominant damping term — slightly higher than S1 |
+| Q_VEL | 0.000250 | minimal velocity correction — ~18× lower than S1 |
+| R | 28.734420 | moderate torque cost — ~3× higher than S1 (softer) |
+| fitness | 0.017938 | RMS pitch 1.242°, survived 12 s (3 full leg cycles) |
 
-**Character of these gains:** The optimizer settled on low Q_PITCH relative to Q_PITCH_RATE,
-meaning the controller primarily damps pitch *rate* (resists angular velocity) rather than
-aggressively correcting pitch angle. This produces smooth, low-torque recovery from the 5°
-step perturbation. Steady-state pitch offset is **not corrected by the LQR** — that is
-intentional and handled by the outer Velocity PI loop (see §"Why We Do NOT Use LQI" below).
+**Prior S1 gains (retained for reference — do not use as baseline):**
+| Parameter | Value | Scenario |
+|-----------|-------|---------|
+| Q_PITCH | 0.138282 | `1_LQR_pitch_step`, 5-min / 4448 evals, fitness=0.003267 |
+| Q_PITCH_RATE | 0.023379 | RMS pitch 0.926°, survived 5 s |
+| Q_VEL | 0.004591 | — |
+| R | 9.998298 | — |
+
+**Character of the S4 gains:** Softer overall than S1 — lower Q_PITCH, higher R. The optimizer
+settled on a solution that tolerates more pitch excursion in exchange for lower torque, which is
+sensible for a 12s scenario where the leg-induced equilibrium shifts are the primary stimulus.
+Q_PITCH_RATE is slightly higher than S1, preserving damping. Steady-state pitch offset is **not
+corrected by the LQR** — that is intentional and handled by the outer Velocity PI loop (see
+§"Why We Do NOT Use LQI" below).
 
 **Gain Scheduling (Ascento-style):**
 
@@ -106,13 +115,19 @@ Positive `θ_ref` = lean forward = drive forward.
 **Integrator reset:** On direction reversal (sign of `v_desired` flips), the PI integrator is
 reset to zero to prevent windup carryover. Implemented in `_run_sim_loop` and replay.
 
-**Optimized gains (combined_PI, 30-min / 5488 evals, 2026-03-18) — CURRENT BASELINE:**
+**Optimized gains (S5 `5_VEL_PI_leg_cycling`, 5-min / 1776 evals, 2026-03-18) — CURRENT BASELINE:**
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| Kp_v | 0.502932 | rad/(m/s) |
-| Ki_v | 0.012678 | rad/m — very low integrator; rate-limited theta_ref handles transients |
-| fitness | 0.61 | on extended ±1 m/s S3 staircase |
+| Kp_v | 0.251209 | rad/(m/s) — ~½ of prior combined_PI value; softer to absorb bump hits |
+| Ki_v | 0.011405 | rad/m — similar to prior |
+| fitness | 2.0635 | S5: vel_rms=0.502 m/s, pitch=5.59°, survived 13 s |
 | THETA_REF_RATE_LIMIT | 2.0 rad/s | rate-limits lean command to suppress pitch-rate spikes on step changes |
+
+**Prior combined_PI baseline (retained for reference):**
+| Parameter | Value | Scenario |
+|-----------|-------|---------|
+| Kp_v | 0.502932 | combined_PI, 30-min / 5488 evals, fitness=0.61 |
+| Ki_v | 0.012678 | — |
 
 **Flag:** `USE_VELOCITY_PI` in `scenarios.py` — set `False` to disable outer loop for LQR-only tests.
 
@@ -158,9 +173,9 @@ All scenarios run at 500 Hz controller rate (2 kHz physics, CTRL_STEPS=4). Noise
 
 ---
 
-### Scenario 1 — `1_LQR_pitch_step`
+### Scenario 1 — `1_LQR_pitch_step` *(superseded by S4 for LQR tuning)*
 
-**Purpose:** Isolate and tune the Balance LQR inner loop. VelocityPI is OFF — the outer loop must not interfere with pure inner-loop step-response characterisation.
+**Purpose:** Isolate and tune the Balance LQR inner loop. VelocityPI is OFF. Legs held at Q_NOM — leg height variation is not tested.
 
 **Initial condition:** Equilibrium pitch + 5° perturbation (PITCH_STEP_RAD).
 
@@ -183,7 +198,52 @@ fitness = W_FALL × fell  +  Σ (pitch_err²) × dt
 
 **Optimizer:** `optimize_lqr.py` — (1+8)-ES over the 4 Q/R parameters.
 
-**Current best:** Q=[0.138, 0.0234, 0.00459], R=9.998, fitness=0.003267 (4448 evals).
+**Last best:** Q=[0.138, 0.0234, 0.00459], R=9.998, fitness=0.003267 (4448 evals, 2026-03-18).
+
+> **Note:** S4 (`4_leg_height_gain_sched`) supersedes S1 for LQR Q/R optimisation.
+> S4 includes the same disturbances but additionally exercises the gain scheduler across
+> the full leg stroke — gains tuned on S4 are strictly more general than S1-tuned gains.
+> `optimize_lqr.py` is now pointed at S4.
+
+---
+
+### Scenario 4 — `4_leg_height_gain_sched` *(current LQR optimizer target)*
+
+**Purpose:** Tune the Balance LQR Q/R weights while the gain scheduler is fully exercised. The legs cycle sinusoidally through the operating range, changing the effective pendulum length continuously. This makes S4 a strict superset of S1: any Q/R set that handles S4 also handles fixed-height balance.
+
+**Initial condition:** Equilibrium pitch at Q_NOM. No pitch perturbation — the leg motion itself is the stimulus.
+
+**Controller under test:** Balance LQR only (gain-scheduled). `θ_ref = 0`, `v_ref = 0`. VelocityPI OFF.
+
+**Leg cycle:**
+```
+q_hip(t) = center + amp × sin(2π t / 4.0)
+
+LEG_CYCLE_Q_RET = Q_RET − 5°  ≈ −25.1°   (less crouched than full-retract to avoid 4-bar instability)
+Q_EXT           = −82.0°                   (fully extended)
+center          ≈ −53.6°,  amp ≈ −28.5°
+Period = 4 s  →  3 full cycles in 12 s
+```
+
+**Disturbances** (same as S1):
+- +4N at t=2.0s for 0.2s (fires mid first cycle, legs near mid-stroke)
+- −4N at t=3.0s for 0.2s
+
+**Duration:** 12s (3 full leg cycles)
+
+**Metric / Fitness:**
+```
+fitness = ISE_pitch  +  W_PITCH_RATE × ISE_pitch_rate  +  W_FALL × fell
+```
+Pitch error is measured against the **live** `pitch_ff(q_hip)` equilibrium, not a fixed Q_NOM reference — so the score purely reflects how well the LQR tracks the changing equilibrium as leg height varies.
+
+**What is being optimised:** Q_PITCH, Q_PITCH_RATE, Q_VEL, R — the LQR cost weights.
+
+**Optimizer:** `optimize_lqr.py` — (1+8)-ES, seeded from S1 best.
+
+**Seed (from S1):** Q=[0.138282, 0.023379, 0.004591], R=9.998298.
+
+**Status:** ✅ Baselined 2026-03-18 — 237 gens, 1896 evals, 5 min. Best: Q=[0.014168, 0.033720, 0.000250], R=28.734, fitness=0.017938, RMS pitch 1.242°, survived 12 s.
 
 ---
 
@@ -258,6 +318,45 @@ Pitch penalty is secondary (0.1×) — exists to prevent the PI from solving tra
 
 ---
 
+### Scenario 5 — `5_VEL_PI_leg_cycling` *(current VelocityPI optimizer target)*
+
+**Purpose:** Tune the Velocity PI under the hardest realistic conditions: legs cycling continuously while the robot simultaneously tracks a velocity staircase and absorbs disturbance kicks. S5 is a strict superset of both S2 (disturbances) and S3 (staircase) — gains that work here are the most transfer-robust.
+
+**Initial condition:** Equilibrium pitch at Q_NOM, `v_desired = 0`.
+
+**Controller under test:** VelocityPI (outer) + Balance LQR (inner, gain-scheduled). LQR Q/R fixed at S4 baseline.
+
+**Velocity profile:** Identical to S3 staircase:
+```
+t =  0.0 –  1.0 s  →  0.0 m/s  (settle)
+t =  1.0 –  3.0 s  → +0.3 m/s  gentle forward
+t =  3.0 –  5.0 s  → +0.6 m/s  step up
+t =  5.0 –  7.0 s  → +1.0 m/s  high-speed forward
+t =  7.0 –  9.0 s  → −0.5 m/s  direction reversal
+t =  9.0 – 11.0 s  → −1.0 m/s  high-speed backward
+t = 11.0 – 13.0 s  →  0.0 m/s  return to stop
+```
+
+**Disturbances:** S2 kicks: +1N at t=2s for 0.2s, −1N at t=3s for 0.2s (fire during the +0.3m/s phase, adding velocity AND pitch disturbance simultaneously).
+
+**Leg motion:** Sinusoidal Q_RET ↔ Q_EXT, period = 4s (same as S4) — 3+ full cycles during the 13s run. Changing leg height continuously shifts pitch_ff, challenging the VelocityPI + LQR cascade throughout.
+
+**Duration:** 13s
+
+**Metric / Fitness:**
+```
+fitness = W_VEL_ERR × vel_track_rms_ms  +  0.1 × W_RMS × rms_pitch_deg  +  W_FALL × fell
+```
+Same form as S3 — velocity tracking is primary, pitch penalty is secondary.
+
+**What is being optimised:** KP_V, KI_V — the VelocityPI gains.
+
+**Optimizer:** `optimize_vel_pi.py` (ACTIVE_SCENARIO updated to S5).
+
+**Status:** ✅ Baselined 2026-03-18 — 222 gens, 1776 evals, 5 min. Best: KP_V=0.251209, KI_V=0.011405, fitness=2.0635, vel_rms=0.502 m/s, pitch=5.59°, survived 13 s.
+
+---
+
 ### Combined PI Scenario — `combined_PI`
 
 Used by the optimizer to jointly tune KP_V/KI_V for both behaviours:
@@ -313,14 +412,15 @@ The `dist_fn(t) -> float` callable interface allows each scenario to specify an 
 
 ## Implementation Phases
 
-### Phase 1 — 3-State LQR + Gain Scheduling ✅ COMPLETE
+### Phase 1 — 3-State LQR + Gain Scheduling ✅ COMPLETE & S4-BASELINED
 
 **Files:** `lqr_design.py`, `scenarios.py`, `optimize_lqr.py`, `replay.py`
 
 - LQR solver with gain scheduling at 3 leg positions (retracted/nominal/extended)
 - (1+8)-ES optimizer over Q/R weights
-- Best: Q=[0.138, 0.0234, 0.00459], R=9.998, fitness=0.003267 (4448 evals, 2026-03-18)
-- RMS pitch 0.926°, survived full 5 s, pitch-rate-dominated damping, no steady-state correction (outer PI handles that)
+- S4 baseline: Q=[0.014168, 0.033720, 0.000250], R=28.734, fitness=0.017938 (1896 evals, 2026-03-18)
+- RMS pitch 1.242°, survived full 12 s (3 leg cycles + disturbances), softer/more damped than S1
+- S1 reference gains (fixed-height only): Q=[0.138, 0.0234, 0.00459], R=9.998, fitness=0.003267
 
 ---
 
@@ -334,8 +434,10 @@ The `dist_fn(t) -> float` callable interface allows each scenario to specify an 
 - S3 `3_VEL_PI_staircase`: 4-step velocity profile, 8.5s, metric = vel_track_rms_ms
 - `combined_PI` scenario: 50/50 weighted fitness of S2+S3
 - S2 and S3 share `_run_sim_loop` — identical physics, consistent `v_ref` to LQR
-- Best (S2 only so far): KP_V=0.499, KI_V=0.0585, wheel_travel=1.332m
+- Best (combined_PI): KP_V=0.536, KI_V=0.028, fitness=1.056 (824 evals, 2026-03-18)
 - `replay.py`: 4-panel telemetry (pitch, torque, pitch_rate, velocity with cmd overlay), v_desired slider, Drive ON/OFF toggle, staircase auto-scheduled for S3
+
+> **Limitation:** VelocityPI is a *velocity* controller — it commands lean angle proportional to velocity error. It does NOT guarantee the robot stays at a fixed world-frame position; a constant disturbance will cause slow drift that the integrator only partially corrects. **Future work (Phase 2.5 or above):** add a Position PI outer-outer loop (odometry → position error → v_desired command) above VelocityPI so the robot can be commanded to hold or reach an absolute position. Until then, position control is not available — only velocity setpoint tracking.
 
 ---
 
@@ -409,10 +511,11 @@ Scenario 1 runs with `USE_VELOCITY_PI = False` — the outer integrator is delib
 
 | Controller | Method | Parameters | Status |
 |------------|--------|-----------|--------|
-| Balance LQR | (1+8)-ES | Q_pitch, Q_pitch_rate, Q_vel, R | ✅ Done — Q=[0.138,0.0234,0.00459], R=9.998 |
+| Balance LQR | (1+8)-ES on S4 | Q_pitch, Q_pitch_rate, Q_vel, R | ✅ S4 baselined — Q=[0.0142, 0.0337, 0.00025], R=28.73 (2026-03-18) |
 | Gain scheduling | Offline at 3 points | l_eff at Q_RET/NOM/EXT | ✅ Done |
-| Velocity PI (hold) | (1+8)-ES on S2 | Kp_v, Ki_v | ✅ Baselined — Kp=0.499, Ki=0.0585 |
-| Velocity PI (tracking) | (1+8)-ES on combined_PI | Kp_v, Ki_v | ✅ Done — Kp=0.503, Ki=0.013, theta_ref rate-limited 2 rad/s |
+| Velocity PI (hold) | (1+8)-ES on S2 | Kp_v, Ki_v | ✅ Prior baseline — Kp=0.499, Ki=0.0585 |
+| Velocity PI (tracking) | (1+8)-ES on combined_PI | Kp_v, Ki_v | ✅ Prior baseline — Kp=0.503, Ki=0.013 |
+| Velocity PI (leg cycling) | (1+8)-ES on S5 | Kp_v, Ki_v | ✅ S5 baselined — Kp=0.2512, Ki=0.0114 (2026-03-18) |
 | Yaw PI | Manual visual | Kp_yaw, Ki_yaw | Not started |
 | Leg impedance | Critical damping formula | K_s, B_s | Placeholder values only |
 | Jump recovery | 1D search | Landing K_s multiplier | Not started |

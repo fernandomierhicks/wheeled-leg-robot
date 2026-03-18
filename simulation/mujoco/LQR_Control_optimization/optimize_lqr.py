@@ -46,15 +46,15 @@ PARAM_RANGES = {
 }
 
 # ── Active scenarios ─────────────────────────────────────────────────────────
-# For LQR optimization: use '1_LQR_pitch_step' (scenario 1 only)
-ACTIVE_SCENARIO = "1_LQR_pitch_step"
+# For Scenario 4: gain scheduler validation across full leg stroke
+ACTIVE_SCENARIO = "4_leg_height_gain_sched"
 
 # ── Seed weights (used when CSV is empty — fresh start) ──────────────────────
 SEED_WEIGHTS = {
-    "Q_PITCH":      0.654,   # Prior opt (unvalidated per HANDOFF)
-    "Q_PITCH_RATE": 0.134,   # Prior opt (unvalidated per HANDOFF)
-    "Q_VEL":        0.0269,  # Prior opt (unvalidated per HANDOFF)
-    "R":            9.275,   # Prior opt (unvalidated per HANDOFF)
+    "Q_PITCH":      0.138282,   # S1 optimized (run_id=966, fitness=0.003267)
+    "Q_PITCH_RATE": 0.023379,   # S1 optimized
+    "Q_VEL":        0.004591,   # S1 optimized
+    "R":            9.998298,   # S1 optimized
 }
 
 # ── (1+λ)-ES hyper-parameters ────────────────────────────────────────────────

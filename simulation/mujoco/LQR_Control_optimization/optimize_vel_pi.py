@@ -34,7 +34,7 @@ from sim_config import (
     VELOCITY_PI_KP, VELOCITY_PI_KI,
 )
 
-ACTIVE_SCENARIO = "combined_PI"
+ACTIVE_SCENARIO = "5_VEL_PI_leg_cycling"
 
 # ── Search space: VelocityPI gains ──────────────────────────────────────────
 PARAM_RANGES = {
@@ -106,7 +106,7 @@ def _eval_worker(args):
     )
 
     # Call scenario runner directly (not evaluate()) to avoid double-logging
-    metrics = scenarios.run_combined_PI_scenario({})
+    metrics = scenarios.run_5_VEL_PI_leg_cycling({})
 
     row = dict(
         run_id    = run_id,
@@ -124,8 +124,8 @@ def _eval_worker(args):
     fit = row.get("fitness", 9999.0)
     print(f"[{run_id:5d}] {label:<28}  {row.get('status','FAIL'):<5}  "
           f"fit={fit:.4f}  "
-          f"s2={row.get('s2_fitness','?'):.3f}(hold)  "
-          f"s3={row.get('s3_fitness','?'):.3f}(track)  "
+          f"vel_rms={row.get('vel_track_rms_ms','?'):.3f}m/s  "
+          f"pitch={row.get('rms_pitch_deg','?'):.2f}°  "
           f"KP_V={kp_v:.4g}  KI_V={ki_v:.4g}")
     return row
 

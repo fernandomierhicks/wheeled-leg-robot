@@ -195,11 +195,13 @@ def find_stroke(p: dict = None):
 # ---------------------------------------------------------------------------
 # MJCF XML builder
 # ---------------------------------------------------------------------------
-def build_xml(p: dict = None, obstacle_height: float = 0.0) -> str:
+def build_xml(p: dict = None, obstacle_height: float = 0.0,
+              bumps: list = None) -> str:
     """Generate MJCF XML for the two-leg balance robot.
 
     p: robot geometry dict (defaults to ROBOT from sim_config).
     obstacle_height: if > 0, add a floor step at x=OBSTACLE_X of this height [m].
+    bumps: list of (x, height) tuples — thin box speed-bumps (4 cm wide, 1 m across).
     Arena: flat floor, open (no walls — robot can roll freely).
     """
     if p is None: p = ROBOT
@@ -319,6 +321,14 @@ def build_xml(p: dict = None, obstacle_height: float = 0.0) -> str:
           material="floor_mat" condim="3" friction="0.8 0.01 0.001"
           solref="0.04 1" solimp="0.9 0.95 0.001"/>
     {f'<geom name="floor_step" type="box" pos="{OBSTACLE_X + 2.0:.3f} 0 {obstacle_height/2:.5f}" size="2.0 5.0 {obstacle_height/2:.5f}" rgba="0.75 0.50 0.20 1.0" condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>' if obstacle_height > 0.0 else ''}
+    {''.join(
+        f'<geom name="bump_{i}" type="box" '
+        f'pos="{x:.3f} 0 {h/2:.5f}" '
+        f'size="0.02 5.0 {h/2:.5f}" '
+        f'rgba="{"0.85 0.65 0.20" if h <= 0.015 else "0.80 0.35 0.15"} 1.0" '
+        f'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>'
+        for i, (x, h) in enumerate(bumps)
+    ) if bumps else ''}
 
 
     <!-- ── Body ───────────────────────────────────────────────────────── -->

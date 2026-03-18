@@ -51,15 +51,16 @@ POSITION_KP   =  2.16  # [rad/m]    wheel odometry → pitch lean correction (wa
 VELOCITY_KP   =  0.497 # [rad/(m/s)] wheel velocity feedback (was 0.30)
 MAX_PITCH_CMD =  0.25  # [rad] clamp on position/velocity feedback
 
-# ── LQR cost weights — optimized via scenario 1 (2026-03-18) ──────────────────
+# ── LQR cost weights — optimized via scenario 4 (2026-03-18) ──────────────────
 # State: x = [pitch − pitch_ff − θ_ref,  pitch_rate,  wheel_vel_avg − v_ref]
 # u = −K @ x,  K solved from Q, R via scipy.linalg.solve_continuous_are
-# Scenario 1 (1_LQR_pitch_step) 5-min run: 556 gens, 4448 evals, 5s duration
-#   Best (run_id=966): fitness=0.003267, rms_pitch=0.926°, survived=5.0s
-LQR_Q_PITCH      =  0.138282  # weight on pitch error
-LQR_Q_PITCH_RATE =  0.023379  # weight on pitch rate
-LQR_Q_VEL        =  0.004591  # weight on wheel velocity
-LQR_R            =  9.998298  # weight on control effort
+# Scenario 4 (4_leg_height_gain_sched) 5-min run: 237 gens, 1896 evals, 12s duration
+#   Best (run_id=6426): fitness=0.017938, rms_pitch=1.242°, survived=12.0s
+# S1 seed (retained in docs/Control.MD): Q=[0.138282, 0.023379, 0.004591], R=9.998298
+LQR_Q_PITCH      =  0.014168  # weight on pitch error
+LQR_Q_PITCH_RATE =  0.033720  # weight on pitch rate
+LQR_Q_VEL        =  0.000250  # weight on wheel velocity
+LQR_R            = 28.734420  # weight on control effort
 
 # ── Leg impedance (held at Q_NOM; decoupled from balance loop) ─────────────
 LEG_K_S = 8.0    # [N·m/rad] spring stiffness  (matches baseline1 HIP_KP_SUSP)
@@ -75,16 +76,30 @@ SIM_TIMESTEP = 0.0005                                     # [s] MuJoCo timestep 
 CTRL_HZ      = 500                                        # [Hz] balance controller rate
 CTRL_STEPS   = round(1.0 / (SIM_TIMESTEP * CTRL_HZ))     # MuJoCo steps per control call = 4
 SCENARIO_1_DURATION = 5.0                                 # [s] 5s — only transient recovery matters (no steady-state scoring)
-SCENARIO_2_DURATION = 6.0                                 # [s] 6s — gives PI ~2.8s to correct after last kick at t=3.2s
+SCENARIO_2_DURATION = 12.0                                # [s] 12s — extends post-kick steady-state window from 2.8s → 8.8s
 SCENARIO_3_DURATION = 13.0                                # [s] 13s — staircase: 0→+0.3→+0.6→+1.0→-0.5→-1.0→0 m/s (1s settle)
+SCENARIO_5_DURATION = 13.0                                # [s] 13s — same staircase as S3, legs cycling throughout
+
+# ── Scenario 5 bump obstacles — (x_position [m], height [m]) ─────────────────
+# Placed along the forward (+X) and backward (−X) drive paths.
+# Bump footprint: 4 cm wide × 1 m across (covers both wheels).
+# Heights alternate 1 cm / 3 cm for variety.
+S5_BUMPS = [
+    ( 0.8, 0.01),   # 1 cm — encountered during +0.3 m/s phase
+    ( 2.0, 0.03),   # 3 cm — encountered during +0.6 m/s phase
+    ( 3.5, 0.01),   # 1 cm — encountered during +1.0 m/s phase
+    (-0.8, 0.03),   # 3 cm — encountered during −0.5 m/s return
+    (-2.0, 0.01),   # 1 cm — encountered during −1.0 m/s return
+]
 
 # ── Velocity PI outer loop (drive mode) ─────────────────────────────────────
 # Outer loop converts velocity error → lean angle command (theta_ref).
 # theta_ref is added to pitch_ff inside lqr_torque: state[0] = pitch - pitch_ff + theta_ref.
 # Positive theta_ref = lean forward command = drive forward.
 # Starting gains from Control.MD; optimizer will tune via (1+8)-ES.
-VELOCITY_PI_KP = 0.502932  # [rad/(m/s)] proportional gain (combined_PI 30-min / 5488 evals, 2026-03-18)
-VELOCITY_PI_KI = 0.012678  # [rad/m]     integral gain  (combined_PI 30-min, fitness=0.61 on extended S3)
+VELOCITY_PI_KP = 0.251209  # [rad/(m/s)] proportional gain (S5 5-min / 1776 evals, 2026-03-18)
+VELOCITY_PI_KI = 0.011405  # [rad/m]     integral gain  (S5 5-min, fitness=2.0635, vel_rms=0.502 m/s)
+# Prior combined_PI baseline (retained for reference): KP_V=0.502932, KI_V=0.012678, fitness=0.61
 VELOCITY_PI_THETA_MAX    = 0.26   # [rad] ±15° hard clamp on theta_ref output
 VELOCITY_PI_INT_MAX      = 2.0    # [rad·s] integrator anti-windup clamp
 THETA_REF_RATE_LIMIT     = 2.0    # [rad/s] max rate of change of theta_ref from VelocityPI
@@ -111,6 +126,17 @@ S2_DIST1_DUR   = 0.2    # [s]
 S2_DIST2_TIME  = 3.0    # [s] second kick (backward)
 S2_DIST2_FORCE = -1.0   # [N] horizontal (−X)
 S2_DIST2_DUR   = 0.2    # [s]
+
+# ── Scenario 4 — leg-height gain scheduling validation ───────────────────────
+# Like S1 (LQR only, VelocityPI OFF). Legs cycle through full stroke while
+# the LQR must keep pitch near the live equilibrium pitch_ff(q_hip).
+# Exercises the gain scheduler at all heights; position drift is acceptable.
+SCENARIO_4_DURATION  = 12.0    # [s] 3 full leg cycles
+LEG_CYCLE_PERIOD     =  4.0    # [s] one full retracted→extended→retracted cycle
+                                #     half-period = 2 s (one extreme to the other)
+LEG_CYCLE_Q_RET      = Q_RET - math.radians(5.0)  # [rad] S4 crouched setpoint — 5° less
+                                                   # crouched than Q_RET to avoid 4-bar
+                                                   # instability at fully-retracted position
 
 # ── LQR Gain Scheduling Table ────────────────────────────────────────────────
 # Computed in scenarios.py to avoid circular import with lqr_design.py
