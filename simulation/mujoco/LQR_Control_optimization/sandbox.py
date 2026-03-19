@@ -230,6 +230,12 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         for c in range(2):
             _style_ax(axes[r][c], *specs[r][c])
 
+    # SoC panel: numeric display only — hide axes clutter
+    axes[4][0].set_xticks([]); axes[4][0].set_yticks([])
+    axes[4][0].set_xlabel(""); axes[4][0].set_ylabel("")
+    for sp in axes[4][0].spines.values(): sp.set_visible(False)
+    axes[4][0].grid(False)
+
     # Primary lines
     ln_pitch,   = axes[0][0].plot([], [], color="#60d0ff", lw=1.5)
     ln_prate,   = axes[0][1].plot([], [], color="#b060ff", lw=1.5)
@@ -239,7 +245,12 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ln_roll,    = axes[2][1].plot([], [], color="#ff6090", lw=1.5)
     ln_tau_L,   = axes[3][0].plot([], [], color="#ffcc44", lw=1.5)
     ln_vbatt,   = axes[3][1].plot([], [], color="#ff9944", lw=1.5, label="V_term")
-    ln_soc,     = axes[4][0].plot([], [], color="#44ffcc", lw=1.5)
+    lbl_soc = axes[4][0].text(0.5, 0.5, "–– %", transform=axes[4][0].transAxes,
+                               ha="center", va="center", fontsize=28, fontweight="bold",
+                               color="#44ffcc")
+    lbl_I_total = axes[4][1].text(0.02, 0.97, "I_total: –– A", transform=axes[4][1].transAxes,
+                                   ha="left", va="top", fontsize=9, fontweight="bold",
+                                   color="#ffffff")
     ln_I_total, = axes[4][1].plot([], [], color="#ffffff", lw=1.8, label="I_total")
 
     # Secondary / command overlay lines
@@ -296,7 +307,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         pass
 
     _all_lines = [ln_pitch, ln_prate, ln_vel, ln_yaw, ln_hip_L, ln_roll,
-                  ln_tau_L, ln_vbatt, ln_soc, ln_I_total,
+                  ln_tau_L, ln_vbatt, ln_I_total,
                   ln_pitch_ref, ln_v_cmd, ln_omega_cmd, ln_hip_R, ln_hip_cmd,
                   ln_tau_R, ln_btemp, ln_vbatt_nom,
                   ln_I_whl_L, ln_I_whl_R, ln_I_hip_L, ln_I_hip_R]
@@ -315,6 +326,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             if item == "RESET":
                 for buf in all_bufs: buf.clear()
                 for ln in _all_lines: ln.set_data([], [])
+                lbl_soc.set_text("–– %")
+                lbl_I_total.set_text("I_total: –– A")
                 fig.canvas.flush_events()
                 continue
             (t, pitch, pitch_ref, pitch_rate, vel, v_cmd, yaw_rate, omega_cmd,
@@ -385,11 +398,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             axes[3][1].set_ylim(lo - span * 0.15, hi + span * 0.15)
             ln_vbatt_nom.set_data([t0, sim_t + 0.5], [BATT_V_NOM, BATT_V_NOM])
 
-        # SoC
+        # SoC — numeric label only
         if sc_bw:
-            ln_soc.set_data(tw, sc_bw)
-            axes[4][0].set_xlim(t0, sim_t + 0.5)
-            axes[4][0].set_ylim(max(0.0, min(sc_bw) - 5), 105)
+            lbl_soc.set_text(f"{sc_bw[-1]:.1f} %")
 
         # Motor currents
         if iT_bw:
@@ -398,6 +409,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             ln_I_whl_R.set_data(tw, iWR_bw)
             ln_I_hip_L.set_data(tw, iHL_bw)
             ln_I_hip_R.set_data(tw, iHR_bw)
+            lbl_I_total.set_text(f"I_total: {iT_bw[-1]:.1f} A")
             axes[4][1].set_xlim(t0, sim_t + 0.5)
             all_i = iT_bw + iWL_bw + iWR_bw + iHL_bw + iHR_bw
             lo, hi = min(all_i), max(all_i)
@@ -770,6 +782,10 @@ def sandbox(slowmo: float = 1.0):
 
     data_q.put(None)
     plot_proc.join(timeout=2)
+    if plot_proc.is_alive():
+        plot_proc.terminate()
+    if _PYGAME_OK:
+        pygame.quit()
 
 
 # ---------------------------------------------------------------------------

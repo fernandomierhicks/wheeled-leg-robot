@@ -1,1 +1,16 @@
 Check that velocity controller starts commanded the magic pitch angle
+
+--- Overnight optimization ideas ---
+1. Widen suspension bounds and re-run optimize_suspension.py overnight
+   - LEG_K_S: (2.0, 16.0) -> (2.0, 40.0)   [currently at upper bound]
+   - LEG_K_ROLL: (0.01, 4.0) -> (0.01, 8.0) [currently at upper bound]
+   - Expected: better bump absorption and roll leveling
+
+2. Re-run optimize_lqr.py pointed at S5 instead of S4
+   - S5 includes velocity tracking + leg cycling + kicks
+   - Ensures LQR gains robust under combined load, not just passive cycling
+
+3. Write optimize_joint_pi.py — joint VelocityPI + YawPI (6 params)
+   - Fitness = weighted S5 + S6 + S7
+   - Finds gains that work for both driving and turning simultaneously
+   - Safe: doesn't touch LQR or suspension

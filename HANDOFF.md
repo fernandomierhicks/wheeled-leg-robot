@@ -114,63 +114,50 @@ q_nom_R = clamp(Q_NOM - δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
 
 ---
 
-### Phase 5 — Realistic Wheel Motor Model (Back-EMF) ⬜ NEXT
+### Phase 5 — Realistic Wheel Motor Model (Back-EMF) ✅ COMPLETE
 
-**Motivation:** Wheel motors are currently ideal torque sources (±3.67 N·m regardless of speed).
-Real 5065 130KV at 24V has torque that tapers linearly with speed:
-`T(ω) = T_peak × (1 − ω / ω_noload)` where `ω_noload = KV × V = 130 × 24 × 2π/60 ≈ 327 rad/s`.
+Back-EMF taper (`motor_taper()`), battery model (`BatteryModel`), and voltage-scaled
+`omega_noload` are all implemented in `LQR_Control_optimization/`:
+- `scenarios.py` — `motor_taper()` applied to every `data.ctrl` wheel write
+- `sandbox.py` / `replay.py` — same
+- `battery_model.py` — 6S LiPo model with voltage sag + temperature
+- `sim_config.py` — `WHEEL_OMEGA_NOLOAD`, `WHEEL_KT`, `BATT_V_NOM` constants
 
-At operating speeds (0–3 m/s, ω_wheel = 0–40 rad/s) the taper is only 0–12% — barely felt.
-But it matters for:
-- **Top speed prediction** — currently unbounded in sim; real robot tops out ~24 m/s at rim
-- **High-speed balance** — available torque for disturbance rejection drops at speed
-- **Firmware accuracy** — controller expecting full torque at high speed will be surprised
+---
 
-**Implementation plan:**
+### Phase 6 — Latency Model ⬜ NEXT
 
-**5.1 — Add back-EMF clamp to `physics.py`** (or apply in `scenarios.py` / `sandbox.py`)
+**Motivation:** all gains (LQR, VelocityPI, YawPI, suspension) were tuned in a
+zero-latency sim. Real robot has ~8.2 ms total delay on the wheel path (~4 loop
+periods). Gains will be overconfident without this — likely to oscillate or fall.
 
-Option A (MuJoCo actuator): Add `<motor>` with `forcelimited` + velocity-dependent gain via
-a custom actuator model — complex in MuJoCo XML.
+**Work is done in a new folder** `simulation/mujoco/latency_sensitivity/` (full copy
+of `LQR_Control_optimization/`). Original folder stays untouched as known-good baseline.
 
-Option B (control-loop clamp, preferred): After computing `tau_wheel` in `_run_sim_loop` /
-`sandbox.py`, clamp with taper before writing to `data.ctrl`:
+**Approach:** physics-step ring buffers with delays in seconds. Buffer depth
+auto-computes as `round(delay_s / SIM_TIMESTEP)` — so updating from hardware
+measurements requires only changing two constants, no code changes.
+
+**Constants to add to `sim_config.py`:**
 ```python
-OMEGA_NOLOAD = 326.7   # rad/s (KV×V×2π/60, from motor_models.py in baseline1)
-KT           = 0.0735  # N·m/A
-T_PEAK       = 3.67    # N·m
-
-def motor_taper(tau_cmd, omega_wheel):
-    """Reduce available torque linearly as speed approaches no-load."""
-    taper = max(0.0, 1.0 - abs(omega_wheel) / OMEGA_NOLOAD)
-    t_max = T_PEAK * taper
-    return float(np.clip(tau_cmd, -t_max, t_max))
+USE_LATENCY_MODEL  = True
+SENSOR_DELAY_S     = 0.005    # BNO086 fusion ~5 ms + I2C ~0.4 ms  → 10 steps
+ACTUATOR_DELAY_S   = 0.0025   # ODESC FOC ~0.5 ms + τ_elec ~2 ms   →  5 steps
 ```
 
-Apply in `_run_sim_loop` (scenarios.py), `sandbox.py`, and `replay.py` — same pattern as
-all other gain sharing (import constants from `sim_config.py`).
+**Files to modify** (all in `latency_sensitivity/`):
+- `sim_config.py` — add 3 constants after `CTRL_STEPS`
+- `scenarios.py` — replace lines 457–460 (init), 525 (sens buf), 539–540 (ctrl buf)
+- `sandbox.py` — after line 501 (init), inside `_reset_state`, lines 645, 666–667
 
-Add constants to `sim_config.py`:
-```python
-WHEEL_OMEGA_NOLOAD = 326.7   # [rad/s]  ω_noload = KV × V_batt × 2π/60
-WHEEL_KT           = 0.0735  # [N·m/A]  torque constant (Kt = 1/KV in SI)
-```
+**Full implementation detail:** see `docs/Latencies.MD § 5` and plan file
+`~/.claude/plans/lovely-conjuring-pond.md`.
 
-**5.2 — Re-run sandbox validation**
-Check that robot still balances and top speed is physically capped (~24 m/s at rim —
-effectively unreachable in sandbox but limit should be visible in telemetry).
-
-**5.3 — Re-optimize if needed**
-Taper is small at typical speeds — gains probably don't need re-tuning.
-Run S5 replay first; if vel_rms degrades significantly, re-run `optimize_vel_pi.py`.
-
-**5.4 — Add friction model (optional)**
-`motor_models.py` in baseline1 has `B_friction = 0.02 N·m·s/rad` viscous drag.
-Apply similarly: `tau_net = tau_cmd - B_friction * omega_wheel` before physics step.
-
-**Why Phase 5 before firmware:**
-The firmware will implement the same motor limits. Without back-EMF in sim, the tuned gains
-could be overconfident at speed — better to discover this in simulation.
+**After implementation:**
+1. Run `python sandbox.py` — expect slightly more pitch oscillation (gains now over-aggressive for delayed plant)
+2. Run `python replay.py --baseline --scenario 5_VEL_PI_leg_cycling` — fitness degrades moderately; robot should not fall
+3. Set `USE_LATENCY_MODEL = False` — replay fitness must match original exactly (confirms bypass)
+4. Re-run all optimizers in `latency_sensitivity/` overnight with delay active
 
 ---
 
