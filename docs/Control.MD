@@ -115,13 +115,23 @@ Positive `θ_ref` = lean forward = drive forward.
 **Integrator reset:** On direction reversal (sign of `v_desired` flips), the PI integrator is
 reset to zero to prevent windup carryover. Implemented in `_run_sim_loop` and replay.
 
-**Optimized gains (S5 `5_VEL_PI_leg_cycling`, 5-min / 1776 evals, 2026-03-18) — CURRENT BASELINE:**
+**Optimized gains (S5 `5_VEL_PI_leg_cycling`, 5-min / 1776 evals, 2026-03-18):**
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | Kp_v | 0.251209 | rad/(m/s) — ~½ of prior combined_PI value; softer to absorb bump hits |
 | Ki_v | 0.011405 | rad/m — similar to prior |
 | fitness | 2.0635 | S5: vel_rms=0.502 m/s, pitch=5.59°, survived 13 s |
 | THETA_REF_RATE_LIMIT | 2.0 rad/s | rate-limits lean command to suppress pitch-rate spikes on step changes |
+
+**Manual sandbox tuning (2026-03-18) — CURRENT BASELINE:**
+Optimizer-tuned gains felt too conservative in practice — robot accelerated sluggishly in the
+sandbox even on flat ground. KP_V was doubled and rate limit raised 2.5× for snappier response.
+KI_V left unchanged (integrator behaviour was fine).
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Kp_v | 0.502418 | rad/(m/s) — 2× optimizer value; matches pre-S5 combined_PI baseline |
+| Ki_v | 0.011405 | rad/m — unchanged |
+| THETA_REF_RATE_LIMIT | 5.0 rad/s | 2.5× optimizer value — lean ramp ~52 ms vs 130 ms |
 
 **Prior combined_PI baseline (retained for reference):**
 | Parameter | Value | Scenario |

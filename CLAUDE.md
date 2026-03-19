@@ -24,8 +24,8 @@ with simulation, firmware, and control code without needing re-explanation each 
 **Current Status (2026-03-18):**
 - ✅ Phase 1: 3-State LQR + Gain Scheduling — COMPLETE & S4-BASELINED
   - Q=[0.014168, 0.033720, 0.000250], R=28.734 (1896 evals, fitness=0.018, RMS pitch 1.24°)
-- ✅ Phase 2: Velocity PI — COMPLETE & S5-BASELINED
-  - KP_V=0.251209, KI_V=0.011405 (1776 evals, vel_rms=0.502 m/s)
+- ✅ Phase 2: Velocity PI — COMPLETE & SANDBOX-RETUNED
+  - KP_V=0.502418, KI_V=0.011405, THETA_REF_RATE_LIMIT=5.0 rad/s (optimizer was too conservative)
 - ✅ Phase 3: Yaw PI — COMPLETE & RE-BASELINED (optimizer)
   - KP_YAW=2.272, KI_YAW=1.125 (55752 evals / 75 min, fitness=0.4102) — was visual 0.3/0.05
 - ✅ Phase 4: Leg Impedance + Roll Leveling — COMPLETE & RE-BASELINED (optimizer)
