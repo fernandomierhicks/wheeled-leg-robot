@@ -22,18 +22,16 @@ LQR gains optimised on S4 (`4_leg_height_gain_sched`) — legs cycling through f
 
 ---
 
-### Phase 2 — VelocityPI Outer Loop ✅ COMPLETE & S5-BASELINED
+### Phase 2 — VelocityPI Outer Loop ✅ COMPLETE & SANDBOX-RETUNED
 
-VelocityPI gains optimised on S5 (`5_VEL_PI_leg_cycling`) — staircase velocity tracking + ±1N kicks + legs cycling + 5 bump obstacles.
+VelocityPI gains optimised on S5, then manually increased after sandbox testing showed optimizer was too conservative (sluggish acceleration on flat ground).
 
-**S5 baseline (current `sim_config.py`):**
-| Param | Value |
-|-------|-------|
-| KP_V | 0.251209 |
-| KI_V | 0.011405 |
-| fitness (S5) | 2.0635 |
-| vel_rms | 0.502 m/s |
-| rms_pitch | 5.59° — survived 13 s |
+**Current baseline (current `sim_config.py`):**
+| Param | Value | Notes |
+|-------|-------|-------|
+| KP_V | 0.502418 | 2× optimizer value — snappier feel in sandbox |
+| KI_V | 0.011405 | unchanged from optimizer |
+| THETA_REF_RATE_LIMIT | 5.0 rad/s | 2.5× optimizer value — lean ramp ~52 ms |
 
 ---
 
@@ -42,11 +40,12 @@ VelocityPI gains optimised on S5 (`5_VEL_PI_leg_cycling`) — staircase velocity
 YawPI implemented and verified. Starting gains performed well; no optimizer run needed.
 
 **Baselined gains (current `sim_config.py`):**
-| Param | Value |
-|-------|-------|
-| KP_YAW | 0.3 |
-| KI_YAW | 0.05 |
-| YAW_PI_TORQUE_MAX | 0.5 N·m |
+| Param | Value | Notes |
+|-------|-------|-------|
+| KP_YAW | 2.272 | 55752 evals / 75 min — was visual 0.3 (7.5× increase) |
+| KI_YAW | 1.125 | was visual 0.05 (22.5× increase) |
+| YAW_PI_TORQUE_MAX | 0.5 N·m | unchanged |
+| fitness (S6) | 0.4102 | gen 3622 |
 
 **Key implementation facts:**
 - Sign: `τ_L = τ_sym − τ_yaw`, `τ_R = τ_sym + τ_yaw` (positive ω = CCW = left turn)
@@ -81,11 +80,11 @@ Suspension + roll leveling controller implemented and optimised on combined S5+S
 | Param | Value | Notes |
 |-------|-------|-------|
 | LEG_K_S | 16.000000 N·m/rad | Very stiff — absorbs impacts sharply |
-| LEG_B_S | 0.821633 N·m·s/rad | Low damping — spring-dominant |
-| LEG_K_ROLL | 3.963615 rad/rad | Aggressive roll correction |
-| LEG_D_ROLL | 1.000000 rad·s/rad | Strong roll rate damping |
+| LEG_B_S | 0.798710 N·m·s/rad | Low damping — spring-dominant |
+| LEG_K_ROLL | 4.000000 rad/rad | At upper bound — wants more |
+| LEG_D_ROLL | 1.000000 rad·s/rad | At upper bound — wants more |
 | HIP_IMPEDANCE_TORQUE_LIMIT | 1.0 N·m | Keeps hips backdrivable |
-| fitness (S5+S8 combined) | 4.11 | 177 gens, 1416 evals, 5 min (2026-03-18) |
+| fitness (S5+S8 combined) | 4.0918 | 3127 gens, 25016 evals, 90 min (2026-03-18) |
 
 **Controller structure (per leg, 500 Hz):**
 ```python
@@ -112,6 +111,66 @@ q_nom_R = clamp(Q_NOM - δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
 - `scenarios.py` — differential impedance block in `_run_sim_loop`, `run_8_terrain_compliance()`
 - `optimize_suspension.py` — (1+8)-ES over 4 params, combined S5+S8 fitness
 - `replay.py` — 8-panel telemetry (4×2); Roll and Suspension Δq panels verify leveling
+
+---
+
+### Phase 5 — Realistic Wheel Motor Model (Back-EMF) ⬜ NEXT
+
+**Motivation:** Wheel motors are currently ideal torque sources (±3.67 N·m regardless of speed).
+Real 5065 130KV at 24V has torque that tapers linearly with speed:
+`T(ω) = T_peak × (1 − ω / ω_noload)` where `ω_noload = KV × V = 130 × 24 × 2π/60 ≈ 327 rad/s`.
+
+At operating speeds (0–3 m/s, ω_wheel = 0–40 rad/s) the taper is only 0–12% — barely felt.
+But it matters for:
+- **Top speed prediction** — currently unbounded in sim; real robot tops out ~24 m/s at rim
+- **High-speed balance** — available torque for disturbance rejection drops at speed
+- **Firmware accuracy** — controller expecting full torque at high speed will be surprised
+
+**Implementation plan:**
+
+**5.1 — Add back-EMF clamp to `physics.py`** (or apply in `scenarios.py` / `sandbox.py`)
+
+Option A (MuJoCo actuator): Add `<motor>` with `forcelimited` + velocity-dependent gain via
+a custom actuator model — complex in MuJoCo XML.
+
+Option B (control-loop clamp, preferred): After computing `tau_wheel` in `_run_sim_loop` /
+`sandbox.py`, clamp with taper before writing to `data.ctrl`:
+```python
+OMEGA_NOLOAD = 326.7   # rad/s (KV×V×2π/60, from motor_models.py in baseline1)
+KT           = 0.0735  # N·m/A
+T_PEAK       = 3.67    # N·m
+
+def motor_taper(tau_cmd, omega_wheel):
+    """Reduce available torque linearly as speed approaches no-load."""
+    taper = max(0.0, 1.0 - abs(omega_wheel) / OMEGA_NOLOAD)
+    t_max = T_PEAK * taper
+    return float(np.clip(tau_cmd, -t_max, t_max))
+```
+
+Apply in `_run_sim_loop` (scenarios.py), `sandbox.py`, and `replay.py` — same pattern as
+all other gain sharing (import constants from `sim_config.py`).
+
+Add constants to `sim_config.py`:
+```python
+WHEEL_OMEGA_NOLOAD = 326.7   # [rad/s]  ω_noload = KV × V_batt × 2π/60
+WHEEL_KT           = 0.0735  # [N·m/A]  torque constant (Kt = 1/KV in SI)
+```
+
+**5.2 — Re-run sandbox validation**
+Check that robot still balances and top speed is physically capped (~24 m/s at rim —
+effectively unreachable in sandbox but limit should be visible in telemetry).
+
+**5.3 — Re-optimize if needed**
+Taper is small at typical speeds — gains probably don't need re-tuning.
+Run S5 replay first; if vel_rms degrades significantly, re-run `optimize_vel_pi.py`.
+
+**5.4 — Add friction model (optional)**
+`motor_models.py` in baseline1 has `B_friction = 0.02 N·m·s/rad` viscous drag.
+Apply similarly: `tau_net = tau_cmd - B_friction * omega_wheel` before physics step.
+
+**Why Phase 5 before firmware:**
+The firmware will implement the same motor limits. Without back-EMF in sim, the tuned gains
+could be overconfident at speed — better to discover this in simulation.
 
 ---
 
