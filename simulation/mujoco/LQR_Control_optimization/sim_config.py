@@ -64,8 +64,8 @@ LQR_Q_VEL        =  0.000250  # weight on wheel velocity
 LQR_R            = 28.734420  # weight on control effort
 
 # ── Leg impedance (held at Q_NOM; decoupled from balance loop) ─────────────
-LEG_K_S = 16.000000  # [N·m/rad] spring stiffness  (Phase 4 optimizer: 177 gens, fitness=4.11)
-LEG_B_S =  0.821633  # [N·m·s/rad] damping        (Phase 4 optimizer, 2026-03-18)
+LEG_K_S = 16.000000  # [N·m/rad] spring stiffness  (Phase 4 re-opt: 3127 gens / 25016 evals, fitness=4.0918, 2026-03-18)
+LEG_B_S =  0.798710  # [N·m·s/rad] damping        (Phase 4 re-opt; was 0.8216)
 
 # ── Roll leveling (differential hip control, Phase 4.2) ─────────────────────
 # Each hip gets a differential offset δq = K_ROLL*roll + D_ROLL*roll_rate
@@ -77,8 +77,8 @@ LEG_B_S =  0.821633  # [N·m·s/rad] damping        (Phase 4 optimizer, 2026-03-
 #
 # Hip safe range: 10° buffer inside joint limits to avoid end-stops.
 # Robot drives at Q_NOM (mid-stroke) so full ±travel is available.
-LEG_K_ROLL         = 3.963615  # [rad/rad]     roll proportional gain (Phase 4 optimizer)
-LEG_D_ROLL         = 1.000000  # [rad·s/rad]   roll rate damping (Phase 4 optimizer)
+LEG_K_ROLL         = 4.000000  # [rad/rad]     roll proportional gain (Phase 4 re-opt, at upper bound)
+LEG_D_ROLL         = 1.000000  # [rad·s/rad]   roll rate damping (Phase 4 re-opt, at upper bound)
 ROLL_NOISE_STD_RAD = math.radians(0.05)          # [rad] BNO086 roll noise model
 HIP_SAFE_MIN       = Q_EXT + math.radians(10)    # [rad] -1.257 (extended limit + 10°)
 HIP_SAFE_MAX       = Q_RET - math.radians(10)    # [rad] -0.526 (retracted limit - 10°)
@@ -185,8 +185,8 @@ DRIVE_TURN_YAW_RATE  = 0.5    # [rad/s] simultaneous yaw rate during combined sc
 # Yaw rate measured from data.qvel[5] (world-frame ωz, positive = CCW = left turn).
 # Independent of pitch — symmetric (LQR/VelocityPI) and differential (YawPI) modes
 # are orthogonal in control space; the average wheel velocity is unaffected by tau_yaw.
-YAW_PI_KP         = 0.3     # [N·m / (rad/s)] proportional gain — starting value (Control.MD §Phase 3)
-YAW_PI_KI         = 0.05    # [N·m / rad]     integral gain     — starting value
+YAW_PI_KP         = 2.272   # [N·m / (rad/s)] proportional gain — (1+8)-ES, 6969 gens / 55752 evals, fitness=0.4102, 2026-03-18
+YAW_PI_KI         = 1.125   # [N·m / rad]     integral gain     — (was visual 0.3/0.05; optimizer found 7.5× larger Kp)
 YAW_PI_TORQUE_MAX = 0.5     # [N·m] differential torque clamp (±0.5 N·m each wheel)
 YAW_PI_INT_MAX    = 0.5     # [N·m·s] integrator anti-windup
 

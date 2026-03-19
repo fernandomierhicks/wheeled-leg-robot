@@ -26,10 +26,10 @@ with simulation, firmware, and control code without needing re-explanation each 
   - Q=[0.014168, 0.033720, 0.000250], R=28.734 (1896 evals, fitness=0.018, RMS pitch 1.24°)
 - ✅ Phase 2: Velocity PI — COMPLETE & S5-BASELINED
   - KP_V=0.251209, KI_V=0.011405 (1776 evals, vel_rms=0.502 m/s)
-- ✅ Phase 3: Yaw PI — COMPLETE & BASELINED
-  - KP_YAW=0.3, KI_YAW=0.05 (visual tuning, S6 yaw_rms=0.045 rad/s)
-- ✅ Phase 4: Leg Impedance + Roll Leveling — COMPLETE & BASELINED
-  - K_s=16.0, B_s=0.822, K_ROLL=3.964, D_ROLL=1.0 (1416 evals, fitness=4.11)
+- ✅ Phase 3: Yaw PI — COMPLETE & RE-BASELINED (optimizer)
+  - KP_YAW=2.272, KI_YAW=1.125 (55752 evals / 75 min, fitness=0.4102) — was visual 0.3/0.05
+- ✅ Phase 4: Leg Impedance + Roll Leveling — COMPLETE & RE-BASELINED (optimizer)
+  - K_s=16.0, B_s=0.799, K_ROLL=4.0, D_ROLL=1.0 (25016 evals / 90 min, fitness=4.0918)
 
 ---
 
