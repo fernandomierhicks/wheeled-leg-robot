@@ -544,6 +544,143 @@ Scenario 1 runs with `USE_VELOCITY_PI = False` — the outer integrator is delib
 
 ---
 
+## Optimizing with Latencies
+
+All work below is done in `simulation/mujoco/latency_sensitivity/` — a full copy of
+`LQR_Control_optimization/` with 10-step sensor delay and 5-step actuator delay added
+via ring buffers. The zero-latency folder is left untouched as a reference baseline.
+
+**Why re-optimize:** gains tuned at zero latency assume ~60° phase margin. The real
+robot has ~8.2 ms total wheel-path delay (~4 loop periods), which costs ~30° of phase
+margin. Without re-tuning, the controller will be overconfident and likely oscillate.
+
+**Dependency chain:** inner loops must be tuned before outer loops. Each optimizer
+holds all inner-loop gains fixed at the previous step's result.
+
+---
+
+### Step 0 — LQR seed run on S1 (quick, ~15 min)
+
+**Purpose:** Get a fast rough seed for the delayed plant on the simplest scenario
+(fixed legs, no velocity control). The zero-latency S4 gains will likely fall
+immediately with delay active — S1 gives the optimizer a stable starting point
+before the full S4 run.
+
+**Scenario:** S1 `1_LQR_pitch_step` — 5° pitch step + ±4N kicks, fixed legs, 5s.
+
+**Why S1 first:** S1 is the shortest and most forgiving scenario. A gain set that
+barely survives S1 is enough to seed the harder S4 run. Skipping S0 risks S4
+spending its first many generations just finding a non-falling solution.
+
+```bash
+cd simulation/mujoco/latency_sensitivity
+python optimize_lqr.py --hours 0.25   # ~15 min — scenario = S1
+```
+
+Save the best result as the seed for Step 1.
+
+---
+
+### Step 1 — Balance LQR on S4 (~1 hr)
+
+**Purpose:** Fully re-tune the LQR Q/R weights for the delayed plant across the full
+leg stroke. Seeded from Step 0 result.
+
+**Scenario:** S4 `4_leg_height_gain_sched` — legs cycling full stroke + ±4N kicks, 12s.
+
+**Params:** Q_PITCH, Q_PITCH_RATE, Q_VEL, R
+
+**Expected change vs zero-latency baseline:**
+- R will increase (softer torque — delay eats phase margin, aggressive gains oscillate)
+- Q_PITCH_RATE will increase (more damping needed to absorb phase-delayed response)
+- Q_PITCH may decrease (steady-state tracking is less important than not oscillating)
+
+```bash
+python optimize_lqr.py --hours 1     # scenario = S4, seed from Step 0
+```
+
+Update `sim_config.py` with the best Q/R before moving to Step 2.
+
+---
+
+### Step 2 — VelocityPI on S5 (~1 hr)
+
+**Purpose:** Re-tune the outer velocity loop. LQR is now fixed at Step 1 values.
+With delay, the delayed wheel velocity reading fed back to VelocityPI will cause
+overshoot if KP_V is too high.
+
+**Scenario:** S5 `5_VEL_PI_leg_cycling` — staircase + ±1N kicks + leg cycling + 5 bumps, 13s.
+
+**Params:** KP_V, KI_V
+
+**Expected change vs zero-latency baseline:**
+- KP_V will likely decrease (stale wheel velocity → overshoot at high gain)
+- KI_V may stay similar (integrator is naturally slow — less phase-sensitive)
+
+```bash
+python optimize_vel_pi.py --hours 1
+```
+
+---
+
+### Step 3 — Leg Impedance + Roll on S5+S8 (~1 hr)
+
+**Purpose:** Re-tune suspension stiffness and roll leveling. Hip torque is **not
+delayed** in the model (AK45-10 FOC lag rounds to 0 steps at 2 kHz physics), so
+changes here will be smaller than Steps 1–2. Main risk: K_ROLL interacts with
+delayed pitch via body lean, so roll correction may need slight de-rating.
+
+**Scenario:** combined S5+S8 — velocity tracking + one-sided bumps.
+
+**Params:** K_s, B_s, K_ROLL, D_ROLL
+
+```bash
+python optimize_suspension.py --hours 1
+```
+
+---
+
+### Step 4 — Yaw PI on S6 (~1 hr)
+
+**Purpose:** Re-tune differential torque loop. Yaw rate measurement is also delayed
+by SENSOR_DELAY_S, so the PI may need slight de-rating. Orthogonal to balance — can
+be run independently after Steps 1–2 are stable.
+
+**Scenario:** S6 `6_YAW_PI_turn` — pure 360° CCW turn at 1 rad/s, 8s.
+
+**Params:** KP_YAW, KI_YAW
+
+```bash
+python optimize_yaw_pi.py --hours 1
+```
+
+---
+
+### Validation after all steps
+
+1. Run `python sandbox.py` in `latency_sensitivity/` — robot should balance stably
+   with the re-tuned gains. Expect slightly more pitch excursion than zero-latency
+   sandbox but no sustained oscillation.
+2. Run `python replay.py --baseline --scenario 5_VEL_PI_leg_cycling` — fitness will
+   be higher than the zero-latency result (harder scenario) but robot must not fall.
+3. Set `USE_LATENCY_MODEL = False` — replay fitness must match the original
+   zero-latency results exactly, confirming the bypass works correctly.
+
+---
+
+### Total overnight estimate
+
+| Step | Run time | Scenario |
+|------|----------|----------|
+| 0 | ~15 min | S1 (seed) |
+| 1 | ~1 hr | S4 (LQR) |
+| 2 | ~1 hr | S5 (VelocityPI) |
+| 3 | ~1 hr | S5+S8 (Suspension) |
+| 4 | ~1 hr | S6 (YawPI) |
+| **Total** | **~4.25 hr** | — |
+
+---
+
 ## Tuning Summary
 
 | Controller | Method | Parameters | Status |
