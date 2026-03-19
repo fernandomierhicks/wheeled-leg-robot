@@ -114,12 +114,12 @@ S5_BUMPS = [
 # theta_ref is added to pitch_ff inside lqr_torque: state[0] = pitch - pitch_ff + theta_ref.
 # Positive theta_ref = lean forward command = drive forward.
 # Starting gains from Control.MD; optimizer will tune via (1+8)-ES.
-VELOCITY_PI_KP = 0.251209  # [rad/(m/s)] proportional gain (S5 5-min / 1776 evals, 2026-03-18)
+VELOCITY_PI_KP = 0.502418  # [rad/(m/s)] proportional gain — 2× for snappier accel (was 0.251209 optimizer baseline)
 VELOCITY_PI_KI = 0.011405  # [rad/m]     integral gain  (S5 5-min, fitness=2.0635, vel_rms=0.502 m/s)
 # Prior combined_PI baseline (retained for reference): KP_V=0.502932, KI_V=0.012678, fitness=0.61
 VELOCITY_PI_THETA_MAX    = 0.26   # [rad] ±15° hard clamp on theta_ref output
 VELOCITY_PI_INT_MAX      = 2.0    # [rad·s] integrator anti-windup clamp
-THETA_REF_RATE_LIMIT     = 2.0    # [rad/s] max rate of change of theta_ref from VelocityPI
+THETA_REF_RATE_LIMIT     = 5.0    # [rad/s] max rate of change of theta_ref from VelocityPI — 2.5× for snappier accel (was 2.0)
                                    # Prevents pitch_rate spikes when lean command steps abruptly.
 
 # ── Drive scenario parameters ────────────────────────────────────────────────
