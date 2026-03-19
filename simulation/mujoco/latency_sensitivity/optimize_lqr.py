@@ -47,14 +47,14 @@ PARAM_RANGES = {
 
 # ── Active scenarios ─────────────────────────────────────────────────────────
 # For Scenario 4: gain scheduler validation across full leg stroke
-ACTIVE_SCENARIO = "4_leg_height_gain_sched"
+ACTIVE_SCENARIO = "4_leg_height_gain_sched"   # Step 1: full leg stroke + disturbances
 
 # ── Seed weights (used when CSV is empty — fresh start) ──────────────────────
 SEED_WEIGHTS = {
-    "Q_PITCH":      0.138282,   # S1 optimized (run_id=966, fitness=0.003267)
-    "Q_PITCH_RATE": 0.023379,   # S1 optimized
-    "Q_VEL":        0.004591,   # S1 optimized
-    "R":            9.998298,   # S1 optimized
+    "Q_PITCH":      0.003411,   # Step 0: S1 delayed-plant seed (fitness=0.002386, rms=0.79°)
+    "Q_PITCH_RATE": 0.000674,   # Step 0: ~35× softer than zero-latency S1
+    "Q_VEL":        0.000459,   # Step 0
+    "R":            4.455076,   # Step 0: ~2× softer than zero-latency S1
 }
 
 # ── (1+λ)-ES hyper-parameters ────────────────────────────────────────────────

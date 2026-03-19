@@ -76,16 +76,17 @@ POSITION_KP   =  2.16  # [rad/m]    wheel odometry → pitch lean correction (wa
 VELOCITY_KP   =  0.497 # [rad/(m/s)] wheel velocity feedback (was 0.30)
 MAX_PITCH_CMD =  0.25  # [rad] clamp on position/velocity feedback
 
-# ── LQR cost weights — optimized via scenario 4 (2026-03-18) ──────────────────
+# ── LQR cost weights — Phase 6 re-baselined for delayed plant (2026-03-19) ────
 # State: x = [pitch − pitch_ff − θ_ref,  pitch_rate,  wheel_vel_avg − v_ref]
 # u = −K @ x,  K solved from Q, R via scipy.linalg.solve_continuous_are
-# Scenario 4 (4_leg_height_gain_sched) 5-min run: 237 gens, 1896 evals, 12s duration
-#   Best (run_id=6426): fitness=0.017938, rms_pitch=1.242°, survived=12.0s
-# S1 seed (retained in docs/Control.MD): Q=[0.138282, 0.023379, 0.004591], R=9.998298
-LQR_Q_PITCH      =  0.014168  # weight on pitch error
-LQR_Q_PITCH_RATE =  0.033720  # weight on pitch rate
-LQR_Q_VEL        =  0.000250  # weight on wheel velocity
-LQR_R            = 28.734420  # weight on control effort
+# Step 1: S4 (4_leg_height_gain_sched) 10-min run: 3302 evals, seeded from Step 0 S1 result
+#   Best: fitness=0.044589, rms_pitch=1.774°, survived=12.0s
+# Character: Q_PITCH↑ (more pitch correction), Q_PITCH_RATE/Q_VEL↓↓ (stale rates destabilise), R↓ (more torque allowed)
+# Zero-latency reference: Q=[0.014168, 0.033720, 0.000250], R=28.734 (see LQR_Control_optimization/)
+LQR_Q_PITCH      =  0.063424  # weight on pitch error
+LQR_Q_PITCH_RATE =  0.000219  # weight on pitch rate  (↓154× vs zero-latency — stale rate info)
+LQR_Q_VEL        =  0.000011  # weight on wheel velocity (↓23× vs zero-latency)
+LQR_R            =  1.980419  # weight on control effort (↓14× vs zero-latency)
 
 # ── Leg impedance (held at Q_NOM; decoupled from balance loop) ─────────────
 LEG_K_S = 16.000000  # [N·m/rad] spring stiffness  (Phase 4 re-opt: 3127 gens / 25016 evals, fitness=4.0918, 2026-03-18)

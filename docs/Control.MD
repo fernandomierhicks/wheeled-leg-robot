@@ -559,29 +559,14 @@ holds all inner-loop gains fixed at the previous step's result.
 
 ---
 
-### Step 0 — LQR seed run on S1 (quick, ~15 min)
+### Step 0 — LQR seed run on S1 ✅ DONE (2026-03-19, 5 min)
 
-**Purpose:** Get a fast rough seed for the delayed plant on the simplest scenario
-(fixed legs, no velocity control). The zero-latency S4 gains will likely fall
-immediately with delay active — S1 gives the optimizer a stable starting point
-before the full S4 run.
-
-**Scenario:** S1 `1_LQR_pitch_step` — 5° pitch step + ±4N kicks, fixed legs, 5s.
-
-**Why S1 first:** S1 is the shortest and most forgiving scenario. A gain set that
-barely survives S1 is enough to seed the harder S4 run. Skipping S0 risks S4
-spending its first many generations just finding a non-falling solution.
-
-```bash
-cd simulation/mujoco/latency_sensitivity
-python optimize_lqr.py --hours 0.25   # ~15 min — scenario = S1
-```
-
-Save the best result as the seed for Step 1.
+**Result:** Q=[0.003411, 0.000674, 0.000459], R=4.455, fitness=0.002386, rms=0.79°, survived 5s.
+Used as SEED_WEIGHTS for Step 1.
 
 ---
 
-### Step 1 — Balance LQR on S4 (~1 hr)
+### Step 1 — Balance LQR on S4 ✅ BASELINED (2026-03-19, 10 min)
 
 **Purpose:** Fully re-tune the LQR Q/R weights for the delayed plant across the full
 leg stroke. Seeded from Step 0 result.
@@ -590,16 +575,24 @@ leg stroke. Seeded from Step 0 result.
 
 **Params:** Q_PITCH, Q_PITCH_RATE, Q_VEL, R
 
-**Expected change vs zero-latency baseline:**
-- R will increase (softer torque — delay eats phase margin, aggressive gains oscillate)
-- Q_PITCH_RATE will increase (more damping needed to absorb phase-delayed response)
-- Q_PITCH may decrease (steady-state tracking is less important than not oscillating)
+**Result (10 min, 3302 evals, seeded from Step 0):**
 
-```bash
-python optimize_lqr.py --hours 1     # scenario = S4, seed from Step 0
-```
+| Param | Zero-latency | Delayed baseline |
+|-------|-------------|------------------|
+| Q_PITCH | 0.014168 | **0.063424** (+4.5×) |
+| Q_PITCH_RATE | 0.033720 | **0.000219** (↓154×) |
+| Q_VEL | 0.000250 | **0.000011** (↓23×) |
+| R | 28.734 | **1.980** (↓14×) |
+| fitness | 0.017938 | **0.044589** |
+| rms_pitch | 1.24° | **1.77°** |
+| survived | 12s | 12s ✅ |
 
-Update `sim_config.py` with the best Q/R before moving to Step 2.
+**Character:** Q_PITCH↑ — robot must actively correct pitch using stale angle reading.
+Q_PITCH_RATE/Q_VEL↓↓ — penalising delayed rates causes instability (kick info arrives late,
+controller fights the motion it can no longer affect). R↓ — more torque is allowed because
+the controller is now more selective about when to apply it.
+
+Gains written to `latency_sensitivity/sim_config.py`.
 
 ---
 

@@ -125,39 +125,51 @@ Back-EMF taper (`motor_taper()`), battery model (`BatteryModel`), and voltage-sc
 
 ---
 
-### Phase 6 — Latency Model ⬜ NEXT
+### Phase 6 — Latency Model 🔄 IN PROGRESS
 
-**Motivation:** all gains (LQR, VelocityPI, YawPI, suspension) were tuned in a
-zero-latency sim. Real robot has ~8.2 ms total delay on the wheel path (~4 loop
-periods). Gains will be overconfident without this — likely to oscillate or fall.
+**Framework:** `simulation/mujoco/latency_sensitivity/` — ring-buffer delays active:
+- `SENSOR_DELAY_S = 0.005` → 10 steps (BNO086 fusion + I2C)
+- `ACTUATOR_DELAY_S = 0.0025` → 5 steps (ODESC FOC + motor τ_elec)
 
-**Work is done in a new folder** `simulation/mujoco/latency_sensitivity/` (full copy
-of `LQR_Control_optimization/`). Original folder stays untouched as known-good baseline.
+#### Step 0 — LQR seed on S1 ✅ DONE
+5-min run on simple fixed-leg scenario to get a stable starting point for the delayed plant.
+Best: Q=[0.003411, 0.000674, 0.000459], R=4.455, fitness=0.002386, rms=0.79°
 
-**Approach:** physics-step ring buffers with delays in seconds. Buffer depth
-auto-computes as `round(delay_s / SIM_TIMESTEP)` — so updating from hardware
-measurements requires only changing two constants, no code changes.
+#### Step 1 — LQR on S4 ✅ BASELINED
+10-min run seeded from Step 0. Gains in `latency_sensitivity/sim_config.py`.
 
-**Constants to add to `sim_config.py`:**
-```python
-USE_LATENCY_MODEL  = True
-SENSOR_DELAY_S     = 0.005    # BNO086 fusion ~5 ms + I2C ~0.4 ms  → 10 steps
-ACTUATOR_DELAY_S   = 0.0025   # ODESC FOC ~0.5 ms + τ_elec ~2 ms   →  5 steps
+| Param | Zero-latency | **Delayed baseline** |
+|-------|-------------|----------------------|
+| Q_PITCH | 0.014168 | **0.063424** |
+| Q_PITCH_RATE | 0.033720 | **0.000219** |
+| Q_VEL | 0.000250 | **0.000011** |
+| R | 28.734 | **1.980** |
+| fitness | 0.017938 | **0.044589** |
+| rms_pitch | 1.24° | **1.77°** |
+
+Character: Q_PITCH↑ (robot needs to actively correct pitch with stale data), Q_PITCH_RATE/Q_VEL↓↓ (penalising stale rates destabilises), R↓ (more torque allowed to compensate).
+
+#### Step 2 — VelocityPI on S5 ⬜ NEXT
+
+**Goal:** Re-tune KP_V and KI_V with the delayed LQR active. Stale wheel velocity
+fed back to VelocityPI will cause overshoot at high KP_V — expect KP_V to decrease.
+
+**Setup:**
+- `optimize_vel_pi.py` is already pointed at S5 (`5_VEL_PI_leg_cycling`)
+- LQR gains in `sim_config.py` are now the Step 1 delayed baseline — do not change them
+- `results_5_VEL_PI_leg_cycling.csv` has been cleared — clean start
+
+**Run:**
+```bash
+cd simulation/mujoco/latency_sensitivity
+python optimize_vel_pi.py --hours 1
 ```
 
-**Files to modify** (all in `latency_sensitivity/`):
-- `sim_config.py` — add 3 constants after `CTRL_STEPS`
-- `scenarios.py` — replace lines 457–460 (init), 525 (sens buf), 539–540 (ctrl buf)
-- `sandbox.py` — after line 501 (init), inside `_reset_state`, lines 645, 666–667
+**Seed:** current `sim_config.py` values (KP_V=0.502418, KI_V=0.011405) — optimizer
+will read these as baseline if CSV is empty (verify SEED_WEIGHTS in `optimize_vel_pi.py`).
 
-**Full implementation detail:** see `docs/Latencies.MD § 5` and plan file
-`~/.claude/plans/lovely-conjuring-pond.md`.
-
-**After implementation:**
-1. Run `python sandbox.py` — expect slightly more pitch oscillation (gains now over-aggressive for delayed plant)
-2. Run `python replay.py --baseline --scenario 5_VEL_PI_leg_cycling` — fitness degrades moderately; robot should not fall
-3. Set `USE_LATENCY_MODEL = False` — replay fitness must match original exactly (confirms bypass)
-4. Re-run all optimizers in `latency_sensitivity/` overnight with delay active
+**Pass criterion:** robot survives full 13s staircase with legs cycling + bumps.
+Expected: KP_V↓ (less aggressive lean to avoid overshoot on stale velocity reading).
 
 ---
 
