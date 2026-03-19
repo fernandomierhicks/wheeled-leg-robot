@@ -83,6 +83,7 @@ from sim_config import (
     CTRL_STEPS, PITCH_STEP_RAD, THETA_REF_RATE_LIMIT,
     S5_BUMPS, S8_BUMPS, S8_DRIVE_SPEED,
     YAW_PI_KP, YAW_PI_KI,
+    BATT_V_NOM,
 )
 from physics import build_xml, build_assets, get_equilibrium_pitch
 from run_log import (
@@ -92,11 +93,12 @@ from run_log import (
 import scenarios as _scenarios
 from scenarios import (
     init_sim, get_pitch_and_rate, balance_torque, lqr_torque, evaluate,
-    VelocityPI, YawPI,
+    VelocityPI, YawPI, motor_taper, _motor_currents,
     FALL_THRESHOLD, BALANCE_DURATION,
     DISTURBANCE_TIME, DISTURBANCE_FORCE, DISTURBANCE_DUR,
     s1_dist_fn, s2_dist_fn, s3_velocity_profile, _leg_cycle_profile,
 )
+from battery_model import BatteryModel
 from lqr_design import compute_gain_table
 
 RENDER_HZ    = 60
@@ -153,7 +155,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     from matplotlib.widgets import Button, Slider
 
     MAXLEN = int(window_s * TELEMETRY_HZ) + 500
-    # 15 data channels (index matches telemetry tuple slots 1-14)
+    # 18 data channels
     (t_buf,
      pitch_buf, pitch_ref_buf,          # panel [0,0] — Pitch
      vel_buf, v_cmd_buf,                # panel [0,1] — Velocity
@@ -163,24 +165,25 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
      pitch_rate_buf,                    # panel [2,1] — Pitch Rate
      tau_L_buf, tau_R_buf,              # panel [3,0] — Wheel Torques
      delta_q_buf,                       # panel [3,1] — Suspension Δq
-     ) = (deque(maxlen=MAXLEN) for _ in range(15))
+     v_batt_buf, soc_buf, batt_temp_buf,# panel [4,0/1] — Battery
+     ) = (deque(maxlen=MAXLEN) for _ in range(18))
 
     plt.ion()
-    fig, axes = plt.subplots(4, 2, figsize=(13, 9))
+    fig, axes = plt.subplots(5, 2, figsize=(13, 11))
     fig.patch.set_facecolor("#1e1e2e")
     plt.subplots_adjust(hspace=0.65, wspace=0.38,
-                        top=0.91, bottom=0.28, left=0.10, right=0.97)
+                        top=0.91, bottom=0.22, left=0.10, right=0.97)
 
     BG  = "#1e1e2e"
     GRD = "#333333"
 
     # ── Panel specs: (title, ylabel, primary_colour) ────────────────────────
-    #  [row][col]
     specs = [
         [("Pitch",            "deg",   "#60d0ff"),   ("Velocity",       "m/s",   "#50e080")],
         [("Yaw Rate",         "rad/s", "#f08040"),   ("Hip Joints",     "deg",   "#d0a0ff")],
         [("Roll",             "deg",   "#ff6090"),   ("Pitch Rate",     "deg/s", "#b060ff")],
         [("Wheel Torques",    "N·m",   "#ffcc44"),   ("Suspension Δq",  "deg",   "#44ddcc")],
+        [("Battery Voltage",  "V",     "#ff9944"),   ("SoC / Temp",     "%",     "#44ffcc")],
     ]
 
     def _style_ax(ax, ttl, unit, col):
@@ -192,7 +195,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ax.set_ylabel(unit, color=col, fontsize=7)
         ax.set_xlabel("t [s]", color="#888", fontsize=6)
 
-    for r in range(4):
+    for r in range(5):
         for c in range(2):
             ttl, unit, col = specs[r][c]
             _style_ax(axes[r][c], ttl, unit, col)
@@ -206,6 +209,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ln_prate,    = axes[2][1].plot([], [], color="#b060ff", lw=1.5)
     ln_tau_L,    = axes[3][0].plot([], [], color="#ffcc44", lw=1.5)
     ln_delta_q,  = axes[3][1].plot([], [], color="#44ddcc", lw=1.5)
+    ln_vbatt,    = axes[4][0].plot([], [], color="#ff9944", lw=1.5)
+    ln_soc,      = axes[4][1].plot([], [], color="#44ffcc", lw=1.5)
 
     # Secondary / command overlay lines
     ln_pitch_ref, = axes[0][0].plot([], [], color="#ff6060", lw=1.0, ls="--")
@@ -214,6 +219,15 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ln_hip_R,     = axes[1][1].plot([], [], color="#a060cc", lw=1.2, ls="--")
     ln_hip_cmd,   = axes[1][1].plot([], [], color="#ffffff", lw=0.8, ls=":")
     ln_tau_R,     = axes[3][0].plot([], [], color="#ff8844", lw=1.2, ls="--")
+    ln_vbatt_nom, = axes[4][0].plot([], [], color="#ffffff", lw=0.8, ls="--")
+    ln_temp,      = axes[4][1].plot([], [], color="#ff6090", lw=1.2, ls="--")
+
+    # Twin-y axis for temperature on SoC panel
+    ax_temp = axes[4][1].twinx()
+    ax_temp.set_facecolor(BG)
+    ax_temp.tick_params(colors="lightgray", labelsize=6)
+    ax_temp.set_ylabel("°C", color="#ff6090", fontsize=7)
+    ln_temp, = ax_temp.plot([], [], color="#ff6090", lw=1.2, ls="--")
 
     # Zero/reference lines
     axes[1][0].axhline(0.0, color="#666688", lw=0.7, ls="--")
@@ -231,6 +245,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     axes[1][1].legend([ln_hip_L, ln_hip_R, ln_hip_cmd],
                       ["hip L", "hip R", "cmd"], **_leg_kw)
     axes[3][0].legend([ln_tau_L, ln_tau_R], ["τ_L", "τ_R"], **_leg_kw)
+    axes[4][0].legend([ln_vbatt, ln_vbatt_nom], ["V_term", "V_nom"], **_leg_kw)
+    axes[4][1].legend([ln_soc,   ln_temp],       ["SoC %", "T °C"],  **_leg_kw)
 
     # ── Widgets ─────────────────────────────────────────────────────────────
     ax_sld = fig.add_axes([0.10, 0.19, 0.80, 0.025])
@@ -325,7 +341,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
     all_bufs = [t_buf, pitch_buf, pitch_ref_buf, vel_buf, v_cmd_buf,
                 yaw_buf, omega_cmd_buf, hip_L_buf, hip_R_buf, hip_cmd_buf,
-                roll_buf, pitch_rate_buf, tau_L_buf, tau_R_buf, delta_q_buf]
+                roll_buf, pitch_rate_buf, tau_L_buf, tau_R_buf, delta_q_buf,
+                v_batt_buf, soc_buf, batt_temp_buf]
     all_sec_lines = [ln_pitch_ref, ln_v_cmd, ln_omega_cmd,
                      ln_hip_R, ln_hip_cmd, ln_tau_R]
 
@@ -343,12 +360,13 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             if item == "RESET":
                 for buf in all_bufs: buf.clear()
                 for ln in [ln_pitch, ln_vel, ln_yaw, ln_hip_L, ln_roll,
-                           ln_prate, ln_tau_L, ln_delta_q] + all_sec_lines:
+                           ln_prate, ln_tau_L, ln_delta_q, ln_vbatt, ln_soc] + all_sec_lines:
                     ln.set_data([], [])
                 fig.canvas.flush_events()
                 continue
             (t, pitch, pitch_ref, vel, v_cmd, yaw, omega_cmd,
-             hip_L, hip_R, hip_cmd, roll, prate, tau_L, tau_R, delta_q) = item
+             hip_L, hip_R, hip_cmd, roll, prate, tau_L, tau_R, delta_q,
+             v_batt, soc, batt_temp) = item
             t_buf.append(t)
             pitch_buf.append(pitch);      pitch_ref_buf.append(pitch_ref)
             vel_buf.append(vel);          v_cmd_buf.append(v_cmd)
@@ -358,6 +376,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             pitch_rate_buf.append(prate)
             tau_L_buf.append(tau_L);      tau_R_buf.append(tau_R)
             delta_q_buf.append(delta_q)
+            v_batt_buf.append(v_batt);    soc_buf.append(soc);  batt_temp_buf.append(batt_temp)
 
         if len(t_buf) < 2: continue
         tb    = list(t_buf)
@@ -390,6 +409,30 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         _upd(ln_prate,   axes[2][1], pitch_rate_buf)
         _upd(ln_tau_L,   axes[3][0], tau_L_buf,     tau_R_buf)
         _upd(ln_delta_q, axes[3][1], delta_q_buf)
+
+        # Battery voltage panel
+        vb_bw = list(v_batt_buf)[idx:]
+        if vb_bw:
+            ln_vbatt.set_data(tw, vb_bw)
+            axes[4][0].set_xlim(t0, sim_t + 0.5)
+            lo, hi = min(vb_bw), max(vb_bw)
+            span = max(hi - lo, 0.5)
+            axes[4][0].set_ylim(lo - span * 0.15, hi + span * 0.15)
+            ln_vbatt_nom.set_data([t0, sim_t + 0.5], [BATT_V_NOM, BATT_V_NOM])
+
+        # SoC + temperature panel
+        soc_bw  = list(soc_buf)[idx:]
+        temp_bw = list(batt_temp_buf)[idx:]
+        if soc_bw:
+            ln_soc.set_data(tw, soc_bw)
+            axes[4][1].set_xlim(t0, sim_t + 0.5)
+            axes[4][1].set_ylim(max(0.0, min(soc_bw) - 5), 105)
+        if temp_bw:
+            ln_temp.set_data(tw, temp_bw)
+            ax_temp.set_xlim(t0, sim_t + 0.5)
+            lo_t, hi_t = min(temp_bw), max(temp_bw)
+            span_t = max(hi_t - lo_t, 2.0)
+            ax_temp.set_ylim(lo_t - span_t * 0.2, hi_t + span_t * 0.5)
 
         # Secondary lines
         ln_pitch_ref.set_data(tw, list(pitch_ref_buf)[idx:])
@@ -559,6 +602,8 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     _dt_ctrl = model.opt.timestep * CTRL_STEPS
     vel_pi = VelocityPI(kp=kp_v, ki=ki_v, dt=_dt_ctrl)
     yaw_pi = YawPI(kp=kp_yaw, ki=ki_yaw, dt=_dt_ctrl)
+    battery = BatteryModel(); battery.reset()
+    _v_batt = [BATT_V_NOM]
 
     # Snap MuJoCo window to right half once it appears
     threading.Thread(target=_position_mujoco_right, args=(1.5,), daemon=True).start()
@@ -583,6 +628,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
             _omega_desired[0] = 0.0
             vel_pi.reset()
             yaw_pi.reset()
+            battery.reset(); _v_batt[0] = BATT_V_NOM
             if not data_q.full(): data_q.put_nowait("RESET")
 
         while viewer.is_running():
@@ -675,8 +721,8 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                                              v_ref=v_ref_rads, theta_ref=theta_ref)
                         yaw_rate = data.qvel[d_yaw]
                         tau_yaw = yaw_pi.update(_omega_desired[0], yaw_rate) if _scenarios.USE_YAW_PI else 0.0
-                        data.ctrl[act_wheel_L] = np.clip(tau_sym - tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
-                        data.ctrl[act_wheel_R] = np.clip(tau_sym + tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
+                        data.ctrl[act_wheel_L] = motor_taper(tau_sym - tau_yaw, data.qvel[dof_whl_L], _v_batt[0])
+                        data.ctrl[act_wheel_R] = motor_taper(tau_sym + tau_yaw, data.qvel[dof_whl_R], _v_batt[0])
                         # Leg impedance + roll leveling
                         _q_hip_sym = (_leg_cycle_profile(float(data.time))
                                       if scenario in ("4_leg_height_gain_sched",
@@ -700,12 +746,15 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                             dq_hip  = data.qvel[dof_hip]
                             tau_hip = -(LEG_K_S * (q_hip - _q_nom_leg) + LEG_B_S * dq_hip)
                             data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+                        _v_batt[0] = battery.step(_dt_ctrl, _motor_currents(
+                            float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
+                            float(data.ctrl[act_hip_L]),   float(data.ctrl[act_hip_R])))
                     else:
                         tau_wheel, pitch_integral, odo_x = balance_torque(
                             _pitch_d, _pitch_rate_d, pitch_integral, odo_x,
                             _wheel_vel_d, q_hip_avg, dt, gains)
-                        data.ctrl[act_wheel_L] = tau_wheel
-                        data.ctrl[act_wheel_R] = tau_wheel
+                        data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[dof_whl_L], _v_batt[0])
+                        data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[dof_whl_R], _v_batt[0])
                         for qpos_hip, dof_hip, act_hip in [
                             (qpos_hip_L, dof_hip_L, act_hip_L),
                             (qpos_hip_R, dof_hip_R, act_hip_R),
@@ -714,6 +763,9 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                             dq_hip  = data.qvel[dof_hip]
                             tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
                             data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+                        _v_batt[0] = battery.step(_dt_ctrl, _motor_currents(
+                            float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
+                            float(data.ctrl[act_hip_L]),   float(data.ctrl[act_hip_R])))
 
                 # Apply disturbance impulse — function resolved once before the loop
                 data.xfrc_applied[box_bid, 0] = _scenario_dist_fn(data.time)
@@ -759,6 +811,9 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                     float(data.ctrl[act_wheel_L]),                               # 12 tau_L
                     float(data.ctrl[act_wheel_R]),                               # 13 tau_R
                     math.degrees(data.qpos[qpos_hip_L] - data.qpos[qpos_hip_R]),# 14 delta_q
+                    battery.v_terminal,                                          # 15 v_batt
+                    battery.soc_pct,                                             # 16 soc_pct
+                    battery.temperature_c,                                       # 17 batt_temp
                 ))
                 last_push = wall_now
 

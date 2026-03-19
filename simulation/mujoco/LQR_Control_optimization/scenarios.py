@@ -10,7 +10,8 @@ import mujoco
 
 from sim_config import (
     ROBOT, Q_NOM, Q_RET, Q_EXT, WHEEL_R,
-    HIP_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT,
+    HIP_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT, WHEEL_OMEGA_NOLOAD, WHEEL_KT,
+    BATT_V_NOM, HIP_KT_OUTPUT, BATT_I_QUIESCENT,
     LEG_K_S, LEG_B_S,
     LEG_K_ROLL, LEG_D_ROLL, ROLL_NOISE_STD_RAD, HIP_SAFE_MIN, HIP_SAFE_MAX,
     MAX_PITCH_CMD,
@@ -37,6 +38,34 @@ from sim_config import (
 from physics import build_xml, build_assets, solve_ik, get_equilibrium_pitch
 from run_log import log_run, next_run_id, CSV_PATH
 from lqr_design import interpolate_gains, compute_gain_table
+from battery_model import BatteryModel
+
+# ── Motor back-EMF taper ─────────────────────────────────────────────────────
+def motor_taper(tau_cmd: float, omega_wheel: float,
+                v_batt: float = BATT_V_NOM) -> float:
+    """Clamp wheel torque by linear back-EMF taper, voltage-scaled.
+
+    ω_noload ∝ V_terminal — lower battery voltage reduces available top speed and
+    therefore also reduces the torque available at high wheel speeds.
+    At the nominal rated voltage (BATT_V_NOM) the behaviour is identical to before.
+    """
+    omega_noload = WHEEL_OMEGA_NOLOAD * (v_batt / BATT_V_NOM)
+    taper = max(0.0, 1.0 - abs(omega_wheel) / omega_noload)
+    t_max = WHEEL_TORQUE_LIMIT * taper
+    return float(np.clip(tau_cmd, -t_max, t_max))
+
+
+def _motor_currents(tau_whl_L: float, tau_whl_R: float,
+                    tau_hip_L: float, tau_hip_R: float) -> float:
+    """Sum all motor currents plus quiescent electronics load [A].
+
+    Uses the commanded (clamped) torques as a proxy for actual phase current.
+    I_wheel = |τ| / Kt_wheel,  I_hip = |τ_output| / Kt_output_shaft.
+    """
+    I_whl = (abs(tau_whl_L) + abs(tau_whl_R)) / WHEEL_KT
+    I_hip = (abs(tau_hip_L) + abs(tau_hip_R)) / HIP_KT_OUTPUT
+    return I_whl + I_hip + BATT_I_QUIESCENT
+
 
 # ── Controller mode ──────────────────────────────────────────────────────────
 USE_PD_CONTROLLER = True  # Toggle between PD (True) and LQR (False)
@@ -450,6 +479,11 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
     yaw_sq_sum    = 0.0   # yaw rate tracking error accumulator
     n_yaw         = 0
 
+    # ── Battery model ────────────────────────────────────────────────────────
+    battery = BatteryModel()
+    battery.reset()
+    v_batt = BATT_V_NOM   # initialise to rated voltage; updated each ctrl step
+
     # ── Simulation loop ─────────────────────────────────────────────────────
     step = 0
     while data.time < duration:
@@ -502,8 +536,8 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
             tau_yaw     = yaw_pi.update(omega_tgt, yaw_rate) if USE_YAW_PI else 0.0
 
             # tau_yaw > 0 = left turn: right wheel gets more torque than left
-            data.ctrl[act_wheel_L] = np.clip(tau_sym - tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
-            data.ctrl[act_wheel_R] = np.clip(tau_sym + tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
+            data.ctrl[act_wheel_L] = motor_taper(tau_sym - tau_yaw, data.qvel[d_whl_L], v_batt)
+            data.ctrl[act_wheel_R] = motor_taper(tau_sym + tau_yaw, data.qvel[d_whl_R], v_batt)
 
             # ── Yaw tracking error ─────────────────────────────────────────────
             if omega_profile_fn and data.time >= YAW_ERR_START:
@@ -543,6 +577,11 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
                 tau_hip = -(LEG_K_S * (q_hip - q_nom_leg) + LEG_B_S * dq_hip)
                 data.ctrl[act_hip] = np.clip(
                     tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+
+            # ── Battery step (update v_batt for next control tick) ────────────
+            v_batt = battery.step(dt, _motor_currents(
+                float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
+                float(data.ctrl[act_hip_L]),   float(data.ctrl[act_hip_R])))
 
             # ── Metrics ───────────────────────────────────────────────────────
             pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff))
@@ -755,6 +794,11 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
     settled        = False
     settle_start   = None
 
+    # ── Battery model ────────────────────────────────────────────────────────
+    battery = BatteryModel()
+    battery.reset()
+    v_batt = BATT_V_NOM
+
     # ── Simulation loop ─────────────────────────────────────────────────────
     # Physics: 2000 Hz.  Controller (IMU + torque cmd): 500 Hz = every CTRL_STEPS steps.
     step = 0
@@ -797,8 +841,8 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
                 tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
                                        v_ref=0.0, theta_ref=theta_ref)
 
-            data.ctrl[act_wheel_L] = tau_wheel
-            data.ctrl[act_wheel_R] = tau_wheel
+            data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
+            data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
 
             # ── Leg impedance: hold Q_NOM ────────────────────────────────────
             for s_hip, d_hip, act_hip in [
@@ -809,6 +853,11 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
                 dq_hip = data.qvel[d_hip]
                 tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
                 data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+
+            # ── Battery step ─────────────────────────────────────────────────
+            v_batt = battery.step(dt, _motor_currents(
+                float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
+                float(data.ctrl[act_hip_L]),   float(data.ctrl[act_hip_R])))
 
             # ── Metrics ─────────────────────────────────────────────────────
             pitch_err_deg  = math.degrees(abs(pitch_true - pitch_ff))
@@ -933,6 +982,11 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
     disturbance_applied = False
     disturbance_end_time = DISTURBANCE_TIME + DISTURBANCE_DUR
 
+    # ── Battery model ────────────────────────────────────────────────────────
+    battery = BatteryModel()
+    battery.reset()
+    v_batt = BATT_V_NOM
+
     # ── Simulation loop ─────────────────────────────────────────────────────
     step = 0
     dt   = model.opt.timestep * CTRL_STEPS   # 0.002 s controller dt
@@ -974,8 +1028,8 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
                 tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
                                        v_ref=0.0, theta_ref=theta_ref)
 
-            data.ctrl[act_wheel_L] = tau_wheel
-            data.ctrl[act_wheel_R] = tau_wheel
+            data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
+            data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
 
             # ── Leg impedance: hold Q_NOM ────────────────────────────────────
             for s_hip, d_hip, act_hip in [
@@ -986,6 +1040,11 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
                 dq_hip = data.qvel[d_hip]
                 tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
                 data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+
+            # ── Battery step ─────────────────────────────────────────────────
+            v_batt = battery.step(dt, _motor_currents(
+                float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
+                float(data.ctrl[act_hip_L]),   float(data.ctrl[act_hip_R])))
 
             # ── Metrics ─────────────────────────────────────────────────────
             pitch_err_deg  = math.degrees(abs(pitch_true - pitch_ff))
@@ -1250,6 +1309,10 @@ def run_1_LQR_pitch_step(gains: dict, duration: float = BALANCE_DURATION,
     settled        = False
     settle_start   = None
 
+    battery = BatteryModel()
+    battery.reset()
+    v_batt = BATT_V_NOM
+
     step = 0
     while data.time < duration:
         if step % CTRL_STEPS == 0:
@@ -1270,8 +1333,8 @@ def run_1_LQR_pitch_step(gains: dict, duration: float = BALANCE_DURATION,
             # LQR — VelocityPI OFF (theta_ref = 0)
             tau_wheel = lqr_torque(pitch, pitch_rate, wheel_vel, hip_q_avg,
                                    v_ref=0.0, theta_ref=0.0)
-            data.ctrl[act_wheel_L] = tau_wheel
-            data.ctrl[act_wheel_R] = tau_wheel
+            data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
+            data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
 
             # Leg impedance: hold Q_NOM
             for s_hip, d_hip, act_hip in [
@@ -1283,6 +1346,10 @@ def run_1_LQR_pitch_step(gains: dict, duration: float = BALANCE_DURATION,
                 data.ctrl[act_hip] = np.clip(
                     -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip),
                     -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+
+            v_batt = battery.step(dt, _motor_currents(
+                float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
+                float(data.ctrl[act_hip_L]),   float(data.ctrl[act_hip_R])))
 
             # Metrics — error vs fixed Q_NOM reference (not live hip)
             pitch_err_rad = pitch_true - pitch_ff_nom
@@ -1385,6 +1452,10 @@ def run_2_LQR_impulse_recovery(gains: dict, duration: float = BALANCE_DURATION,
     settled_post       = False
     settle_start_post  = None
 
+    battery = BatteryModel()
+    battery.reset()
+    v_batt = BATT_V_NOM
+
     step = 0
     while data.time < duration:
         if step % CTRL_STEPS == 0:
@@ -1406,8 +1477,8 @@ def run_2_LQR_impulse_recovery(gains: dict, duration: float = BALANCE_DURATION,
             # LQR — VelocityPI OFF (theta_ref = 0)
             tau_wheel = lqr_torque(pitch, pitch_rate, wheel_vel, hip_q_avg,
                                    v_ref=0.0, theta_ref=0.0)
-            data.ctrl[act_wheel_L] = tau_wheel
-            data.ctrl[act_wheel_R] = tau_wheel
+            data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
+            data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
 
             # Leg impedance: hold Q_NOM
             for s_hip, d_hip, act_hip in [
@@ -1419,6 +1490,10 @@ def run_2_LQR_impulse_recovery(gains: dict, duration: float = BALANCE_DURATION,
                 data.ctrl[act_hip] = np.clip(
                     -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip),
                     -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+
+            v_batt = battery.step(dt, _motor_currents(
+                float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
+                float(data.ctrl[act_hip_L]),   float(data.ctrl[act_hip_R])))
 
             # Metrics — split pre / post disturbance
             pitch_err_rad = pitch_true - pitch_ff
@@ -1649,6 +1724,10 @@ def run_4_leg_height_gain_sched(gains: dict, duration: float = SCENARIO_4_DURATI
     n_samples      = 0
     survived_s     = duration
 
+    battery = BatteryModel()
+    battery.reset()
+    v_batt = BATT_V_NOM
+
     step = 0
     while data.time < duration:
         if step % CTRL_STEPS == 0:
@@ -1669,8 +1748,8 @@ def run_4_leg_height_gain_sched(gains: dict, duration: float = SCENARIO_4_DURATI
             # LQR — VelocityPI OFF, theta_ref = 0
             tau_wheel = lqr_torque(pitch, pitch_rate, wheel_vel, hip_q_avg,
                                    v_ref=0.0, theta_ref=0.0)
-            data.ctrl[act_wheel_L] = tau_wheel
-            data.ctrl[act_wheel_R] = tau_wheel
+            data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
+            data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
 
             # Leg impedance: track cycling profile
             q_hip_tgt = _leg_cycle_profile(data.time)
@@ -1683,6 +1762,10 @@ def run_4_leg_height_gain_sched(gains: dict, duration: float = SCENARIO_4_DURATI
                 data.ctrl[act_hip] = np.clip(
                     -(LEG_K_S * (q_hip - q_hip_tgt) + LEG_B_S * dq_hip),
                     -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+
+            v_batt = battery.step(dt, _motor_currents(
+                float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
+                float(data.ctrl[act_hip_L]),   float(data.ctrl[act_hip_R])))
 
             # Metrics — pitch error vs live equilibrium for current leg height
             pitch_ff      = get_equilibrium_pitch(ROBOT, hip_q_avg)

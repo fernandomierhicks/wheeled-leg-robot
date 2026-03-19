@@ -1,10 +1,8 @@
 """sandbox.py — Interactive free-drive sandbox arena.
 
 Scattered obstacles 1–8 cm tall (boxes and cylinders).
-Drive the robot freely:
-  - v_desired slider:  forward / backward speed  [-1.2, 1.2] m/s
-  - ω_desired slider:  yaw rate (left/right)      [-2.0, 2.0] rad/s
-  - Hip height slider: leg height 0 % (up) → 100 % (down)
+Drive with joystick (left-stick Y = fwd/bwd, right-stick X = yaw, right-stick Y = hip).
+Keyboard fallback: no sliders — use the joystick.
 
 Gains: baselined LQR + VelocityPI + YawPI from sim_config.py.
 
@@ -47,7 +45,7 @@ from sim_config import (
     CTRL_STEPS, THETA_REF_RATE_LIMIT,
     VELOCITY_PI_KP, VELOCITY_PI_KI,
     YAW_PI_KP, YAW_PI_KI,
-    BATT_V_NOM,
+    BATT_V_NOM, WHEEL_KT, HIP_KT_OUTPUT, BATT_I_QUIESCENT,
 )
 from physics import build_xml, build_assets, get_equilibrium_pitch
 from scenarios import init_sim, get_pitch_and_rate, lqr_torque, VelocityPI, YawPI, motor_taper, _motor_currents
@@ -56,7 +54,7 @@ from lqr_design import compute_gain_table
 import scenarios as _scenarios
 
 RENDER_HZ    = 60
-TELEMETRY_HZ = 100
+TELEMETRY_HZ = 120
 WINDOW_S     = 8.0
 
 # Sandbox hip range: cap max extension 10° closer to neutral than Q_EXT
@@ -163,25 +161,25 @@ def _position_mujoco_right(delay: float = 2.0):
 
 # ---------------------------------------------------------------------------
 # Matplotlib telemetry panel (separate process) — 5×2 layout
-# Telemetry tuple (18 values):
+# Telemetry tuple (22 values):
 #   t, pitch_deg, pitch_ref_deg,           [0,0] Pitch
-#   vel_ms, v_cmd,                         [0,1] Velocity
-#   yaw_rate, omega_cmd,                   [1,0] Yaw Rate
-#   hip_L_deg, hip_R_deg, hip_cmd_deg,     [1,1] Hip Joints
-#   roll_deg,                              [2,0] Roll
-#   pitch_rate_deg,                        [2,1] Pitch Rate
+#   pitch_rate_deg,                        [0,1] Pitch Rate
+#   vel_ms, v_cmd,                         [1,0] Velocity
+#   yaw_rate, omega_cmd,                   [1,1] Yaw Rate
+#   hip_L_deg, hip_R_deg, hip_cmd_deg,     [2,0] Hip Joints
+#   roll_deg,                              [2,1] Roll
 #   tau_L, tau_R,                          [3,0] Wheel Torque
-#   delta_q_deg,                           [3,1] Suspension Δq
-#   v_batt,                                [4,0] Battery Voltage [V]
-#   soc_pct,                               [4,1] SoC [%]  (temperature on twin-y)
-#   batt_temp_c                            [4,1] Battery Temperature [°C]
+#   v_batt, batt_temp_c,                   [3,1] Battery V & T (same axis)
+#   soc_pct,                               [4,0] SoC [%]
+#   I_wheel_L, I_wheel_R, I_hip_L,         [4,1] Motor Currents [A]
+#   I_hip_R, I_total
 # ---------------------------------------------------------------------------
 def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                   window_s: float, title: str) -> None:
     import matplotlib
     matplotlib.use("TkAgg")
     import matplotlib.pyplot as plt
-    from matplotlib.widgets import Button, Slider
+    from matplotlib.widgets import Button
 
     BG  = "#1e1e2e"
     GRD = "#333333"
@@ -189,26 +187,28 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     MAXLEN = int(window_s * TELEMETRY_HZ) + 500
     (t_buf,
      pitch_buf, pitch_ref_buf,
+     pitch_rate_buf,
      vel_buf, v_cmd_buf,
      yaw_rate_buf, omega_cmd_buf,
      hip_L_buf, hip_R_buf, hip_cmd_buf,
      roll_buf,
-     pitch_rate_buf,
      tau_L_buf, tau_R_buf,
-     delta_q_buf,
-     v_batt_buf, soc_buf, batt_temp_buf,
-     ) = (deque(maxlen=MAXLEN) for _ in range(18))
+     v_batt_buf, batt_temp_buf,
+     soc_buf,
+     I_whl_L_buf, I_whl_R_buf, I_hip_L_buf, I_hip_R_buf, I_total_buf,
+     ) = (deque(maxlen=MAXLEN) for _ in range(22))
 
-    all_bufs = [t_buf, pitch_buf, pitch_ref_buf, vel_buf, v_cmd_buf,
-                yaw_rate_buf, omega_cmd_buf, hip_L_buf, hip_R_buf, hip_cmd_buf,
-                roll_buf, pitch_rate_buf, tau_L_buf, tau_R_buf, delta_q_buf,
-                v_batt_buf, soc_buf, batt_temp_buf]
+    all_bufs = [t_buf, pitch_buf, pitch_ref_buf, pitch_rate_buf,
+                vel_buf, v_cmd_buf, yaw_rate_buf, omega_cmd_buf,
+                hip_L_buf, hip_R_buf, hip_cmd_buf, roll_buf,
+                tau_L_buf, tau_R_buf, v_batt_buf, batt_temp_buf, soc_buf,
+                I_whl_L_buf, I_whl_R_buf, I_hip_L_buf, I_hip_R_buf, I_total_buf]
 
     plt.ion()
     fig, axes = plt.subplots(5, 2, figsize=(13, 11))
     fig.patch.set_facecolor(BG)
     plt.subplots_adjust(hspace=0.65, wspace=0.38,
-                        top=0.91, bottom=0.22, left=0.10, right=0.97)
+                        top=0.91, bottom=0.07, left=0.10, right=0.97)
 
     def _style_ax(ax, ttl, unit, col):
         ax.set_facecolor(BG)
@@ -220,11 +220,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ax.set_xlabel("sim time [s]", color="lightgray", fontsize=7)
 
     specs = [
-        [("Pitch",           "deg",   "#60d0ff"), ("Velocity",      "m/s",   "#50e080")],
-        [("Yaw Rate",        "rad/s", "#f08040"), ("Hip Joints",    "deg",   "#d0a0ff")],
-        [("Roll",            "deg",   "#ff6090"), ("Pitch Rate",    "deg/s", "#b060ff")],
-        [("Wheel Torque",    "N·m",   "#ffcc44"), ("Suspension Δq", "deg",   "#44ddcc")],
-        [("Battery Voltage", "V",     "#ff9944"), ("SoC / Temp",    "%",     "#44ffcc")],
+        [("Pitch",           "deg",    "#60d0ff"), ("Pitch Rate",    "deg/s",  "#b060ff")],
+        [("Velocity",        "m/s",    "#50e080"), ("Yaw Rate",      "rad/s",  "#f08040")],
+        [("Hip Joints",      "deg",    "#d0a0ff"), ("Roll",          "deg",    "#ff6090")],
+        [("Wheel Torque",    "N·m",    "#ffcc44"), ("Battery V & T", "V / °C", "#ff9944")],
+        [("SoC",             "%",      "#44ffcc"), ("Motor Currents","A",      "#7fbbff")],
     ]
     for r in range(5):
         for c in range(2):
@@ -232,122 +232,52 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
     # Primary lines
     ln_pitch,   = axes[0][0].plot([], [], color="#60d0ff", lw=1.5)
-    ln_vel,     = axes[0][1].plot([], [], color="#50e080", lw=1.5)
-    ln_yaw,     = axes[1][0].plot([], [], color="#f08040", lw=1.5)
-    ln_hip_L,   = axes[1][1].plot([], [], color="#d0a0ff", lw=1.5)
-    ln_roll,    = axes[2][0].plot([], [], color="#ff6090", lw=1.5)
-    ln_prate,   = axes[2][1].plot([], [], color="#b060ff", lw=1.5)
+    ln_prate,   = axes[0][1].plot([], [], color="#b060ff", lw=1.5)
+    ln_vel,     = axes[1][0].plot([], [], color="#50e080", lw=1.5)
+    ln_yaw,     = axes[1][1].plot([], [], color="#f08040", lw=1.5)
+    ln_hip_L,   = axes[2][0].plot([], [], color="#d0a0ff", lw=1.5)
+    ln_roll,    = axes[2][1].plot([], [], color="#ff6090", lw=1.5)
     ln_tau_L,   = axes[3][0].plot([], [], color="#ffcc44", lw=1.5)
-    ln_delta_q, = axes[3][1].plot([], [], color="#44ddcc", lw=1.5)
-    ln_vbatt,   = axes[4][0].plot([], [], color="#ff9944", lw=1.5)
-    ln_soc,     = axes[4][1].plot([], [], color="#44ffcc", lw=1.5)
+    ln_vbatt,   = axes[3][1].plot([], [], color="#ff9944", lw=1.5, label="V_term")
+    ln_soc,     = axes[4][0].plot([], [], color="#44ffcc", lw=1.5)
+    ln_I_total, = axes[4][1].plot([], [], color="#ffffff", lw=1.8, label="I_total")
 
     # Secondary / command overlay lines
     ln_pitch_ref, = axes[0][0].plot([], [], color="#ff6060", lw=1.0, ls="--")
-    ln_v_cmd,     = axes[0][1].plot([], [], color="#b0ff80", lw=1.0, ls="--")
-    ln_omega_cmd, = axes[1][0].plot([], [], color="#ffb060", lw=1.0, ls="--")
-    ln_hip_R,     = axes[1][1].plot([], [], color="#a060cc", lw=1.2, ls="--")
-    ln_hip_cmd,   = axes[1][1].plot([], [], color="#ffffff", lw=0.8, ls=":")
+    ln_v_cmd,     = axes[1][0].plot([], [], color="#b0ff80", lw=1.0, ls="--")
+    ln_omega_cmd, = axes[1][1].plot([], [], color="#ffb060", lw=1.0, ls="--")
+    ln_hip_R,     = axes[2][0].plot([], [], color="#a060cc", lw=1.2, ls="--")
+    ln_hip_cmd,   = axes[2][0].plot([], [], color="#ffffff", lw=0.8, ls=":")
     ln_tau_R,     = axes[3][0].plot([], [], color="#ff8844", lw=1.2, ls="--")
-    ln_vbatt_nom, = axes[4][0].plot([], [], color="#ffffff", lw=0.8, ls="--")  # V_NOM ref
-    ln_temp,      = axes[4][1].plot([], [], color="#ff6090", lw=1.2, ls="--")  # temperature
-
-    # Twin-y axis for temperature on SoC panel
-    ax_temp = axes[4][1].twinx()
-    ax_temp.set_facecolor(BG)
-    ax_temp.tick_params(colors="lightgray", labelsize=7)
-    ax_temp.set_ylabel("°C", color="#ff6090", fontsize=8)
-    ln_temp, = ax_temp.plot([], [], color="#ff6090", lw=1.2, ls="--")
+    ln_btemp,     = axes[3][1].plot([], [], color="#ff6090", lw=1.2, ls="--", label="T °C")
+    ln_vbatt_nom, = axes[3][1].plot([], [], color="#aaaaaa", lw=0.8, ls=":", label="V_nom")
+    ln_I_whl_L,   = axes[4][1].plot([], [], color="#ffcc44", lw=1.0, label="I_whl_L")
+    ln_I_whl_R,   = axes[4][1].plot([], [], color="#ff8844", lw=1.0, ls="--", label="I_whl_R")
+    ln_I_hip_L,   = axes[4][1].plot([], [], color="#d0a0ff", lw=1.0, label="I_hip_L")
+    ln_I_hip_R,   = axes[4][1].plot([], [], color="#a060cc", lw=1.0, ls="--", label="I_hip_R")
 
     # Zero reference lines
-    for ax in [axes[1][0], axes[2][0], axes[2][1], axes[3][0], axes[3][1]]:
+    for ax in [axes[1][1], axes[2][1], axes[3][0]]:
         ax.axhline(0.0, color="#666688", lw=0.7, ls="--")
 
     # Legends
     _leg_kw = dict(loc="upper right", fontsize=5,
                    facecolor="#2a2a3e", edgecolor="#555", labelcolor="lightgray")
-    axes[0][0].legend([ln_pitch,  ln_pitch_ref],            ["pitch", "cmd"],          **_leg_kw)
-    axes[0][1].legend([ln_vel,    ln_v_cmd],                ["actual", "cmd"],          **_leg_kw)
-    axes[1][0].legend([ln_yaw,    ln_omega_cmd],            ["yaw ω", "cmd ω"],         **_leg_kw)
-    axes[1][1].legend([ln_hip_L,  ln_hip_R,   ln_hip_cmd], ["hip L", "hip R", "cmd"],  **_leg_kw)
-    axes[3][0].legend([ln_tau_L,  ln_tau_R],                ["τ_L", "τ_R"],             **_leg_kw)
-    axes[4][0].legend([ln_vbatt,  ln_vbatt_nom],            ["V_term", "V_nom"],        **_leg_kw)
-    axes[4][1].legend([ln_soc,    ln_temp],                 ["SoC %", "T °C"],          **_leg_kw)
+    axes[0][0].legend([ln_pitch,   ln_pitch_ref],                      ["pitch", "cmd"],                           **_leg_kw)
+    axes[1][0].legend([ln_vel,     ln_v_cmd],                          ["actual", "cmd"],                          **_leg_kw)
+    axes[1][1].legend([ln_yaw,     ln_omega_cmd],                      ["yaw ω", "cmd ω"],                         **_leg_kw)
+    axes[2][0].legend([ln_hip_L,   ln_hip_R,   ln_hip_cmd],            ["hip L", "hip R", "cmd"],                  **_leg_kw)
+    axes[3][0].legend([ln_tau_L,   ln_tau_R],                          ["τ_L", "τ_R"],                             **_leg_kw)
+    axes[3][1].legend([ln_vbatt,   ln_btemp,   ln_vbatt_nom],          ["V_term", "T °C", "V_nom"],                **_leg_kw)
+    axes[4][1].legend([ln_I_total, ln_I_whl_L, ln_I_whl_R,
+                       ln_I_hip_L, ln_I_hip_R],
+                      ["I_total", "I_whl_L", "I_whl_R", "I_hip_L", "I_hip_R"],                                    **_leg_kw)
 
-    # ── Sliders ─────────────────────────────────────────────────────────────
-    ax_sld_v = fig.add_axes([0.10, 0.22, 0.80, 0.025])
-    ax_sld_v.set_facecolor("#2a2a3e")
-    sld_v = Slider(ax_sld_v, "v (m/s)", -3.0, 3.0, valinit=0.0, color="#50e080")
-    sld_v.label.set_color("lightgray"); sld_v.label.set_fontsize(8)
-    sld_v.valtext.set_color("#ff6060"); sld_v.valtext.set_fontsize(8)
-
-    ax_sld_w = fig.add_axes([0.10, 0.17, 0.80, 0.025])
-    ax_sld_w.set_facecolor("#2a2a3e")
-    sld_w = Slider(ax_sld_w, "ω (rad/s)", -5.0, 5.0, valinit=0.0, color="#f08040")
-    sld_w.label.set_color("lightgray"); sld_w.label.set_fontsize(8)
-    sld_w.valtext.set_color("#ffb060"); sld_w.valtext.set_fontsize(8)
-
-    hip_nom_pct = (Q_NOM - Q_RET) / (Q_EXT - Q_RET) * 100.0
-    ax_sld_h = fig.add_axes([0.10, 0.12, 0.80, 0.025])
-    ax_sld_h.set_facecolor("#2a2a3e")
-    sld_h = Slider(ax_sld_h, "Hip % (0=up)", 0.0, 100.0, valinit=hip_nom_pct, color="#c080ff")
-    sld_h.label.set_color("lightgray"); sld_h.label.set_fontsize(8)
-    sld_h.valtext.set_color("#c080ff"); sld_h.valtext.set_fontsize(8)
-
-    # ── Buttons ─────────────────────────────────────────────────────────────
-    drive_active = [True]
-    ax_drv = fig.add_axes([0.04, 0.05, 0.20, 0.045])
-    btn_drv = Button(ax_drv, "Drive ON", color="#2a5e3a", hovercolor="#5a5a9e")
-    btn_drv.label.set_color("white"); btn_drv.label.set_fontsize(8)
-
-    turn_active = [True]
-    ax_trn = fig.add_axes([0.27, 0.05, 0.20, 0.045])
-    btn_trn = Button(ax_trn, "Turn ON", color="#5e3a2a", hovercolor="#5a5a9e")
-    btn_trn.label.set_color("white"); btn_trn.label.set_fontsize(8)
-
-    ax_rst = fig.add_axes([0.74, 0.05, 0.20, 0.045])
+    # ── Restart button ───────────────────────────────────────────────────────
+    ax_rst = fig.add_axes([0.40, 0.01, 0.20, 0.045])
     btn_rst = Button(ax_rst, "Restart", color="#3a3a5e", hovercolor="#5a5a9e")
     btn_rst.label.set_color("white"); btn_rst.label.set_fontsize(9)
     btn_rst.on_clicked(lambda _: cmd_q.put_nowait("RESTART"))
-
-    _from_joy = [False]   # guard: suppress cmd echo when joystick updates sliders
-
-    def _toggle_drive(_):
-        drive_active[0] = not drive_active[0]
-        if drive_active[0]:
-            btn_drv.label.set_text("Drive ON"); btn_drv.ax.set_facecolor("#2a5e3a")
-            cmd_q.put_nowait(("V_DESIRED", sld_v.val))
-        else:
-            btn_drv.label.set_text("Drive OFF"); btn_drv.ax.set_facecolor("#3a3a5e")
-            cmd_q.put_nowait(("V_DESIRED", 0.0))
-        fig.canvas.draw_idle()
-    btn_drv.on_clicked(_toggle_drive)
-
-    def _toggle_turn(_):
-        turn_active[0] = not turn_active[0]
-        if turn_active[0]:
-            btn_trn.label.set_text("Turn ON"); btn_trn.ax.set_facecolor("#5e3a2a")
-            cmd_q.put_nowait(("OMEGA_DESIRED", sld_w.val))
-        else:
-            btn_trn.label.set_text("Turn OFF"); btn_trn.ax.set_facecolor("#3a3a5e")
-            cmd_q.put_nowait(("OMEGA_DESIRED", 0.0))
-        fig.canvas.draw_idle()
-    btn_trn.on_clicked(_toggle_turn)
-
-    def _on_v(_):
-        if _from_joy[0]: return
-        if drive_active[0]: cmd_q.put_nowait(("V_DESIRED", sld_v.val))
-    sld_v.on_changed(_on_v)
-
-    def _on_w(_):
-        if _from_joy[0]: return
-        if turn_active[0]: cmd_q.put_nowait(("OMEGA_DESIRED", sld_w.val))
-    sld_w.on_changed(_on_w)
-
-    def _on_h(_):
-        if _from_joy[0]: return
-        cmd_q.put_nowait(("HIP_PCT", sld_h.val))
-    sld_h.on_changed(_on_h)
 
     fig.suptitle(title, color="white", fontsize=9)
     fig.show()
@@ -365,10 +295,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     except Exception:
         pass
 
-    _all_lines = [ln_pitch, ln_vel, ln_yaw, ln_hip_L, ln_roll, ln_prate,
-                  ln_tau_L, ln_delta_q, ln_pitch_ref, ln_v_cmd,
-                  ln_omega_cmd, ln_hip_R, ln_hip_cmd, ln_tau_R,
-                  ln_vbatt, ln_soc, ln_vbatt_nom, ln_temp]
+    _all_lines = [ln_pitch, ln_prate, ln_vel, ln_yaw, ln_hip_L, ln_roll,
+                  ln_tau_L, ln_vbatt, ln_soc, ln_I_total,
+                  ln_pitch_ref, ln_v_cmd, ln_omega_cmd, ln_hip_R, ln_hip_cmd,
+                  ln_tau_R, ln_btemp, ln_vbatt_nom,
+                  ln_I_whl_L, ln_I_whl_R, ln_I_hip_L, ln_I_hip_R]
 
     while plt.fignum_exists(fig.number):
         items = []
@@ -376,7 +307,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             try: items.append(data_q.get_nowait())
             except Exception: break
         if not items:
-            plt.pause(1.0 / 30)
+            plt.pause(0.004)
             continue
 
         for item in items:
@@ -386,22 +317,21 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                 for ln in _all_lines: ln.set_data([], [])
                 fig.canvas.flush_events()
                 continue
-            if isinstance(item, tuple) and item[0] == "JOY_V":
-                _from_joy[0] = True; sld_v.set_val(item[1]); _from_joy[0] = False; continue
-            if isinstance(item, tuple) and item[0] == "JOY_W":
-                _from_joy[0] = True; sld_w.set_val(item[1]); _from_joy[0] = False; continue
-            if isinstance(item, tuple) and item[0] == "JOY_H":
-                _from_joy[0] = True; sld_h.set_val(item[1]); _from_joy[0] = False; continue
-            (t, pitch, pitch_ref, vel, v_cmd, yaw_rate, omega_cmd,
-             hip_L, hip_R, hip_cmd, roll, pitch_rate, tau_L, tau_R, delta_q,
-             v_batt, soc, batt_temp) = item
+            (t, pitch, pitch_ref, pitch_rate, vel, v_cmd, yaw_rate, omega_cmd,
+             hip_L, hip_R, hip_cmd, roll, tau_L, tau_R,
+             v_batt, batt_temp, soc,
+             I_whl_L, I_whl_R, I_hip_L, I_hip_R, I_total) = item
             t_buf.append(t); pitch_buf.append(pitch); pitch_ref_buf.append(pitch_ref)
+            pitch_rate_buf.append(pitch_rate)
             vel_buf.append(vel); v_cmd_buf.append(v_cmd)
             yaw_rate_buf.append(yaw_rate); omega_cmd_buf.append(omega_cmd)
             hip_L_buf.append(hip_L); hip_R_buf.append(hip_R); hip_cmd_buf.append(hip_cmd)
-            roll_buf.append(roll); pitch_rate_buf.append(pitch_rate)
-            tau_L_buf.append(tau_L); tau_R_buf.append(tau_R); delta_q_buf.append(delta_q)
-            v_batt_buf.append(v_batt); soc_buf.append(soc); batt_temp_buf.append(batt_temp)
+            roll_buf.append(roll)
+            tau_L_buf.append(tau_L); tau_R_buf.append(tau_R)
+            v_batt_buf.append(v_batt); batt_temp_buf.append(batt_temp); soc_buf.append(soc)
+            I_whl_L_buf.append(I_whl_L); I_whl_R_buf.append(I_whl_R)
+            I_hip_L_buf.append(I_hip_L); I_hip_R_buf.append(I_hip_R)
+            I_total_buf.append(I_total)
 
         if len(t_buf) < 2: continue
         tb    = list(t_buf)
@@ -416,51 +346,63 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             ln.set_data(tw, bw)
             ax.set_xlim(t0, sim_t + 0.5)
             all_vals = bw[:]
-            for ex in extras:
-                all_vals += ex
+            for ex in extras: all_vals += ex
             lo, hi = min(all_vals), max(all_vals)
             span = max(hi - lo, 0.1)
             ax.set_ylim(lo - span * 0.15, hi + span * 0.15)
 
-        pr_bw = list(pitch_ref_buf)[idx:]
-        vc_bw = list(v_cmd_buf)[idx:]
-        oc_bw = list(omega_cmd_buf)[idx:]
-        hR_bw   = list(hip_R_buf)[idx:]
-        hc_bw   = list(hip_cmd_buf)[idx:]
-        tR_bw   = list(tau_R_buf)[idx:]
-        vb_bw   = list(v_batt_buf)[idx:]
-        soc_bw  = list(soc_buf)[idx:]
-        temp_bw = list(batt_temp_buf)[idx:]
+        pr_bw  = list(pitch_ref_buf)[idx:]
+        vc_bw  = list(v_cmd_buf)[idx:]
+        oc_bw  = list(omega_cmd_buf)[idx:]
+        hR_bw  = list(hip_R_buf)[idx:]
+        hc_bw  = list(hip_cmd_buf)[idx:]
+        tR_bw  = list(tau_R_buf)[idx:]
+        vb_bw  = list(v_batt_buf)[idx:]
+        bt_bw  = list(batt_temp_buf)[idx:]
+        sc_bw  = list(soc_buf)[idx:]
+        iWL_bw = list(I_whl_L_buf)[idx:]
+        iWR_bw = list(I_whl_R_buf)[idx:]
+        iHL_bw = list(I_hip_L_buf)[idx:]
+        iHR_bw = list(I_hip_R_buf)[idx:]
+        iT_bw  = list(I_total_buf)[idx:]
 
-        _draw(axes[0][0], ln_pitch,   pitch_buf,     (pr_bw,))
-        _draw(axes[0][1], ln_vel,     vel_buf,        (vc_bw,))
-        _draw(axes[1][0], ln_yaw,     yaw_rate_buf,   (oc_bw,))
-        _draw(axes[1][1], ln_hip_L,   hip_L_buf,      (hR_bw, hc_bw))
-        _draw(axes[2][0], ln_roll,    roll_buf)
-        _draw(axes[2][1], ln_prate,   pitch_rate_buf)
-        _draw(axes[3][0], ln_tau_L,   tau_L_buf,      (tR_bw,))
-        _draw(axes[3][1], ln_delta_q, delta_q_buf)
+        _draw(axes[0][0], ln_pitch,  pitch_buf,     (pr_bw,))
+        _draw(axes[0][1], ln_prate,  pitch_rate_buf)
+        _draw(axes[1][0], ln_vel,    vel_buf,        (vc_bw,))
+        _draw(axes[1][1], ln_yaw,    yaw_rate_buf,   (oc_bw,))
+        _draw(axes[2][0], ln_hip_L,  hip_L_buf,      (hR_bw, hc_bw))
+        _draw(axes[2][1], ln_roll,   roll_buf)
+        _draw(axes[3][0], ln_tau_L,  tau_L_buf,      (tR_bw,))
 
-        # Battery voltage panel
-        if vb_bw:
+        # Battery V & T — combined axis (similar numeric range)
+        if vb_bw and bt_bw:
             ln_vbatt.set_data(tw, vb_bw)
-            axes[4][0].set_xlim(t0, sim_t + 0.5)
-            lo, hi = min(vb_bw), max(vb_bw)
-            span = max(hi - lo, 0.5)
-            axes[4][0].set_ylim(lo - span * 0.15, hi + span * 0.15)
+            ln_btemp.set_data(tw, bt_bw)
+            axes[3][1].set_xlim(t0, sim_t + 0.5)
+            all_bt = vb_bw + bt_bw
+            lo, hi = min(all_bt), max(all_bt)
+            span = max(hi - lo, 1.0)
+            axes[3][1].set_ylim(lo - span * 0.15, hi + span * 0.15)
             ln_vbatt_nom.set_data([t0, sim_t + 0.5], [BATT_V_NOM, BATT_V_NOM])
 
-        # SoC + temperature panel
-        if soc_bw:
-            ln_soc.set_data(tw, soc_bw)
+        # SoC
+        if sc_bw:
+            ln_soc.set_data(tw, sc_bw)
+            axes[4][0].set_xlim(t0, sim_t + 0.5)
+            axes[4][0].set_ylim(max(0.0, min(sc_bw) - 5), 105)
+
+        # Motor currents
+        if iT_bw:
+            ln_I_total.set_data(tw, iT_bw)
+            ln_I_whl_L.set_data(tw, iWL_bw)
+            ln_I_whl_R.set_data(tw, iWR_bw)
+            ln_I_hip_L.set_data(tw, iHL_bw)
+            ln_I_hip_R.set_data(tw, iHR_bw)
             axes[4][1].set_xlim(t0, sim_t + 0.5)
-            axes[4][1].set_ylim(max(0.0, min(soc_bw) - 5), 105)
-        if temp_bw:
-            ln_temp.set_data(tw, temp_bw)
-            ax_temp.set_xlim(t0, sim_t + 0.5)
-            lo_t, hi_t = min(temp_bw), max(temp_bw)
-            span_t = max(hi_t - lo_t, 2.0)
-            ax_temp.set_ylim(lo_t - span_t * 0.2, hi_t + span_t * 0.5)
+            all_i = iT_bw + iWL_bw + iWR_bw + iHL_bw + iHR_bw
+            lo, hi = min(all_i), max(all_i)
+            span = max(hi - lo, 1.0)
+            axes[4][1].set_ylim(max(0.0, lo - span * 0.1), hi + span * 0.15)
 
         ln_pitch_ref.set_data(tw, pr_bw)
         ln_v_cmd.set_data(tw, vc_bw)
@@ -578,10 +520,14 @@ def sandbox(slowmo: float = 1.0):
     _pitch_rate_deg = 0.0
     _tau_L      = 0.0
     _tau_R      = 0.0
-    _delta_q_deg = 0.0
     _batt_v     = BATT_V_NOM
     _batt_soc   = 100.0
     _batt_temp  = 25.0
+    _I_whl_L    = 0.0
+    _I_whl_R    = 0.0
+    _I_hip_L    = 0.0
+    _I_hip_R    = 0.0
+    _I_total    = BATT_I_QUIESCENT
 
     rng  = np.random.default_rng(0)
     step = 0
@@ -614,8 +560,9 @@ def sandbox(slowmo: float = 1.0):
             nonlocal step, prev_sim_t, _pitch_d, _pitch_rate_d
             nonlocal _wheel_vel_d, _theta_ref, _vel_est_ms
             nonlocal _hip_L_deg, _hip_R_deg, _hip_cmd_deg
-            nonlocal _roll_deg, _pitch_rate_deg, _tau_L, _tau_R, _delta_q_deg
+            nonlocal _roll_deg, _pitch_rate_deg, _tau_L, _tau_R
             nonlocal _batt_v, _batt_soc, _batt_temp
+            nonlocal _I_whl_L, _I_whl_R, _I_hip_L, _I_hip_R, _I_total
             _init()
             step = 0; prev_sim_t = 0.0
             _pitch_d = _gep(ROBOT, Q_NOM); _pitch_rate_d = 0.0; _wheel_vel_d = 0.0
@@ -623,9 +570,11 @@ def sandbox(slowmo: float = 1.0):
             _v_desired[0] = 0.0; _omega_desired[0] = 0.0
             _hip_pct[0] = _HIP_NOM_PCT
             _hip_L_deg = _hip_R_deg = _hip_cmd_deg = math.degrees(Q_NOM)
-            _roll_deg = _pitch_rate_deg = _tau_L = _tau_R = _delta_q_deg = 0.0
+            _roll_deg = _pitch_rate_deg = _tau_L = _tau_R = 0.0
             battery.reset(); _v_batt[0] = BATT_V_NOM
             _batt_v = BATT_V_NOM; _batt_soc = 100.0; _batt_temp = 25.0
+            _I_whl_L = _I_whl_R = _I_hip_L = _I_hip_R = 0.0
+            _I_total = BATT_I_QUIESCENT
             vel_pi.reset(); yaw_pi.reset()
             if not data_q.full(): data_q.put_nowait("RESET")
 
@@ -671,12 +620,6 @@ def sandbox(slowmo: float = 1.0):
                 if h_joy is not None:
                     _hip_pct[0] = h_joy
 
-                # Mirror joystick position to matplotlib sliders
-                if not data_q.full():
-                    data_q.put_nowait(("JOY_V", _v_desired[0]))
-                    data_q.put_nowait(("JOY_W", _omega_desired[0]))
-                    if h_joy is not None:
-                        data_q.put_nowait(("JOY_H", _hip_pct[0]))
 
             # Physics + control loop
             for _ in range(steps_per_frame):
@@ -746,10 +689,14 @@ def sandbox(slowmo: float = 1.0):
                     _pitch_rate_deg = math.degrees(pitch_rate_true)
                     _tau_L       = float(data.ctrl[act_wheel_L])
                     _tau_R       = float(data.ctrl[act_wheel_R])
-                    _delta_q_deg = math.degrees(delta_q)
                     _batt_v      = battery.v_terminal
                     _batt_soc    = battery.soc_pct
                     _batt_temp   = battery.temperature_c
+                    _I_whl_L     = abs(_tau_L) / WHEEL_KT
+                    _I_whl_R     = abs(_tau_R) / WHEEL_KT
+                    _I_hip_L     = abs(float(data.ctrl[act_hip_L])) / HIP_KT_OUTPUT
+                    _I_hip_R     = abs(float(data.ctrl[act_hip_R])) / HIP_KT_OUTPUT
+                    _I_total     = battery.i_total
 
                 mujoco.mj_step(model, data)
                 step += 1
@@ -769,23 +716,27 @@ def sandbox(slowmo: float = 1.0):
                 pitch_ref_display = _gep(ROBOT, q_hip_avg) + _theta_ref
                 data_q.put_nowait((
                     sim_t,
-                    math.degrees(pitch_true),        # [0,0] pitch
+                    math.degrees(pitch_true),         # [0,0] pitch
                     math.degrees(pitch_ref_display),  # [0,0] pitch cmd
-                    _vel_est_ms,                      # [0,1] velocity
-                    _v_desired[0],                    # [0,1] v cmd
-                    data.qvel[d_yaw],                 # [1,0] yaw rate
-                    _omega_desired[0],                # [1,0] omega cmd
-                    _hip_L_deg,                       # [1,1] hip L
-                    _hip_R_deg,                       # [1,1] hip R
-                    _hip_cmd_deg,                     # [1,1] hip cmd
-                    _roll_deg,                        # [2,0] roll
-                    _pitch_rate_deg,                  # [2,1] pitch rate
+                    _pitch_rate_deg,                  # [0,1] pitch rate
+                    _vel_est_ms,                      # [1,0] velocity
+                    _v_desired[0],                    # [1,0] v cmd
+                    data.qvel[d_yaw],                 # [1,1] yaw rate
+                    _omega_desired[0],                # [1,1] omega cmd
+                    _hip_L_deg,                       # [2,0] hip L
+                    _hip_R_deg,                       # [2,0] hip R
+                    _hip_cmd_deg,                     # [2,0] hip cmd
+                    _roll_deg,                        # [2,1] roll
                     _tau_L,                           # [3,0] tau L
                     _tau_R,                           # [3,0] tau R
-                    _delta_q_deg,                     # [3,1] suspension delta q
-                    _batt_v,                          # [4,0] battery voltage [V]
-                    _batt_soc,                        # [4,1] SoC [%]
-                    _batt_temp,                       # [4,1] battery temperature [°C]
+                    _batt_v,                          # [3,1] battery voltage [V]
+                    _batt_temp,                       # [3,1] battery temperature [°C]
+                    _batt_soc,                        # [4,0] SoC [%]
+                    _I_whl_L,                         # [4,1] wheel current L [A]
+                    _I_whl_R,                         # [4,1] wheel current R [A]
+                    _I_hip_L,                         # [4,1] hip current L [A]
+                    _I_hip_R,                         # [4,1] hip current R [A]
+                    _I_total,                         # [4,1] total battery current [A]
                 ))
                 last_push = wall_now
 

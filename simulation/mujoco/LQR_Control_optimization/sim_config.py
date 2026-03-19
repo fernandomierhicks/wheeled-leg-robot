@@ -33,6 +33,28 @@ WHEEL_R    = 0.075    # [m] wheel radius (150 mm diameter)
 LEG_Y      = 0.1430   # [m] Y-offset of leg plane from body centre
 MOTOR_MASS = 0.260    # [kg] AK45-10 hip motor
 
+# ── Battery model (6S LiPo) ─────────────────────────────────────────────────
+BATT_CAPACITY_AH  = 5.0         # [Ah]    pack capacity
+BATT_V_FULL       = 25.2        # [V]     fully charged (4.2 V/cell × 6)
+BATT_V_NOM        = 24.0        # [V]     rated operating voltage — used to normalise motor speed
+BATT_V_CUTOFF     = 18.0        # [V]     low-voltage cutoff (3.0 V/cell × 6)
+BATT_R0           = 0.040       # [Ω]     internal resistance at SoC=1, T=25 °C (quality 5 Ah cell)
+BATT_K_SOC        = 0.50        # []      R_int quadratic rise factor at SoC=0 (50 % higher at empty)
+BATT_K_TEMP       = 0.010       # [1/°C]  Arrhenius-like temp coefficient (cold → higher R)
+BATT_TEMP_REF_C   = 25.0        # [°C]    reference temperature for BATT_R0
+BATT_THERMAL_MASS = 800.0       # [J/°C]  thermal mass of pack (~5 Ah LiPo)
+BATT_COOL_W_PER_C = 3.0         # [W/°C]  passive convective cooling coefficient
+BATT_TEMP_INIT_C  = 25.0        # [°C]    initial battery temperature
+BATT_SOC_INIT     = 1.0         # []      initial state of charge (fully charged)
+BATT_I_QUIESCENT  = 0.30        # [A]     always-on electronics: MCU + IMU + CAN transceivers
+
+# ── Hip motor electrical (CubeMars AK45-10 KV75, 10:1 planetary) ─────────────
+# Raw motor: Kt = 60 / (KV × 2π) = 0.1273 N·m/A
+# After 10:1 gearbox (torque multiplies, current does not):
+#   Kt_output = Kt_motor × gear_ratio = 1.273 N·m/A
+#   I_hip = |tau_output| / HIP_KT_OUTPUT  →  ~5.5 A at 7 N·m peak
+HIP_KT_OUTPUT = 60.0 / (75.0 * 2 * math.pi) * 10.0   # [N·m/A] ≈ 1.273
+
 # ── Motor limits ────────────────────────────────────────────────────────────
 HIP_TORQUE_LIMIT            = 7.0   # [N·m] AK45-10 peak (physical spec — never exceed)
 HIP_IMPEDANCE_TORQUE_LIMIT  = 1.0   # [N·m] max torque the impedance controller may use
@@ -41,6 +63,8 @@ HIP_IMPEDANCE_TORQUE_LIMIT  = 1.0   # [N·m] max torque the impedance controller
                                      # Lowered from 2.0 (placeholder) → 1.0 (Phase 4.1 validation).
                                      # Full 7 N·m reserved for jump/recovery.
 WHEEL_TORQUE_LIMIT          = 3.67  # [N·m] 5065 130KV @ 50 A ODESC limit
+WHEEL_OMEGA_NOLOAD          = 326.7 # [rad/s] ω_noload = KV × V_batt × 2π/60 = 130 × 24 × 2π/60
+WHEEL_KT                    = 0.0735 # [N·m/A] torque constant (Kt = 1/KV in SI)
 
 # ── Balance PD controller (optimized via (1+8)-ES, run_id=221) ─────────────
 # Optimized gains for smooth, efficient balance.
