@@ -150,20 +150,37 @@ Starting gains: Kp_yaw = 0.3, Ki_yaw = 0.05. **Not yet implemented.**
 
 ---
 
-### 4. Leg Impedance PD (independent, 500 Hz)
+### 4. Leg Impedance PD + Roll Leveling (independent, 500 Hz)
 
-Decoupled from balance. Controls hip motor as a spring-damper:
+Decoupled from balance. Per-leg spring-damper with differential roll leveling:
 
 ```python
-τ_hip = −K_s * (q_hip − q_nom) − B_s * dq_hip
+# Roll leveling — differential hip target
+roll_true = atan2(2*(w*x + y*z), 1 - 2*(x²+y²))   # from free joint quaternion
+roll_meas = roll_true + N(0, ROLL_NOISE_STD_RAD)     # BNO086 noise (0.05°)
+roll_rate = data.qvel[d_root + 3]                    # ωx world-frame
+
+δq = K_ROLL * roll_meas + D_ROLL * roll_rate
+q_nom_L = clamp(Q_NOM + δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
+q_nom_R = clamp(Q_NOM - δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
+
+# Spring-damper per leg
+τ_hip = clamp(-(K_s*(q_hip - q_nom) + B_s*dq_hip), ±HIP_IMPEDANCE_TORQUE_LIMIT)
 ```
 
-Current simulation values (matched to baseline1):
-- K_s = 8.0 N·m/rad
-- B_s = 4.0 N·m·s/rad
-- Torque limit: 2.0 N·m (HIP_IMPEDANCE_TORQUE_LIMIT) — keeps hips backdrivable
+**Baselined gains (Phase 4 optimizer, S5+S8 combined, 177 gens / 1416 evals, 2026-03-18):**
+| Param | Value | Notes |
+|-------|-------|-------|
+| K_s | 16.000000 N·m/rad | Very stiff spring |
+| B_s | 0.821633 N·m·s/rad | Low damping — spring-dominant |
+| K_ROLL | 3.963615 rad/rad | Aggressive roll correction |
+| D_ROLL | 1.000000 rad·s/rad | Strong roll rate damping |
+| HIP_IMPEDANCE_TORQUE_LIMIT | 1.0 N·m | Keeps hips backdrivable |
+| HIP_SAFE_MIN | Q_EXT + 10° = −1.257 rad | Buffer from extended limit |
+| HIP_SAFE_MAX | Q_RET − 10° = −0.526 rad | Buffer from retracted limit |
 
-`q_nom` = Q_NOM (30% of stroke) — fixed in current sim, user-adjustable later.
+Roll leveling is **orthogonal** to pitch/yaw — δq has zero effect on average hip height.
+Robot drives at Q_NOM (30% of stroke) to maximise suspension travel in both directions.
 
 ---
 
@@ -464,13 +481,13 @@ The `dist_fn(t) -> float` callable interface allows each scenario to specify an 
 
 ---
 
-### Phase 4 — Leg Impedance Suspension
+### Phase 4 — Leg Impedance Suspension + Roll Leveling ✅ COMPLETE & BASELINED
 
-| Step | Action | Pass Criterion |
-|------|--------|---------------|
-| 4.1 | Add SUSPENSION_SOFTNESS param, multiple K_s/B_s presets | — |
-| 4.2 | Terrain disturbance: reduce K_s 30% for 200ms on unexpected pitch | 5N impulse → Z deflect < 2cm |
-| 4.3 | Tune HIP_IMPEDANCE_TORQUE_LIMIT (currently 2 N·m placeholder) | Balance holds while legs deflect |
+- Differential impedance controller: per-leg q_nom offset by δq = K_ROLL×roll + D_ROLL×roll_rate
+- S8 `8_terrain_compliance`: 5 one-sided bumps (alt left/right), 1.0 m/s, metric = max_roll_deg
+- `optimize_suspension.py`: (1+8)-ES over K_s, B_s, K_ROLL, D_ROLL; fitness = 0.5×S5 + 0.5×S8
+- **S4 baseline**: K_s=16.0, B_s=0.822, K_ROLL=3.964, D_ROLL=1.0, fitness=4.11 (177 gens, 2026-03-18)
+- `replay.py` upgraded: 4×2 telemetry (8 panels) including Roll and Suspension Δq panels
 
 ---
 
@@ -526,6 +543,6 @@ Scenario 1 runs with `USE_VELOCITY_PI = False` — the outer integrator is delib
 | Velocity PI (hold) | (1+8)-ES on S2 | Kp_v, Ki_v | ✅ Prior baseline — Kp=0.499, Ki=0.0585 |
 | Velocity PI (tracking) | (1+8)-ES on combined_PI | Kp_v, Ki_v | ✅ Prior baseline — Kp=0.503, Ki=0.013 |
 | Velocity PI (leg cycling) | (1+8)-ES on S5 | Kp_v, Ki_v | ✅ S5 baselined — Kp=0.2512, Ki=0.0114 (2026-03-18) |
-| Yaw PI | Manual visual | Kp_yaw, Ki_yaw | Not started |
-| Leg impedance | Critical damping formula | K_s, B_s | Placeholder values only |
+| Yaw PI | Manual visual | Kp_yaw, Ki_yaw | ✅ Baselined — Kp=0.3, Ki=0.05 (Phase 3) |
+| Leg impedance + Roll | (1+8)-ES on S5+S8 | K_s, B_s, K_ROLL, D_ROLL | ✅ S8 baselined — K_s=16.0, B_s=0.822, K_ROLL=3.964, D_ROLL=1.0 (2026-03-18) |
 | Jump recovery | 1D search | Landing K_s multiplier | Not started |

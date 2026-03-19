@@ -195,17 +195,136 @@ def find_stroke(p: dict = None):
 # ---------------------------------------------------------------------------
 # MJCF XML builder
 # ---------------------------------------------------------------------------
+def _obstacle_rgba(h: float) -> str:
+    if h <= 0.02: return "0.85 0.85 0.20"
+    if h <= 0.04: return "0.90 0.55 0.10"
+    if h <= 0.06: return "0.90 0.30 0.10"
+    return "0.85 0.10 0.10"
+
+_OBS_ATTR = 'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"'
+
+
+def _render_sandbox_obstacles(obstacles: list) -> str:
+    if not obstacles:
+        return ""
+    parts = []
+    for i, o in enumerate(obstacles):
+        s = o["shape"]
+        x, y = o["x"], o["y"]
+        if s == "box":
+            h = o["h"]
+            parts.append(
+                f'<geom name="sbox_{i}" type="box" '
+                f'pos="{x:.3f} {y:.3f} {h/2:.5f}" '
+                f'size="{o["rx"]:.4f} {o["ry"]:.4f} {h/2:.5f}" '
+                f'rgba="{_obstacle_rgba(h)} 1.0" {_OBS_ATTR}/>')
+        elif s == "cyl":
+            h = o["h"]
+            parts.append(
+                f'<geom name="scyl_{i}" type="cylinder" '
+                f'pos="{x:.3f} {y:.3f} {h/2:.5f}" '
+                f'size="{o["r"]:.4f} {h/2:.5f}" '
+                f'rgba="{_obstacle_rgba(h)} 1.0" {_OBS_ATTR}/>')
+        elif s == "capsule":
+            # Capsule lying on Y axis — bump height = radius r, sits on ground
+            r = o["r"]; length = o["length"]
+            parts.append(
+                f'<geom name="scap_{i}" type="capsule" '
+                f'pos="{x:.3f} {y:.3f} {r:.5f}" '
+                f'size="{r:.4f} {length/2:.4f}" euler="90 0 0" '
+                f'rgba="0.55 0.75 0.35 1.0" {_OBS_ATTR}/>')
+        elif s == "ramp":
+            # Tilted box rising from ground — angle_deg, length along slope, width, peak height h
+            ang = o["angle_deg"]
+            lx  = o["length"] / 2.0          # half-length along slope direction
+            ly  = o["width"]  / 2.0
+            lz  = o.get("h", o["length"] * math.sin(math.radians(ang))) / 2.0
+            # Centre of the tilted box: shift forward by lx*cos, up by lz
+            cx  = x + lx * math.cos(math.radians(ang))
+            cz  = lz
+            parts.append(
+                f'<geom name="sramp_{i}" type="box" '
+                f'pos="{cx:.3f} {y:.3f} {cz:.4f}" '
+                f'size="{lx:.4f} {ly:.4f} {lz:.4f}" '
+                f'euler="0 {-ang:.2f} 0" '
+                f'rgba="0.60 0.70 0.45 1.0" {_OBS_ATTR}/>')
+        elif s == "sphere":
+            # Large sphere mostly below ground — only top h metres exposed as a gentle mound
+            h  = o["h"]; r = o["r"]
+            cz = -(r - h)   # centre below ground so top is at z=h
+            parts.append(
+                f'<geom name="sph_{i}" type="sphere" '
+                f'pos="{x:.3f} {y:.3f} {cz:.4f}" '
+                f'size="{r:.4f}" '
+                f'rgba="0.50 0.65 0.80 1.0" {_OBS_ATTR}/>')
+    return "\n    ".join(parts)
+
+
+def _render_prop_bodies(props: list) -> str:
+    """Free-body props — real-world objects for scale reference, can be knocked over."""
+    if not props:
+        return ""
+    parts = []
+    for i, p in enumerate(props):
+        x, y = p["x"], p["y"]
+        t = p["type"]
+        if t == "can":
+            # Soda can: 66mm diameter, 122mm tall, 385g (full)
+            parts.append(
+                f'<body name="prop_can_{i}" pos="{x:.3f} {y:.3f} 0.061">'
+                f'<freejoint/>'
+                f'<inertial pos="0 0 0" mass="0.385" diaginertia="3.5e-4 3.5e-4 2.1e-4"/>'
+                f'<geom type="cylinder" size="0.033 0.061" '
+                f'rgba="0.85 0.15 0.15 1.0" condim="4" friction="0.6 0.01 0.001"/>'
+                f'</body>')
+        elif t == "bottle":
+            # 500ml water bottle: 80mm diameter, 250mm tall, 520g (full)
+            parts.append(
+                f'<body name="prop_bottle_{i}" pos="{x:.3f} {y:.3f} 0.125">'
+                f'<freejoint/>'
+                f'<inertial pos="0 0 0" mass="0.520" diaginertia="8.0e-4 8.0e-4 1.7e-4"/>'
+                f'<geom type="cylinder" size="0.040 0.125" '
+                f'rgba="0.30 0.65 0.90 0.55" condim="4" friction="0.5 0.01 0.001"/>'
+                f'</body>')
+        elif t == "ball":
+            # Tennis ball: 66mm diameter, 57g
+            parts.append(
+                f'<body name="prop_ball_{i}" pos="{x:.3f} {y:.3f} 0.033">'
+                f'<freejoint/>'
+                f'<inertial pos="0 0 0" mass="0.057" diaginertia="2.5e-5 2.5e-5 2.5e-5"/>'
+                f'<geom type="sphere" size="0.033" '
+                f'rgba="0.85 0.95 0.15 1.0" condim="4" friction="0.6 0.01 0.001"/>'
+                f'</body>')
+        elif t == "cardboard_box":
+            # Small cardboard box: 300×200×200mm, 300g
+            parts.append(
+                f'<body name="prop_cbox_{i}" pos="{x:.3f} {y:.3f} 0.100">'
+                f'<freejoint/>'
+                f'<inertial pos="0 0 0" mass="0.300" diaginertia="1.7e-3 2.6e-3 3.5e-3"/>'
+                f'<geom type="box" size="0.150 0.100 0.100" '
+                f'rgba="0.75 0.60 0.35 1.0" condim="4" friction="0.6 0.01 0.001"/>'
+                f'</body>')
+    return "\n    ".join(parts)
+
+
 def build_xml(p: dict = None, obstacle_height: float = 0.0,
               bumps: list = None,
               sandbox_obstacles: list = None,
+              prop_bodies: list = None,
               floor_size: tuple = None) -> str:
     """Generate MJCF XML for the two-leg balance robot.
 
     p: robot geometry dict (defaults to ROBOT from sim_config).
     obstacle_height: if > 0, add a floor step at x=OBSTACLE_X of this height [m].
     bumps: list of (x, height) tuples — thin box speed-bumps (4 cm wide, 1 m across).
-    sandbox_obstacles: list of dicts with keys: shape ('box'|'cyl'), x, y, h,
-        and for box: rx, ry; for cyl: r.  Placed as static geoms in the world.
+    sandbox_obstacles: list of dicts, shape in ('box'|'cyl'|'ramp'|'sphere'|'capsule'):
+        box:     x, y, h, rx, ry
+        cyl:     x, y, h, r
+        ramp:    x, y, angle_deg, length, width, h  (tilted box, rises to h)
+        sphere:  x, y, h, r  (large sphere, only top h metres protrude above ground)
+        capsule: x, y, r, length  (capsule lying on Y axis, bump height = r)
+    prop_bodies: list of dicts — free-falling real-world props for scale reference:
+        type in ('can', 'bottle', 'ball', 'cardboard_box'), x, y
     floor_size: (sx, sy) half-sizes for the ground plane.  Default: (10, 5).
     Arena: flat floor, open (no walls — robot can roll freely).
     """
@@ -335,20 +454,8 @@ def build_xml(p: dict = None, obstacle_height: float = 0.0,
         f'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>'
         for i, (x, h) in enumerate(bumps)
     ) if bumps else ''}
-    {''.join(
-        (f'<geom name="sbox_{i}" type="box" '
-         f'pos="{o["x"]:.3f} {o["y"]:.3f} {o["h"]/2:.5f}" '
-         f'size="{o["rx"]:.4f} {o["ry"]:.4f} {o["h"]/2:.5f}" '
-         f'rgba="{("0.85 0.85 0.20" if o["h"]<=0.02 else "0.90 0.55 0.10" if o["h"]<=0.04 else "0.90 0.30 0.10" if o["h"]<=0.06 else "0.85 0.10 0.10")} 1.0" '
-         f'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>'
-         if o["shape"] == "box" else
-         f'<geom name="scyl_{i}" type="cylinder" '
-         f'pos="{o["x"]:.3f} {o["y"]:.3f} {o["h"]/2:.5f}" '
-         f'size="{o["r"]:.4f} {o["h"]/2:.5f}" '
-         f'rgba="{("0.85 0.85 0.20" if o["h"]<=0.02 else "0.90 0.55 0.10" if o["h"]<=0.04 else "0.90 0.30 0.10" if o["h"]<=0.06 else "0.85 0.10 0.10")} 1.0" '
-         f'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>')
-        for i, o in enumerate(sandbox_obstacles)
-    ) if sandbox_obstacles else ''}
+    {_render_sandbox_obstacles(sandbox_obstacles)}
+    {_render_prop_bodies(prop_bodies)}
 
 
     <!-- ── Body ───────────────────────────────────────────────────────── -->

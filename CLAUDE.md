@@ -21,12 +21,15 @@ with simulation, firmware, and control code without needing re-explanation each 
 - Implementation phases 2–6: Drive mode, turning, leg suspension, jump recovery
 - Per-phase tuning strategies and success criteria
 
-**Current Status (2026-03-17):**
-- ✅ Phase 1: 3-State LQR + Gain Scheduling — COMPLETE & RE-BASELINED
-  - Optimized gains: Q=[0.0438, 0.0021, 0.0001], R=9.027  (run_id=6288, 8496 evals)
-  - K_nominal = [-12.672, -1.754, -0.003] at Q_NOM
-  - Fitness: 0.400 (new metric: equilibrium-relative pitch + liftoff penalty)
-  - RMS pitch 0.113°, max pitch 0.363°, zero liftoff, survives 1N disturbance
+**Current Status (2026-03-18):**
+- ✅ Phase 1: 3-State LQR + Gain Scheduling — COMPLETE & S4-BASELINED
+  - Q=[0.014168, 0.033720, 0.000250], R=28.734 (1896 evals, fitness=0.018, RMS pitch 1.24°)
+- ✅ Phase 2: Velocity PI — COMPLETE & S5-BASELINED
+  - KP_V=0.251209, KI_V=0.011405 (1776 evals, vel_rms=0.502 m/s)
+- ✅ Phase 3: Yaw PI — COMPLETE & BASELINED
+  - KP_YAW=0.3, KI_YAW=0.05 (visual tuning, S6 yaw_rms=0.045 rad/s)
+- ✅ Phase 4: Leg Impedance + Roll Leveling — COMPLETE & BASELINED
+  - K_s=16.0, B_s=0.822, K_ROLL=3.964, D_ROLL=1.0 (1416 evals, fitness=4.11)
 
 ---
 

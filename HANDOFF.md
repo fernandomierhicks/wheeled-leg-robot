@@ -69,52 +69,49 @@ YawPI implemented and verified. Starting gains performed well; no optimizer run 
 | 5 | `5_VEL_PI_leg_cycling` | VelocityPI+LQR | cycling | staircase | ±1N + 5 bumps | 13s |
 | 6 | `6_YAW_PI_turn` | YawPI+VelocityPI+LQR | fixed Q_NOM | 0 (hold) | none | 8s |
 | 7 | `7_DRIVE_TURN` | YawPI+VelocityPI+LQR | fixed Q_NOM | 0.3 m/s | none | 8s |
+| 8 | `8_terrain_compliance` | All+Suspension+Roll | impedance | 1.0 m/s | 5 one-sided bumps | 12s |
 
 Full specs in `docs/Control.MD → Optimizer Scenarios`.
 
----
+### Phase 4 — Leg Impedance Suspension + Roll Leveling ✅ COMPLETE & BASELINED
 
-## Next Task — Phase 4: Leg Impedance Suspension Tuning
+Suspension + roll leveling controller implemented and optimised on combined S5+S8 scenario.
 
-**Goal:** Make the legs act as a passive suspension — absorbing terrain impacts and complying to disturbances rather than rigidly holding `Q_NOM`. The LQR balance loop is unaffected; only the hip impedance parameters change.
+**Baselined gains (current `sim_config.py`):**
+| Param | Value | Notes |
+|-------|-------|-------|
+| LEG_K_S | 16.000000 N·m/rad | Very stiff — absorbs impacts sharply |
+| LEG_B_S | 0.821633 N·m·s/rad | Low damping — spring-dominant |
+| LEG_K_ROLL | 3.963615 rad/rad | Aggressive roll correction |
+| LEG_D_ROLL | 1.000000 rad·s/rad | Strong roll rate damping |
+| HIP_IMPEDANCE_TORQUE_LIMIT | 1.0 N·m | Keeps hips backdrivable |
+| fitness (S5+S8 combined) | 4.11 | 177 gens, 1416 evals, 5 min (2026-03-18) |
 
-**Current state:**
-- `LEG_K_S = 8.0 N·m/rad` (spring stiffness — holds leg at Q_NOM)
-- `LEG_B_S = 4.0 N·m·s/rad` (damping)
-- `HIP_IMPEDANCE_TORQUE_LIMIT = 2.0 N·m` (placeholder — never validated)
-- Hip target is fixed at `Q_NOM` in all scenarios; no terrain compliance
+**Controller structure (per leg, 500 Hz):**
+```python
+roll_true = atan2(2*(w*x + y*z), 1 - 2*(x²+y²))   # from data.xquat[box_bid]
+roll_rate = data.qvel[d_root + 3]                    # ωx world-frame
+roll_meas = roll_true + N(0, ROLL_NOISE_STD_RAD)     # BNO086 noise model
 
-**What to do:**
+δq = K_ROLL * roll_meas + D_ROLL * roll_rate
+q_nom_L = clamp(Q_NOM + δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
+q_nom_R = clamp(Q_NOM - δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
 
-### Step 4.1 — Tune `HIP_IMPEDANCE_TORQUE_LIMIT`
-
-The 2 N·m limit was a placeholder. It defines when the hip backdrive — any terrain force above this will deflect the leg.
-- Too high: rigid leg, impacts transmitted to body, large pitch spikes
-- Too low: leg flops around, poor balance on rough terrain
-- Start: lower to **1.0 N·m** and observe S5 bump performance
-- Pass criterion: pitch < 6° during 3 cm bump impacts (currently ~5.6° RMS)
-
-```bash
-# Edit sim_config.py: HIP_IMPEDANCE_TORQUE_LIMIT = 1.0
-python replay.py --baseline --scenario 5_VEL_PI_leg_cycling
+τ_hip = clamp(-(LEG_K_S*(q_hip - q_nom) + LEG_B_S*dq_hip), ±1.0 N·m)
 ```
 
-### Step 4.2 — Tune K_s / B_s
+**Key facts:**
+- Roll leveling is orthogonal to pitch/yaw — δq has zero effect on average hip height
+- HIP_SAFE_MIN = Q_EXT + 10° = −1.257 rad; HIP_SAFE_MAX = Q_RET − 10° = −0.526 rad
+- S8 fitness metric: `max_roll_deg` (peak spike, not average) — rewards leveling each individual bump
+- K_s hit upper bound (16.0) — optimizer wants maximum vertical stiffness within searched range
+- K_ROLL hit upper bound (4.0) — very aggressive roll correction
 
-After torque limit is set, sweep stiffness:
-- Softer spring (K_s ↓): more terrain compliance, more leg sag at speed
-- More damping (B_s ↑): less oscillation after bump
-- Suggested range: K_s ∈ [4, 12], B_s ∈ [2, 8]
-- Pass criterion: S5 bump impacts don't cause fall, pitch spike < 4° per bump
-
-### Step 4.3 — Add Scenario 8: terrain compliance test (optional)
-
-A dedicated scenario with harder bumps (5 cm) at higher speed (1.0 m/s) would let the optimizer tune K_s/B_s/torque_limit simultaneously. Use S5 as template.
-
-**Key files to edit:**
-- `sim_config.py` — `LEG_K_S`, `LEG_B_S`, `HIP_IMPEDANCE_TORQUE_LIMIT`
-- `scenarios.py` — already applies impedance in `_run_sim_loop`; no structural changes needed
-- `replay.py` — hip angle panel removed (now Yaw Rate); hip behaviour visible via pitch response
+**Files:**
+- `sim_config.py` — all suspension/roll params (LEG_K_S, LEG_B_S, LEG_K_ROLL, LEG_D_ROLL, etc.)
+- `scenarios.py` — differential impedance block in `_run_sim_loop`, `run_8_terrain_compliance()`
+- `optimize_suspension.py` — (1+8)-ES over 4 params, combined S5+S8 fitness
+- `replay.py` — 8-panel telemetry (4×2); Roll and Suspension Δq panels verify leveling
 
 ---
 

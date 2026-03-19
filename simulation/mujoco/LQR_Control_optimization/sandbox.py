@@ -40,7 +40,8 @@ sys.path.insert(0, _HERE)
 from sim_config import (
     ROBOT, Q_NOM, Q_RET, Q_EXT, WHEEL_R,
     HIP_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT,
-    LEG_K_S, LEG_B_S,
+    LEG_K_S, LEG_B_S, LEG_K_ROLL, LEG_D_ROLL,
+    ROLL_NOISE_STD_RAD, HIP_SAFE_MIN, HIP_SAFE_MAX,
     LQR_Q_PITCH, LQR_Q_PITCH_RATE, LQR_Q_VEL, LQR_R,
     PITCH_NOISE_STD_RAD, PITCH_RATE_NOISE_STD_RAD_S,
     CTRL_STEPS, THETA_REF_RATE_LIMIT,
@@ -68,38 +69,52 @@ _HIP_NOM_PCT = (Q_NOM - Q_RET) / (_HIP_MAX_Q - Q_RET) * 100.0
 #                   ≤6 cm = red-orange,   >6 cm = red
 # shape="box": rx, ry = half-sizes in X/Y   shape="cyl": r = radius
 # ---------------------------------------------------------------------------
+# ── Sandbox terrain obstacles ────────────────────────────────────────────────
+# Mix of gentle shapes (sphere mounds, capsule bumps, ramps) and a few sharp steps.
+# sphere: large sphere mostly below ground — only top h metres emerge as smooth mound
+# capsule: cylinder lying on side — rounded cross-section, bump height = radius r
+# ramp: tilted box, angle_deg from horizontal, length=slope length, h=peak height
+# box/cyl: traditional abrupt steps (used sparingly)
 SANDBOX_OBSTACLES = [
-    # ── Near (1–2 m) — 1–2 cm ──────────────────────────────────────────────
-    dict(shape="box", x= 1.5, y= 0.0, rx=0.08, ry=0.25, h=0.01),
-    dict(shape="box", x= 1.2, y=-1.0, rx=0.15, ry=0.15, h=0.02),
-    dict(shape="cyl", x= 0.5, y= 1.5, r=0.10,           h=0.01),
-    dict(shape="box", x=-1.0, y= 0.8, rx=0.20, ry=0.10, h=0.02),
-    dict(shape="box", x= 0.8, y=-2.0, rx=0.12, ry=0.12, h=0.01),
-    # ── Medium (2–4 m) — 2–4 cm ─────────────────────────────────────────────
-    dict(shape="box", x= 3.0, y= 0.5, rx=0.20, ry=0.10, h=0.03),
-    dict(shape="box", x= 2.5, y=-2.0, rx=0.15, ry=0.20, h=0.02),
-    dict(shape="box", x= 3.5, y=-1.0, rx=0.20, ry=0.20, h=0.04),
-    dict(shape="cyl", x= 2.0, y= 2.5, r=0.10,           h=0.03),
-    dict(shape="box", x=-2.5, y= 0.5, rx=0.20, ry=0.15, h=0.04),
-    dict(shape="box", x=-2.0, y=-1.5, rx=0.15, ry=0.25, h=0.03),
-    dict(shape="box", x= 1.0, y= 3.5, rx=0.15, ry=0.15, h=0.02),
-    dict(shape="box", x=-1.5, y=-3.0, rx=0.18, ry=0.12, h=0.04),
-    # ── Far (4–7 m) — 4–8 cm ────────────────────────────────────────────────
-    dict(shape="box", x= 5.0, y= 0.0, rx=0.25, ry=0.30, h=0.05),
-    dict(shape="box", x= 4.5, y= 2.0, rx=0.20, ry=0.20, h=0.06),
-    dict(shape="cyl", x= 3.5, y=-3.5, r=0.12,           h=0.05),
-    dict(shape="box", x= 6.0, y=-1.0, rx=0.25, ry=0.25, h=0.07),
-    dict(shape="box", x=-4.0, y=-2.0, rx=0.20, ry=0.30, h=0.06),
-    dict(shape="box", x= 7.0, y= 1.0, rx=0.30, ry=0.30, h=0.08),
-    dict(shape="cyl", x=-5.0, y= 2.0, r=0.15,           h=0.07),
-    dict(shape="box", x= 5.0, y=-5.0, rx=0.25, ry=0.25, h=0.08),
-    dict(shape="box", x=-3.0, y= 4.0, rx=0.20, ry=0.20, h=0.05),
-    dict(shape="box", x= 1.0, y= 4.5, rx=0.15, ry=0.15, h=0.04),
-    dict(shape="box", x=-6.0, y= 0.5, rx=0.20, ry=0.20, h=0.06),
-    dict(shape="box", x= 4.0, y= 5.0, rx=0.20, ry=0.25, h=0.04),
-    dict(shape="cyl", x=-4.0, y=-5.0, r=0.18,           h=0.08),
-    dict(shape="box", x= 6.5, y= 4.0, rx=0.25, ry=0.20, h=0.07),
-    dict(shape="box", x=-6.0, y=-4.0, rx=0.25, ry=0.25, h=0.05),
+    # ── Gentle sphere mounds — large smooth hills ────────────────────────────
+    dict(shape="sphere", x= 3.0, y= 0.0, r=1.20, h=0.06),  # broad 6 cm mound ahead
+    dict(shape="sphere", x=-2.5, y= 1.5, r=0.80, h=0.05),  # 5 cm mound left-rear
+    dict(shape="sphere", x= 5.5, y=-2.0, r=1.00, h=0.07),  # 7 cm far mound
+    dict(shape="sphere", x=-5.0, y=-1.0, r=0.90, h=0.06),  # 6 cm far-left mound
+
+    # ── Capsule rounded bumps — gentle speed bumps ───────────────────────────
+    dict(shape="capsule", x= 1.5, y= 0.0, r=0.020, length=1.20),  # 2 cm near bump
+    dict(shape="capsule", x=-1.2, y= 0.5, r=0.025, length=0.80),  # 2.5 cm behind
+    dict(shape="capsule", x= 4.0, y= 1.0, r=0.030, length=1.00),  # 3 cm far bump
+    dict(shape="capsule", x= 2.5, y=-1.5, r=0.020, length=0.70),  # 2 cm off-axis
+    dict(shape="capsule", x=-3.5, y=-2.0, r=0.035, length=1.20),  # 3.5 cm far-rear
+
+    # ── Ramps — gradual rise then abrupt back edge ───────────────────────────
+    dict(shape="ramp", x= 2.0, y=-0.5, angle_deg= 8, length=0.60, width=0.50, h=0.050),
+    dict(shape="ramp", x=-2.0, y= 2.0, angle_deg= 6, length=0.80, width=0.60, h=0.040),
+    dict(shape="ramp", x= 6.0, y= 0.5, angle_deg=10, length=0.50, width=0.60, h=0.060),
+    dict(shape="ramp", x=-4.0, y=-3.0, angle_deg= 7, length=0.70, width=0.50, h=0.045),
+
+    # ── A few abrupt steps for comparison (keep these sparse) ───────────────
+    dict(shape="box", x= 1.0, y= 2.0, rx=0.12, ry=0.20, h=0.02),  # 2 cm sharp step
+    dict(shape="box", x=-1.5, y=-2.5, rx=0.15, ry=0.15, h=0.03),  # 3 cm step
+    dict(shape="cyl", x= 4.5, y= 3.0, r=0.10,           h=0.05),  # 5 cm puck
+    dict(shape="box", x= 7.0, y=-1.5, rx=0.20, ry=0.25, h=0.07),  # 7 cm far step
+    dict(shape="box", x=-6.0, y= 2.0, rx=0.20, ry=0.20, h=0.06),  # 6 cm far step
+]
+
+# ── Real-world props for scale reference — free bodies, can be knocked around ──
+# Soda can ≈ 66 mm dia × 122 mm tall (385 g full)
+# Water bottle ≈ 80 mm dia × 250 mm tall (520 g full)
+# Tennis ball ≈ 66 mm dia (57 g)
+# Cardboard box ≈ 300 × 200 × 200 mm (300 g)
+SANDBOX_PROPS = [
+    dict(type="can",           x= 0.8, y= 0.3),   # soda can — right in front
+    dict(type="can",           x= 0.8, y=-0.3),   # soda can — pair it
+    dict(type="bottle",        x= 1.5, y=-0.8),   # water bottle off to right
+    dict(type="ball",          x= 0.6, y= 0.8),   # tennis ball — rolls on contact
+    dict(type="ball",          x= 0.5, y=-0.6),   # second tennis ball
+    dict(type="cardboard_box", x= 2.0, y= 0.5),   # box — taller obstacle
 ]
 
 
@@ -398,7 +413,8 @@ def sandbox(slowmo: float = 1.0):
             print("Joystick: none detected — sliders only")
 
     print("Building sandbox arena...")
-    xml    = build_xml(sandbox_obstacles=SANDBOX_OBSTACLES, floor_size=(25, 25))
+    xml    = build_xml(sandbox_obstacles=SANDBOX_OBSTACLES, prop_bodies=SANDBOX_PROPS,
+                       floor_size=(25, 25))
     assets = build_assets()
     model  = mujoco.MjModel.from_xml_string(xml, assets)
     data   = mujoco.MjData(model)
@@ -589,15 +605,24 @@ def sandbox(slowmo: float = 1.0):
                     data.ctrl[act_wheel_L] = np.clip(tau_sym - tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
                     data.ctrl[act_wheel_R] = np.clip(tau_sym + tau_yaw, -WHEEL_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT)
 
-                    # Hip impedance — commanded by hip slider
-                    q_tgt = _hip_target()
-                    for qpos_hip, dof_hip, act_hip in [
-                        (qpos_hip_L, dof_hip_L, act_hip_L),
-                        (qpos_hip_R, dof_hip_R, act_hip_R),
+                    # Hip impedance + roll leveling — same logic as _run_sim_loop
+                    q_sym = _hip_target()
+                    q_roll = data.xquat[box_bid]   # [w, x, y, z]
+                    roll_true = math.atan2(
+                        2.0 * (q_roll[0]*q_roll[1] + q_roll[2]*q_roll[3]),
+                        1.0 - 2.0 * (q_roll[1]**2  + q_roll[2]**2))
+                    roll_rate = data.qvel[dof_free + 3]
+                    roll_meas = roll_true + rng.normal(0, ROLL_NOISE_STD_RAD)
+                    delta_q   = LEG_K_ROLL * roll_meas + LEG_D_ROLL * roll_rate
+                    q_nom_L   = float(np.clip(q_sym + delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
+                    q_nom_R   = float(np.clip(q_sym - delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
+                    for qpos_hip, dof_hip, act_hip, q_nom_leg in [
+                        (qpos_hip_L, dof_hip_L, act_hip_L, q_nom_L),
+                        (qpos_hip_R, dof_hip_R, act_hip_R, q_nom_R),
                     ]:
                         q_hip  = data.qpos[qpos_hip]
                         dq_hip = data.qvel[dof_hip]
-                        tau_h  = -(LEG_K_S * (q_hip - q_tgt) + LEG_B_S * dq_hip)
+                        tau_h  = -(LEG_K_S * (q_hip - q_nom_leg) + LEG_B_S * dq_hip)
                         data.ctrl[act_hip] = np.clip(tau_h,
                                                      -HIP_IMPEDANCE_TORQUE_LIMIT,
                                                       HIP_IMPEDANCE_TORQUE_LIMIT)

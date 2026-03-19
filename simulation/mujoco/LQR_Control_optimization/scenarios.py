@@ -12,6 +12,7 @@ from sim_config import (
     ROBOT, Q_NOM, Q_RET, Q_EXT, WHEEL_R,
     HIP_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT,
     LEG_K_S, LEG_B_S,
+    LEG_K_ROLL, LEG_D_ROLL, ROLL_NOISE_STD_RAD, HIP_SAFE_MIN, HIP_SAFE_MAX,
     MAX_PITCH_CMD,
     PITCH_NOISE_STD_RAD, PITCH_RATE_NOISE_STD_RAD_S, ACCEL_NOISE_STD,
     CTRL_STEPS,
@@ -31,6 +32,7 @@ from sim_config import (
     S5_BUMPS,
     SCENARIO_6_DURATION, YAW_TURN_RATE, YAW_ERR_START,
     SCENARIO_7_DURATION, DRIVE_TURN_SPEED, DRIVE_TURN_YAW_RATE,
+    SCENARIO_8_DURATION, S8_DRIVE_SPEED, S8_BUMPS,
 )
 from physics import build_xml, build_assets, solve_ik, get_equilibrium_pitch
 from run_log import log_run, next_run_id, CSV_PATH
@@ -54,6 +56,12 @@ VELOCITY_PI_KI = _DEFAULT_KI_V   # [rad/m]
 # tau_L = tau_sym + tau_yaw,  tau_R = tau_sym − tau_yaw
 YAW_PI_KP_GAIN = _DEFAULT_KP_YAW   # [N·m / (rad/s)]
 YAW_PI_KI_GAIN = _DEFAULT_KI_YAW   # [N·m / rad]
+
+# ── Roll leveling gains — mutable module globals (overridden by optimizer) ────
+# Differential hip offset: δq = K_ROLL*roll + D_ROLL*roll_rate
+# q_nom_L = q_nom_sym + δq,  q_nom_R = q_nom_sym - δq
+LEG_K_ROLL_GAIN = LEG_K_ROLL   # [rad/rad]
+LEG_D_ROLL_GAIN = LEG_D_ROLL   # [rad·s/rad]
 
 # ── Initialize LQR gain table at module load ────────────────────────────────
 LQR_K_TABLE = compute_gain_table(
@@ -288,9 +296,10 @@ def lqr_torque(pitch: float, pitch_rate: float, wheel_vel: float,
 # ---------------------------------------------------------------------------
 # Model initialisation
 # ---------------------------------------------------------------------------
-def _build_model_and_data(p=None, obstacle_height=0.0, bumps=None):
+def _build_model_and_data(p=None, obstacle_height=0.0, bumps=None, sandbox_obstacles=None):
     if p is None: p = ROBOT
-    xml    = build_xml(p, obstacle_height=obstacle_height, bumps=bumps)
+    xml    = build_xml(p, obstacle_height=obstacle_height, bumps=bumps,
+                       sandbox_obstacles=sandbox_obstacles)
     assets = build_assets()
     model  = mujoco.MjModel.from_xml_string(xml, assets)
     data   = mujoco.MjData(model)
@@ -423,6 +432,8 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
 
     # ── Metric accumulators ─────────────────────────────────────────────────
     pitch_sq_sum      = 0.0
+    roll_sq_sum       = 0.0   # body roll RMS
+    max_roll          = 0.0   # peak |roll| over the run [deg]
     vel_sq_sum        = 0.0   # velocity tracking error
     max_pitch         = 0.0
     wheel_travel_m    = 0.0
@@ -499,21 +510,46 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
                 yaw_sq_sum += (omega_tgt - yaw_rate) ** 2
                 n_yaw      += 1
 
-            # ── Leg impedance: track target hip angle (default Q_NOM) ────────
-            _q_hip_tgt = _hip_fn(data.time)
-            for s_hip, d_hip, act_hip in [
-                (s_hip_L, d_hip_L, act_hip_L),
-                (s_hip_R, d_hip_R, act_hip_R),
+            # ── Leg impedance + roll leveling ────────────────────────────────
+            # Common-mode: both legs track the same height profile (Q_NOM or cycling)
+            _q_hip_sym = _hip_fn(data.time)
+
+            # Roll leveling: differential δq keeps box at 0° roll.
+            # Sign: positive roll = left side UP (right-hand rule about +X forward).
+            # δq > 0 → q_nom_L += δq (retract left) + q_nom_R -= δq (extend right).
+            # Verify sign with lateral disturbance; negate LEG_K_ROLL if inverted.
+            q_roll    = data.xquat[box_bid]   # world quaternion [w, x, y, z]
+            roll_true = math.atan2(
+                2.0 * (q_roll[0]*q_roll[1] + q_roll[2]*q_roll[3]),
+                1.0 - 2.0 * (q_roll[1]**2  + q_roll[2]**2))
+            roll_rate = data.qvel[d_root + 3]  # ωx world-frame [rad/s]
+
+            if add_noise:
+                roll_meas = roll_true + rng.normal(0, ROLL_NOISE_STD_RAD)
+            else:
+                roll_meas = roll_true
+
+            delta_q = LEG_K_ROLL_GAIN * roll_meas + LEG_D_ROLL_GAIN * roll_rate
+
+            q_nom_L = float(np.clip(_q_hip_sym + delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
+            q_nom_R = float(np.clip(_q_hip_sym - delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
+
+            for s_hip, d_hip, act_hip, q_nom_leg in [
+                (s_hip_L, d_hip_L, act_hip_L, q_nom_L),
+                (s_hip_R, d_hip_R, act_hip_R, q_nom_R),
             ]:
                 q_hip  = data.qpos[s_hip]
                 dq_hip = data.qvel[d_hip]
-                tau_hip = -(LEG_K_S * (q_hip - _q_hip_tgt) + LEG_B_S * dq_hip)
+                tau_hip = -(LEG_K_S * (q_hip - q_nom_leg) + LEG_B_S * dq_hip)
                 data.ctrl[act_hip] = np.clip(
                     tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
 
             # ── Metrics ───────────────────────────────────────────────────────
             pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff))
             pitch_sq_sum += pitch_err_deg ** 2
+            roll_deg_now  = math.degrees(roll_true)
+            roll_sq_sum  += roll_deg_now ** 2
+            max_roll      = max(max_roll, abs(roll_deg_now))
             max_pitch     = max(max_pitch, pitch_err_deg)
             vel_est       = (wheel_vel + pitch_rate_true) * WHEEL_R
             wheel_travel_m += abs(vel_est) * dt
@@ -549,6 +585,8 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
 
     # ── Compute final metrics ────────────────────────────────────────────────
     rms_pitch_deg      = math.sqrt(pitch_sq_sum / max(1, n_samples))
+    rms_roll_deg       = math.sqrt(roll_sq_sum  / max(1, n_samples))
+    max_roll_deg       = max_roll
     rms_vel_ms         = (math.sqrt(vel_sq_sum / max(1, n_vel))
                           if n_vel > 0 else 0.0)
     yaw_track_rms_rads = (math.sqrt(yaw_sq_sum / max(1, n_yaw))
@@ -558,6 +596,8 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
 
     return dict(
         rms_pitch_deg           = round(rms_pitch_deg,      4),
+        rms_roll_deg            = round(rms_roll_deg,       4),
+        max_roll_deg            = round(max_roll_deg,       4),
         vel_track_rms_ms        = round(rms_vel_ms,         4),
         yaw_track_rms_rads      = round(yaw_track_rms_rads, 4),
         max_pitch_deg           = round(max_pitch,           4),
@@ -1793,6 +1833,40 @@ def run_7_DRIVE_TURN(gains: dict, duration: float = SCENARIO_7_DURATION,
     return raw
 
 
+def run_8_terrain_compliance(gains: dict, duration: float = SCENARIO_8_DURATION,
+                              add_noise: bool = True, rng_seed: int = None) -> dict:
+    """8_terrain_compliance — Roll leveling + suspension test with one-sided bumps.
+
+    Controller under test : LQR + VelocityPI + roll leveling impedance
+    v_desired             : S8_DRIVE_SPEED (1.0 m/s) constant forward
+    Obstacles             : S8_BUMPS — alternate left/right one-sided bumps (3–5 cm)
+                            Each bump hits only one wheel → roll disturbance.
+    Duration              : 12.0 s
+    Metric / Fitness      : W_VEL_ERR*vel_rms + W_RMS*roll_rms + 0.1*pitch_rms + W_FALL*fell
+
+    Pass criterion: roll_rms < 2°, no fall, velocity tracking maintained.
+    """
+    rng = np.random.default_rng(rng_seed)
+    try:
+        model, data = _build_model_and_data(sandbox_obstacles=S8_BUMPS)
+        init_sim(model, data)
+    except Exception as e:
+        return _fail_result(f"model init: {e}")
+
+    raw = _run_sim_loop(model, data, duration,
+                        v_profile_fn=lambda t: S8_DRIVE_SPEED,
+                        add_noise=add_noise, rng=rng)
+
+    fitness = (
+        W_VEL_ERR * raw['vel_track_rms_ms']
+        + W_RMS   * raw['max_roll_deg']       # peak spike, not RMS — penalises worst-case bump
+        + 0.1 * W_RMS * raw['rms_pitch_deg']
+        + (W_FALL if raw['fell'] else 0.0)
+    )
+    raw['fitness'] = round(fitness, 4)
+    return raw
+
+
 def _fail_result(reason: str) -> dict:
     return dict(
         rms_pitch_deg=999.0, max_pitch_deg=999.0, wheel_travel_m=999.0,
@@ -1836,6 +1910,8 @@ def evaluate(gains: dict, scenario: str = "balance", label: str = "",
         metrics = run_6_YAW_PI_turn(gains, duration=SCENARIO_6_DURATION)
     elif scenario == "7_DRIVE_TURN":
         metrics = run_7_DRIVE_TURN(gains, duration=SCENARIO_7_DURATION)
+    elif scenario == "8_terrain_compliance":
+        metrics = run_8_terrain_compliance(gains, duration=SCENARIO_8_DURATION)
     else:
         raise ValueError(f"Unknown scenario: '{scenario}'")
 

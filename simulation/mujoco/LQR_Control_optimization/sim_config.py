@@ -35,10 +35,11 @@ MOTOR_MASS = 0.260    # [kg] AK45-10 hip motor
 
 # ── Motor limits ────────────────────────────────────────────────────────────
 HIP_TORQUE_LIMIT            = 7.0   # [N·m] AK45-10 peak (physical spec — never exceed)
-HIP_IMPEDANCE_TORQUE_LIMIT  = 2.0   # [N·m] max torque the impedance controller may use
+HIP_IMPEDANCE_TORQUE_LIMIT  = 1.0   # [N·m] max torque the impedance controller may use
                                      # for position-holding.  Keeps the hip backdrivable:
                                      # any disturbance > this will move the leg.
-                                     # Tune this later; full 7 N·m reserved for jump/recovery.
+                                     # Lowered from 2.0 (placeholder) → 1.0 (Phase 4.1 validation).
+                                     # Full 7 N·m reserved for jump/recovery.
 WHEEL_TORQUE_LIMIT          = 3.67  # [N·m] 5065 130KV @ 50 A ODESC limit
 
 # ── Balance PD controller (optimized via (1+8)-ES, run_id=221) ─────────────
@@ -63,8 +64,24 @@ LQR_Q_VEL        =  0.000250  # weight on wheel velocity
 LQR_R            = 28.734420  # weight on control effort
 
 # ── Leg impedance (held at Q_NOM; decoupled from balance loop) ─────────────
-LEG_K_S = 8.0    # [N·m/rad] spring stiffness  (matches baseline1 HIP_KP_SUSP)
-LEG_B_S = 4.0    # [N·m·s/rad] damping        (matches baseline1 HIP_KD_SUSP)
+LEG_K_S = 16.000000  # [N·m/rad] spring stiffness  (Phase 4 optimizer: 177 gens, fitness=4.11)
+LEG_B_S =  0.821633  # [N·m·s/rad] damping        (Phase 4 optimizer, 2026-03-18)
+
+# ── Roll leveling (differential hip control, Phase 4.2) ─────────────────────
+# Each hip gets a differential offset δq = K_ROLL*roll + D_ROLL*roll_rate
+# so the body box stays at 0° roll on sloped / uneven terrain.
+#
+# Sign convention (verify with lateral disturbance, negate if wrong):
+#   positive roll = left side UP (right-hand rule about +X forward)
+#   δq > 0 → q_nom_L += δq (retract left) + q_nom_R -= δq (extend right)
+#
+# Hip safe range: 10° buffer inside joint limits to avoid end-stops.
+# Robot drives at Q_NOM (mid-stroke) so full ±travel is available.
+LEG_K_ROLL         = 3.963615  # [rad/rad]     roll proportional gain (Phase 4 optimizer)
+LEG_D_ROLL         = 1.000000  # [rad·s/rad]   roll rate damping (Phase 4 optimizer)
+ROLL_NOISE_STD_RAD = math.radians(0.05)          # [rad] BNO086 roll noise model
+HIP_SAFE_MIN       = Q_EXT + math.radians(10)    # [rad] -1.257 (extended limit + 10°)
+HIP_SAFE_MAX       = Q_RET - math.radians(10)    # [rad] -0.526 (retracted limit - 10°)
 
 # ── Sensor noise (BNO086 realistic model) ──────────────────────────────────
 PITCH_NOISE_STD_RAD        = math.radians(0.1)    # [rad]
@@ -142,6 +159,21 @@ LEG_CYCLE_Q_RET      = Q_RET - math.radians(5.0)  # [rad] S4 crouched setpoint �
 SCENARIO_6_DURATION  = 8.0    # [s] 1s settle + 6.28s turn + 0.72s tail
 YAW_TURN_RATE        = 1.0    # [rad/s] target yaw rate (one full revolution in 6.28s)
 YAW_ERR_START        = 1.0    # [s] skip first 1s settle period from yaw error metric
+
+# ── Scenario 8 parameters (one-sided bumps — roll leveling test) ─────────────
+# Bumps hit only ONE wheel at a time to create a roll disturbance.
+# Alternates left / right so the roll leveling controller is exercised in both directions.
+# Uses sandbox_obstacles format (x, y, h, rx, ry) so y-position can be one-sided.
+# Wheel planes are at y = ±LEG_Y = ±0.143 m; bump y-half-size = 0.15 m covers one wheel.
+SCENARIO_8_DURATION = 12.0    # [s] constant forward drive
+S8_DRIVE_SPEED      =  1.0    # [m/s] fast enough to make roll disturbances significant
+S8_BUMPS = [
+    {'shape': 'box', 'x':  1.2, 'y':  LEG_Y, 'h': 0.05, 'rx': 0.02, 'ry': 0.15},  # 5 cm left
+    {'shape': 'box', 'x':  3.0, 'y': -LEG_Y, 'h': 0.03, 'rx': 0.02, 'ry': 0.15},  # 3 cm right
+    {'shape': 'box', 'x':  5.0, 'y':  LEG_Y, 'h': 0.05, 'rx': 0.02, 'ry': 0.15},  # 5 cm left
+    {'shape': 'box', 'x':  7.0, 'y': -LEG_Y, 'h': 0.03, 'rx': 0.02, 'ry': 0.15},  # 3 cm right
+    {'shape': 'box', 'x':  9.5, 'y':  LEG_Y, 'h': 0.05, 'rx': 0.02, 'ry': 0.15},  # 5 cm left
+]
 
 # ── Scenario 7 parameters (drive+turn cross-coupling check) ──────────────────
 SCENARIO_7_DURATION  = 8.0    # [s]
