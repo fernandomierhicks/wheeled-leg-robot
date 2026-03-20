@@ -346,13 +346,32 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     all_sec_lines = [ln_pitch_ref, ln_v_cmd, ln_omega_cmd,
                      ln_hip_R, ln_hip_cmd, ln_tau_R]
 
+    # ── Blit setup ───────────────────────────────────────────────────────────
+    # Mark every data line animated so it's excluded from the static background
+    _animated_lines = [
+        ln_pitch, ln_pitch_ref, ln_vel, ln_v_cmd, ln_yaw, ln_omega_cmd,
+        ln_hip_L, ln_hip_R, ln_hip_cmd, ln_roll, ln_prate,
+        ln_tau_L, ln_tau_R, ln_delta_q, ln_vbatt, ln_vbatt_nom,
+        ln_soc, ln_temp,
+    ]
+    for _ln in _animated_lines:
+        _ln.set_animated(True)
+
+    fig.canvas.draw()   # initial full draw to capture clean backgrounds
+    _ax_list = list(axes.flat) + [ax_temp]
+    _bgs     = [fig.canvas.copy_from_bbox(ax.bbox) for ax in _ax_list]
+
+    _RESCALE_EVERY = 6   # full redraw + background recapture every 6 rendered frames
+    _render_frame  = 0
+    _do_rescale    = True
+    _last_draw = 0.0
     while plt.fignum_exists(fig.number):
         items = []
         while True:
             try: items.append(data_q.get_nowait())
             except Exception: break
         if not items:
-            plt.pause(1.0 / 30)
+            plt.pause(0.005)
             continue
 
         for item in items:
@@ -385,7 +404,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         idx   = next((i for i, t in enumerate(tb) if t >= t0), 0)
         tw    = tb[idx:]
 
+        _render_frame += 1
+        _do_rescale = (_render_frame % _RESCALE_EVERY == 0)
+
         def _autoscale(ax, *bufs):
+            if not _do_rescale: return
             all_vals = []
             for b in bufs:
                 all_vals += list(b)[idx:]
@@ -414,10 +437,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         vb_bw = list(v_batt_buf)[idx:]
         if vb_bw:
             ln_vbatt.set_data(tw, vb_bw)
-            axes[4][0].set_xlim(t0, sim_t + 0.5)
-            lo, hi = min(vb_bw), max(vb_bw)
-            span = max(hi - lo, 0.5)
-            axes[4][0].set_ylim(lo - span * 0.15, hi + span * 0.15)
+            if _do_rescale:
+                axes[4][0].set_xlim(t0, sim_t + 0.5)
+                lo, hi = min(vb_bw), max(vb_bw)
+                span = max(hi - lo, 0.5)
+                axes[4][0].set_ylim(lo - span * 0.15, hi + span * 0.15)
             ln_vbatt_nom.set_data([t0, sim_t + 0.5], [BATT_V_NOM, BATT_V_NOM])
 
         # SoC + temperature panel
@@ -425,14 +449,16 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         temp_bw = list(batt_temp_buf)[idx:]
         if soc_bw:
             ln_soc.set_data(tw, soc_bw)
-            axes[4][1].set_xlim(t0, sim_t + 0.5)
-            axes[4][1].set_ylim(max(0.0, min(soc_bw) - 5), 105)
+            if _do_rescale:
+                axes[4][1].set_xlim(t0, sim_t + 0.5)
+                axes[4][1].set_ylim(max(0.0, min(soc_bw) - 5), 105)
         if temp_bw:
             ln_temp.set_data(tw, temp_bw)
-            ax_temp.set_xlim(t0, sim_t + 0.5)
-            lo_t, hi_t = min(temp_bw), max(temp_bw)
-            span_t = max(hi_t - lo_t, 2.0)
-            ax_temp.set_ylim(lo_t - span_t * 0.2, hi_t + span_t * 0.5)
+            if _do_rescale:
+                ax_temp.set_xlim(t0, sim_t + 0.5)
+                lo_t, hi_t = min(temp_bw), max(temp_bw)
+                span_t = max(hi_t - lo_t, 2.0)
+                ax_temp.set_ylim(lo_t - span_t * 0.2, hi_t + span_t * 0.5)
 
         # Secondary lines
         ln_pitch_ref.set_data(tw, list(pitch_ref_buf)[idx:])
@@ -442,7 +468,25 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_hip_cmd.set_data(tw,   list(hip_cmd_buf)[idx:])
         ln_tau_R.set_data(tw,     list(tau_R_buf)[idx:])
 
-        fig.canvas.flush_events()
+        # ── Render ───────────────────────────────────────────────────────────
+        _now = time.monotonic()
+        if _now - _last_draw < 1.0 / 60:
+            continue   # skip render — will catch up next iteration
+        _last_draw = _now
+
+        if _do_rescale:
+            # Full redraw on rescale frames — recapture static backgrounds
+            fig.canvas.draw()
+            _bgs[:] = [fig.canvas.copy_from_bbox(ax.bbox) for ax in _ax_list]
+        else:
+            # Blit: restore cached background, draw only animated lines on top
+            for ax, bg in zip(_ax_list, _bgs):
+                fig.canvas.restore_region(bg)
+                for ln in ax.get_lines():
+                    if ln.get_animated():
+                        ax.draw_artist(ln)
+                fig.canvas.blit(ax.bbox)
+            fig.canvas.flush_events()
 
 
 # ---------------------------------------------------------------------------
@@ -577,8 +621,8 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                                else 0.0)
     _scenario_dist_fn = {
         "1_LQR_pitch_step":          s1_dist_fn,
-        "4_leg_height_gain_sched":   s1_dist_fn,
-        "2_VEL_PI_disturbance":      s2_dist_fn,
+        "2_leg_height_gain_sched":   s1_dist_fn,
+        "3_VEL_PI_disturbance":      s2_dist_fn,
         "5_VEL_PI_leg_cycling":      s2_dist_fn,
         "balance_disturbance":       _generic_dist,
         "lqr_combined":              _generic_dist,
@@ -675,7 +719,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                         data.ctrl[act_hip_R]   = 0.0
                     elif use_lqr:
                         if scenario in ("1_LQR_pitch_step", "2_LQR_impulse_recovery",
-                                        "4_leg_height_gain_sched"):
+                                        "2_leg_height_gain_sched"):
                             # LQR isolation scenarios — VelocityPI disabled
                             theta_ref   = 0.0
                             _vel_est_ms = _wheel_vel_d * WHEEL_R
@@ -706,7 +750,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                             _theta_ref  = theta_ref
                         else:
                             _vel_est_ms = _wheel_vel_d * WHEEL_R
-                            if scenario == "3_VEL_PI_staircase" and _staircase_active[0]:
+                            if scenario == "4_VEL_PI_staircase" and _staircase_active[0]:
                                 _v_desired[0] = s3_velocity_profile(float(data.time))
                             theta_ref   = vel_pi.update(_v_desired[0], _vel_est_ms)
                             _d_max = THETA_REF_RATE_LIMIT * _dt_ctrl
@@ -725,7 +769,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                         data.ctrl[act_wheel_R] = motor_taper(tau_sym + tau_yaw, data.qvel[dof_whl_R], _v_batt[0])
                         # Leg impedance + roll leveling
                         _q_hip_sym = (_leg_cycle_profile(float(data.time))
-                                      if scenario in ("4_leg_height_gain_sched",
+                                      if scenario in ("2_leg_height_gain_sched",
                                                        "5_VEL_PI_leg_cycling")
                                       else Q_NOM)
                         _hip_sym_ref[0] = _q_hip_sym
@@ -862,6 +906,8 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
 
     data_q.put(None)
     plot_proc.join(timeout=2)
+    if plot_proc.is_alive():
+        plot_proc.terminate()
 
 
 # ---------------------------------------------------------------------------

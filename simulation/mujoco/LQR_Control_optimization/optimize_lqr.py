@@ -47,7 +47,7 @@ PARAM_RANGES = {
 
 # ── Active scenarios ─────────────────────────────────────────────────────────
 # For Scenario 4: gain scheduler validation across full leg stroke
-ACTIVE_SCENARIO = "4_leg_height_gain_sched"
+ACTIVE_SCENARIO = "2_leg_height_gain_sched"
 
 # ── Seed weights (used when CSV is empty — fresh start) ──────────────────────
 SEED_WEIGHTS = {

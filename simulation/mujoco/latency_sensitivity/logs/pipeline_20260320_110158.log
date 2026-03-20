@@ -1,0 +1,33 @@
+[11:01:58] ========================================================================
+[11:01:58]   S1-S8 Pipeline -- 8 steps  |  0.05h/step  |  20260320_110158
+[11:01:58] ========================================================================
+[11:01:58]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\logs\pipeline_20260320_110158.log
+[11:01:58]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']
+[11:01:58]   patience=200  tol=0.0001  fresh=True
+[11:01:58] ========================================================================
+[11:01:58]   [1/8] S1 -- optimize_lqr.py -- 1_LQR_pitch_step
+[11:01:58] ========================================================================
+[11:01:58]   Deleted S1_LQR_pitch_step.csv (--fresh)
+[11:01:58]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_lqr.py --scenario 1_LQR_pitch_step --hours 0.05 --patience 200 --tol 0.0001
+[11:01:58]   ERROR: optimizer exited with code 1
+[11:01:58]   FAILED: S1 produced no usable result — continuing to next step
+[11:01:58] ========================================================================
+[11:01:58]   [2/8] S2 -- optimize_lqr.py -- 2_leg_height_gain_sched
+[11:01:58] ========================================================================
+[11:01:58]   WARNING: S1 has no result yet — starting from sim_config baseline
+[11:01:58]   Deleted S2_leg_height_gain_sched.csv (--fresh)
+[11:01:58]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_lqr.py --scenario 2_leg_height_gain_sched --hours 0.05 --patience 200 --tol 0.0001
+[11:01:58]   ERROR: optimizer exited with code 1
+[11:01:58]   FAILED: S2 produced no usable result — continuing to next step
+[11:01:58] ========================================================================
+[11:01:58]   [3/8] S3 -- optimize_vel_pi.py -- 3_VEL_PI_disturbance
+[11:01:58] ========================================================================
+[11:01:58]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_vel_pi.py --scenario 3_VEL_PI_disturbance --hours 0.05 --patience 200 --tol 0.0001
+[11:01:59]   ERROR: optimizer exited with code 1
+[11:01:59]   FAILED: S3 produced no usable result — continuing to next step
+[11:01:59] ========================================================================
+[11:01:59]   [4/8] S4 -- optimize_vel_pi.py -- 4_VEL_PI_staircase
+[11:01:59] ========================================================================
+[11:01:59]   WARNING: S3 has no result yet — starting from sim_config baseline
+[11:01:59]   Deleted S4_VEL_PI_staircase.csv (--fresh)
+[11:01:59]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_vel_pi.py --scenario 4_VEL_PI_staircase --hours 0.05 --patience 200 --tol 0.0001

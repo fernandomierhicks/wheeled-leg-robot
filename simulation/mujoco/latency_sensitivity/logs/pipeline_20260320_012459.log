@@ -1,0 +1,11 @@
+[01:24:59] ========================================================================
+[01:24:59]   S1-S8 Pipeline -- 8 steps  |  1.00h/step  |  20260320_012459
+[01:24:59] ========================================================================
+[01:24:59]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\logs\pipeline_20260320_012459.log
+[01:24:59]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']
+[01:24:59]   patience=30  tol=0.0001  fresh=False
+[01:24:59] ========================================================================
+[01:24:59]   [1/8] S1 -- optimize_lqr.py -- 1_LQR_pitch_step
+[01:24:59] ========================================================================
+[01:24:59]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_lqr.py --scenario 1_LQR_pitch_step --hours 1.0 --patience 30 --tol 0.0001
+[01:25:12]   ERROR: optimizer exited with code 3221225786

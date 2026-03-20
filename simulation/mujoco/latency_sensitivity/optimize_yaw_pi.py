@@ -2,15 +2,19 @@
 
 Searches over 2 YawPI parameters via (1+8)-ES:
   KP_YAW  [N·m / (rad/s)]  proportional gain
-  KI_YAW  [N·m / rad]      integral gain
+  KI_YAW  [N·m / rad]      integral gain (can evolve to zero)
 
 LQR Q/R weights and VelocityPI gains are held fixed at the baselined values
-in sim_config.py. Scenario: 6_YAW_PI_turn — pure 360° CCW turn at 1 rad/s.
-Fitness: lower is better; fall adds large penalty.
+in sim_config.py.
+
+Default scenario: 6_YAW_PI_turn — pure 360° CCW turn at 1 rad/s.
+Also supports: 7_DRIVE_TURN — simultaneous drive + turn cross-coupling test.
 
 Run:
     python optimize_yaw_pi.py --hours 0.083   # 5 minutes
     python optimize_yaw_pi.py --hours 0.5 --workers 8
+    python optimize_yaw_pi.py --scenario 7_DRIVE_TURN --hours 1
+    python optimize_yaw_pi.py --seed-gains "KP_YAW=2.19,KI_YAW=0.43"
 """
 import argparse
 import math
@@ -33,13 +37,22 @@ from sim_config import (
     YAW_PI_KP, YAW_PI_KI,
 )
 
-ACTIVE_SCENARIO = "6_YAW_PI_turn"
+_DEFAULT_SCENARIO = "6_YAW_PI_turn"
 
-# ── Search space: YawPI gains ────────────────────────────────────────────────
-PARAM_RANGES = {
-    "KP_YAW": (0.01, 5.0),    # [N·m / (rad/s)]
-    "KI_YAW": (0.001, 2.0),   # [N·m / rad]
+# ── Valid scenarios for this optimizer ───────────────────────────────────────
+_VALID_SCENARIOS = {
+    "6_YAW_PI_turn",
+    "7_DRIVE_TURN",
 }
+
+# ── Search space: YawPI gains (wide — never clamp) ───────────────────────────
+PARAM_RANGES = {
+    "KP_YAW": (1e-3, 20.0),   # [N·m / (rad/s)]
+    "KI_YAW": (1e-4, 10.0),   # [N·m / rad]   integral can legitimately → 0
+}
+
+# Gains that may evolve to zero
+ZERO_FLOOR = 1e-6
 
 # ── Seed from current sim_config values ─────────────────────────────────────
 SEED_WEIGHTS = {
@@ -49,11 +62,13 @@ SEED_WEIGHTS = {
 
 # ── (1+λ)-ES hyper-parameters ────────────────────────────────────────────────
 LAMBDA         = 8
-SIGMA_LOG_INIT = 0.50    # moderate initial exploration in log space
+SIGMA_LOG_INIT = 0.50
 SIGMA_LOG_MIN  = 0.01
 SIGMA_LOG_MAX  = 1.00
 SUCCESS_TARGET = 1.0 / 5.0
 ADAPT_WINDOW   = 10
+_DEFAULT_PATIENCE = 30
+_DEFAULT_TOL      = 1e-4
 
 
 # ---------------------------------------------------------------------------
@@ -67,8 +82,19 @@ def _gains_to_str(g: dict) -> str:
     return "  ".join(f"{k}={v:.4g}" for k, v in g.items())
 
 
-def _load_best_weights(csv_path: str) -> tuple:
-    row = get_best_run(scenario=ACTIVE_SCENARIO, csv_path=csv_path)
+def _parse_seed_gains(seed_str: str) -> dict:
+    result = {}
+    for part in seed_str.split(","):
+        k, _, v = part.strip().partition("=")
+        result[k.strip()] = float(v.strip())
+    return result
+
+
+def _load_best_weights(active_scenario: str, csv_path: str,
+                       seed_override: dict = None) -> tuple:
+    if seed_override:
+        return dict(seed_override), float("inf")
+    row = get_best_run(scenario=active_scenario, csv_path=csv_path)
     if row is None:
         return dict(SEED_WEIGHTS), float("inf")
     weights = {}
@@ -84,7 +110,7 @@ def _load_best_weights(csv_path: str) -> tuple:
 # Multiprocessing worker
 # ---------------------------------------------------------------------------
 def _eval_worker(args):
-    kp_yaw, ki_yaw, label, run_id, csv_path = args
+    kp_yaw, ki_yaw, label, run_id, csv_path, scenario_name = args
 
     import os, sys, datetime
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -107,11 +133,19 @@ def _eval_worker(args):
         R_val=LQR_R,
     )
 
-    metrics = scenarios.run_6_YAW_PI_turn({})
+    # Dispatch to the appropriate scenario runner
+    _RUNNERS = {
+        "6_YAW_PI_turn": scenarios.run_6_YAW_PI_turn,
+        "7_DRIVE_TURN":  scenarios.run_7_DRIVE_TURN,
+    }
+    runner = _RUNNERS.get(scenario_name)
+    if runner is None:
+        raise ValueError(f"Unknown YawPI scenario: '{scenario_name}'")
+    metrics = runner({})
 
     row = dict(
         run_id    = run_id,
-        scenario  = ACTIVE_SCENARIO,
+        scenario  = scenario_name,
         label     = label,
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         KP_YAW    = round(kp_yaw, 6),
@@ -125,8 +159,8 @@ def _eval_worker(args):
     fit = row.get("fitness", 9999.0)
     print(f"[{run_id:5d}] {label:<28}  {row.get('status','FAIL'):<5}  "
           f"fit={fit:.4f}  "
-          f"yaw_rms={row.get('yaw_track_rms_rads','?'):.3f}rad/s  "
-          f"pitch={row.get('rms_pitch_deg','?'):.2f}°  "
+          f"yaw_rms={float(row.get('yaw_track_rms_rads') or 0):.3f}rad/s  "
+          f"pitch={float(row.get('rms_pitch_deg') or 0):.2f}°  "
           f"KP_YAW={kp_yaw:.4g}  KI_YAW={ki_yaw:.4g}")
     return row
 
@@ -136,8 +170,15 @@ def _eval_worker(args):
 # ---------------------------------------------------------------------------
 def run_evo(hours: float = None, max_iters: int = None,
             seed: int = None, n_workers: int = None,
-            csv_path: str = None, win: "ProgressWindow | None" = None):
+            csv_path: str = None, win: "ProgressWindow | None" = None,
+            active_scenario: str = None, seed_override: dict = None,
+            patience: int = _DEFAULT_PATIENCE, tol: float = _DEFAULT_TOL):
 
+    if active_scenario is None:
+        active_scenario = _DEFAULT_SCENARIO
+    if active_scenario not in _VALID_SCENARIOS:
+        raise ValueError(f"Scenario '{active_scenario}' not valid for YawPI optimizer. "
+                         f"Valid: {sorted(_VALID_SCENARIOS)}")
     if hours is None and max_iters is None:
         hours = 1.0
     if n_workers is None:
@@ -145,17 +186,17 @@ def run_evo(hours: float = None, max_iters: int = None,
     if seed is not None:
         np.random.seed(seed)
     if csv_path is None:
-        csv_path = get_scenario_csv_path(ACTIVE_SCENARIO)
+        csv_path = get_scenario_csv_path(active_scenario)
 
-    parent, parent_fit = _load_best_weights(csv_path)
+    parent, parent_fit = _load_best_weights(active_scenario, csv_path, seed_override)
     if parent_fit == float("inf"):
         print("No prior results — evaluating seed weights first...")
         row = _eval_worker((parent["KP_YAW"], parent["KI_YAW"],
-                            "evo_seed", next_run_id(csv_path), csv_path))
+                            "evo_seed", next_run_id(csv_path), csv_path, active_scenario))
         parent_fit = float(row.get("fitness", float("inf")))
         print(f"Seed fitness: {parent_fit:.4f}\n")
     else:
-        print(f"Seeding from best CSV: fitness={parent_fit:.4f}")
+        print(f"Seeding from best result: fitness={parent_fit:.4f}")
         print(f"  {_gains_to_str(parent)}\n")
 
     sigmas         = {k: SIGMA_LOG_INIT for k in PARAM_RANGES}
@@ -168,11 +209,16 @@ def run_evo(hours: float = None, max_iters: int = None,
     best_fit = parent_fit
     best_gen = 0
 
+    # Convergence tracking
+    gens_without_improvement = 0
+    prev_best_for_patience = best_fit
+
     print("=" * 70)
-    print(f"YawPI Optimizer (1+{LAMBDA})-ES  |  Scenario: {ACTIVE_SCENARIO}")
+    print(f"YawPI Optimizer (1+{LAMBDA})-ES  |  Scenario: {active_scenario}")
     print(f"  workers={n_workers}  params={list(PARAM_RANGES)}")
     print(f"  Fixed LQR: Q=[{LQR_Q_PITCH:.4g},{LQR_Q_PITCH_RATE:.4g},{LQR_Q_VEL:.4g}]  R={LQR_R:.4g}")
     print(f"  Fixed VelocityPI: KP_V={VELOCITY_PI_KP:.4g}  KI_V={VELOCITY_PI_KI:.4g}")
+    print(f"  early-stop: patience={patience}  tol={tol:.1e}")
     if hours:
         print(f"  Duration: {hours:.2f} h  ({hours*60:.1f} min)")
     else:
@@ -185,21 +231,28 @@ def run_evo(hours: float = None, max_iters: int = None,
                 break
             if max_iters is not None and gen >= max_iters:
                 break
+            if gens_without_improvement >= patience:
+                print(f"\nEarly stop: no improvement in {patience} generations.")
+                break
 
             children = []
             for _ in range(LAMBDA):
                 child = {}
                 for k, (lo, hi) in PARAM_RANGES.items():
-                    lv = math.log10(max(1e-9, parent[k]))
+                    lv = math.log10(max(1e-9, parent[k])) if parent[k] > 0 else math.log10(lo)
                     lv += np.random.normal(0.0, sigmas[k])
                     lv  = _clamp(lv, math.log10(lo), math.log10(hi))
-                    child[k] = 10.0 ** lv
+                    val = 10.0 ** lv
+                    # KI_YAW can evolve to zero (pure P controller is valid)
+                    if k == "KI_YAW" and val < ZERO_FLOOR:
+                        val = 0.0
+                    child[k] = val
                 children.append(child)
 
             base_id = next_run_id(csv_path)
             ids     = list(range(base_id, base_id + LAMBDA))
             labels  = [f"evo_g{gen:06d}_c{i}" for i in range(LAMBDA)]
-            args    = [(c["KP_YAW"], c["KI_YAW"], lbl, rid, csv_path)
+            args    = [(c["KP_YAW"], c["KI_YAW"], lbl, rid, csv_path, active_scenario)
                        for c, lbl, rid in zip(children, labels, ids)]
 
             rows    = pool.map(_eval_worker, args)
@@ -221,6 +274,14 @@ def run_evo(hours: float = None, max_iters: int = None,
                 if gen_best_fit < best_fit:
                     best_fit = gen_best_fit
                     best_gen = gen
+
+            # Convergence check
+            rel_improvement = (prev_best_for_patience - best_fit) / (prev_best_for_patience + 1e-12)
+            if rel_improvement > tol:
+                gens_without_improvement = 0
+                prev_best_for_patience = best_fit
+            else:
+                gens_without_improvement += 1
 
             if len(success_window) >= ADAPT_WINDOW:
                 sr = sum(success_window) / len(success_window)
@@ -259,7 +320,8 @@ def run_evo(hours: float = None, max_iters: int = None,
                     progress_str = f"{pct:5.1f}%  gen {gen}/{max_iters}"
                 filled = int(pct / 100 * 40)
                 bar = "[" + "#" * filled + "-" * (40 - filled) + "]"
-                print(f"\n{bar} {progress_str}  evals={n_evals}  elapsed={elapsed_min:.1f}min")
+                print(f"\n{bar} {progress_str}  evals={n_evals}  elapsed={elapsed_min:.1f}min"
+                      f"  stagnant={gens_without_improvement}/{patience}")
                 print(f"  best={best_fit:.4f}  parent={parent_fit:.4f}  best_at_gen={best_gen}")
                 print(f"  gains: {gains_str}")
 
@@ -268,7 +330,7 @@ def run_evo(hours: float = None, max_iters: int = None,
     print(f"Optimization complete: {gen} gens, {n_evals} evals, {elapsed_min:.1f} min")
     print(f"All-time best: fitness={best_fit:.4f}  (gen {best_gen})")
     print(f"Best YawPI: {_gains_to_str(parent)}")
-    print(f"\nTo replay: python replay.py --top 1 --csv {get_scenario_csv_path(ACTIVE_SCENARIO)}")
+    print(f"\nTo replay: python replay.py --top 1 --csv {get_scenario_csv_path(active_scenario)}")
 
 
 # ---------------------------------------------------------------------------
@@ -283,17 +345,30 @@ Examples:
   python optimize_yaw_pi.py --hours 0.083   # 5 minutes
   python optimize_yaw_pi.py --hours 0.5
   python optimize_yaw_pi.py --iters 100 --workers 8
+  python optimize_yaw_pi.py --scenario 7_DRIVE_TURN --hours 1
+  python optimize_yaw_pi.py --seed-gains "KP_YAW=2.19,KI_YAW=0.43"
 """)
     ap.add_argument("--hours",   type=float, default=None)
     ap.add_argument("--iters",   type=int,   default=None)
     ap.add_argument("--workers", type=int,   default=None)
     ap.add_argument("--seed",    type=int,   default=None)
+    ap.add_argument("--scenario", type=str,  default=_DEFAULT_SCENARIO,
+                    help=f"Scenario to optimize (default: {_DEFAULT_SCENARIO}). "
+                         f"Valid: {sorted(_VALID_SCENARIOS)}")
+    ap.add_argument("--seed-gains", type=str, default=None,
+                    help='Explicit seed gains, e.g. "KP_YAW=2.19,KI_YAW=0.43"')
+    ap.add_argument("--patience", type=int,  default=_DEFAULT_PATIENCE)
+    ap.add_argument("--tol",     type=float, default=_DEFAULT_TOL)
     args = ap.parse_args()
 
-    win = ProgressWindow(f"YawPI Optimizer — {ACTIVE_SCENARIO}")
+    seed_override = _parse_seed_gains(args.seed_gains) if args.seed_gains else None
+
+    win = ProgressWindow(f"YawPI Optimizer — {args.scenario}")
     try:
         run_evo(hours=args.hours, max_iters=args.iters,
-                seed=args.seed, n_workers=args.workers, win=win)
+                seed=args.seed, n_workers=args.workers, win=win,
+                active_scenario=args.scenario, seed_override=seed_override,
+                patience=args.patience, tol=args.tol)
     finally:
         win.finish()
 

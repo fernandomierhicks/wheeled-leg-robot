@@ -14,6 +14,7 @@ from sim_config import (
     HIP_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT, WHEEL_OMEGA_NOLOAD, WHEEL_KT,
     BATT_V_NOM, HIP_KT_OUTPUT, BATT_I_QUIESCENT,
     LEG_K_S, LEG_B_S,
+    HIP_POSITION_KP, HIP_POSITION_KD,
     LEG_K_ROLL, LEG_D_ROLL, ROLL_NOISE_STD_RAD, HIP_SAFE_MIN, HIP_SAFE_MAX,
     MAX_PITCH_CMD,
     PITCH_NOISE_STD_RAD, PITCH_RATE_NOISE_STD_RAD_S, ACCEL_NOISE_STD,
@@ -37,7 +38,7 @@ from sim_config import (
     SCENARIO_8_DURATION, S8_DRIVE_SPEED, S8_BUMPS,
 )
 from physics import build_xml, build_assets, solve_ik, get_equilibrium_pitch
-from run_log import log_run, next_run_id, CSV_PATH
+from run_log import log_run, next_run_id
 from lqr_design import interpolate_gains, compute_gain_table
 from battery_model import BatteryModel
 
@@ -174,6 +175,12 @@ def _leg_cycle_profile(t: float) -> float:
     return center + amp * math.sin(2.0 * math.pi * t / LEG_CYCLE_PERIOD)
 
 
+def _leg_cycle_profile_vel(t: float) -> float:
+    """Derivative of _leg_cycle_profile — target hip velocity for feed-forward."""
+    amp = (Q_EXT - LEG_CYCLE_Q_RET) / 2.0
+    return amp * (2.0 * math.pi / LEG_CYCLE_PERIOD) * math.cos(2.0 * math.pi * t / LEG_CYCLE_PERIOD)
+
+
 # ── Combined scenario weights (for LQR optimization) ────────────────────────
 # Phase 2 combined: balance (gate) + disturbance + drive-slow + drive-medium + obstacle
 W_BALANCE      = 0.10   # still balance (just a gate really)
@@ -186,7 +193,6 @@ W_DRIVE_STEP   = 0.15   # 3 cm floor step crossing robustness
 # ── Drive/obstacle fitness weights ───────────────────────────────────────────
 W_VEL_ERR   = 3.0   # RMS velocity tracking error [m/s] — 3× to penalise steady-state offset harder
 W_YAW_ERR   = 3.0   # RMS yaw rate tracking error [rad/s] — same weight as velocity
-W_TRANSIENT = 2.0   # integral of |v_error| during 1s window after each staircase step [m/s·s]
 
 
 # ---------------------------------------------------------------------------
@@ -395,7 +401,8 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
                   dist_fn=None,
                   add_noise: bool = True, rng=None,
                   target_hip_q=None,
-                  omega_profile_fn=None) -> dict:
+                  omega_profile_fn=None,
+                  use_impedance: bool = False) -> dict:
     """Core LQR simulation loop used by drive and obstacle scenarios.
 
     v_profile_fn(t: float) -> v_target_ms [float]
@@ -408,7 +415,7 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
         Positive = CCW = left turn when viewed from above.
 
     target_hip_q: float, callable(t)->float, or None.
-        Sets the impedance controller's target hip angle each step.
+        Sets the position servo's target hip angle each step.
         None (default) → hold Q_NOM as before.
 
     dist_fn: optional callable(t)->force [N] applied to body X axis.
@@ -566,39 +573,47 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
                 yaw_sq_sum += (omega_tgt - yaw_rate) ** 2
                 n_yaw      += 1
 
-            # ── Leg impedance + roll leveling ────────────────────────────────
-            # Common-mode: both legs track the same height profile (Q_NOM or cycling)
+            # ── Hip control ──────────────────────────────────────────────────
+            # S1–S7: position servo PD (stiff, tracks commanded angle reliably)
+            # S8:    impedance + roll leveling (tunable compliance for terrain)
             _q_hip_sym = _hip_fn(data.time)
 
-            # Roll leveling: differential δq keeps box at 0° roll.
-            # Sign: positive roll = left side UP (right-hand rule about +X forward).
-            # δq > 0 → q_nom_L += δq (retract left) + q_nom_R -= δq (extend right).
-            # Verify sign with lateral disturbance; negate LEG_K_ROLL if inverted.
-            q_roll    = data.xquat[box_bid]   # world quaternion [w, x, y, z]
+            q_roll    = data.xquat[box_bid]
             roll_true = math.atan2(
                 2.0 * (q_roll[0]*q_roll[1] + q_roll[2]*q_roll[3]),
                 1.0 - 2.0 * (q_roll[1]**2  + q_roll[2]**2))
-            roll_rate = data.qvel[d_root + 3]  # ωx world-frame [rad/s]
+            roll_rate = data.qvel[d_root + 3]
 
-            if add_noise:
-                roll_meas = roll_true + rng.normal(0, ROLL_NOISE_STD_RAD)
+            if use_impedance:
+                # ── S8: impedance + roll leveling ─────────────────────────────
+                if add_noise:
+                    roll_meas = roll_true + rng.normal(0, ROLL_NOISE_STD_RAD)
+                else:
+                    roll_meas = roll_true
+                delta_q = LEG_K_ROLL_GAIN * roll_meas + LEG_D_ROLL_GAIN * roll_rate
+                q_nom_L = float(np.clip(_q_hip_sym + delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
+                q_nom_R = float(np.clip(_q_hip_sym - delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
+                for s_hip, d_hip, act_hip, q_nom_leg in [
+                    (s_hip_L, d_hip_L, act_hip_L, q_nom_L),
+                    (s_hip_R, d_hip_R, act_hip_R, q_nom_R),
+                ]:
+                    q_hip  = data.qpos[s_hip]
+                    dq_hip = data.qvel[d_hip]
+                    tau_hip = -(LEG_K_S * (q_hip - q_nom_leg) + LEG_B_S * dq_hip)
+                    data.ctrl[act_hip] = np.clip(
+                        tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
             else:
-                roll_meas = roll_true
-
-            delta_q = LEG_K_ROLL_GAIN * roll_meas + LEG_D_ROLL_GAIN * roll_rate
-
-            q_nom_L = float(np.clip(_q_hip_sym + delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
-            q_nom_R = float(np.clip(_q_hip_sym - delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
-
-            for s_hip, d_hip, act_hip, q_nom_leg in [
-                (s_hip_L, d_hip_L, act_hip_L, q_nom_L),
-                (s_hip_R, d_hip_R, act_hip_R, q_nom_R),
-            ]:
-                q_hip  = data.qpos[s_hip]
-                dq_hip = data.qvel[d_hip]
-                tau_hip = -(LEG_K_S * (q_hip - q_nom_leg) + LEG_B_S * dq_hip)
-                data.ctrl[act_hip] = np.clip(
-                    tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+                # ── S1–S7: position servo PD ──────────────────────────────────
+                for s_hip, d_hip, act_hip in [
+                    (s_hip_L, d_hip_L, act_hip_L),
+                    (s_hip_R, d_hip_R, act_hip_R),
+                ]:
+                    q_hip  = data.qpos[s_hip]
+                    dq_hip = data.qvel[d_hip]
+                    tau_hip = (HIP_POSITION_KP * (_q_hip_sym - q_hip)
+                               - HIP_POSITION_KD * dq_hip)
+                    data.ctrl[act_hip] = np.clip(
+                        tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
 
             # ── Battery step (update v_batt for next control tick) ────────────
             v_batt = battery.step(dt, _motor_currents(
@@ -811,6 +826,8 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
 
     # ── Metric accumulators ─────────────────────────────────────────────────
     pitch_sq_sum   = 0.0
+    ise_pitch      = 0.0
+    ise_pitch_rate = 0.0
     max_pitch      = 0.0
     wheel_travel_m = 0.0
     wheel_liftoff_s = 0.0
@@ -871,14 +888,15 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
             data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
             data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
 
-            # ── Leg impedance: hold Q_NOM ────────────────────────────────────
+            # ── Hip position servo: hold Q_NOM ────────────────────────────────
             for s_hip, d_hip, act_hip in [
                 (s_hip_L, d_hip_L, act_hip_L),
                 (s_hip_R, d_hip_R, act_hip_R),
             ]:
                 q_hip  = data.qpos[s_hip]
                 dq_hip = data.qvel[d_hip]
-                tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
+                tau_hip = (HIP_POSITION_KP * (Q_NOM - q_hip)
+                           - HIP_POSITION_KD * dq_hip)
                 data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
 
             # ── Battery step ─────────────────────────────────────────────────
@@ -889,6 +907,11 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
             # ── Metrics ─────────────────────────────────────────────────────
             pitch_err_deg  = math.degrees(abs(pitch_true - pitch_ff))
             pitch_sq_sum  += pitch_err_deg ** 2
+            
+            pitch_err_rad   = pitch_true - pitch_ff
+            ise_pitch      += pitch_err_rad ** 2 * dt
+            ise_pitch_rate += pitch_rate_true ** 2 * dt
+            
             max_pitch      = max(max_pitch, pitch_err_deg)
             vel_est        = (wheel_vel + pitch_rate_true) * WHEEL_R
             wheel_travel_m += abs(vel_est) * dt
@@ -921,10 +944,10 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
     rms_pitch_deg = math.sqrt(pitch_sq_sum / max(1, n_samples))
     fell = survived_s < duration - 0.05
 
-    # Fitness: wheel travel only — pitch is implicit (still wheels = maintained pitch).
-    # Liftoff in balance = instant kill (see break above), so W_LIFTOFF not needed here.
+    # Fitness: S1 style (ISE pitch + pitch rate) instead of wheel travel
     fitness = (
-        W_TRAVEL * wheel_travel_m
+        ise_pitch
+        + W_PITCH_RATE * ise_pitch_rate
         + (W_FALL if (fell or liftoff_kill) else 0.0)
     )
 
@@ -932,6 +955,8 @@ def run_balance_scenario(gains: dict, duration: float = BALANCE_DURATION,
         rms_pitch_deg   = round(rms_pitch_deg,   4),
         max_pitch_deg   = round(max_pitch,        4),
         wheel_travel_m  = round(wheel_travel_m,   4),
+        ise_rad2s       = round(ise_pitch,        6),
+        ise_pitch_rate  = round(ise_pitch_rate,   6),
         wheel_liftoff_s = round(wheel_liftoff_s,  4),
         settle_time_s   = round(settle_time,      3),
         survived_s      = round(survived_s,       3),
@@ -1058,14 +1083,15 @@ def run_balance_with_disturbance_scenario(gains: dict, duration: float = BALANCE
             data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
             data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
 
-            # ── Leg impedance: hold Q_NOM ────────────────────────────────────
+            # ── Hip position servo: hold Q_NOM ────────────────────────────────
             for s_hip, d_hip, act_hip in [
                 (s_hip_L, d_hip_L, act_hip_L),
                 (s_hip_R, d_hip_R, act_hip_R),
             ]:
                 q_hip  = data.qpos[s_hip]
                 dq_hip = data.qvel[d_hip]
-                tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
+                tau_hip = (HIP_POSITION_KP * (Q_NOM - q_hip)
+                           - HIP_POSITION_KD * dq_hip)
                 data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
 
             # ── Battery step ─────────────────────────────────────────────────
@@ -1382,16 +1408,17 @@ def run_1_LQR_pitch_step(gains: dict, duration: float = BALANCE_DURATION,
             data.ctrl[act_wheel_L] = motor_taper(_tau_d, data.qvel[d_whl_L], v_batt)
             data.ctrl[act_wheel_R] = motor_taper(_tau_d, data.qvel[d_whl_R], v_batt)
 
-            # Leg impedance: hold Q_NOM
+            # ── Hip position servo: hold Q_NOM ────────────────────────────────
             for s_hip, d_hip, act_hip in [
                 (s_hip_L, d_hip_L, act_hip_L),
                 (s_hip_R, d_hip_R, act_hip_R),
             ]:
                 q_hip  = data.qpos[s_hip]
                 dq_hip = data.qvel[d_hip]
+                tau_hip = (HIP_POSITION_KP * (Q_NOM - q_hip)
+                           - HIP_POSITION_KD * dq_hip)
                 data.ctrl[act_hip] = np.clip(
-                    -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip),
-                    -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+                    tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
 
             v_batt = battery.step(dt, _motor_currents(
                 float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
@@ -1526,16 +1553,17 @@ def run_2_LQR_impulse_recovery(gains: dict, duration: float = BALANCE_DURATION,
             data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
             data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
 
-            # Leg impedance: hold Q_NOM
+            # ── Hip position servo: hold Q_NOM ────────────────────────────────
             for s_hip, d_hip, act_hip in [
                 (s_hip_L, d_hip_L, act_hip_L),
                 (s_hip_R, d_hip_R, act_hip_R),
             ]:
                 q_hip  = data.qpos[s_hip]
                 dq_hip = data.qvel[d_hip]
+                tau_hip = (HIP_POSITION_KP * (Q_NOM - q_hip)
+                           - HIP_POSITION_KD * dq_hip)
                 data.ctrl[act_hip] = np.clip(
-                    -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip),
-                    -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+                    tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
 
             v_batt = battery.step(dt, _motor_currents(
                 float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
@@ -1597,15 +1625,15 @@ def run_2_LQR_impulse_recovery(gains: dict, duration: float = BALANCE_DURATION,
 
 # ── VelocityPI combined scenario weights ─────────────────────────────────────
 # Used by run_combined_PI_scenario. Both sub-fitnesses are normalized to [m/s].
-W_PI_DISTURBANCE = 0.50   # weight on 2_VEL_PI_disturbance fitness (position hold)
-W_PI_STAIRCASE   = 0.50   # weight on 3_VEL_PI_staircase fitness  (setpoint tracking)
+W_PI_DISTURBANCE = 0.50   # weight on 3_VEL_PI_disturbance fitness (position hold)
+W_PI_STAIRCASE   = 0.50   # weight on 4_VEL_PI_staircase fitness  (setpoint tracking)
 
 # ---------------------------------------------------------------------------
-# 2_VEL_PI_disturbance — VelocityPI outer loop, disturbance rejection
+# 3_VEL_PI_disturbance — VelocityPI outer loop, disturbance rejection
 # ---------------------------------------------------------------------------
-def run_2_VEL_PI_disturbance(gains: dict, duration: float = SCENARIO_2_DURATION,
+def run_3_VEL_PI_disturbance(gains: dict, duration: float = SCENARIO_2_DURATION,
                               add_noise: bool = True, rng_seed: int = None) -> dict:
-    """2_VEL_PI_disturbance — VelocityPI position-hold under two impulse kicks.
+    """3_VEL_PI_disturbance — VelocityPI position-hold under two impulse kicks.
 
     Controller under test : VelocityPI (outer) + Balance LQR (inner)
     Initial condition     : equilibrium pitch — no perturbation
@@ -1643,11 +1671,11 @@ def run_2_VEL_PI_disturbance(gains: dict, duration: float = SCENARIO_2_DURATION,
 
 
 # ---------------------------------------------------------------------------
-# 3_VEL_PI_staircase — VelocityPI setpoint tracking across four speed steps
+# 4_VEL_PI_staircase — VelocityPI setpoint tracking across four speed steps
 # ---------------------------------------------------------------------------
-def run_3_VEL_PI_staircase(gains: dict, duration: float = SCENARIO_3_DURATION,
+def run_4_VEL_PI_staircase(gains: dict, duration: float = SCENARIO_3_DURATION,
                             add_noise: bool = True, rng_seed: int = None) -> dict:
-    """3_VEL_PI_staircase — VelocityPI tracking of a six-step velocity profile.
+    """4_VEL_PI_staircase — VelocityPI tracking of a six-step velocity profile.
 
     Controller under test : VelocityPI (outer) + Balance LQR (inner)
     Velocity profile      : 0 → +0.3 → +0.6 → +1.0 → −0.5 → −1.0 → 0 m/s
@@ -1696,8 +1724,8 @@ def run_combined_PI_scenario(gains: dict, add_noise: bool = True,
     Fitness = W_PI_DISTURBANCE × s2_fitness + W_PI_STAIRCASE × s3_fitness
     """
     rng_seed = int(np.random.default_rng(rng_seed).integers(0, 2**31))
-    s2 = run_2_VEL_PI_disturbance(gains, add_noise=add_noise, rng_seed=rng_seed)
-    s3 = run_3_VEL_PI_staircase(  gains, add_noise=add_noise, rng_seed=rng_seed)
+    s2 = run_3_VEL_PI_disturbance(gains, add_noise=add_noise, rng_seed=rng_seed)
+    s3 = run_4_VEL_PI_staircase(  gains, add_noise=add_noise, rng_seed=rng_seed)
 
     s2_fell = s2['status'] == 'FAIL'
     s3_fell = s3.get('fell', s3['status'] == 'FAIL')
@@ -1723,11 +1751,11 @@ def run_combined_PI_scenario(gains: dict, add_noise: bool = True,
 
 
 # ---------------------------------------------------------------------------
-# 4_leg_height_gain_sched — gain scheduler validation across full leg stroke
+# 2_leg_height_gain_sched — gain scheduler validation across full leg stroke
 # ---------------------------------------------------------------------------
-def run_4_leg_height_gain_sched(gains: dict, duration: float = SCENARIO_4_DURATION,
+def run_2_leg_height_gain_sched(gains: dict, duration: float = SCENARIO_4_DURATION,
                                  add_noise: bool = True, rng_seed: int = None) -> dict:
-    """4_leg_height_gain_sched — LQR-only balance while legs cycle through full stroke.
+    """2_leg_height_gain_sched — LQR-only balance while legs cycle through full stroke.
 
     Controller under test : Balance LQR (inner loop only, gain-scheduled)
     VelocityPI            : OFF — theta_ref = 0, v_ref = 0
@@ -1797,17 +1825,19 @@ def run_4_leg_height_gain_sched(gains: dict, duration: float = SCENARIO_4_DURATI
             data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
             data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
 
-            # Leg impedance: track cycling profile
-            q_hip_tgt = _leg_cycle_profile(data.time)
+            # ── Hip position servo: track cycling profile ─────────────────────
+            q_hip_tgt  = _leg_cycle_profile(data.time)
+            dq_hip_tgt = _leg_cycle_profile_vel(data.time)
             for s_hip, d_hip, act_hip in [
                 (s_hip_L, d_hip_L, act_hip_L),
                 (s_hip_R, d_hip_R, act_hip_R),
             ]:
                 q_hip  = data.qpos[s_hip]
                 dq_hip = data.qvel[d_hip]
+                tau_hip = (HIP_POSITION_KP * (q_hip_tgt - q_hip)
+                           + HIP_POSITION_KD * (dq_hip_tgt - dq_hip))
                 data.ctrl[act_hip] = np.clip(
-                    -(LEG_K_S * (q_hip - q_hip_tgt) + LEG_B_S * dq_hip),
-                    -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+                    tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
 
             v_batt = battery.step(dt, _motor_currents(
                 float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
@@ -1882,7 +1912,6 @@ def run_5_VEL_PI_leg_cycling(gains: dict, duration: float = SCENARIO_5_DURATION,
 
     fitness = (
         W_VEL_ERR        * raw['vel_track_rms_ms']
-        + W_TRANSIENT    * raw['transient_lag_ms']
         + 0.1 * W_RMS    * raw['rms_pitch_deg']
         + (W_FALL if raw['fell'] else 0.0)
     )
@@ -1985,7 +2014,8 @@ def run_8_terrain_compliance(gains: dict, duration: float = SCENARIO_8_DURATION,
 
     raw = _run_sim_loop(model, data, duration,
                         v_profile_fn=lambda t: S8_DRIVE_SPEED,
-                        add_noise=add_noise, rng=rng)
+                        add_noise=add_noise, rng=rng,
+                        use_impedance=True)
 
     fitness = (
         W_VEL_ERR * raw['vel_track_rms_ms']
@@ -2009,7 +2039,9 @@ def _fail_result(reason: str) -> dict:
 # Top-level evaluate() — run + log to CSV
 # ---------------------------------------------------------------------------
 def evaluate(gains: dict, scenario: str = "balance", label: str = "",
-             run_id: int = None, csv_path: str = CSV_PATH) -> dict:
+             run_id: int = None, csv_path: str = None) -> dict:
+    if csv_path is None:
+        raise ValueError("evaluate() requires an explicit csv_path — use get_scenario_csv_path(scenario)")
     if scenario == "balance":
         metrics = run_balance_scenario(gains)
     elif scenario == "balance_disturbance":
@@ -2026,14 +2058,14 @@ def evaluate(gains: dict, scenario: str = "balance", label: str = "",
         metrics = run_1_LQR_pitch_step(gains, duration=SCENARIO_1_DURATION)
     elif scenario == "2_LQR_impulse_recovery":
         metrics = run_2_LQR_impulse_recovery(gains)
-    elif scenario == "2_VEL_PI_disturbance":
-        metrics = run_2_VEL_PI_disturbance(gains, duration=SCENARIO_2_DURATION)
-    elif scenario == "3_VEL_PI_staircase":
-        metrics = run_3_VEL_PI_staircase(gains, duration=SCENARIO_3_DURATION)
+    elif scenario == "3_VEL_PI_disturbance":
+        metrics = run_3_VEL_PI_disturbance(gains, duration=SCENARIO_2_DURATION)
+    elif scenario == "4_VEL_PI_staircase":
+        metrics = run_4_VEL_PI_staircase(gains, duration=SCENARIO_3_DURATION)
     elif scenario == "combined_PI":
         metrics = run_combined_PI_scenario(gains)
-    elif scenario == "4_leg_height_gain_sched":
-        metrics = run_4_leg_height_gain_sched(gains, duration=SCENARIO_4_DURATION)
+    elif scenario == "2_leg_height_gain_sched":
+        metrics = run_2_leg_height_gain_sched(gains, duration=SCENARIO_4_DURATION)
     elif scenario == "5_VEL_PI_leg_cycling":
         metrics = run_5_VEL_PI_leg_cycling(gains, duration=SCENARIO_5_DURATION)
     elif scenario == "6_YAW_PI_turn":
@@ -2087,5 +2119,7 @@ if __name__ == "__main__":
     result = run_2_LQR_impulse_recovery(gains, add_noise=False, rng_seed=0)
     for k, v in result.items():
         print(f"  {k:<30} = {v}")
+    print("Baseline gains are brittle under disturbance (high pitch error post-impact)")
+    print("=" * 70)
     print("Baseline gains are brittle under disturbance (high pitch error post-impact)")
     print("=" * 70)

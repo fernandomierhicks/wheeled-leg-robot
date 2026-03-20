@@ -1,0 +1,11 @@
+[02:09:08] ========================================================================
+[02:09:08]   S1-S8 Pipeline -- 8 steps  |  0.45h/step  |  20260320_020908
+[02:09:08] ========================================================================
+[02:09:08]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\logs\pipeline_20260320_020908.log
+[02:09:08]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']
+[02:09:08]   patience=30  tol=0.0001  fresh=True
+[02:09:08] ========================================================================
+[02:09:08]   [1/8] S1 -- optimize_lqr.py -- 1_LQR_pitch_step
+[02:09:08] ========================================================================
+[02:09:08]   Deleted S1_LQR_pitch_step.csv (--fresh)
+[02:09:08]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_lqr.py --scenario 1_LQR_pitch_step --hours 0.45 --patience 30 --tol 0.0001

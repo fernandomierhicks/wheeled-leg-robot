@@ -57,14 +57,14 @@ HIP_KT_OUTPUT = 60.0 / (75.0 * 2 * math.pi) * 10.0   # [N·m/A] ≈ 1.273
 
 # ── Motor limits ────────────────────────────────────────────────────────────
 HIP_TORQUE_LIMIT            = 7.0   # [N·m] AK45-10 peak (physical spec — never exceed)
-HIP_IMPEDANCE_TORQUE_LIMIT  = 1.0   # [N·m] max torque the impedance controller may use
-                                     # for position-holding.  Keeps the hip backdrivable:
-                                     # any disturbance > this will move the leg.
-                                     # Lowered from 2.0 (placeholder) → 1.0 (Phase 4.1 validation).
-                                     # Full 7 N·m reserved for jump/recovery.
-WHEEL_TORQUE_LIMIT          = 3.67  # [N·m] 5065 130KV @ 50 A ODESC limit
-WHEEL_OMEGA_NOLOAD          = 326.7 # [rad/s] ω_noload = KV × V_batt × 2π/60 = 130 × 24 × 2π/60
-WHEEL_KT                    = 0.0735 # [N·m/A] torque constant (Kt = 1/KV in SI)
+HIP_IMPEDANCE_TORQUE_LIMIT  = 5.0   # [N·m] S8 impedance controller torque cap (per-scenario limits TBD)
+HIP_POSITION_KP             = 50.0  # [N·m/rad] position servo stiffness (S1–S7)
+                                     # ω_n ≈ 31 rad/s (>> 1.6 rad/s leg cycle) — tracks full stroke
+HIP_POSITION_KD             = 3.0   # [N·m·s/rad] position servo damping (near-critical)
+WHEEL_KV                    = 70.0   # [RPM/V] Maytech MTO5065-70-HA-C
+WHEEL_KT                    = 9.55 / WHEEL_KV          # [N·m/A]  ≈ 0.1364
+WHEEL_TORQUE_LIMIT          = WHEEL_KT * 50.0           # [N·m]    ≈ 6.82 (Kt × ODESC 50 A limit)
+WHEEL_OMEGA_NOLOAD          = WHEEL_KV * BATT_V_NOM * (2 * math.pi / 60)  # [rad/s] ≈ 175.9 @ 24 V
 
 # ── Balance PD controller (optimized via (1+8)-ES, run_id=221) ─────────────
 # Optimized gains for smooth, efficient balance.
@@ -79,7 +79,7 @@ MAX_PITCH_CMD =  0.25  # [rad] clamp on position/velocity feedback
 # ── LQR cost weights — optimized via scenario 4 (2026-03-18) ──────────────────
 # State: x = [pitch − pitch_ff − θ_ref,  pitch_rate,  wheel_vel_avg − v_ref]
 # u = −K @ x,  K solved from Q, R via scipy.linalg.solve_continuous_are
-# Scenario 4 (4_leg_height_gain_sched) 5-min run: 237 gens, 1896 evals, 12s duration
+# Scenario 4 (2_leg_height_gain_sched) 5-min run: 237 gens, 1896 evals, 12s duration
 #   Best (run_id=6426): fitness=0.017938, rms_pitch=1.242°, survived=12.0s
 # S1 seed (retained in docs/Control.MD): Q=[0.138282, 0.023379, 0.004591], R=9.998298
 LQR_Q_PITCH      =  0.014168  # weight on pitch error

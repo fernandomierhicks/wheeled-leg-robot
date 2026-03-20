@@ -57,14 +57,14 @@ HIP_KT_OUTPUT = 60.0 / (75.0 * 2 * math.pi) * 10.0   # [N·m/A] ≈ 1.273
 
 # ── Motor limits ────────────────────────────────────────────────────────────
 HIP_TORQUE_LIMIT            = 7.0   # [N·m] AK45-10 peak (physical spec — never exceed)
-HIP_IMPEDANCE_TORQUE_LIMIT  = 1.0   # [N·m] max torque the impedance controller may use
-                                     # for position-holding.  Keeps the hip backdrivable:
-                                     # any disturbance > this will move the leg.
-                                     # Lowered from 2.0 (placeholder) → 1.0 (Phase 4.1 validation).
-                                     # Full 7 N·m reserved for jump/recovery.
-WHEEL_TORQUE_LIMIT          = 3.67  # [N·m] 5065 130KV @ 50 A ODESC limit
-WHEEL_OMEGA_NOLOAD          = 326.7 # [rad/s] ω_noload = KV × V_batt × 2π/60 = 130 × 24 × 2π/60
-WHEEL_KT                    = 0.0735 # [N·m/A] torque constant (Kt = 1/KV in SI)
+HIP_IMPEDANCE_TORQUE_LIMIT  = 5.0   # [N·m] S8 impedance controller torque cap (per-scenario limits TBD)
+HIP_POSITION_KP             = 50.0  # [N·m/rad] position servo stiffness (S1–S7)
+                                     # ω_n ≈ 31 rad/s (>> 1.6 rad/s leg cycle) — tracks full stroke
+HIP_POSITION_KD             = 3.0   # [N·m·s/rad] position servo damping (near-critical)
+WHEEL_KV                    = 70.0   # [RPM/V] Maytech MTO5065-70-HA-C — override with measured value once hardware arrives
+WHEEL_KT                    = 9.55 / WHEEL_KV          # [N·m/A]  = 0.1364; override with --kt if measured
+WHEEL_TORQUE_LIMIT          = WHEEL_KT * 50.0           # [N·m]    = 6.821 (Kt × ODESC 50 A limit)
+WHEEL_OMEGA_NOLOAD          = WHEEL_KV * BATT_V_NOM * (2 * math.pi / 60)  # [rad/s] = 175.9 @ 24 V
 
 # ── Balance PD controller (optimized via (1+8)-ES, run_id=221) ─────────────
 # Optimized gains for smooth, efficient balance.
@@ -79,18 +79,18 @@ MAX_PITCH_CMD =  0.25  # [rad] clamp on position/velocity feedback
 # ── LQR cost weights — Phase 6 re-baselined for delayed plant (2026-03-19) ────
 # State: x = [pitch − pitch_ff − θ_ref,  pitch_rate,  wheel_vel_avg − v_ref]
 # u = −K @ x,  K solved from Q, R via scipy.linalg.solve_continuous_are
-# Step 1: S4 (4_leg_height_gain_sched) 10-min run: 3302 evals, seeded from Step 0 S1 result
+# Step 1: S4 (2_leg_height_gain_sched) 10-min run: 3302 evals, seeded from Step 0 S1 result
 #   Best: fitness=0.044589, rms_pitch=1.774°, survived=12.0s
 # Character: Q_PITCH↑ (more pitch correction), Q_PITCH_RATE/Q_VEL↓↓ (stale rates destabilise), R↓ (more torque allowed)
 # Zero-latency reference: Q=[0.014168, 0.033720, 0.000250], R=28.734 (see LQR_Control_optimization/)
-LQR_Q_PITCH      =  0.063424  # weight on pitch error
-LQR_Q_PITCH_RATE =  0.000219  # weight on pitch rate  (↓154× vs zero-latency — stale rate info)
-LQR_Q_VEL        =  0.000011  # weight on wheel velocity (↓23× vs zero-latency)
-LQR_R            =  1.980419  # weight on control effort (↓14× vs zero-latency)
+LQR_Q_PITCH      =  103.07792  # weight on pitch error
+LQR_Q_PITCH_RATE =  0.001     # weight on pitch rate  — floored at 1e-3 (previous 0.000143 eliminated damping, causing sandbox instability)
+LQR_Q_VEL        =  4.5e-05  # weight on wheel velocity (↓23× vs zero-latency)
+LQR_R            =  12.78017  # weight on control effort (↓14× vs zero-latency)
 
 # ── Leg impedance (held at Q_NOM; decoupled from balance loop) ─────────────
-LEG_K_S = 2.040161   # [N·m/rad] spring stiffness  (latency model: 652 gens / 5216 evals, fitness=7.498, 2026-03-19; ↓8× vs zero-latency — stiff spring oscillates with delayed feedback)
-LEG_B_S = 4.178528   # [N·m·s/rad] damping        (latency model: ↑5× vs zero-latency — high damping compensates for soft spring)
+LEG_K_S = 0.392245   # [N·m/rad] spring stiffness  (latency model: 652 gens / 5216 evals, fitness=7.498, 2026-03-19; ↓8× vs zero-latency — stiff spring oscillates with delayed feedback)
+LEG_B_S = 1.833868   # [N·m·s/rad] damping        (latency model: ↑5× vs zero-latency — high damping compensates for soft spring)
 # Zero-latency reference: LEG_K_S=16.0, LEG_B_S=0.799, fitness=4.0918 (LQR_Control_optimization)
 
 # ── Roll leveling (differential hip control, Phase 4.2) ─────────────────────
@@ -103,8 +103,8 @@ LEG_B_S = 4.178528   # [N·m·s/rad] damping        (latency model: ↑5× vs ze
 #
 # Hip safe range: 10° buffer inside joint limits to avoid end-stops.
 # Robot drives at Q_NOM (mid-stroke) so full ±travel is available.
-LEG_K_ROLL         = 3.911783  # [rad/rad]     roll proportional gain (latency model: 5216 evals, 2026-03-19)
-LEG_D_ROLL         = 0.916232  # [rad·s/rad]   roll rate damping (latency model; zero-latency ref: K=4.0, D=1.0)
+LEG_K_ROLL         = 4.491178  # [rad/rad]     roll proportional gain (latency model: 5216 evals, 2026-03-19)
+LEG_D_ROLL         = 0.578257  # [rad·s/rad]   roll rate damping (latency model; zero-latency ref: K=4.0, D=1.0)
 ROLL_NOISE_STD_RAD = math.radians(0.05)          # [rad] BNO086 roll noise model
 HIP_SAFE_MIN       = Q_EXT + math.radians(10)    # [rad] -1.257 (extended limit + 10°)
 HIP_SAFE_MAX       = Q_RET - math.radians(10)    # [rad] -0.526 (retracted limit - 10°)
@@ -148,8 +148,8 @@ S5_BUMPS = [
 # theta_ref is added to pitch_ff inside lqr_torque: state[0] = pitch - pitch_ff + theta_ref.
 # Positive theta_ref = lean forward command = drive forward.
 # Starting gains from Control.MD; optimizer will tune via (1+8)-ES.
-VELOCITY_PI_KP = 0.3755    # [rad/(m/s)] S5 20-min opt (latency+soft suspension): fitness=6.508, 9312 evals, 2026-03-19
-VELOCITY_PI_KI = 0.01081   # [rad/m]     KP dominant with soft suspension — integrator less needed
+VELOCITY_PI_KP = 0.028547    # [rad/(m/s)] S5 20-min opt (latency+soft suspension): fitness=6.508, 9312 evals, 2026-03-19
+VELOCITY_PI_KI = 0.0002   # [rad/m]     KP dominant with soft suspension — integrator less needed
 # Prior S5 result (stiff suspension): KP_V=0.01315, KI_V=0.04901, fitness=18.492 — near-zero KP was suspension artefact
 # Zero-latency reference: KP_V=0.502418, KI_V=0.011405 (LQR_Control_optimization)
 VELOCITY_PI_THETA_MAX    = 0.26   # [rad] ±15° hard clamp on theta_ref output
@@ -186,7 +186,7 @@ S2_DIST2_DUR   = 0.2    # [s]
 SCENARIO_4_DURATION  = 12.0    # [s] 3 full leg cycles
 LEG_CYCLE_PERIOD     =  4.0    # [s] one full retracted→extended→retracted cycle
                                 #     half-period = 2 s (one extreme to the other)
-LEG_CYCLE_Q_RET      = Q_RET - math.radians(5.0)  # [rad] S4 crouched setpoint — 5° less
+LEG_CYCLE_Q_RET      = Q_RET - math.radians(10.0) # [rad] S4 crouched setpoint — 10° less
                                                    # crouched than Q_RET to avoid 4-bar
                                                    # instability at fully-retracted position
 
@@ -204,10 +204,6 @@ SCENARIO_8_DURATION = 12.0    # [s] constant forward drive
 S8_DRIVE_SPEED      =  1.0    # [m/s] fast enough to make roll disturbances significant
 S8_BUMPS = [
     {'shape': 'box', 'x':  1.2, 'y':  LEG_Y, 'h': 0.05, 'rx': 0.02, 'ry': 0.15},  # 5 cm left
-    {'shape': 'box', 'x':  3.0, 'y': -LEG_Y, 'h': 0.03, 'rx': 0.02, 'ry': 0.15},  # 3 cm right
-    {'shape': 'box', 'x':  5.0, 'y':  LEG_Y, 'h': 0.05, 'rx': 0.02, 'ry': 0.15},  # 5 cm left
-    {'shape': 'box', 'x':  7.0, 'y': -LEG_Y, 'h': 0.03, 'rx': 0.02, 'ry': 0.15},  # 3 cm right
-    {'shape': 'box', 'x':  9.5, 'y':  LEG_Y, 'h': 0.05, 'rx': 0.02, 'ry': 0.15},  # 5 cm left
 ]
 
 # ── Scenario 7 parameters (drive+turn cross-coupling check) ──────────────────
@@ -220,11 +216,33 @@ DRIVE_TURN_YAW_RATE  = 0.5    # [rad/s] simultaneous yaw rate during combined sc
 # Yaw rate measured from data.qvel[5] (world-frame ωz, positive = CCW = left turn).
 # Independent of pitch — symmetric (LQR/VelocityPI) and differential (YawPI) modes
 # are orthogonal in control space; the average wheel velocity is unaffected by tau_yaw.
-YAW_PI_KP         = 2.192   # [N·m / (rad/s)] S6 20-min opt (latency model): 1911 gens, 15288 evals, fitness=1.7595, 2026-03-19
-YAW_PI_KI         = 0.4274  # [N·m / rad]     KI_YAW↓62% vs zero-latency — integral accumulates too much with stale yaw rate
+YAW_PI_KP         = 7.442615   # [N·m / (rad/s)] S6 20-min opt (latency model): 1911 gens, 15288 evals, fitness=1.7595, 2026-03-19
+YAW_PI_KI         = 6.496905  # [N·m / rad]     KI_YAW↓62% vs zero-latency — integral accumulates too much with stale yaw rate
 # Zero-latency reference: KP_YAW=2.272, KI_YAW=1.125, fitness=0.4102 (LQR_Control_optimization)
 YAW_PI_TORQUE_MAX = 0.5     # [N·m] differential torque clamp (±0.5 N·m each wheel)
 YAW_PI_INT_MAX    = 0.5     # [N·m·s] integrator anti-windup
+
+# ── Motor thermal model (all values are estimates — calibrate with thermocouple data) ──
+# 2-node lumped model: winding (T_w) ─(R_th_wc)─> case (T_c) ─(R_th_ca)─> ambient
+# R_eff = 3 × R_phase (3-phase star; P_copper = I² × R_eff, I = |τ|/Kt)
+# Wheel motor: 5065 130KV outrunner, ~200 g motor body, direct drive
+WHEEL_R_EFF      = 0.24    # [Ω]    effective winding resistance (est. R_phase≈0.08 Ω)
+WHEEL_C_WINDING  = 20.0    # [J/°C] copper winding thermal mass (~30 g Cu)
+WHEEL_C_CASE     = 80.0    # [J/°C] stator + housing thermal mass (~150 g)
+WHEEL_R_TH_WC    = 1.5     # [°C/W] winding-to-case thermal resistance
+WHEEL_R_TH_CA    = 8.0     # [°C/W] case-to-air (outrunner, natural convection)
+WHEEL_T_MAX_C    = 130.0   # [°C]   Class B insulation rating
+
+# Hip motor: AK45-10 KV75, 10:1 planetary, ~260 g motor + gearbox
+# Current is motor-side (before gearbox): I = |τ_output| / HIP_KT_OUTPUT
+HIP_R_EFF        = 0.75    # [Ω]    effective winding resistance (est. R_phase≈0.25 Ω)
+HIP_C_WINDING    = 30.0    # [J/°C] copper winding thermal mass
+HIP_C_CASE       = 200.0   # [J/°C] motor + gearbox housing thermal mass (~300 g)
+HIP_R_TH_WC      = 1.0     # [°C/W] winding-to-case
+HIP_R_TH_CA      = 6.0     # [°C/W] case-to-air (enclosed motor, less convection)
+HIP_T_MAX_C      = 130.0   # [°C]   Class B insulation rating
+
+MOTOR_T_AMB_C    = 25.0    # [°C]   ambient temperature (initial condition)
 
 # ── LQR Gain Scheduling Table ────────────────────────────────────────────────
 # Computed in scenarios.py to avoid circular import with lqr_design.py

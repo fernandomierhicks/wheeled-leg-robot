@@ -17,13 +17,15 @@ Outer loops (500 Hz, same rate as inner)    Inner loop (500 Hz)          Actuato
 
 Independent (500 Hz)
 ──────────────────────
-[Leg Impedance PD] ──────────────────────────────────────────────────▶  τ_hip (both legs)
+[Hip Position Servo]  ──────────────────────────────────────────────▶  τ_hip (S1–S7: stiff PD)
+[Hip Impedance + Roll]──────────────────────────────────────────────▶  τ_hip (S8: terrain compliance)
 ```
 
 | # | Controller | Type | State / Input | Output | Rate |
 |---|------------|------|--------------|--------|------|
 | 1 | Balance LQR | LQR 3-state | [pitch−θ_ref, pitch_rate, wheel_vel_avg−v_ref] | τ_sym | 500 Hz |
-| 2 | Leg Impedance | PD impedance | [q_hip−q_nom, dq_hip] | τ_hip | 500 Hz |
+| 2 | Hip control (S1–S7) | Position servo PD | q_hip_tgt − q_hip, dq_tgt − dq_hip | τ_hip | 500 Hz |
+| 2 | Hip control (S8) | Impedance + Roll PD | q_hip − q_nom ± δq_roll, dq_hip | τ_hip | 500 Hz |
 | 3 | Velocity PI | PI | v_desired − v_measured | θ_ref (lean cmd) | 500 Hz |
 | 4 | Yaw PI | PI | ω_yaw_desired − ω_yaw_measured | τ_yaw | 500 Hz |
 
@@ -50,7 +52,7 @@ R = scalar
 
 **Important — `v_ref` coupling:** The LQR third state is `(wheel_vel − v_ref)`, where `v_ref = v_desired / WHEEL_R`. This means the LQR does not penalise wheel velocity when the robot is intentionally moving at the commanded speed. Both the headless simulation and the replay must pass `v_ref = v_desired / WHEEL_R` — passing `v_ref=0.0` during drive incorrectly penalises the wheel velocity and fights the PI's lean command.
 
-**Optimized gains (scenario 4_leg_height_gain_sched, 5-min / 1896 evals, 2026-03-18) — CURRENT BASELINE:**
+**Optimized gains (scenario 2_leg_height_gain_sched, 5-min / 1896 evals, 2026-03-18) — CURRENT BASELINE:**
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | Q_PITCH | 0.014168 | soft pitch weight — ~10× lower than S1 |
@@ -156,13 +158,34 @@ yaw_err = ω_yaw_desired − ω_yaw_measured   # from BNO086 gyro Z
 τ_R = τ_sym − τ_yaw
 ```
 
-Starting gains: Kp_yaw = 0.3, Ki_yaw = 0.05. **Not yet implemented.**
+See Phase 3 and latency Step 4 for baselined gains.
 
 ---
 
-### 4. Leg Impedance PD + Roll Leveling (independent, 500 Hz)
+### 4. Hip Control (independent, 500 Hz)
 
-Decoupled from balance. Per-leg spring-damper with differential roll leveling:
+Decoupled from balance. Two modes selected per scenario:
+
+#### S1–S7: Position Servo PD
+
+Stiff PD that reliably tracks the commanded hip angle (fixed `Q_NOM` or sinusoidal cycling profile). No compliance — hip reaches target reliably regardless of disturbances.
+
+```python
+τ_hip = KP * (q_tgt − q_hip) + KD * (dq_tgt − dq_hip)
+τ_hip = clamp(τ_hip, ±HIP_IMPEDANCE_TORQUE_LIMIT)
+```
+
+For static targets (`dq_tgt = 0`). For cycling scenarios (S2, S5), `dq_tgt` is the analytic derivative of the sine profile (feed-forward velocity term).
+
+| Param | Value | Notes |
+|-------|-------|-------|
+| HIP_POSITION_KP | 50.0 N·m/rad | ω_n ≈ 31 rad/s >> 1.6 rad/s leg cycle |
+| HIP_POSITION_KD | 3.0 N·m·s/rad | Near-critical damping |
+| HIP_IMPEDANCE_TORQUE_LIMIT | 5.0 N·m | Per-scenario limits TBD |
+
+#### S8 only: Impedance + Roll Leveling
+
+Compliant spring-damper with differential roll correction for terrain. Optimised by `optimize_suspension.py`.
 
 ```python
 # Roll leveling — differential hip target
@@ -171,32 +194,53 @@ roll_meas = roll_true + N(0, ROLL_NOISE_STD_RAD)     # BNO086 noise (0.05°)
 roll_rate = data.qvel[d_root + 3]                    # ωx world-frame
 
 δq = K_ROLL * roll_meas + D_ROLL * roll_rate
-q_nom_L = clamp(Q_NOM + δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
-q_nom_R = clamp(Q_NOM - δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
+q_nom_L = clamp(q_tgt + δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
+q_nom_R = clamp(q_tgt − δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
 
 # Spring-damper per leg
-τ_hip = clamp(-(K_s*(q_hip - q_nom) + B_s*dq_hip), ±HIP_IMPEDANCE_TORQUE_LIMIT)
+τ_hip = clamp(-(K_s*(q_hip − q_nom) + B_s*dq_hip), ±HIP_IMPEDANCE_TORQUE_LIMIT)
 ```
 
-**Baselined gains (Phase 4 optimizer, S5+S8 combined, 177 gens / 1416 evals, 2026-03-18):**
+**Baselined gains (LQR_Control_optimization — zero-latency):**
 | Param | Value | Notes |
 |-------|-------|-------|
-| K_s | 16.000000 N·m/rad | Very stiff spring |
-| B_s | 0.821633 N·m·s/rad | Low damping — spring-dominant |
-| K_ROLL | 3.963615 rad/rad | Aggressive roll correction |
-| D_ROLL | 1.000000 rad·s/rad | Strong roll rate damping |
-| HIP_IMPEDANCE_TORQUE_LIMIT | 1.0 N·m | Keeps hips backdrivable |
-| HIP_SAFE_MIN | Q_EXT + 10° = −1.257 rad | Buffer from extended limit |
-| HIP_SAFE_MAX | Q_RET − 10° = −0.526 rad | Buffer from retracted limit |
+| K_s | 16.000 N·m/rad | Stiff spring |
+| B_s | 0.799 N·m·s/rad | Low damping — spring-dominant |
+| K_ROLL | 4.000 rad/rad | Roll correction |
+| D_ROLL | 1.000 rad·s/rad | Roll rate damping |
+
+**Baselined gains (latency_sensitivity — 5 ms sensor + 2.5 ms actuator delay):**
+| Param | Value | Notes |
+|-------|-------|-------|
+| K_s | 2.040 N·m/rad | ↓8× vs zero-latency — stiff spring oscillates with delayed feedback |
+| B_s | 4.179 N·m·s/rad | ↑5× vs zero-latency — high damping compensates for soft spring |
+| K_ROLL | 3.912 rad/rad | Roll correction (similar to zero-latency) |
+| D_ROLL | 0.916 rad·s/rad | Roll rate damping |
 
 Roll leveling is **orthogonal** to pitch/yaw — δq has zero effect on average hip height.
 Robot drives at Q_NOM (30% of stroke) to maximise suspension travel in both directions.
+`HIP_SAFE_MIN = Q_EXT + 10° = −1.257 rad`, `HIP_SAFE_MAX = Q_RET − 10° = −0.526 rad`.
 
 ---
 
 ## Optimizer Scenarios
 
 All scenarios run at 500 Hz controller rate (2 kHz physics, CTRL_STEPS=4). Noise model active by default (BNO086 pitch/rate noise). All scenarios use `_run_sim_loop` as the shared simulation backend — S2 and S3 run byte-for-byte identical physics.
+
+### Scenario Summary
+
+| S# | Name | Controller under test | How it tests | Key metric | Duration |
+|:--:|-----------------------|--------------|------------|----------|----------|
+| 1 | `1_LQR_pitch_step` | Balance LQR | Fixed legs at Q_NOM; +5° pitch step + 2 force kicks; VelocityPI OFF | ISE pitch (rad²·s) | 5 s |
+| 2 | `2_leg_height_gain_sched` | Balance LQR + gain scheduler | Legs sinusoidally cycling full stroke; ±4 N kicks; VelocityPI OFF | ISE pitch (rad²·s) | 12 s |
+| 3 | `3_VEL_PI_disturbance` | Velocity PI | Fixed legs; v_desired=0 (position hold); ±1 N impulse kicks at t=2/3 s | Wheel-travel RMS [m/s] | 12 s |
+| 4 | `4_VEL_PI_staircase` | Velocity PI | Fixed legs; 4-step speed profile 0→0.3→0.6→−0.3→0 m/s; no disturbances | Velocity-tracking RMS [m/s] | 13 s |
+| 5 | `5_VEL_PI_leg_cycling` | Velocity PI (with cycling legs) | Legs cycling + staircase velocity + ±1 N kicks + 5 one-sided bumps; full stress test | Velocity-tracking + pitch RMS combined | 13 s |
+| 6 | `6_YAW_PI_turn` | Yaw PI | Fixed legs; v_desired=0; ω_desired=1 rad/s; no disturbances | Yaw-rate-tracking RMS [rad/s] | 8 s |
+| 7 | `7_DRIVE_TURN` | Yaw PI + Velocity PI together | Fixed legs; v=0.3 m/s + ω=0.5 rad/s simultaneous; no disturbances | Combined velocity + yaw RMS | 8 s |
+| 8 | `8_terrain_compliance` | Leg Impedance + Roll Leveling | v=1.0 m/s; 1 one-sided bump (5 cm left at x=1.2 m); optimised hip impedance + roll leveling | Peak roll angle [deg] | 12 s |
+
+**Optimizer targets:** LQR → S2 · VelocityPI → S5 · YawPI → S6 · Suspension (impedance+roll) → S8
 
 ---
 
@@ -227,14 +271,14 @@ fitness = W_FALL × fell  +  Σ (pitch_err²) × dt
 
 **Last best:** Q=[0.138, 0.0234, 0.00459], R=9.998, fitness=0.003267 (4448 evals, 2026-03-18).
 
-> **Note:** S4 (`4_leg_height_gain_sched`) supersedes S1 for LQR Q/R optimisation.
+> **Note:** S4 (`2_leg_height_gain_sched`) supersedes S1 for LQR Q/R optimisation.
 > S4 includes the same disturbances but additionally exercises the gain scheduler across
 > the full leg stroke — gains tuned on S4 are strictly more general than S1-tuned gains.
 > `optimize_lqr.py` is now pointed at S4.
 
 ---
 
-### Scenario 4 — `4_leg_height_gain_sched` *(current LQR optimizer target)*
+### Scenario 4 — `2_leg_height_gain_sched` *(current LQR optimizer target)*
 
 **Purpose:** Tune the Balance LQR Q/R weights while the gain scheduler is fully exercised. The legs cycle sinusoidally through the operating range, changing the effective pendulum length continuously. This makes S4 a strict superset of S1: any Q/R set that handles S4 also handles fixed-height balance.
 
@@ -274,7 +318,7 @@ Pitch error is measured against the **live** `pitch_ff(q_hip)` equilibrium, not 
 
 ---
 
-### Scenario 2 — `2_VEL_PI_disturbance`
+### Scenario 2 — `3_VEL_PI_disturbance`
 
 **Purpose:** Tune the Velocity PI outer loop for position hold quality under external disturbances. The LQR Q/R are fixed at their S1-optimised values.
 
@@ -305,7 +349,7 @@ Normalised by duration so it is on the same scale as S3's `vel_track_rms_ms`.
 
 ---
 
-### Scenario 3 — `3_VEL_PI_staircase`
+### Scenario 3 — `4_VEL_PI_staircase`
 
 **Purpose:** Tune the Velocity PI for velocity tracking across a four-step speed profile including direction reversal. Complements S2 (which tests position hold) — together they ensure the PI works in both static and dynamic modes.
 
@@ -342,6 +386,38 @@ Pitch penalty is secondary (0.1×) — exists to prevent the PI from solving tra
 **Optimizer:** `optimize_vel_pi.py` with `combined_PI` scenario (0.5 × S2 + 0.5 × S3) to jointly optimise for both position hold and velocity tracking.
 
 **Status:** ✅ Baselined 2026-03-18 via combined_PI (5488 evals, 30 min).
+
+---
+
+### Scenario 6 — `6_YAW_PI_turn`
+
+**Replay profile (latency_sensitivity/replay.py) — 2026-03-20:**
+The optimizer runs a plain constant-ω step. The replay uses a richer multi-phase auto-profile driven by accumulated yaw angle:
+
+| Phase | Trigger | ω_desired | v_desired |
+|-------|---------|-----------|-----------|
+| Settle | t < 1 s | 0 | 0 |
+| 1 — 1 rotation fwd | until +2π accumulated | +YAW_TURN_RATE | 0 |
+| 2 — 2 rotations rev | until −4π from phase entry | −2 × YAW_TURN_RATE | 0 |
+| 3 — 2 rotations fwd | until +4π from phase entry | +2 × YAW_TURN_RATE | 0 |
+| 4 — done | — | 0 | 0 |
+
+**Bug fixed (2026-03-20):** `turn_active` was referenced in `replay()` but only defined inside `_plot_process()` — caused `NameError` on any S6 load. Fixed by adding `turn_active = [False]` to the `replay()` state variables.
+
+---
+
+### Scenario 7 — `7_DRIVE_TURN`
+
+**Replay profile (latency_sensitivity/replay.py) — 2026-03-20:**
+The optimizer uses constant v=0.3 m/s + ω=0.5 rad/s. The replay uses a time-based multi-phase profile:
+
+| Phase | Time window | v_desired | ω_desired |
+|-------|-------------|-----------|-----------|
+| 1 — baseline | t < 5 s | 0.3 m/s | +0.5 rad/s |
+| 2 — reverse + faster | 5–10 s | 0.5 m/s | −1.0 rad/s |
+| 3 — forward + high yaw | 10 s+ | 0.7 m/s | +1.5 rad/s |
+
+**Bug fixed (2026-03-20):** S7 fell through to the generic `else` branch in replay which never set `_omega_desired`, so the robot drove straight. Fixed by adding an explicit `elif scenario == "7_DRIVE_TURN":` block that sets both `_v_desired` and `_omega_desired`.
 
 ---
 
@@ -403,10 +479,23 @@ All scenarios from S2 onwards use `_run_sim_loop` in `scenarios.py` as the singl
 - Identical PI controller instantiation (same `VelocityPI` class, same gains)
 - Correct `v_ref = v_target_ms / WHEEL_R` passed to the LQR at every step
 - Consistent PI integrator reset on direction reversal
-- Identical noise model, sensor read order, and leg impedance controller
+- Identical noise model, sensor read order, and hip controller (position servo for S1–S7, impedance+roll for S8)
 - Same liftoff detection and settle-time tracking
 
 The `dist_fn(t) -> float` callable interface allows each scenario to specify an arbitrary disturbance profile without duplicating the sim loop.
+
+---
+
+## Simulation Tooling Notes (2026-03-20)
+
+### Log file layout
+CSV and `.log` files moved to `latency_sensitivity/logs/`. Naming convention: `S{scenario_name}.csv` (e.g. `S6_YAW_PI_turn.csv`). Archive files prefixed `archive_S{N}_…`. `run_log.py` updated — `get_scenario_csv_path()` now writes to `logs/S{name}.csv`.
+
+### Lingering Python processes
+After closing the MuJoCo viewer the matplotlib subprocess could remain alive. Fixed in both `latency_sensitivity/replay.py` and `LQR_Control_optimization/replay.py` by adding `plot_proc.terminate()` after the 2s `join()` timeout.
+
+### S8 bump layout change
+`S8_BUMPS` reduced from 5 alternating one-sided bumps to a single 5 cm left bump at x=1.2 m. Reason: the robot veers off-axis at the first bump and never reaches subsequent ones, making the multi-bump layout redundant for baseline visualization. The optimizer still uses whatever `S8_BUMPS` is defined in `sim_config.py`.
 
 ---
 
@@ -457,8 +546,8 @@ The `dist_fn(t) -> float` callable interface allows each scenario to specify an 
 
 - `VelocityPI` class: velocity error → lean angle command (θ_ref) for LQR
 - Dedicated optimizer `optimize_vel_pi.py` — (1+8)-ES over KP_V/KI_V with LQR Q/R fixed
-- S2 `2_VEL_PI_disturbance`: equilibrium start, ±1N kicks, 6s, metric = wheel travel
-- S3 `3_VEL_PI_staircase`: 4-step velocity profile, 8.5s, metric = vel_track_rms_ms
+- S2 `3_VEL_PI_disturbance`: equilibrium start, ±1N kicks, 6s, metric = wheel travel
+- S3 `4_VEL_PI_staircase`: 4-step velocity profile, 8.5s, metric = vel_track_rms_ms
 - `combined_PI` scenario: 50/50 weighted fitness of S2+S3
 - S2 and S3 share `_run_sim_loop` — identical physics, consistent `v_ref` to LQR
 - Best (combined_PI): KP_V=0.536, KI_V=0.028, fitness=1.056 (824 evals, 2026-03-18)
@@ -470,7 +559,7 @@ The `dist_fn(t) -> float` callable interface allows each scenario to specify an 
 
 ### Phase 3 — Yaw PI + Turn Mode ✅ COMPLETE & BASELINED
 
-**Files:** `scenarios.py`, `optimize_yaw_pi.py`, `replay.py`, `sim_config.py`, `sandbox.py`
+**Files:** `scenarios.py`, `optimize_yaw_pi.py`, `replay.py`, `sim_config.py`, `sandbox_fastchart.py`
 
 - `YawPI` class: yaw rate error → τ_yaw, ±0.5 N·m clamp, integrator anti-windup 0.5 N·m·s
 - Differential mixing: `τ_L = τ_sym − τ_yaw`, `τ_R = τ_sym + τ_yaw` (sign verified experimentally — positive ω = CCW = left turn)
@@ -478,25 +567,25 @@ The `dist_fn(t) -> float` callable interface allows each scenario to specify an 
 - Controller orthogonality confirmed: differential τ_yaw cancels in wheel average — LQR/VelocityPI are blind to it
 - S6 `6_YAW_PI_turn`: pure 360° CCW turn at 1 rad/s, 8 s — yaw_rms=0.045 rad/s (4.5% error), pitch=3.3°
 - S7 `7_DRIVE_TURN`: v=0.3 m/s + ω=0.5 rad/s simultaneously — pitch=3.2°, no cross-coupling instability
-- Starting gains KP_YAW=0.3, KI_YAW=0.05 performed well; optimizer available (`optimize_yaw_pi.py`) if needed
+- Initial visual gains KP_YAW=0.3, KI_YAW=0.05 were a starting point; optimizer confirmed much higher gains needed
 - `replay.py`: 4th panel changed to Yaw Rate with cmd overlay; ω_desired slider; Turn ON/OFF button; differential torque applied
-- `sandbox.py`: interactive free-drive arena — 28 obstacles (1–8 cm), v/ω/hip sliders + gamepad support
+- `sandbox_fastchart.py`: interactive free-drive arena — 28 obstacles (1–8 cm), v/ω/hip sliders + gamepad support; pyqtgraph 5×2 telemetry panel (60 Hz, 15 s window)
 
-**Baselined gains (sim_config.py):**
+**Baselined gains (sim_config.py — optimizer result, 55752 evals / 75 min):**
 | Param | Value |
 |-------|-------|
-| KP_YAW | 0.3 |
-| KI_YAW | 0.05 |
+| KP_YAW | 2.272 |
+| KI_YAW | 1.125 |
 | YAW_PI_TORQUE_MAX | 0.5 N·m |
 
 ---
 
-### Phase 4 — Leg Impedance Suspension + Roll Leveling ✅ COMPLETE & BASELINED
+### Phase 4 — Leg Suspension + Roll Leveling (S8 only) ✅ COMPLETE & BASELINED
 
-- Differential impedance controller: per-leg q_nom offset by δq = K_ROLL×roll + D_ROLL×roll_rate
-- S8 `8_terrain_compliance`: 5 one-sided bumps (alt left/right), 1.0 m/s, metric = max_roll_deg
-- `optimize_suspension.py`: (1+8)-ES over K_s, B_s, K_ROLL, D_ROLL; fitness = 0.5×S5 + 0.5×S8
-- **S4 baseline**: K_s=16.0, B_s=0.822, K_ROLL=3.964, D_ROLL=1.0, fitness=4.11 (177 gens, 2026-03-18)
+- **S1–S7** hip control switched to **position servo PD** (KP=50, KD=3) — stiff, reliable tracking, no tunable compliance. `_run_sim_loop` uses `use_impedance=False` (default).
+- **S8** (`8_terrain_compliance`) uses **impedance + roll leveling** via `use_impedance=True`. Per-leg spring-damper with differential δq = K_ROLL×roll + D_ROLL×roll_rate.
+- `optimize_suspension.py`: (1+8)-ES over K_s, B_s, K_ROLL, D_ROLL; fitness = S8 (terrain compliance)
+- **Zero-latency baseline**: K_s=16.0, B_s=0.799, K_ROLL=4.0, D_ROLL=1.0, fitness=4.09 (25016 evals, 2026-03-18)
 - `replay.py` upgraded: 4×2 telemetry (8 panels) including Roll and Suspension Δq panels
 
 ---
@@ -571,7 +660,7 @@ Used as SEED_WEIGHTS for Step 1.
 **Purpose:** Fully re-tune the LQR Q/R weights for the delayed plant across the full
 leg stroke. Seeded from Step 0 result.
 
-**Scenario:** S4 `4_leg_height_gain_sched` — legs cycling full stroke + ±4N kicks, 12s.
+**Scenario:** S4 `2_leg_height_gain_sched` — legs cycling full stroke + ±4N kicks, 12s.
 
 **Params:** Q_PITCH, Q_PITCH_RATE, Q_VEL, R
 
@@ -596,62 +685,65 @@ Gains written to `latency_sensitivity/sim_config.py`.
 
 ---
 
-### Step 2 — VelocityPI on S5 (~1 hr)
+### Step 2 — VelocityPI on S5 ✅ DONE (2026-03-19, 20 min)
 
-**Purpose:** Re-tune the outer velocity loop. LQR is now fixed at Step 1 values.
-With delay, the delayed wheel velocity reading fed back to VelocityPI will cause
-overshoot if KP_V is too high.
+**Purpose:** Re-tune the outer velocity loop. LQR fixed at Step 1 values.
 
 **Scenario:** S5 `5_VEL_PI_leg_cycling` — staircase + ±1N kicks + leg cycling + 5 bumps, 13s.
 
-**Params:** KP_V, KI_V
+**Result (9312 evals, 20 min):**
 
-**Expected change vs zero-latency baseline:**
-- KP_V will likely decrease (stale wheel velocity → overshoot at high gain)
-- KI_V may stay similar (integrator is naturally slow — less phase-sensitive)
+| Param | Zero-latency | Delayed baseline |
+|-------|-------------|------------------|
+| KP_V | 0.502418 | **0.375500** (↓25%) |
+| KI_V | 0.011405 | **0.010810** (similar) |
+| fitness | — | 6.508 |
 
-```bash
-python optimize_vel_pi.py --hours 1
-```
-
----
-
-### Step 3 — Leg Impedance + Roll on S5+S8 (~1 hr)
-
-**Purpose:** Re-tune suspension stiffness and roll leveling. Hip torque is **not
-delayed** in the model (AK45-10 FOC lag rounds to 0 steps at 2 kHz physics), so
-changes here will be smaller than Steps 1–2. Main risk: K_ROLL interacts with
-delayed pitch via body lean, so roll correction may need slight de-rating.
-
-**Scenario:** combined S5+S8 — velocity tracking + one-sided bumps.
-
-**Params:** K_s, B_s, K_ROLL, D_ROLL
-
-```bash
-python optimize_suspension.py --hours 1
-```
+**Character:** KP_V reduced — stale wheel velocity causes overshoot at high gain. KI_V largely unchanged. Note: prior stiff-suspension S5 result (KP_V≈0.013) was a suspension artefact — soft K_s masked PI response.
 
 ---
 
-### Step 4 — Yaw PI on S6 (~1 hr)
+### Step 3 — Yaw PI on S6 ✅ DONE (2026-03-19, 20 min)
 
-**Purpose:** Re-tune differential torque loop. Yaw rate measurement is also delayed
-by SENSOR_DELAY_S, so the PI may need slight de-rating. Orthogonal to balance — can
-be run independently after Steps 1–2 are stable.
+**Purpose:** Re-tune differential torque loop. Yaw rate measurement also delayed.
 
 **Scenario:** S6 `6_YAW_PI_turn` — pure 360° CCW turn at 1 rad/s, 8s.
 
-**Params:** KP_YAW, KI_YAW
+**Result (15288 evals, 20 min):**
 
-```bash
-python optimize_yaw_pi.py --hours 1
-```
+| Param | Zero-latency | Delayed baseline |
+|-------|-------------|------------------|
+| KP_YAW | 2.272 | **2.192** (similar) |
+| KI_YAW | 1.125 | **0.427** (↓62%) |
+| fitness | 0.410 | 1.760 |
+
+**Character:** KP_YAW largely unchanged (yaw inertia is high — phase margin less sensitive). KI_YAW↓↓ — integrator accumulates too much with stale yaw rate reading.
+
+---
+
+### Step 4 — Leg Impedance + Roll on S8 ✅ DONE (2026-03-19, 5216 evals)
+
+**Purpose:** Re-tune suspension stiffness and roll leveling for delayed plant.
+
+**Scenario:** S8 `8_terrain_compliance` — 1 bump (5 cm left at x=1.2 m), 1.0 m/s, 12s.
+
+**Result:**
+
+| Param | Zero-latency | Delayed baseline |
+|-------|-------------|------------------|
+| K_s | 16.000 N·m/rad | **2.040** (↓8×) |
+| B_s | 0.799 N·m·s/rad | **4.179** (↑5×) |
+| K_ROLL | 4.000 rad/rad | **3.912** (similar) |
+| D_ROLL | 1.000 rad·s/rad | **0.916** (similar) |
+| fitness | 4.09 | 7.498 |
+
+**Character:** K_s↓↓ — stiff spring oscillates with delayed feedback. B_s↑↑ — heavy damping compensates. Roll leveling gains largely unchanged (hip torque delay rounds to 0 steps at 2 kHz).
 
 ---
 
 ### Validation after all steps
 
-1. Run `python sandbox.py` in `latency_sensitivity/` — robot should balance stably
+1. Run `python sandbox_fastchart.py` in `latency_sensitivity/` — robot should balance stably
    with the re-tuned gains. Expect slightly more pitch excursion than zero-latency
    sandbox but no sustained oscillation.
 2. Run `python replay.py --baseline --scenario 5_VEL_PI_leg_cycling` — fitness will
@@ -661,28 +753,26 @@ python optimize_yaw_pi.py --hours 1
 
 ---
 
-### Total overnight estimate
+### Latency tuning summary ✅ ALL STEPS COMPLETE (2026-03-19)
 
-| Step | Run time | Scenario |
-|------|----------|----------|
-| 0 | ~15 min | S1 (seed) |
-| 1 | ~1 hr | S4 (LQR) |
-| 2 | ~1 hr | S5 (VelocityPI) |
-| 3 | ~1 hr | S5+S8 (Suspension) |
-| 4 | ~1 hr | S6 (YawPI) |
-| **Total** | **~4.25 hr** | — |
+| Step | Actual run time | Scenario | Status |
+|------|----------------|----------|--------|
+| 0 | ~15 min | S1 (LQR seed) | ✅ Done |
+| 1 | ~10 min | S2 (LQR full) | ✅ Done |
+| 2 | ~20 min | S5 (VelocityPI) | ✅ Done |
+| 3 | ~20 min | S6 (YawPI) | ✅ Done |
+| 4 | ~5216 evals | S8 (Suspension) | ✅ Done |
 
 ---
 
 ## Tuning Summary
 
-| Controller | Method | Parameters | Status |
-|------------|--------|-----------|--------|
-| Balance LQR | (1+8)-ES on S4 | Q_pitch, Q_pitch_rate, Q_vel, R | ✅ S4 baselined — Q=[0.0142, 0.0337, 0.00025], R=28.73 (2026-03-18) |
-| Gain scheduling | Offline at 3 points | l_eff at Q_RET/NOM/EXT | ✅ Done |
-| Velocity PI (hold) | (1+8)-ES on S2 | Kp_v, Ki_v | ✅ Prior baseline — Kp=0.499, Ki=0.0585 |
-| Velocity PI (tracking) | (1+8)-ES on combined_PI | Kp_v, Ki_v | ✅ Prior baseline — Kp=0.503, Ki=0.013 |
-| Velocity PI (leg cycling) | (1+8)-ES on S5 | Kp_v, Ki_v | ✅ S5 baselined — Kp=0.2512, Ki=0.0114 (2026-03-18) |
-| Yaw PI | Manual visual | Kp_yaw, Ki_yaw | ✅ Baselined — Kp=0.3, Ki=0.05 (Phase 3) |
-| Leg impedance + Roll | (1+8)-ES on S5+S8 | K_s, B_s, K_ROLL, D_ROLL | ✅ S8 baselined — K_s=16.0, B_s=0.822, K_ROLL=3.964, D_ROLL=1.0 (2026-03-18) |
-| Jump recovery | 1D search | Landing K_s multiplier | Not started |
+| Controller | Method | Parameters | Zero-latency baseline | Latency baseline |
+|------------|--------|-----------|----------------------|-----------------|
+| Balance LQR | (1+8)-ES on S2 | Q_pitch, Q_pitch_rate, Q_vel, R | ✅ Q=[0.0142, 0.0337, 0.00025], R=28.73 | ✅ Q=[0.0634, 0.000219, 0.000011], R=1.980 |
+| Gain scheduling | Offline at 3 points | l_eff at Q_RET/NOM/EXT | ✅ Done | same |
+| Hip servo (S1–S7) | Fixed (not optimised) | KP=50 N·m/rad, KD=3 N·m·s/rad | ✅ | ✅ |
+| Velocity PI | (1+8)-ES on S5 | Kp_v, Ki_v | ✅ Kp=0.502, Ki=0.011 | ✅ Kp=0.376, Ki=0.011 |
+| Yaw PI | (1+8)-ES on S6 | Kp_yaw, Ki_yaw | ✅ Kp=2.272, Ki=1.125 | ✅ Kp=2.192, Ki=0.427 |
+| Hip Impedance + Roll (S8) | (1+8)-ES on S8 | K_s, B_s, K_ROLL, D_ROLL | ✅ K_s=16.0, B_s=0.799, K_ROLL=4.0, D_ROLL=1.0 | ✅ K_s=2.040, B_s=4.179, K_ROLL=3.912, D_ROLL=0.916 |
+| Jump recovery | — | — | Not started | — |

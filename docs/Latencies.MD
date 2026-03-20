@@ -74,7 +74,7 @@ balancing robot) each 2 ms loop costs ~3.6° of phase margin.
 
 ## 3. Current Simulation — Zero Latency
 
-The MuJoCo sim in `scenarios.py` / `sandbox.py` has **no modelled latency anywhere**:
+The MuJoCo sim in `scenarios.py` / `sandbox_fastchart.py` has **no modelled latency anywhere**:
 
 | Stage | Sim behaviour | Real behaviour | Error |
 |-------|--------------|----------------|-------|
@@ -173,7 +173,7 @@ A `collections.deque` of fixed length holds the history. Each control tick:
 2. Pop the left (oldest) element as the delayed value seen by the controller/actuator
 
 ```python
-# Sensor side (scenarios.py / sandbox.py)
+# Sensor side (scenarios.py / sandbox_fastchart.py)
 _sens_buf.append((pitch, pitch_rate, wheel_vel))
 _pitch_d, _pitch_rate_d, _wheel_vel_d = _sens_buf[0]   # oldest = delayed
 

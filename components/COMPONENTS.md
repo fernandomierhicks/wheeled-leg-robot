@@ -24,7 +24,7 @@ Structural sizing source: `simulation/mujoco/baseline1_leg_analysis/size_report.
 | ID | Part | Qty | Mass ea (g) | Total (g) | Cost ea ($) | Total ($) | Status | Notes |
 |---|---|---|---|---|---|---|---|---|
 | HIP_MOTOR | CubeMars AK45-10 KV75 | 2 | 260 | 520 | 149 | 298 | designed | Φ53×43 mm, 10:1, 7 N·m peak, MIT CAN, CAN id L=1 R=2 |
-| WHEEL_MOTOR | 5065 130KV outrunner (generic) | 2 | 200 | 400 | 30 | 60 | designed | Direct drive, Hall sensors req. for ODESC, Kt=0.074 Nm/A, T_peak=3.67 Nm @ 50A |
+| WHEEL_MOTOR | Maytech MTO5065-70-HA-C | 2 | 200 | 400 | 30 | 60 | designed | KV70, direct drive, Hall sensors req. for ODESC; Kt=0.1364 Nm/A, T_peak=6.82 Nm @ 50A, ω_noload=175.9 rad/s @ 24V; https://maytech.cn/products/mto5065-170-ha-c?variant=29503884492894 |
 
 **Subtotal motors:** 920 g / $358
 

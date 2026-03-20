@@ -17,19 +17,22 @@ with simulation, firmware, and control code without needing re-explanation each 
 
 **See `docs/Control.MD` for:**
 - Complete 4-controller cascade (Balance LQR + Leg Impedance + Velocity PI + Yaw PI)
-- Phase 1 findings: 3-state LQR re-baselined (run_id=6288, 8496 evals, fitness=0.400)
-- Implementation phases 2–6: Drive mode, turning, leg suspension, jump recovery
-- Per-phase tuning strategies and success criteria
+- Optimizer scenarios S1–S8 and per-phase tuning strategies
+- Latency model framework and gain re-tuning for real hardware delays
 
-**Current Status (2026-03-18):**
+**Current Status (2026-03-20):**
 - ✅ Phase 1: 3-State LQR + Gain Scheduling — COMPLETE & S4-BASELINED
   - Q=[0.014168, 0.033720, 0.000250], R=28.734 (1896 evals, fitness=0.018, RMS pitch 1.24°)
 - ✅ Phase 2: Velocity PI — COMPLETE & SANDBOX-RETUNED
   - KP_V=0.502418, KI_V=0.011405, THETA_REF_RATE_LIMIT=5.0 rad/s (optimizer was too conservative)
 - ✅ Phase 3: Yaw PI — COMPLETE & RE-BASELINED (optimizer)
-  - KP_YAW=2.272, KI_YAW=1.125 (55752 evals / 75 min, fitness=0.4102) — was visual 0.3/0.05
+  - KP_YAW=2.272, KI_YAW=1.125 (55752 evals / 75 min, fitness=0.4102)
 - ✅ Phase 4: Leg Impedance + Roll Leveling — COMPLETE & RE-BASELINED (optimizer)
   - K_s=16.0, B_s=0.799, K_ROLL=4.0, D_ROLL=1.0 (25016 evals / 90 min, fitness=4.0918)
+- ✅ Phase 5: Realistic Wheel Motor Model — COMPLETE
+  - Back-EMF taper, 6S LiPo battery model, voltage-scaled no-load speed (in LQR_Control_optimization/)
+- ✅ Phase 6: Latency Sensitivity — COMPLETE (all 4 steps, latency_sensitivity/)
+  - Delayed baselines: LQR Q=[0.0634,0.000219,0.000011] R=1.98 · VPI Kp=0.376 · Yaw Kp=2.192 Ki=0.427 · Suspension K_s=2.04
 
 ---
 
@@ -58,20 +61,8 @@ jump height (~283 mm vs ~26 mm) via AK45-10 hip motors replacing GIM6010-8 + ODr
 ## Architecture — Baseline 1
 
 Geometry from evolutionary optimisation (run_id 51167, jump = 282.65 mm).
-Source of truth: `simulation/mujoco/baseline1_leg_analysis/sim_config.py`
-
-| Parameter | Value |
-|---|---|
-| Leg type | 1-DOF synthesised 4-bar linkage, single AK45-10 per leg |
-| Femur (A→C) | 173.78 mm |
-| Tibia (C→W) | 129.39 mm |
-| Tibia stub (C→E, upward) | 35.13 mm |
-| Coupler (F→E) | 150.81 mm |
-| Coupler pivot F | X = −58.87 mm, Z = −18.21 mm from body origin |
-| Hip motor Z offset (A) | −23.5 mm from body centre |
-| Wheel diameter | 150 mm |
-| Stroke | 61.93° (Q_ret = −0.351 rad → Q_ext = −1.432 rad) |
-| Total mass (base) | ~2.8 kg (2798 g); ~3.1 kg with 10% contingency |
+See `components/COMPONENTS.md` for full geometry table, BOM, and mass breakdown.
+Simulation source of truth: `simulation/mujoco/baseline1_leg_analysis/sim_config.py`
 
 ### 4-bar Leg Topology
 
@@ -86,7 +77,7 @@ Source of truth: `simulation/mujoco/baseline1_leg_analysis/sim_config.py`
                |
                | tibia (129.39 mm down to W, 35.13 mm stub up to E)
                |
-               W  ← wheel centre (Ø150 mm, 5065 130KV direct drive)
+               W  ← wheel centre (Ø150 mm, Maytech MTO5065-70-HA-C direct drive)
 ```
 
 - A = hip motor output shaft (femur origin)
@@ -98,24 +89,8 @@ Source of truth: `simulation/mujoco/baseline1_leg_analysis/sim_config.py`
 
 ## Components
 
-Full BOM/MEL: `components/COMPONENTS.md` and `components/database/bom.yaml`
-
-Key facts for coding:
-
-| ID | Part | Key spec |
-|---|---|---|
-| HIP_MOTOR | CubeMars AK45-10 KV75 | 7 N·m peak, 10:1 planetary, MIT CAN, L=1 R=2 |
-| WHEEL_MOTOR | 5065 130KV outrunner | 3.67 N·m peak (50A), direct drive, Hall sensors |
-| WHEEL_TYRE | PLA hub + TPU tread | 150 mm OD, 70 g each |
-| WHEEL_CTRL | ODESC 3.6 Dual Drive | ODrive v0.5.x, axis0=L axis1=R, CAN id=3 |
-| MCU | Arduino UNO R4 WiFi | RA4M1 48 MHz + ESP32-S3, native CAN, 24V VIN max |
-| IMU | BNO086 | Game Rotation Vector at 500 Hz, I2C |
-| BATTERY | 24V (TBD) | All motors rated ≥24V; 5V rail via DC-DC buck |
-
-**Wheel motor electrical model** (see `motor_models.py`):
-- ω_noload = 326.7 rad/s (24.5 m/s at rim)
-- Kt = 0.0735 N·m/A → T_peak = 3.67 N·m at ODESC 50A limit
-- τ_elec ≈ 2 ms, B_friction = 0.02 N·m·s/rad
+Full BOM, geometry, and motor electrical specs: `components/COMPONENTS.md` (single source of truth).
+Machine-readable BOM: `components/database/bom.yaml`
 
 ---
 
@@ -124,25 +99,39 @@ Key facts for coding:
 - **Firmware:** PlatformIO, Arduino framework, UNO R4 WiFi
 - **OTA:** ESP32-S3 handles WiFi OTA (`upload_protocol = espota`)
 - **Simulation:** Python + MuJoCo (Windows native, `pip install mujoco`)
-- **Balance algorithm (planned):** LQR on linearised inverted pendulum, 500 Hz, state = [pitch, pitch_rate, wheel_pos, wheel_vel, leg_length, leg_vel]
+- **Balance algorithm:** LQR on linearised inverted pendulum, 500 Hz, 3-state: [pitch−θ_ref, pitch_rate, wheel_vel_avg−v_ref] — fully tuned in simulation
 - **Wheel odometry:** ODESC encoder feedback via CAN
 
 ---
 
 ## Simulation — Current State
 
-### Working: `simulation/mujoco/baseline1_leg_analysis/`
+### Active: `simulation/mujoco/LQR_Control_optimization/`
 
-Full two-leg robot with jump controller, balance PD, and force analysis.
+Primary sim folder for control tuning (Phases 1–5). All 8 optimizer scenarios, replay, and sandbox.
 
 | File | Purpose |
 |---|---|
-| `sim_config.py` | Single source of truth — all geometry, motor, and controller params |
-| `viewer.py` | MuJoCo GUI viewer; buttons: Drive Fwd/Bwd, Restart, Neutral, Crouch, Jump |
-| `motor_models.py` | Realistic per-axis motor models (back-EMF taper, FOC lag, viscous drag) |
-| `force_log.csv` | Force/telemetry log written each run |
+| `sim_config.py` | All control gains, scenario params, motor/battery constants |
+| `scenarios.py` | All scenario runners, `_run_sim_loop`, `VelocityPI`, `YawPI` classes |
+| `optimize_lqr.py` / `optimize_vel_pi.py` / `optimize_yaw_pi.py` / `optimize_suspension.py` | (1+8)-ES optimizers per controller |
+| `replay.py` | MuJoCo viewer + 8-panel telemetry |
+| `sandbox_fastchart.py` | Interactive arena — 28 obstacles, gamepad + sliders, pyqtgraph |
+| `lqr_design.py` | LQR solver + gain scheduling |
 
-Viewer features: slow-motion during jump, matplotlib telemetry (pitch, forces, bearing loads, jump height), CG marker overlay.
+### Active: `simulation/mujoco/latency_sensitivity/`
+
+Full copy of LQR_Control_optimization with 10-step sensor delay + 5-step actuator delay (ring buffers). Phase 6 — all 4 latency re-tuning steps complete.
+
+### Reference: `simulation/mujoco/baseline1_leg_analysis/`
+
+Two-leg robot with jump controller, balance PD, and force analysis. Source of truth for geometry/mass.
+
+| File | Purpose |
+|---|---|
+| `sim_config.py` | Geometry, motor, and structural params (run_id 51167) |
+| `viewer.py` | MuJoCo GUI viewer with jump, telemetry, CG marker |
+| `motor_models.py` | Realistic per-axis motor models |
 
 ### Reference: `simulation/mujoco/`
 
@@ -160,10 +149,14 @@ software/
   tools/                             ← odrivetool scripts, calibration
 simulation/
   mujoco/
-    baseline1_leg_analysis/          ← ✅ Active two-leg sim (jump + balance)
-      sim_config.py                  ← source of truth for geometry + params
-      viewer.py                      ← MuJoCo GUI
-      motor_models.py                ← motor electrical models
+    LQR_Control_optimization/        ← ✅ Active — control tuning (Phases 1–5)
+      sim_config.py                  ← all gains + scenario params
+      scenarios.py                   ← all scenario runners + controller classes
+      replay.py / sandbox_fastchart.py ← viewer + interactive arena
+    latency_sensitivity/             ← ✅ Active — Phase 6 (delayed plant re-tuning)
+      logs/                          ← CSV + log files (S{name}.csv naming)
+    baseline1_leg_analysis/          ← reference — geometry + jump sim
+      sim_config.py                  ← source of truth for geometry + mass
     4bar_leg.xml / 4bar_leg_sim.py   ← single-leg kinematic reference
     fourbar_ref/                     ← reference 4-bar implementations
   sil/                               ← C++ DLL bridge (future)
@@ -184,7 +177,7 @@ params/robot_params.yaml             ← Physical params
 
 - **Synthesised 4-bar over 2-DOF:** Single motor per leg, passive knee coupling. Baseline1 geometry confirmed in MuJoCo (run_id 51167, 282.65 mm jump).
 - **AK45-10 over GIM6010-8:** GIM6010-8 limited to 3 N·m by ODrive Micro 7A limit; AK45-10 delivers 7 N·m with integrated driver.
-- **5065 130KV over Maytech MTO7052HBM:** Saves 360 g total, cheaper; 3.67 N·m direct drive is sufficient for balance (2× gravity margin at 10° lean). No gearbox needed — FOC gives full torque at zero RPM.
+- **Maytech MTO5065-70-HA-C (KV70) wheel motor:** Direct drive, Hall sensors for ODESC, 6.82 N·m peak @ 50A; no gearbox needed — FOC gives full torque at zero RPM.
 - **ODESC 3.6 over ODrive Pro:** Saves $189, identical firmware/API, 50A vs 40A continuous.
 - **24V battery:** Compatible with all motors (AK45-10 ≤36V, 5065 ≤unrestricted, ODESC ≤56V).
 - **UNO R4 over Teensy 4.1:** Native CAN + WiFi/OTA built-in; 32KB RAM adequate for 500Hz LQR.
@@ -198,7 +191,8 @@ params/robot_params.yaml             ← Physical params
 - [x] 4-bar single-leg kinematics + viewer
 - [x] Two-leg model with ground contact + balance controller
 - [x] Jump controller + force/bearing analysis (baseline1_leg_analysis)
-- [ ] Tune LQR gains in simulation (currently PD placeholder)
+- [x] Tune LQR + VelocityPI + YawPI + Suspension gains (Phases 1–4, LQR_Control_optimization)
+- [x] Realistic motor/battery model + latency sensitivity (Phases 5–6)
 - [ ] Port controller to C++ for SIL (`simulation/sil/`)
 
 ### Firmware

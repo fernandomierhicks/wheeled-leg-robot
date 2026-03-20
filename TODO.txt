@@ -1,4 +1,4 @@
-Check that velocity controller starts commanded the magic pitch angle
+
 
 --- Overnight optimization ideas ---
 1. Widen suspension bounds and re-run optimize_suspension.py overnight
@@ -14,3 +14,31 @@ Check that velocity controller starts commanded the magic pitch angle
    - Fitness = weighted S5 + S6 + S7
    - Finds gains that work for both driving and turning simultaneously
    - Safe: doesn't touch LQR or suspension
+
+
+---Fernandos note dont change below
+
+Refractor sim:
+
+-Single source simulation truth and any physics model. Never double booked in code
+
+-Replay secnario and sandbox use the same simulation logic.
+
+-Scenarios
+---Each only with specific controllers running. 
+---Each with specific robot command. 
+---Each with specific world. 
+---Each with specific metrics
+---Make it easy to add more scenarios and tweak the optimization order
+---A single file never double boooked elsewhere in code, single source of truth
+
+
+
+-Chart motor thermals in sandbox 
+-Port fast sandbox to replay and real sandbox or replace altogether
+-Do we need absolute encoder on hub motors? select/model...
+-Torque analysis onhub motors. Do we need ODESC motor controller.
+
+
+Wheel motor: https://maytech.cn/products/mto5065-170-ha-c?variant=29503884492894
+

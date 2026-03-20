@@ -6,8 +6,8 @@ Searches over 2 VelocityPI parameters via (1+8)-ES:
 
 LQR Q/R weights are held fixed at the baselined values in sim_config.py.
 Scenario: combined_PI — weighted sum of two sub-scenarios (50/50):
-  2_VEL_PI_disturbance : position hold under ±1N impulse kicks (normalised [m/s])
-  3_VEL_PI_staircase   : setpoint tracking 0→0.3→0.6→−0.3→0 m/s [m/s RMS]
+  3_VEL_PI_disturbance : position hold under ±1N impulse kicks (normalised [m/s])
+  4_VEL_PI_staircase   : setpoint tracking 0→0.3→0.6→−0.3→0 m/s [m/s RMS]
 Fitness: lower is better; fall adds large penalty to both sub-fitnesses.
 
 Run:

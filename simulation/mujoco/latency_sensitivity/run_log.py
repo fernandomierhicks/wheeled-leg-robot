@@ -10,17 +10,18 @@ import csv
 import os
 
 # ── File location ───────────────────────────────────────────────────────────
-_HERE    = os.path.dirname(os.path.abspath(__file__))
-CSV_PATH = os.path.join(_HERE, "results.csv")  # Default (legacy)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_LOGS = os.path.join(_HERE, "logs")
+
 
 def get_scenario_csv_path(scenario: str) -> str:
     """Return scenario-specific CSV path to isolate configs.
 
-    Example: scenario='1_LQR_pitch_step' → 'results_1_LQR_pitch_step.csv'
+    Example: scenario='1_LQR_pitch_step' → 'logs/results_1_LQR_pitch_step.csv'
     Ensures scenario config changes don't contaminate old runs.
     """
     safe_name = scenario.replace(" ", "_").replace("/", "_")
-    return os.path.join(_HERE, f"results_{safe_name}.csv")
+    return os.path.join(_LOGS, f"S{safe_name}.csv")
 
 # ── Schema ──────────────────────────────────────────────────────────────────
 CSV_COLS = [
@@ -30,6 +31,10 @@ CSV_COLS = [
     "Q_PITCH", "Q_PITCH_RATE", "Q_VEL", "R",
     # Velocity PI gains (optimizer search space — Phase 2+)
     "KP_V", "KI_V",
+    # Yaw PI gains (optimizer search space — Phase 3+)
+    "KP_YAW", "KI_YAW",
+    # Suspension / roll gains (optimizer search space — Phase 4+)
+    "LEG_K_S", "LEG_B_S", "LEG_K_ROLL", "LEG_D_ROLL",
     # Performance metrics (lower is better except survived_s)
     "rms_pitch_deg", "max_pitch_deg", "wheel_travel_m", "wheel_liftoff_s",
     "vel_track_rms_ms",   # RMS velocity tracking error [m/s] (drive scenarios)
@@ -46,7 +51,7 @@ CSV_COLS = [
 # ---------------------------------------------------------------------------
 # ID management
 # ---------------------------------------------------------------------------
-def next_run_id(csv_path: str = CSV_PATH) -> int:
+def next_run_id(csv_path: str) -> int:
     """Return the next available run_id (1-based, never reuses)."""
     if not os.path.exists(csv_path):
         return 1
@@ -69,7 +74,7 @@ def next_run_id(csv_path: str = CSV_PATH) -> int:
 # ---------------------------------------------------------------------------
 # Write
 # ---------------------------------------------------------------------------
-def log_run(row: dict, csv_path: str = CSV_PATH) -> int:
+def log_run(row: dict, csv_path: str) -> int:
     """Append a run row to the CSV.  Assigns run_id if not already set.
 
     Returns the run_id that was written.
@@ -99,12 +104,12 @@ def _read_all(csv_path: str) -> list[dict]:
             return list(csv.DictReader(f))
 
 
-def load_all_runs(csv_path: str = CSV_PATH) -> list[dict]:
+def load_all_runs(csv_path: str) -> list[dict]:
     """Return all rows as a list of dicts."""
     return _read_all(csv_path)
 
 
-def load_run(run_id: int, csv_path: str = CSV_PATH) -> dict:
+def load_run(run_id: int, csv_path: str) -> dict:
     """Load a single row by run_id.  Raises ValueError if not found."""
     rows = _read_all(csv_path)
     matches = [r for r in rows if str(r.get("run_id")) == str(run_id)]
@@ -113,7 +118,7 @@ def load_run(run_id: int, csv_path: str = CSV_PATH) -> dict:
     return matches[0]
 
 
-def get_best_run(scenario: str = "balance", csv_path: str = CSV_PATH) -> dict | None:
+def get_best_run(scenario: str, csv_path: str) -> dict | None:
     """Return the PASS row with the lowest fitness for the given scenario."""
     rows = _read_all(csv_path)
     valid = [r for r in rows
@@ -128,7 +133,7 @@ def get_best_run(scenario: str = "balance", csv_path: str = CSV_PATH) -> dict | 
     return min(valid, key=_fit)
 
 
-def get_runs_by_scenario(scenario: str, csv_path: str = CSV_PATH) -> list[dict]:
+def get_runs_by_scenario(scenario: str, csv_path: str) -> list[dict]:
     """Return all rows for a given scenario, ordered by run_id."""
     rows = _read_all(csv_path)
     return [r for r in rows if r.get("scenario") == scenario]
@@ -137,7 +142,7 @@ def get_runs_by_scenario(scenario: str, csv_path: str = CSV_PATH) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Overwrite (resimulate a run)
 # ---------------------------------------------------------------------------
-def overwrite_run(run_id: int, new_row: dict, csv_path: str = CSV_PATH) -> None:
+def overwrite_run(run_id: int, new_row: dict, csv_path: str) -> None:
     """Replace the row with matching run_id in-place.
 
     Preserves all other rows.  new_row['run_id'] is forced to run_id.
@@ -163,8 +168,13 @@ def overwrite_run(run_id: int, new_row: dict, csv_path: str = CSV_PATH) -> None:
 # ---------------------------------------------------------------------------
 # List
 # ---------------------------------------------------------------------------
-def list_runs(scenario: str = None, csv_path: str = CSV_PATH) -> None:
+def list_runs(scenario: str = None, csv_path: str = None) -> None:
     """Print a formatted table of runs to stdout."""
+    if csv_path is None:
+        if scenario is None:
+            print("No csv_path specified.")
+            return
+        csv_path = get_scenario_csv_path(scenario)
     rows = _read_all(csv_path)
     if scenario:
         rows = [r for r in rows if r.get("scenario") == scenario]
@@ -204,8 +214,12 @@ def list_runs(scenario: str = None, csv_path: str = CSV_PATH) -> None:
 if __name__ == "__main__":
     import sys
     scenario_filter = sys.argv[1] if len(sys.argv) > 1 else None
-    list_runs(scenario=scenario_filter)
-    best = get_best_run(scenario=scenario_filter or "balance")
+    if scenario_filter is None:
+        print("Usage: python run_log.py <scenario>")
+        sys.exit(1)
+    csv_path_cli = get_scenario_csv_path(scenario_filter)
+    list_runs(scenario=scenario_filter, csv_path=csv_path_cli)
+    best = get_best_run(scenario=scenario_filter, csv_path=csv_path_cli)
     if best:
         print(f"\nBest run: id={best['run_id']}  fitness={best.get('fitness','')}  "
               f"rms={best.get('rms_pitch_deg','')}°  label={best.get('label','')}")

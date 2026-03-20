@@ -76,19 +76,21 @@ sys.path.insert(0, _HERE)
 from sim_config import (
     ROBOT, Q_NOM, WHEEL_R,
     HIP_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT, WHEEL_TORQUE_LIMIT,
+    HIP_POSITION_KP, HIP_POSITION_KD,
     LEG_K_S, LEG_B_S,
     LEG_K_ROLL, LEG_D_ROLL, ROLL_NOISE_STD_RAD, HIP_SAFE_MIN, HIP_SAFE_MAX,
     LQR_Q_PITCH, LQR_Q_PITCH_RATE, LQR_Q_VEL, LQR_R,
     PITCH_NOISE_STD_RAD, PITCH_RATE_NOISE_STD_RAD_S,
     CTRL_STEPS, PITCH_STEP_RAD, THETA_REF_RATE_LIMIT,
     S5_BUMPS, S8_BUMPS, S8_DRIVE_SPEED,
-    YAW_PI_KP, YAW_PI_KI,
+    YAW_PI_KP, YAW_PI_KI, YAW_TURN_RATE,
+    DRIVE_TURN_SPEED, DRIVE_TURN_YAW_RATE,
     BATT_V_NOM,
 )
 from physics import build_xml, build_assets, get_equilibrium_pitch
 from run_log import (
-    CSV_PATH, load_run, load_all_runs, get_best_run,
-    list_runs, overwrite_run,
+    load_run, load_all_runs, get_best_run,
+    list_runs, overwrite_run, get_scenario_csv_path,
 )
 import scenarios as _scenarios
 from scenarios import (
@@ -128,7 +130,9 @@ def _row_to_gains(row: dict) -> dict:
 
 
 def _get_best_run_id(rank: int = 1, csv_path: str = None) -> int:
-    rows = load_all_runs(csv_path or CSV_PATH)
+    if csv_path is None:
+        raise ValueError("csv_path is required — pass --csv or use --scenario to derive it")
+    rows = load_all_runs(csv_path)
     pass_rows = []
     for r in rows:
         if r.get("status") == "PASS":
@@ -346,13 +350,32 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     all_sec_lines = [ln_pitch_ref, ln_v_cmd, ln_omega_cmd,
                      ln_hip_R, ln_hip_cmd, ln_tau_R]
 
+    # ── Blit setup ───────────────────────────────────────────────────────────
+    # Mark every data line animated so it's excluded from the static background
+    _animated_lines = [
+        ln_pitch, ln_pitch_ref, ln_vel, ln_v_cmd, ln_yaw, ln_omega_cmd,
+        ln_hip_L, ln_hip_R, ln_hip_cmd, ln_roll, ln_prate,
+        ln_tau_L, ln_tau_R, ln_delta_q, ln_vbatt, ln_vbatt_nom,
+        ln_soc, ln_temp,
+    ]
+    for _ln in _animated_lines:
+        _ln.set_animated(True)
+
+    fig.canvas.draw()   # initial full draw to capture clean backgrounds
+    _ax_list = list(axes.flat) + [ax_temp]
+    _bgs     = [fig.canvas.copy_from_bbox(ax.bbox) for ax in _ax_list]
+
+    _RESCALE_EVERY = 6   # full redraw + background recapture every 6 rendered frames
+    _render_frame  = 0
+    _do_rescale    = True
+    _last_draw = 0.0
     while plt.fignum_exists(fig.number):
         items = []
         while True:
             try: items.append(data_q.get_nowait())
             except Exception: break
         if not items:
-            plt.pause(1.0 / 30)
+            plt.pause(0.005)
             continue
 
         for item in items:
@@ -385,7 +408,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         idx   = next((i for i, t in enumerate(tb) if t >= t0), 0)
         tw    = tb[idx:]
 
+        _render_frame += 1
+        _do_rescale = (_render_frame % _RESCALE_EVERY == 0)
+
         def _autoscale(ax, *bufs):
+            if not _do_rescale: return
             all_vals = []
             for b in bufs:
                 all_vals += list(b)[idx:]
@@ -414,10 +441,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         vb_bw = list(v_batt_buf)[idx:]
         if vb_bw:
             ln_vbatt.set_data(tw, vb_bw)
-            axes[4][0].set_xlim(t0, sim_t + 0.5)
-            lo, hi = min(vb_bw), max(vb_bw)
-            span = max(hi - lo, 0.5)
-            axes[4][0].set_ylim(lo - span * 0.15, hi + span * 0.15)
+            if _do_rescale:
+                axes[4][0].set_xlim(t0, sim_t + 0.5)
+                lo, hi = min(vb_bw), max(vb_bw)
+                span = max(hi - lo, 0.5)
+                axes[4][0].set_ylim(lo - span * 0.15, hi + span * 0.15)
             ln_vbatt_nom.set_data([t0, sim_t + 0.5], [BATT_V_NOM, BATT_V_NOM])
 
         # SoC + temperature panel
@@ -425,14 +453,16 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         temp_bw = list(batt_temp_buf)[idx:]
         if soc_bw:
             ln_soc.set_data(tw, soc_bw)
-            axes[4][1].set_xlim(t0, sim_t + 0.5)
-            axes[4][1].set_ylim(max(0.0, min(soc_bw) - 5), 105)
+            if _do_rescale:
+                axes[4][1].set_xlim(t0, sim_t + 0.5)
+                axes[4][1].set_ylim(max(0.0, min(soc_bw) - 5), 105)
         if temp_bw:
             ln_temp.set_data(tw, temp_bw)
-            ax_temp.set_xlim(t0, sim_t + 0.5)
-            lo_t, hi_t = min(temp_bw), max(temp_bw)
-            span_t = max(hi_t - lo_t, 2.0)
-            ax_temp.set_ylim(lo_t - span_t * 0.2, hi_t + span_t * 0.5)
+            if _do_rescale:
+                ax_temp.set_xlim(t0, sim_t + 0.5)
+                lo_t, hi_t = min(temp_bw), max(temp_bw)
+                span_t = max(hi_t - lo_t, 2.0)
+                ax_temp.set_ylim(lo_t - span_t * 0.2, hi_t + span_t * 0.5)
 
         # Secondary lines
         ln_pitch_ref.set_data(tw, list(pitch_ref_buf)[idx:])
@@ -442,7 +472,25 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_hip_cmd.set_data(tw,   list(hip_cmd_buf)[idx:])
         ln_tau_R.set_data(tw,     list(tau_R_buf)[idx:])
 
-        fig.canvas.flush_events()
+        # ── Render ───────────────────────────────────────────────────────────
+        _now = time.monotonic()
+        if _now - _last_draw < 1.0 / 60:
+            continue   # skip render — will catch up next iteration
+        _last_draw = _now
+
+        if _do_rescale:
+            # Full redraw on rescale frames — recapture static backgrounds
+            fig.canvas.draw()
+            _bgs[:] = [fig.canvas.copy_from_bbox(ax.bbox) for ax in _ax_list]
+        else:
+            # Blit: restore cached background, draw only animated lines on top
+            for ax, bg in zip(_ax_list, _bgs):
+                fig.canvas.restore_region(bg)
+                for ln in ax.get_lines():
+                    if ln.get_animated():
+                        ax.draw_artist(ln)
+                fig.canvas.blit(ax.bbox)
+            fig.canvas.flush_events()
 
 
 # ---------------------------------------------------------------------------
@@ -466,7 +514,8 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
             fitness="(baseline)",
         )
     else:
-        csv_path = csv_path or CSV_PATH
+        if csv_path is None:
+            raise ValueError("csv_path is required when not using --baseline")
         if run_id is None:
             run_id = _get_best_run_id(rank=1, csv_path=csv_path)
         row = load_run(run_id, csv_path)
@@ -551,7 +600,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     _init()
 
     # Telemetry process
-    plot_title = f"run {run_id} | {label} | fit={logged_fit}"
+    plot_title = f"scenario: {scenario} | run {run_id} | {label} | fit={logged_fit}"
     data_q  = mp.Queue(maxsize=4000)
     cmd_q   = mp.Queue(maxsize=16)
     plot_proc = mp.Process(target=_plot_process,
@@ -577,8 +626,8 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                                else 0.0)
     _scenario_dist_fn = {
         "1_LQR_pitch_step":          s1_dist_fn,
-        "4_leg_height_gain_sched":   s1_dist_fn,
-        "2_VEL_PI_disturbance":      s2_dist_fn,
+        "2_leg_height_gain_sched":   s1_dist_fn,
+        "3_VEL_PI_disturbance":      s2_dist_fn,
         "5_VEL_PI_leg_cycling":      s2_dist_fn,
         "balance_disturbance":       _generic_dist,
         "lqr_combined":              _generic_dist,
@@ -595,6 +644,10 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
     _vel_est_ms         = 0.0   # last velocity estimate fed into VelocityPI (m/s)
     _v_desired          = [0.0] # velocity setpoint [m/s]; slider writes here via cmd_q
     _omega_desired      = [0.0] # yaw rate setpoint [rad/s]; slider writes here via cmd_q
+    turn_active         = [False]  # S6: manual turn override flag (mirrored from plot UI)
+    _s6_phase       = [0]     # S6 auto-profile: 0=settle 1=+1rot 2=-2rot 3=+2rot 4=done
+    _s6_yaw_accum   = [0.0]  # integrated yaw since t=1s [rad]
+    _s6_phase_start = [0.0]  # _s6_yaw_accum value at start of current phase
     _hip_sym_ref        = [Q_NOM]  # common-mode hip target; updated each control step
     _staircase_active   = [True]  # False when user switches to manual slider control
 
@@ -626,6 +679,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
             _staircase_active[0] = True
             _v_desired[0] = 0.0
             _omega_desired[0] = 0.0
+            _s6_phase[0] = 0; _s6_yaw_accum[0] = 0.0; _s6_phase_start[0] = 0.0
             vel_pi.reset()
             yaw_pi.reset()
             battery.reset(); _v_batt[0] = BATT_V_NOM
@@ -675,7 +729,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                         data.ctrl[act_hip_R]   = 0.0
                     elif use_lqr:
                         if scenario in ("1_LQR_pitch_step", "2_LQR_impulse_recovery",
-                                        "4_leg_height_gain_sched"):
+                                        "2_leg_height_gain_sched"):
                             # LQR isolation scenarios — VelocityPI disabled
                             theta_ref   = 0.0
                             _vel_est_ms = _wheel_vel_d * WHEEL_R
@@ -684,6 +738,30 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                             _vel_est_ms = _wheel_vel_d * WHEEL_R
                             _v_desired[0] = s3_velocity_profile(float(data.time))
                             theta_ref   = vel_pi.update(_v_desired[0], _vel_est_ms)
+                            _d_max = THETA_REF_RATE_LIMIT * _dt_ctrl
+                            theta_ref = float(np.clip(
+                                theta_ref,
+                                _prev_theta_ref[0] - _d_max,
+                                _prev_theta_ref[0] + _d_max))
+                            _prev_theta_ref[0] = theta_ref
+                            _theta_ref  = theta_ref
+                        elif scenario == "7_DRIVE_TURN":
+                            # S7: multi-phase drive+turn profile
+                            # phase 1 (1–5s):  v=0.3  ω=+0.5  (baseline)
+                            # phase 2 (5–10s): v=0.5  ω=−1.0  (reverse, faster)
+                            # phase 3 (10s+):  v=0.7  ω=+1.5  (faster speed + high yaw)
+                            _vel_est_ms = _wheel_vel_d * WHEEL_R
+                            _t7 = float(data.time)
+                            if _t7 < 5.0:
+                                _v_desired[0] = DRIVE_TURN_SPEED
+                                _omega_desired[0] = DRIVE_TURN_YAW_RATE
+                            elif _t7 < 10.0:
+                                _v_desired[0] = 0.5
+                                _omega_desired[0] = -1.0
+                            else:
+                                _v_desired[0] = 0.7
+                                _omega_desired[0] = 1.5
+                            theta_ref = vel_pi.update(_v_desired[0], _vel_est_ms)
                             _d_max = THETA_REF_RATE_LIMIT * _dt_ctrl
                             theta_ref = float(np.clip(
                                 theta_ref,
@@ -706,7 +784,7 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                             _theta_ref  = theta_ref
                         else:
                             _vel_est_ms = _wheel_vel_d * WHEEL_R
-                            if scenario == "3_VEL_PI_staircase" and _staircase_active[0]:
+                            if scenario == "4_VEL_PI_staircase" and _staircase_active[0]:
                                 _v_desired[0] = s3_velocity_profile(float(data.time))
                             theta_ref   = vel_pi.update(_v_desired[0], _vel_est_ms)
                             _d_max = THETA_REF_RATE_LIMIT * _dt_ctrl
@@ -719,33 +797,71 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                         v_ref_rads = _v_desired[0] / WHEEL_R
                         tau_sym = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, q_hip_avg,
                                              v_ref=v_ref_rads, theta_ref=theta_ref)
+                        # S6: auto yaw profile — 1 rot fwd, 2 rot rev×2, 2 rot fwd×2
+                        if scenario == "6_YAW_PI_turn" and not turn_active[0]:
+                            if float(data.time) >= 1.0:
+                                _s6_yaw_accum[0] += data.qvel[d_yaw] * _dt_ctrl
+                                _ph = _s6_phase[0]
+                                _in = _s6_yaw_accum[0] - _s6_phase_start[0]
+                                if _ph == 0:
+                                    _s6_phase[0] = 1; _s6_phase_start[0] = _s6_yaw_accum[0]
+                                    _omega_desired[0] = YAW_TURN_RATE
+                                elif _ph == 1:
+                                    _omega_desired[0] = YAW_TURN_RATE
+                                    if _in >= 2 * math.pi:
+                                        _s6_phase[0] = 2; _s6_phase_start[0] = _s6_yaw_accum[0]
+                                elif _ph == 2:
+                                    _omega_desired[0] = -2.0 * YAW_TURN_RATE
+                                    if _in <= -4 * math.pi:
+                                        _s6_phase[0] = 3; _s6_phase_start[0] = _s6_yaw_accum[0]
+                                elif _ph == 3:
+                                    _omega_desired[0] = 2.0 * YAW_TURN_RATE
+                                    if _in >= 4 * math.pi:
+                                        _s6_phase[0] = 4
+                                else:  # phase 4: done
+                                    _omega_desired[0] = 0.0
+                            else:
+                                _omega_desired[0] = 0.0
                         yaw_rate = data.qvel[d_yaw]
                         tau_yaw = yaw_pi.update(_omega_desired[0], yaw_rate) if _scenarios.USE_YAW_PI else 0.0
                         data.ctrl[act_wheel_L] = motor_taper(tau_sym - tau_yaw, data.qvel[dof_whl_L], _v_batt[0])
                         data.ctrl[act_wheel_R] = motor_taper(tau_sym + tau_yaw, data.qvel[dof_whl_R], _v_batt[0])
-                        # Leg impedance + roll leveling
+                        # Hip position target (leg cycling or fixed stance)
                         _q_hip_sym = (_leg_cycle_profile(float(data.time))
-                                      if scenario in ("4_leg_height_gain_sched",
+                                      if scenario in ("2_leg_height_gain_sched",
                                                        "5_VEL_PI_leg_cycling")
                                       else Q_NOM)
                         _hip_sym_ref[0] = _q_hip_sym
-                        _q_roll   = data.xquat[box_bid]
-                        _roll_true = math.atan2(
-                            2.0 * (_q_roll[0]*_q_roll[1] + _q_roll[2]*_q_roll[3]),
-                            1.0 - 2.0 * (_q_roll[1]**2  + _q_roll[2]**2))
-                        _roll_rate = data.qvel[dof_free + 3]
-                        _roll_meas = _roll_true + rng.normal(0, ROLL_NOISE_STD_RAD)
-                        _delta_q   = LEG_K_ROLL * _roll_meas + LEG_D_ROLL * _roll_rate
-                        _q_nom_L   = float(np.clip(_q_hip_sym + _delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
-                        _q_nom_R   = float(np.clip(_q_hip_sym - _delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
-                        for qpos_hip, dof_hip, act_hip, _q_nom_leg in [
-                            (qpos_hip_L, dof_hip_L, act_hip_L, _q_nom_L),
-                            (qpos_hip_R, dof_hip_R, act_hip_R, _q_nom_R),
-                        ]:
-                            q_hip   = data.qpos[qpos_hip]
-                            dq_hip  = data.qvel[dof_hip]
-                            tau_hip = -(LEG_K_S * (q_hip - _q_nom_leg) + LEG_B_S * dq_hip)
-                            data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+                        if scenario == "8_terrain_compliance":
+                            # S8: impedance + roll leveling (soft spring, compliance test)
+                            _q_roll   = data.xquat[box_bid]
+                            _roll_true = math.atan2(
+                                2.0 * (_q_roll[0]*_q_roll[1] + _q_roll[2]*_q_roll[3]),
+                                1.0 - 2.0 * (_q_roll[1]**2  + _q_roll[2]**2))
+                            _roll_rate = data.qvel[dof_free + 3]
+                            _roll_meas = _roll_true + rng.normal(0, ROLL_NOISE_STD_RAD)
+                            _delta_q   = LEG_K_ROLL * _roll_meas + LEG_D_ROLL * _roll_rate
+                            _q_nom_L   = float(np.clip(_q_hip_sym + _delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
+                            _q_nom_R   = float(np.clip(_q_hip_sym - _delta_q, HIP_SAFE_MIN, HIP_SAFE_MAX))
+                            for qpos_hip, dof_hip, act_hip, _q_nom_leg in [
+                                (qpos_hip_L, dof_hip_L, act_hip_L, _q_nom_L),
+                                (qpos_hip_R, dof_hip_R, act_hip_R, _q_nom_R),
+                            ]:
+                                q_hip   = data.qpos[qpos_hip]
+                                dq_hip  = data.qvel[dof_hip]
+                                tau_hip = -(LEG_K_S * (q_hip - _q_nom_leg) + LEG_B_S * dq_hip)
+                                data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
+                        else:
+                            # S1–S7: stiff position servo (matches scenarios.py evaluate())
+                            for qpos_hip, dof_hip, act_hip in [
+                                (qpos_hip_L, dof_hip_L, act_hip_L),
+                                (qpos_hip_R, dof_hip_R, act_hip_R),
+                            ]:
+                                q_hip   = data.qpos[qpos_hip]
+                                dq_hip  = data.qvel[dof_hip]
+                                tau_hip = (HIP_POSITION_KP * (_q_hip_sym - q_hip)
+                                           - HIP_POSITION_KD * dq_hip)
+                                data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
                         _v_batt[0] = battery.step(_dt_ctrl, _motor_currents(
                             float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
                             float(data.ctrl[act_hip_L]),   float(data.ctrl[act_hip_R])))
@@ -761,7 +877,8 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
                         ]:
                             q_hip   = data.qpos[qpos_hip]
                             dq_hip  = data.qvel[dof_hip]
-                            tau_hip = -(LEG_K_S * (q_hip - Q_NOM) + LEG_B_S * dq_hip)
+                            tau_hip = (HIP_POSITION_KP * (Q_NOM - q_hip)
+                                       - HIP_POSITION_KD * dq_hip)
                             data.ctrl[act_hip] = np.clip(tau_hip, -HIP_IMPEDANCE_TORQUE_LIMIT, HIP_IMPEDANCE_TORQUE_LIMIT)
                         _v_batt[0] = battery.step(_dt_ctrl, _motor_currents(
                             float(data.ctrl[act_wheel_L]), float(data.ctrl[act_wheel_R]),
@@ -862,21 +979,24 @@ def replay(run_id: int = None, baseline: bool = False, scenario_override: str = 
 
     data_q.put(None)
     plot_proc.join(timeout=2)
+    if plot_proc.is_alive():
+        plot_proc.terminate()
+    os._exit(0)
 
 
 # ---------------------------------------------------------------------------
 # Re-simulate and overwrite
 # ---------------------------------------------------------------------------
-def resim(run_id: int):
+def resim(run_id: int, csv_path: str):
     """Re-run the scenario for run_id and overwrite its CSV row."""
-    row   = load_run(run_id)
+    row   = load_run(run_id, csv_path)
     gains = _row_to_gains(row)
     label = row.get("label", f"resim_{run_id}")
     scenario = row.get("scenario", "balance")
     print(f"Re-simulating run {run_id} [{label}] ...")
     new_row = evaluate(gains, scenario=scenario, label=label,
-                       run_id=run_id, csv_path=CSV_PATH)
-    overwrite_run(run_id, new_row)
+                       run_id=run_id, csv_path=csv_path)
+    overwrite_run(run_id, new_row, csv_path)
     print(f"Run {run_id} overwritten: fitness={new_row.get('fitness','?')}")
 
 
@@ -912,15 +1032,17 @@ Examples:
     ap.add_argument("--slowmo", type=float, default=1.0,
                     help="Slow-motion factor (e.g. 10 = 10x slower than real-time)")
     ap.add_argument("--csv", type=str, default=None,
-                    help="Path to CSV file to load runs from (default: results.csv)")
+                    help="Path to CSV file to load runs from (e.g. logs/S1_LQR_pitch_step.csv)")
     args = ap.parse_args()
 
     if args.list:
-        list_runs()
+        list_runs(scenario=args.scenario, csv_path=args.csv)
         return
 
     if args.resim is not None:
-        resim(args.resim)
+        if args.csv is None:
+            ap.error("--resim requires --csv <path>")
+        resim(args.resim, csv_path=args.csv)
         return
 
     if args.freefall:

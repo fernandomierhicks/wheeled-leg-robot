@@ -1,1 +1,0 @@
-run_id,scenario,label,timestamp,Q_PITCH,Q_PITCH_RATE,Q_VEL,R,KP_V,KI_V,rms_pitch_deg,max_pitch_deg,wheel_travel_m,wheel_liftoff_s,vel_track_rms_ms,settle_time_s,survived_s,fitness_balance,fitness_disturbance,fitness_drive_slow,fitness_drive_med,fitness_obstacle,fitness,status,fail_reason

@@ -24,7 +24,7 @@ import numpy as np
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
-from run_log import CSV_PATH, get_best_run, next_run_id, log_run
+from run_log import get_best_run, next_run_id, log_run, get_scenario_csv_path
 from scenarios import evaluate
 
 # ── Search space ─────────────────────────────────────────────────────────────
@@ -109,9 +109,11 @@ def _next_ids(n: int, csv_path: str) -> list[int]:
 # ---------------------------------------------------------------------------
 def run_evo(hours: float = None, max_iters: int = None,
             seed: int = None, n_workers: int = None,
-            csv_path: str = CSV_PATH):
+            csv_path: str = None):
     import math
 
+    if csv_path is None:
+        csv_path = get_scenario_csv_path("balance")
     if hours is None and max_iters is None:
         hours = 1.0
     if n_workers is None:

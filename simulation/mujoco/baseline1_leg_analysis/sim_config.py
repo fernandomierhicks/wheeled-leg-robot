@@ -39,9 +39,9 @@ MOTOR_MASS = 0.260    # [kg] AK45-10 hip motor
 MOTOR_R_MM = 26.5     # [mm] AK45-10 housing radius
 
 # ── Balance controller ────────────────────────────────────────────────────────
-PITCH_KP          = 60.0   # [N·m/rad]
+PITCH_KP          = 30.0   # [N·m/rad]  scaled for 3.67 N·m wheel torque limit
 PITCH_KI          = 0.0    # [N·m/(rad·s)] — unused
-PITCH_KD          = 5.0    # [N·m·s/rad]
+PITCH_KD          = 2.5    # [N·m·s/rad]  scaled for 3.67 N·m wheel torque limit
 POSITION_KP       = 0.30   # [rad/m]   wheel position → pitch correction
 VELOCITY_KP       = 0.30   # [rad/(m/s)] wheel velocity → pitch correction
 MAX_PITCH_CMD     = 0.25   # [rad] saturation on position/velocity feedback

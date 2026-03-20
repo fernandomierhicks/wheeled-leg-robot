@@ -4,11 +4,11 @@ Read this before starting work. Check `CLAUDE.md` for full design context and `d
 
 ---
 
-## Current Status (2026-03-19)
+## Current Status (2026-03-20)
 
 ### Phase 1 — Balance LQR ✅ COMPLETE & S4-BASELINED
 
-LQR gains optimised on S4 (`4_leg_height_gain_sched`) — legs cycling through full stroke + disturbances.
+LQR gains optimised on S4 (`2_leg_height_gain_sched`) — legs cycling through full stroke + disturbances.
 
 **S4 baseline (current `sim_config.py`):**
 | Param | Value |
@@ -37,7 +37,7 @@ VelocityPI gains optimised on S5, then manually increased after sandbox testing 
 
 ### Phase 3 — Yaw PI + Turn Mode ✅ COMPLETE & BASELINED
 
-YawPI implemented and verified. Starting gains performed well; no optimizer run needed.
+YawPI implemented. Optimizer confirmed starting visual gains (0.3/0.05) were far too conservative — 75-min run found ~7.5× higher values needed.
 
 **Baselined gains (current `sim_config.py`):**
 | Param | Value | Notes |
@@ -53,7 +53,7 @@ YawPI implemented and verified. Starting gains performed well; no optimizer run 
 - S6 pure turn: yaw_rms = 0.045 rad/s at 1 rad/s target (4.5% error), pitch = 3.3°
 - S7 drive+turn: v=0.3 + ω=0.5, pitch = 3.2°, no cross-coupling instability
 - `replay.py` updated: Yaw Rate panel, ω_desired slider, Turn ON/OFF, differential torque
-- `sandbox.py` added: interactive arena, 28 obstacles (1–8 cm), gamepad + sliders
+- `sandbox_fastchart.py`: interactive arena, 28 obstacles (1–8 cm), gamepad + sliders; pyqtgraph 5×2 telemetry (replaced matplotlib sandbox.py)
 
 ---
 
@@ -62,13 +62,13 @@ YawPI implemented and verified. Starting gains performed well; no optimizer run 
 | # | Name | Controller | Legs | v_desired | Disturbance | Duration |
 |---|------|------------|------|-----------|-------------|----------|
 | 1 | `1_LQR_pitch_step` | LQR only | fixed Q_NOM | 0 | +5° pitch | 5s |
-| 2 | `2_VEL_PI_disturbance` | VelocityPI+LQR | fixed Q_NOM | 0 (hold) | ±1N at t=2/3s | 12s |
-| 3 | `3_VEL_PI_staircase` | VelocityPI+LQR | fixed Q_NOM | staircase | none | 13s |
-| 4 | `4_leg_height_gain_sched` | LQR only | cycling | 0 | ±4N at t=2/3s | 12s |
+| 2 | `3_VEL_PI_disturbance` | VelocityPI+LQR | fixed Q_NOM | 0 (hold) | ±1N at t=2/3s | 6s |
+| 3 | `4_VEL_PI_staircase` | VelocityPI+LQR | fixed Q_NOM | staircase | none | 13s |
+| 4 | `2_leg_height_gain_sched` | LQR only | cycling | 0 | ±4N at t=2/3s | 12s |
 | 5 | `5_VEL_PI_leg_cycling` | VelocityPI+LQR | cycling | staircase | ±1N + 5 bumps | 13s |
 | 6 | `6_YAW_PI_turn` | YawPI+VelocityPI+LQR | fixed Q_NOM | 0 (hold) | none | 8s |
 | 7 | `7_DRIVE_TURN` | YawPI+VelocityPI+LQR | fixed Q_NOM | 0.3 m/s | none | 8s |
-| 8 | `8_terrain_compliance` | All+Suspension+Roll | impedance | 1.0 m/s | 5 one-sided bumps | 12s |
+| 8 | `8_terrain_compliance` | All+Suspension+Roll | impedance | 1.0 m/s | 1 bump (5 cm left at x=1.2m) | 12s |
 
 Full specs in `docs/Control.MD → Optimizer Scenarios`.
 
@@ -136,7 +136,7 @@ Back-EMF taper (`motor_taper()`), battery model (`BatteryModel`), and voltage-sc
 Best: Q=[0.003411, 0.000674, 0.000459], R=4.455, fitness=0.002386, rms=0.79°
 
 #### Step 1 — LQR on S4 ✅ BASELINED & VISUALLY VERIFIED (2026-03-19)
-10-min optimizer run seeded from Step 0, gains confirmed good in MuJoCo viewer (`replay.py --baseline --scenario 4_leg_height_gain_sched`).
+10-min optimizer run seeded from Step 0, gains confirmed good in MuJoCo viewer (`replay.py --baseline --scenario 2_leg_height_gain_sched`).
 
 | Param | Zero-latency | **Delayed baseline** |
 |-------|-------------|----------------------|
@@ -229,7 +229,7 @@ python optimize_yaw_pi.py --hours 0.5
 | `sandbox.py` | Interactive arena — 28 obstacles 1–8 cm, gamepad + sliders |
 | `physics.py` | XML builder — `build_xml(sandbox_obstacles=..., floor_size=...)` |
 | `lqr_design.py` | LQR solver + gain scheduling at Q_RET/Q_NOM/Q_EXT |
-| `results_4_leg_height_gain_sched.csv` | S4 LQR run history |
+| `results_2_leg_height_gain_sched.csv` | S4 LQR run history |
 | `results_5_VEL_PI_leg_cycling.csv` | S5 VelocityPI run history |
 | `results_6_YAW_PI_turn.csv` | S6 YawPI run history |
 | `docs/Control.MD` | Full architecture, scenario specs, phase plans |
