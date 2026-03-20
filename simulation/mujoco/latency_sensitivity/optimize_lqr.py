@@ -51,10 +51,10 @@ ACTIVE_SCENARIO = "4_leg_height_gain_sched"   # Step 1: full leg stroke + distur
 
 # ── Seed weights (used when CSV is empty — fresh start) ──────────────────────
 SEED_WEIGHTS = {
-    "Q_PITCH":      0.003411,   # Step 0: S1 delayed-plant seed (fitness=0.002386, rms=0.79°)
-    "Q_PITCH_RATE": 0.000674,   # Step 0: ~35× softer than zero-latency S1
-    "Q_VEL":        0.000459,   # Step 0
-    "R":            4.455076,   # Step 0: ~2× softer than zero-latency S1
+    "Q_PITCH":      0.014168,   # LQR_Control_optimization baseline (fitness=0.018, rms=1.24°)
+    "Q_PITCH_RATE": 0.033720,
+    "Q_VEL":        0.000250,
+    "R":            28.734,
 }
 
 # ── (1+λ)-ES hyper-parameters ────────────────────────────────────────────────

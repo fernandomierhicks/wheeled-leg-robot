@@ -4,7 +4,7 @@ Read this before starting work. Check `CLAUDE.md` for full design context and `d
 
 ---
 
-## Current Status (2026-03-18)
+## Current Status (2026-03-19)
 
 ### Phase 1 — Balance LQR ✅ COMPLETE & S4-BASELINED
 
@@ -135,8 +135,8 @@ Back-EMF taper (`motor_taper()`), battery model (`BatteryModel`), and voltage-sc
 5-min run on simple fixed-leg scenario to get a stable starting point for the delayed plant.
 Best: Q=[0.003411, 0.000674, 0.000459], R=4.455, fitness=0.002386, rms=0.79°
 
-#### Step 1 — LQR on S4 ✅ BASELINED
-10-min run seeded from Step 0. Gains in `latency_sensitivity/sim_config.py`.
+#### Step 1 — LQR on S4 ✅ BASELINED & VISUALLY VERIFIED (2026-03-19)
+10-min optimizer run seeded from Step 0, gains confirmed good in MuJoCo viewer (`replay.py --baseline --scenario 4_leg_height_gain_sched`).
 
 | Param | Zero-latency | **Delayed baseline** |
 |-------|-------------|----------------------|
@@ -149,27 +149,47 @@ Best: Q=[0.003411, 0.000674, 0.000459], R=4.455, fitness=0.002386, rms=0.79°
 
 Character: Q_PITCH↑ (robot needs to actively correct pitch with stale data), Q_PITCH_RATE/Q_VEL↓↓ (penalising stale rates destabilises), R↓ (more torque allowed to compensate).
 
-#### Step 2 — VelocityPI on S5 ⬜ NEXT
+#### Step 2 — VelocityPI ✅ BASELINED (S5, final re-run with soft suspension, 2026-03-19)
 
-**Goal:** Re-tune KP_V and KI_V with the delayed LQR active. Stale wheel velocity
-fed back to VelocityPI will cause overshoot at high KP_V — expect KP_V to decrease.
+Key finding: **suspension stiffness drives VPI gain choice**. Initial runs with stiff
+suspension (LEG_K_S=16) forced near-zero KP_V (stiff spring + latency = oscillation).
+After re-optimising suspension to soft (LEG_K_S=2.04), re-ran VPI — fitness 3× better.
 
-**Setup:**
-- `optimize_vel_pi.py` is already pointed at S5 (`5_VEL_PI_leg_cycling`)
-- LQR gains in `sim_config.py` are now the Step 1 delayed baseline — do not change them
-- `results_5_VEL_PI_leg_cycling.csv` has been cleared — clean start
+| Param | Zero-latency | Stiff susp. interim | **Final (soft susp.)** |
+|-------|-------------|---------------------|------------------------|
+| KP_V | 0.502418 | 0.01315 (↓38×) | **0.3755** |
+| KI_V | 0.011405 | 0.04901 (↑4.3×) | **0.01081** |
+| fitness (S5) | 2.0635 | 18.492 | **6.508** |
 
-**Run:**
-```bash
-cd simulation/mujoco/latency_sensitivity
-python optimize_vel_pi.py --hours 1
-```
+S2 disturbance check (5 min): KP_V=0.01115, KI_V=0.04361 — confirmed stable at low gains before suspension fix.
 
-**Seed:** current `sim_config.py` values (KP_V=0.502418, KI_V=0.011405) — optimizer
-will read these as baseline if CSV is empty (verify SEED_WEIGHTS in `optimize_vel_pi.py`).
+#### Step 3 — YawPI ✅ BASELINED (S6, 2026-03-19)
 
-**Pass criterion:** robot survives full 13s staircase with legs cycling + bumps.
-Expected: KP_V↓ (less aggressive lean to avoid overshoot on stale velocity reading).
+| Param | Zero-latency | **Delayed baseline** |
+|-------|-------------|----------------------|
+| KP_YAW | 2.272 | **2.192** (−3%) |
+| KI_YAW | 1.125 | **0.4274** (−62%) |
+| fitness (S6) | 0.4102 | **1.7595** |
+
+KP_YAW barely changed — proportional yaw is insensitive to latency. KI_YAW halved —
+same integrator-wind-up pattern as VelocityPI.
+
+#### Step 4 — Suspension ✅ BASELINED (combined S5+S8, 2026-03-19) — re-run recommended
+
+| Param | Zero-latency | **Delayed baseline** |
+|-------|-------------|----------------------|
+| LEG_K_S | 16.0 N·m/rad | **2.04** (↓8×) |
+| LEG_B_S | 0.799 N·m·s/rad | **4.18** (↑5×) |
+| LEG_K_ROLL | 4.0 | **3.91** (−2%) |
+| LEG_D_ROLL | 1.0 | **0.916** (−8%) |
+| fitness (combined) | 4.0918 | **7.498** |
+
+Stiff spring + delayed feedback → oscillation. Optimizer found soft spring + high damping
+as the stable configuration. Roll leveling barely changed (roll sensor has lower latency
+than wheel velocity).
+
+⚠️ **Re-run recommended**: suspension was optimised before the final VPI gains were known.
+Now that VPI (KP_V=0.375) is baselined, run `optimize_suspension.py --hours 0.5` again.
 
 ---
 

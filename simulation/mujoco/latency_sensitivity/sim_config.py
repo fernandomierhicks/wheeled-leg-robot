@@ -89,8 +89,9 @@ LQR_Q_VEL        =  0.000011  # weight on wheel velocity (↓23× vs zero-latenc
 LQR_R            =  1.980419  # weight on control effort (↓14× vs zero-latency)
 
 # ── Leg impedance (held at Q_NOM; decoupled from balance loop) ─────────────
-LEG_K_S = 16.000000  # [N·m/rad] spring stiffness  (Phase 4 re-opt: 3127 gens / 25016 evals, fitness=4.0918, 2026-03-18)
-LEG_B_S =  0.798710  # [N·m·s/rad] damping        (Phase 4 re-opt; was 0.8216)
+LEG_K_S = 2.040161   # [N·m/rad] spring stiffness  (latency model: 652 gens / 5216 evals, fitness=7.498, 2026-03-19; ↓8× vs zero-latency — stiff spring oscillates with delayed feedback)
+LEG_B_S = 4.178528   # [N·m·s/rad] damping        (latency model: ↑5× vs zero-latency — high damping compensates for soft spring)
+# Zero-latency reference: LEG_K_S=16.0, LEG_B_S=0.799, fitness=4.0918 (LQR_Control_optimization)
 
 # ── Roll leveling (differential hip control, Phase 4.2) ─────────────────────
 # Each hip gets a differential offset δq = K_ROLL*roll + D_ROLL*roll_rate
@@ -102,8 +103,8 @@ LEG_B_S =  0.798710  # [N·m·s/rad] damping        (Phase 4 re-opt; was 0.8216)
 #
 # Hip safe range: 10° buffer inside joint limits to avoid end-stops.
 # Robot drives at Q_NOM (mid-stroke) so full ±travel is available.
-LEG_K_ROLL         = 4.000000  # [rad/rad]     roll proportional gain (Phase 4 re-opt, at upper bound)
-LEG_D_ROLL         = 1.000000  # [rad·s/rad]   roll rate damping (Phase 4 re-opt, at upper bound)
+LEG_K_ROLL         = 3.911783  # [rad/rad]     roll proportional gain (latency model: 5216 evals, 2026-03-19)
+LEG_D_ROLL         = 0.916232  # [rad·s/rad]   roll rate damping (latency model; zero-latency ref: K=4.0, D=1.0)
 ROLL_NOISE_STD_RAD = math.radians(0.05)          # [rad] BNO086 roll noise model
 HIP_SAFE_MIN       = Q_EXT + math.radians(10)    # [rad] -1.257 (extended limit + 10°)
 HIP_SAFE_MAX       = Q_RET - math.radians(10)    # [rad] -0.526 (retracted limit - 10°)
@@ -147,9 +148,10 @@ S5_BUMPS = [
 # theta_ref is added to pitch_ff inside lqr_torque: state[0] = pitch - pitch_ff + theta_ref.
 # Positive theta_ref = lean forward command = drive forward.
 # Starting gains from Control.MD; optimizer will tune via (1+8)-ES.
-VELOCITY_PI_KP = 0.502418  # [rad/(m/s)] proportional gain — 2× for snappier accel (was 0.251209 optimizer baseline)
-VELOCITY_PI_KI = 0.011405  # [rad/m]     integral gain  (S5 5-min, fitness=2.0635, vel_rms=0.502 m/s)
-# Prior combined_PI baseline (retained for reference): KP_V=0.502932, KI_V=0.012678, fitness=0.61
+VELOCITY_PI_KP = 0.3755    # [rad/(m/s)] S5 20-min opt (latency+soft suspension): fitness=6.508, 9312 evals, 2026-03-19
+VELOCITY_PI_KI = 0.01081   # [rad/m]     KP dominant with soft suspension — integrator less needed
+# Prior S5 result (stiff suspension): KP_V=0.01315, KI_V=0.04901, fitness=18.492 — near-zero KP was suspension artefact
+# Zero-latency reference: KP_V=0.502418, KI_V=0.011405 (LQR_Control_optimization)
 VELOCITY_PI_THETA_MAX    = 0.26   # [rad] ±15° hard clamp on theta_ref output
 VELOCITY_PI_INT_MAX      = 2.0    # [rad·s] integrator anti-windup clamp
 THETA_REF_RATE_LIMIT     = 5.0    # [rad/s] max rate of change of theta_ref from VelocityPI — 2.5× for snappier accel (was 2.0)
@@ -218,8 +220,9 @@ DRIVE_TURN_YAW_RATE  = 0.5    # [rad/s] simultaneous yaw rate during combined sc
 # Yaw rate measured from data.qvel[5] (world-frame ωz, positive = CCW = left turn).
 # Independent of pitch — symmetric (LQR/VelocityPI) and differential (YawPI) modes
 # are orthogonal in control space; the average wheel velocity is unaffected by tau_yaw.
-YAW_PI_KP         = 2.272   # [N·m / (rad/s)] proportional gain — (1+8)-ES, 6969 gens / 55752 evals, fitness=0.4102, 2026-03-18
-YAW_PI_KI         = 1.125   # [N·m / rad]     integral gain     — (was visual 0.3/0.05; optimizer found 7.5× larger Kp)
+YAW_PI_KP         = 2.192   # [N·m / (rad/s)] S6 20-min opt (latency model): 1911 gens, 15288 evals, fitness=1.7595, 2026-03-19
+YAW_PI_KI         = 0.4274  # [N·m / rad]     KI_YAW↓62% vs zero-latency — integral accumulates too much with stale yaw rate
+# Zero-latency reference: KP_YAW=2.272, KI_YAW=1.125, fitness=0.4102 (LQR_Control_optimization)
 YAW_PI_TORQUE_MAX = 0.5     # [N·m] differential torque clamp (±0.5 N·m each wheel)
 YAW_PI_INT_MAX    = 0.5     # [N·m·s] integrator anti-windup
 

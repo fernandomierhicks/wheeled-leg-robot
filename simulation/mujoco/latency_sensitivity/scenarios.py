@@ -17,7 +17,7 @@ from sim_config import (
     LEG_K_ROLL, LEG_D_ROLL, ROLL_NOISE_STD_RAD, HIP_SAFE_MIN, HIP_SAFE_MAX,
     MAX_PITCH_CMD,
     PITCH_NOISE_STD_RAD, PITCH_RATE_NOISE_STD_RAD_S, ACCEL_NOISE_STD,
-    CTRL_STEPS,
+    CTRL_STEPS, USE_LATENCY_MODEL, SENSOR_DELAY_S, ACTUATOR_DELAY_S,
     LQR_Q_PITCH, LQR_Q_PITCH_RATE, LQR_Q_VEL, LQR_R,
     VELOCITY_PI_KP as _DEFAULT_KP_V,
     VELOCITY_PI_KI as _DEFAULT_KI_V,
@@ -184,8 +184,9 @@ W_DRIVE_STEP   = 0.15   # 3 cm floor step crossing robustness
 # Sum = 1.00
 
 # ── Drive/obstacle fitness weights ───────────────────────────────────────────
-W_VEL_ERR  = 3.0    # RMS velocity tracking error [m/s] — 3× to penalise steady-state offset harder
-W_YAW_ERR  = 3.0    # RMS yaw rate tracking error [rad/s] — same weight as velocity
+W_VEL_ERR   = 3.0   # RMS velocity tracking error [m/s] — 3× to penalise steady-state offset harder
+W_YAW_ERR   = 3.0   # RMS yaw rate tracking error [rad/s] — same weight as velocity
+W_TRANSIENT = 2.0   # integral of |v_error| during 1s window after each staircase step [m/s·s]
 
 
 # ---------------------------------------------------------------------------
@@ -456,13 +457,14 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
     _prev_theta_ref = 0.0
 
     # ── Latency ring buffers ─────────────────────────────────────────────────
-    _n_sens = round(SENSOR_DELAY_S   / model.opt.timestep) if USE_LATENCY_MODEL else 0
-    _n_act  = round(ACTUATOR_DELAY_S / model.opt.timestep) if USE_LATENCY_MODEL else 0
+    # Buffer depth measured in CONTROL steps (dt), not physics steps
+    _n_sens = max(1, round(SENSOR_DELAY_S   / dt)) if USE_LATENCY_MODEL else 1
+    _n_act  = max(1, round(ACTUATOR_DELAY_S / dt)) if USE_LATENCY_MODEL else 1
     _pitch0 = get_equilibrium_pitch(ROBOT, Q_NOM)
     _sens_buf = collections.deque(
-        [(_pitch0, 0.0, 0.0)] * max(1, _n_sens), maxlen=max(1, _n_sens))
+        [(_pitch0, 0.0, 0.0)] * _n_sens, maxlen=_n_sens)
     _ctrl_buf = collections.deque(
-        [(0.0, 0.0)] * max(1, _n_act), maxlen=max(1, _n_act))
+        [(0.0, 0.0)] * _n_act, maxlen=_n_act)
     _pitch_d, _pitch_rate_d, _wheel_vel_d = _pitch0, 0.0, 0.0
 
     # ── Metric accumulators ─────────────────────────────────────────────────
@@ -480,10 +482,13 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
     settled           = False
     settle_start      = None
 
-    VEL_ERR_START = 1.0   # skip first 1.0 s (settle period)
-    prev_v_target = 0.0
-    yaw_sq_sum    = 0.0   # yaw rate tracking error accumulator
-    n_yaw         = 0
+    VEL_ERR_START    = 1.0    # skip first 1.0 s (settle period)
+    TRANSIENT_WINDOW = 1.0    # [s] penalise |v_error| for this long after each step change
+    prev_v_target    = 0.0
+    transient_end    = -1.0   # time at which current transient window closes
+    transient_lag_sum = 0.0   # integral of |v_error| during transient windows [m/s·s]
+    yaw_sq_sum       = 0.0    # yaw rate tracking error accumulator
+    n_yaw            = 0
 
     # ── Battery model ────────────────────────────────────────────────────────
     battery = BatteryModel()
@@ -515,17 +520,25 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
             v_measured_ms = wheel_vel * WHEEL_R
             v_ref_rads    = v_target_ms / WHEEL_R
 
+            # Detect velocity setpoint step change → open transient window
+            if abs(v_target_ms - prev_v_target) > 0.05 and data.time >= VEL_ERR_START:
+                transient_end = data.time + TRANSIENT_WINDOW
+
             # Reset PI integrator on direction reversal (prevents windup carryover)
             if (prev_v_target != 0.0 and
                     math.copysign(1, v_target_ms) != math.copysign(1, prev_v_target)):
                 vel_pi.reset()
             prev_v_target = v_target_ms
 
-            theta_ref = vel_pi.update(v_target_ms, v_measured_ms)
-            _d_max = THETA_REF_RATE_LIMIT * dt
-            theta_ref = float(np.clip(
-                theta_ref, _prev_theta_ref - _d_max, _prev_theta_ref + _d_max))
-            _prev_theta_ref = theta_ref
+            if USE_VELOCITY_PI:
+                theta_ref = vel_pi.update(v_target_ms, v_measured_ms)
+                _d_max = THETA_REF_RATE_LIMIT * dt
+                theta_ref = float(np.clip(
+                    theta_ref, _prev_theta_ref - _d_max, _prev_theta_ref + _d_max))
+                _prev_theta_ref = theta_ref
+            else:
+                theta_ref = 0.0
+                v_ref_rads = 0.0
 
             # ── Sensor delay buffer ───────────────────────────────────────────
             _sens_buf.append((pitch, pitch_rate, wheel_vel))
@@ -607,6 +620,10 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
                 vel_sq_sum += (v_target_ms - v_measured_ms) ** 2
                 n_vel += 1
 
+            # Transient lag penalty: integrate |v_error| for TRANSIENT_WINDOW after each step
+            if data.time < transient_end:
+                transient_lag_sum += abs(v_target_ms - v_measured_ms) * dt
+
             if (data.xpos[wheel_bid_L][2] > LIFTOFF_THRESHOLD or
                     data.xpos[wheel_bid_R][2] > LIFTOFF_THRESHOLD):
                 wheel_liftoff_s += dt
@@ -647,6 +664,7 @@ def _run_sim_loop(model, data, duration: float, v_profile_fn,
         rms_roll_deg            = round(rms_roll_deg,       4),
         max_roll_deg            = round(max_roll_deg,       4),
         vel_track_rms_ms        = round(rms_vel_ms,         4),
+        transient_lag_ms        = round(transient_lag_sum,  4),
         yaw_track_rms_rads      = round(yaw_track_rms_rads, 4),
         max_pitch_deg           = round(max_pitch,           4),
         wheel_travel_m          = round(wheel_travel_m,      4),
@@ -1322,6 +1340,17 @@ def run_1_LQR_pitch_step(gains: dict, duration: float = BALANCE_DURATION,
     battery.reset()
     v_batt = BATT_V_NOM
 
+    # ── Latency ring buffers (same model as _run_sim_loop) ───────────────────
+    # Buffer depth measured in CONTROL steps (dt), not physics steps
+    _n_sens = max(1, round(SENSOR_DELAY_S   / dt)) if USE_LATENCY_MODEL else 1
+    _n_act  = max(1, round(ACTUATOR_DELAY_S / dt)) if USE_LATENCY_MODEL else 1
+    _pitch0 = get_equilibrium_pitch(ROBOT, Q_NOM)
+    _sens_buf = collections.deque(
+        [(_pitch0, 0.0, 0.0)] * _n_sens, maxlen=_n_sens)
+    _ctrl_buf = collections.deque(
+        [(0.0, 0.0)] * _n_act, maxlen=_n_act)
+    _pitch_d, _pitch_rate_d, _wheel_vel_d = _pitch0, 0.0, 0.0
+
     step = 0
     while data.time < duration:
         if step % CTRL_STEPS == 0:
@@ -1339,11 +1368,19 @@ def run_1_LQR_pitch_step(gains: dict, duration: float = BALANCE_DURATION,
             wheel_vel = (data.qvel[d_whl_L] + data.qvel[d_whl_R]) / 2.0
             hip_q_avg = (data.qpos[s_hip_L] + data.qpos[s_hip_R]) / 2.0
 
-            # LQR — VelocityPI OFF (theta_ref = 0)
-            tau_wheel = lqr_torque(pitch, pitch_rate, wheel_vel, hip_q_avg,
+            # Sensor delay buffer
+            _sens_buf.append((pitch, pitch_rate, wheel_vel))
+            _pitch_d, _pitch_rate_d, _wheel_vel_d = _sens_buf[0]
+
+            # LQR — VelocityPI OFF (theta_ref = 0), using delayed sensor values
+            tau_wheel = lqr_torque(_pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
                                    v_ref=0.0, theta_ref=0.0)
-            data.ctrl[act_wheel_L] = motor_taper(tau_wheel, data.qvel[d_whl_L], v_batt)
-            data.ctrl[act_wheel_R] = motor_taper(tau_wheel, data.qvel[d_whl_R], v_batt)
+
+            # Actuator delay buffer
+            _ctrl_buf.append((tau_wheel, tau_wheel))
+            _tau_d, _ = _ctrl_buf[0]
+            data.ctrl[act_wheel_L] = motor_taper(_tau_d, data.qvel[d_whl_L], v_batt)
+            data.ctrl[act_wheel_R] = motor_taper(_tau_d, data.qvel[d_whl_R], v_batt)
 
             # Leg impedance: hold Q_NOM
             for s_hip, d_hip, act_hip in [
@@ -1845,6 +1882,7 @@ def run_5_VEL_PI_leg_cycling(gains: dict, duration: float = SCENARIO_5_DURATION,
 
     fitness = (
         W_VEL_ERR        * raw['vel_track_rms_ms']
+        + W_TRANSIENT    * raw['transient_lag_ms']
         + 0.1 * W_RMS    * raw['rms_pitch_deg']
         + (W_FALL if raw['fell'] else 0.0)
     )

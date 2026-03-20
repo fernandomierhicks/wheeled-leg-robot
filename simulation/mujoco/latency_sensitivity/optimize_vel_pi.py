@@ -44,7 +44,7 @@ PARAM_RANGES = {
 
 # ── Seed from current sim_config values ─────────────────────────────────────
 SEED_WEIGHTS = {
-    "KP_V": VELOCITY_PI_KP,
+    "KP_V": VELOCITY_PI_KP,   # S2-baselined latency-aware seed
     "KI_V": VELOCITY_PI_KI,
 }
 

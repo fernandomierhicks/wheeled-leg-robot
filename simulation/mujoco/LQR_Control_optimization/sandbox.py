@@ -223,18 +223,24 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         [("Pitch",           "deg",    "#60d0ff"), ("Pitch Rate",    "deg/s",  "#b060ff")],
         [("Velocity",        "m/s",    "#50e080"), ("Yaw Rate",      "rad/s",  "#f08040")],
         [("Hip Joints",      "deg",    "#d0a0ff"), ("Roll",          "deg",    "#ff6090")],
-        [("Wheel Torque",    "N·m",    "#ffcc44"), ("Battery V & T", "V / °C", "#ff9944")],
-        [("SoC",             "%",      "#44ffcc"), ("Motor Currents","A",      "#7fbbff")],
+        [("Wheel Torque",    "N·m",    "#ffcc44"), ("Battery V & I", "V",      "#ff9944")],
+        [("Battery Info",    "",       "#44ffcc"), ("Motor Currents","A",      "#7fbbff")],
     ]
     for r in range(5):
         for c in range(2):
             _style_ax(axes[r][c], *specs[r][c])
 
-    # SoC panel: numeric display only — hide axes clutter
+    # Battery Info panel: numeric display only — hide axes clutter
     axes[4][0].set_xticks([]); axes[4][0].set_yticks([])
     axes[4][0].set_xlabel(""); axes[4][0].set_ylabel("")
     for sp in axes[4][0].spines.values(): sp.set_visible(False)
     axes[4][0].grid(False)
+
+    # Twin y-axis on [3,1] for battery current (I_total)
+    ax_ibatt = axes[3][1].twinx()
+    ax_ibatt.set_facecolor(BG)
+    ax_ibatt.tick_params(colors="lightgray", labelsize=7)
+    ax_ibatt.set_ylabel("A", color="#44ffee", fontsize=8)
 
     # Primary lines
     ln_pitch,   = axes[0][0].plot([], [], color="#60d0ff", lw=1.5)
@@ -245,13 +251,14 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ln_roll,    = axes[2][1].plot([], [], color="#ff6090", lw=1.5)
     ln_tau_L,   = axes[3][0].plot([], [], color="#ffcc44", lw=1.5)
     ln_vbatt,   = axes[3][1].plot([], [], color="#ff9944", lw=1.5, label="V_term")
-    lbl_soc = axes[4][0].text(0.5, 0.5, "–– %", transform=axes[4][0].transAxes,
-                               ha="center", va="center", fontsize=28, fontweight="bold",
-                               color="#44ffcc")
-    lbl_I_total = axes[4][1].text(0.02, 0.97, "I_total: –– A", transform=axes[4][1].transAxes,
-                                   ha="left", va="top", fontsize=9, fontweight="bold",
-                                   color="#ffffff")
-    ln_I_total, = axes[4][1].plot([], [], color="#ffffff", lw=1.8, label="I_total")
+    ln_ibatt,   = ax_ibatt.plot(  [], [], color="#44ffee", lw=1.5, label="I_total")
+    _lbl_kw = dict(transform=axes[4][0].transAxes, ha="left", va="center", fontsize=11, fontweight="bold")
+    lbl_soc   = axes[4][0].text(0.05, 0.75, "SoC:  –– %",    color="#44ffcc", **_lbl_kw)
+    lbl_temp  = axes[4][0].text(0.05, 0.50, "Temp: –– °C",   color="#ff9944", **_lbl_kw)
+    lbl_I_now = axes[4][0].text(0.05, 0.25, "I:    –– A",    color="#44ffee", **_lbl_kw)
+    lbl_I_max = axes[4][0].text(0.05, 0.02, "Peak: –– A",    color="#ff6090", fontsize=9,
+                                 transform=axes[4][0].transAxes, ha="left", va="bottom")
+    _i_max_ever = [0.0]
 
     # Secondary / command overlay lines
     ln_pitch_ref, = axes[0][0].plot([], [], color="#ff6060", lw=1.0, ls="--")
@@ -260,7 +267,6 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ln_hip_R,     = axes[2][0].plot([], [], color="#a060cc", lw=1.2, ls="--")
     ln_hip_cmd,   = axes[2][0].plot([], [], color="#ffffff", lw=0.8, ls=":")
     ln_tau_R,     = axes[3][0].plot([], [], color="#ff8844", lw=1.2, ls="--")
-    ln_btemp,     = axes[3][1].plot([], [], color="#ff6090", lw=1.2, ls="--", label="T °C")
     ln_vbatt_nom, = axes[3][1].plot([], [], color="#aaaaaa", lw=0.8, ls=":", label="V_nom")
     ln_I_whl_L,   = axes[4][1].plot([], [], color="#ffcc44", lw=1.0, label="I_whl_L")
     ln_I_whl_R,   = axes[4][1].plot([], [], color="#ff8844", lw=1.0, ls="--", label="I_whl_R")
@@ -279,10 +285,10 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     axes[1][1].legend([ln_yaw,     ln_omega_cmd],                      ["yaw ω", "cmd ω"],                         **_leg_kw)
     axes[2][0].legend([ln_hip_L,   ln_hip_R,   ln_hip_cmd],            ["hip L", "hip R", "cmd"],                  **_leg_kw)
     axes[3][0].legend([ln_tau_L,   ln_tau_R],                          ["τ_L", "τ_R"],                             **_leg_kw)
-    axes[3][1].legend([ln_vbatt,   ln_btemp,   ln_vbatt_nom],          ["V_term", "T °C", "V_nom"],                **_leg_kw)
-    axes[4][1].legend([ln_I_total, ln_I_whl_L, ln_I_whl_R,
-                       ln_I_hip_L, ln_I_hip_R],
-                      ["I_total", "I_whl_L", "I_whl_R", "I_hip_L", "I_hip_R"],                                    **_leg_kw)
+    axes[3][1].legend([ln_vbatt,   ln_vbatt_nom],                      ["V_term", "V_nom"],                        **_leg_kw)
+    ax_ibatt.legend( [ln_ibatt],                                        ["I_total"],                                **_leg_kw)
+    axes[4][1].legend([ln_I_whl_L, ln_I_whl_R, ln_I_hip_L, ln_I_hip_R],
+                      ["I_whl_L", "I_whl_R", "I_hip_L", "I_hip_R"],                                               **_leg_kw)
 
     # ── Restart button ───────────────────────────────────────────────────────
     ax_rst = fig.add_axes([0.40, 0.01, 0.20, 0.045])
@@ -307,9 +313,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         pass
 
     _all_lines = [ln_pitch, ln_prate, ln_vel, ln_yaw, ln_hip_L, ln_roll,
-                  ln_tau_L, ln_vbatt, ln_I_total,
+                  ln_tau_L, ln_vbatt, ln_ibatt,
                   ln_pitch_ref, ln_v_cmd, ln_omega_cmd, ln_hip_R, ln_hip_cmd,
-                  ln_tau_R, ln_btemp, ln_vbatt_nom,
+                  ln_tau_R, ln_vbatt_nom,
                   ln_I_whl_L, ln_I_whl_R, ln_I_hip_L, ln_I_hip_R]
 
     while plt.fignum_exists(fig.number):
@@ -326,8 +332,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             if item == "RESET":
                 for buf in all_bufs: buf.clear()
                 for ln in _all_lines: ln.set_data([], [])
-                lbl_soc.set_text("–– %")
-                lbl_I_total.set_text("I_total: –– A")
+                lbl_soc.set_text("SoC:  –– %")
+                lbl_temp.set_text("Temp: –– °C")
+                lbl_I_now.set_text("I:    –– A")
+                lbl_I_max.set_text("Peak: –– A")
+                _i_max_ever[0] = 0.0
                 fig.canvas.flush_events()
                 continue
             (t, pitch, pitch_ref, pitch_rate, vel, v_cmd, yaw_rate, omega_cmd,
@@ -387,31 +396,37 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         _draw(axes[2][1], ln_roll,   roll_buf)
         _draw(axes[3][0], ln_tau_L,  tau_L_buf,      (tR_bw,))
 
-        # Battery V & T — combined axis (similar numeric range)
-        if vb_bw and bt_bw:
+        # Battery V & I — voltage on left y, I_total on twin right y
+        if vb_bw and iT_bw:
             ln_vbatt.set_data(tw, vb_bw)
-            ln_btemp.set_data(tw, bt_bw)
+            ln_ibatt.set_data(tw, iT_bw)
             axes[3][1].set_xlim(t0, sim_t + 0.5)
-            all_bt = vb_bw + bt_bw
-            lo, hi = min(all_bt), max(all_bt)
-            span = max(hi - lo, 1.0)
-            axes[3][1].set_ylim(lo - span * 0.15, hi + span * 0.15)
+            ax_ibatt.set_xlim(t0, sim_t + 0.5)
+            vlo, vhi = min(vb_bw), max(vb_bw)
+            vspan = max(vhi - vlo, 1.0)
+            axes[3][1].set_ylim(vlo - vspan * 0.15, vhi + vspan * 0.15)
+            ilo, ihi = min(iT_bw), max(iT_bw)
+            ispan = max(ihi - ilo, 1.0)
+            ax_ibatt.set_ylim(max(0.0, ilo - ispan * 0.1), ihi + ispan * 0.2)
             ln_vbatt_nom.set_data([t0, sim_t + 0.5], [BATT_V_NOM, BATT_V_NOM])
 
-        # SoC — numeric label only
-        if sc_bw:
-            lbl_soc.set_text(f"{sc_bw[-1]:.1f} %")
+        # Battery info panel — numeric labels
+        if sc_bw and iT_bw:
+            i_now = iT_bw[-1]
+            _i_max_ever[0] = max(_i_max_ever[0], i_now)
+            lbl_soc.set_text(f"SoC:  {sc_bw[-1]:.1f} %")
+            lbl_temp.set_text(f"Temp: {bt_bw[-1]:.1f} °C" if bt_bw else "Temp: –– °C")
+            lbl_I_now.set_text(f"I:    {i_now:.1f} A")
+            lbl_I_max.set_text(f"Peak: {_i_max_ever[0]:.1f} A")
 
-        # Motor currents
-        if iT_bw:
-            ln_I_total.set_data(tw, iT_bw)
+        # Motor currents (per-motor breakdown)
+        if iWL_bw:
             ln_I_whl_L.set_data(tw, iWL_bw)
             ln_I_whl_R.set_data(tw, iWR_bw)
             ln_I_hip_L.set_data(tw, iHL_bw)
             ln_I_hip_R.set_data(tw, iHR_bw)
-            lbl_I_total.set_text(f"I_total: {iT_bw[-1]:.1f} A")
             axes[4][1].set_xlim(t0, sim_t + 0.5)
-            all_i = iT_bw + iWL_bw + iWR_bw + iHL_bw + iHR_bw
+            all_i = iWL_bw + iWR_bw + iHL_bw + iHR_bw
             lo, hi = min(all_i), max(all_i)
             span = max(hi - lo, 1.0)
             axes[4][1].set_ylim(max(0.0, lo - span * 0.1), hi + span * 0.15)
