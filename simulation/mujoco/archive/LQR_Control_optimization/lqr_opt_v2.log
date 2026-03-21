@@ -1,0 +1,457 @@
+[  571] evo_g000000_c2                PASS   fitness=17.345  Q=[0.1,0.01,0.00] R=0.77
+[  574] evo_g000000_c5                PASS   fitness=12.620  Q=[0.1,0.02,0.00] R=2.61
+[  577] evo_g000001_c0                FAIL   fitness=9999.000  Q=[0.2,0.00,0.00] R=0.81
+[  583] evo_g000001_c6                PASS   fitness=24.848  Q=[0.0,0.00,0.00] R=0.70
+[  587] evo_g000002_c2                FAIL   fitness=9999.000  Q=[0.1,0.01,0.01] R=1.04
+[  590] evo_g000002_c5                FAIL   fitness=9999.000  Q=[0.4,0.01,0.00] R=0.73
+[  592] evo_g000002_c7                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.30
+[  594] evo_g000003_c1                PASS   fitness=25.501  Q=[0.1,0.01,0.00] R=0.32
+[  601] evo_g000004_c0                FAIL   fitness=9999.000  Q=[0.6,0.00,0.00] R=0.58
+[  606] evo_g000004_c5                PASS   fitness=10.286  Q=[0.1,0.01,0.00] R=0.21
+[  611] evo_g000005_c2                FAIL   fitness=9999.000  Q=[0.2,0.01,0.00] R=0.22
+[  613] evo_g000005_c4                FAIL   fitness=9999.000  Q=[0.2,0.02,0.00] R=0.53
+[  616] evo_g000005_c7                FAIL   fitness=9999.000  Q=[0.3,0.00,0.00] R=0.32
+[  617] evo_g000006_c0                FAIL   fitness=9999.000  Q=[0.0,0.00,0.00] R=0.18
+[  621] evo_g000006_c4                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.12
+[  622] evo_g000006_c5                PASS   fitness=16.033  Q=[0.1,0.01,0.00] R=2.40
+[  626] evo_g000007_c1                PASS   fitness=24.090  Q=[0.1,0.01,0.00] R=0.86
+[  631] evo_g000007_c6                FAIL   fitness=9999.000  Q=[0.1,0.00,0.01] R=0.88
+[  634] evo_g000008_c1                PASS   fitness=12.728  Q=[0.1,0.01,0.00] R=0.28
+[  638] evo_g000008_c5                FAIL   fitness=9999.000  Q=[0.2,0.00,0.01] R=0.17
+[  641] evo_g000009_c0                PASS   fitness=13.738  Q=[0.1,0.01,0.00] R=0.24
+[  649] evo_g000010_c0                FAIL   fitness=9999.000  Q=[0.3,0.00,0.00] R=0.20
+[  654] evo_g000010_c5                FAIL   fitness=9999.000  Q=[0.4,0.01,0.00] R=0.28
+[  656] evo_g000010_c7                FAIL   fitness=9999.000  Q=[0.3,0.01,0.00] R=0.17
+[  658] evo_g000011_c1                PASS   fitness=11.018  Q=[0.1,0.01,0.00] R=0.34
+[  664] evo_g000011_c7                PASS   fitness=20.806  Q=[0.1,0.00,0.00] R=1.17
+[  668] evo_g000012_c3                FAIL   fitness=9999.000  Q=[0.0,0.01,0.00] R=0.27
+[  669] evo_g000012_c4                PASS   fitness=24.953  Q=[0.2,0.01,0.00] R=1.10
+[  676] evo_g000013_c3                FAIL   fitness=9999.000  Q=[0.2,0.01,0.00] R=0.44
+[  680] evo_g000013_c7                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.33
+[  681] evo_g000014_c0                FAIL   fitness=9999.000  Q=[0.2,0.01,0.00] R=0.58
+[  685] evo_g000014_c4                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.42
+[  686] evo_g000014_c5                PASS   fitness=14.025  Q=[0.2,0.01,0.00] R=0.51
+[  690] evo_g000015_c1                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.38
+[  694] evo_g000015_c5                PASS   fitness=23.110  Q=[0.1,0.01,0.00] R=0.53
+[  697] evo_g000016_c0                PASS   fitness=16.528  Q=[0.1,0.01,0.00] R=0.37
+[  701] evo_g000016_c4                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.43
+[  705] evo_g000017_c0                PASS   fitness=23.016  Q=[0.2,0.00,0.00] R=0.40
+[  711] evo_g000017_c6                PASS   fitness=23.360  Q=[0.2,0.00,0.00] R=0.49
+[  715] evo_g000018_c2                PASS   fitness=6.200  Q=[0.2,0.00,0.00] R=0.41
+[  719] evo_g000018_c6                PASS   fitness=25.349  Q=[0.2,0.00,0.00] R=0.51
+[  723] evo_g000019_c2                PASS   fitness=24.606  Q=[0.2,0.00,0.00] R=0.44
+[  725] evo_g000019_c4                PASS   fitness=8.598  Q=[0.1,0.00,0.00] R=0.38
+[  731] evo_g000020_c2                PASS   fitness=6.808  Q=[0.2,0.00,0.00] R=0.43
+[  733] evo_g000020_c4                PASS   fitness=18.397  Q=[0.2,0.00,0.00] R=0.44
+[  738] evo_g000021_c1                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.43
+[  741] evo_g000021_c4                PASS   fitness=21.491  Q=[0.2,0.00,0.00] R=0.45
+[  745] evo_g000022_c0                PASS   fitness=18.917  Q=[0.2,0.00,0.00] R=0.46
+[  750] evo_g000022_c5                PASS   fitness=27.138  Q=[0.2,0.00,0.00] R=0.47
+[  754] evo_g000023_c1                PASS   fitness=5.763  Q=[0.2,0.00,0.00] R=0.47
+[  758] evo_g000023_c5                PASS   fitness=25.257  Q=[0.1,0.00,0.00] R=0.46
+[  762] evo_g000024_c1                FAIL   fitness=167.874  Q=[0.2,0.00,0.00] R=0.43
+[  765] evo_g000024_c4                FAIL   fitness=9999.000  Q=[0.2,0.00,0.00] R=0.42
+[  769] evo_g000025_c0                PASS   fitness=22.088  Q=[0.2,0.00,0.00] R=0.44
+[  774] evo_g000025_c5                PASS   fitness=18.675  Q=[0.2,0.00,0.00] R=0.43
+[  779] evo_g000026_c2                PASS   fitness=26.224  Q=[0.2,0.00,0.00] R=0.46
+[  782] evo_g000026_c5                PASS   fitness=8.486  Q=[0.2,0.00,0.00] R=0.43
+[  785] evo_g000027_c0                PASS   fitness=6.191  Q=[0.2,0.00,0.00] R=0.45
+[  790] evo_g000027_c5                PASS   fitness=6.040  Q=[0.2,0.00,0.00] R=0.44
+[  794] evo_g000028_c1                PASS   fitness=26.287  Q=[0.2,0.00,0.00] R=0.46
+[  798] evo_g000028_c5                PASS   fitness=19.851  Q=[0.2,0.00,0.00] R=0.48
+[  802] evo_g000029_c1                PASS   fitness=6.013  Q=[0.2,0.00,0.00] R=0.47
+[  806] evo_g000029_c5                PASS   fitness=22.348  Q=[0.2,0.00,0.00] R=0.46
+[  809] evo_g000030_c0                PASS   fitness=21.071  Q=[0.2,0.00,0.00] R=0.46
+[  814] evo_g000030_c5                PASS   fitness=6.464  Q=[0.2,0.00,0.00] R=0.45
+[  818] evo_g000031_c1                PASS   fitness=7.353  Q=[0.2,0.00,0.00] R=0.44
+[  821] evo_g000031_c4                PASS   fitness=6.356  Q=[0.2,0.00,0.00] R=0.45
+[  825] evo_g000032_c0                PASS   fitness=19.831  Q=[0.2,0.00,0.00] R=0.46
+[  830] evo_g000032_c5                PASS   fitness=20.656  Q=[0.2,0.00,0.00] R=0.45
+[  835] evo_g000033_c2                PASS   fitness=22.098  Q=[0.2,0.00,0.00] R=0.47
+[  838] evo_g000033_c5                PASS   fitness=23.106  Q=[0.2,0.00,0.00] R=0.46
+[  843] evo_g000034_c2                PASS   fitness=20.499  Q=[0.2,0.00,0.00] R=0.44
+[  845] evo_g000034_c4                PASS   fitness=22.229  Q=[0.2,0.00,0.00] R=0.45
+[  849] evo_g000035_c0                PASS   fitness=21.012  Q=[0.2,0.00,0.00] R=0.45
+[  853] evo_g000035_c4                PASS   fitness=25.921  Q=[0.2,0.00,0.00] R=0.44
+[  857] evo_g000036_c0                PASS   fitness=5.744  Q=[0.2,0.00,0.00] R=0.45
+[  861] evo_g000036_c4                PASS   fitness=17.492  Q=[0.2,0.00,0.00] R=0.46
+[  867] evo_g000037_c2                PASS   fitness=5.851  Q=[0.2,0.00,0.00] R=0.45
+[  870] evo_g000037_c5                FAIL   fitness=183.368  Q=[0.2,0.00,0.00] R=0.45
+[  873] evo_g000038_c0                PASS   fitness=18.775  Q=[0.2,0.00,0.00] R=0.44
+[  878] evo_g000038_c5                PASS   fitness=11.391  Q=[0.2,0.00,0.00] R=0.45
+[  882] evo_g000039_c1                PASS   fitness=12.370  Q=[0.2,0.00,0.00] R=0.43
+[  887] evo_g000039_c6                PASS   fitness=16.690  Q=[0.2,0.00,0.00] R=0.44
+[  891] evo_g000040_c2                PASS   fitness=5.586  Q=[0.2,0.00,0.00] R=0.45
+[  894] evo_g000040_c5                PASS   fitness=5.789  Q=[0.2,0.00,0.00] R=0.45
+[  898] evo_g000041_c1                FAIL   fitness=168.345  Q=[0.2,0.00,0.00] R=0.45
+[  901] evo_g000041_c4                PASS   fitness=9.636  Q=[0.2,0.00,0.00] R=0.46
+[  905] evo_g000042_c0                PASS   fitness=14.334  Q=[0.2,0.00,0.00] R=0.46
+[  910] evo_g000042_c5                PASS   fitness=7.460  Q=[0.2,0.00,0.00] R=0.46
+[  914] evo_g000043_c1                PASS   fitness=9.428  Q=[0.2,0.00,0.00] R=0.45
+[  919] evo_g000043_c6                PASS   fitness=21.266  Q=[0.2,0.00,0.00] R=0.45
+[  922] evo_g000044_c1                PASS   fitness=17.759  Q=[0.2,0.00,0.00] R=0.45
+[  926] evo_g000044_c5                PASS   fitness=18.793  Q=[0.2,0.00,0.00] R=0.47
+[  931] evo_g000045_c2                PASS   fitness=20.097  Q=[0.2,0.00,0.00] R=0.46[  570] evo_g000000_c1                PASS   fitness=22.464  Q=[0.1,0.02,0.00] R=1.57
+[  575] evo_g000000_c6                PASS   fitness=6.238  Q=[0.2,0.01,0.00] R=0.45
+[  579] evo_g000001_c2                FAIL   fitness=9999.000  Q=[0.1,0.01,0.01] R=0.44
+[  581] evo_g000001_c4                FAIL   fitness=9999.000  Q=[0.2,0.01,0.01] R=0.25
+[  582] evo_g000001_c5                PASS   fitness=26.124  Q=[0.3,0.00,0.00] R=0.67
+[  586] evo_g000002_c1                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.24
+[  589] evo_g000002_c4                FAIL   fitness=9999.000  Q=[0.2,0.00,0.00] R=0.26
+[  591] evo_g000002_c6                FAIL   fitness=170.075  Q=[0.1,0.01,0.00] R=0.34
+[  596] evo_g000003_c3                FAIL   fitness=9999.000  Q=[0.0,0.00,0.00] R=0.24
+[  598] evo_g000003_c5                PASS   fitness=20.965  Q=[0.4,0.02,0.00] R=0.36
+[  602] evo_g000004_c1                PASS   fitness=24.310  Q=[0.0,0.00,0.00] R=0.22
+[  607] evo_g000004_c6                PASS   fitness=22.018  Q=[0.1,0.00,0.00] R=1.46
+[  612] evo_g000005_c3                PASS   fitness=20.443  Q=[0.1,0.01,0.00] R=0.96
+[  618] evo_g000006_c1                PASS   fitness=19.961  Q=[0.1,0.01,0.00] R=0.37
+[  623] evo_g000006_c6                PASS   fitness=24.936  Q=[0.1,0.01,0.01] R=2.41
+[  627] evo_g000007_c2                FAIL   fitness=9999.000  Q=[0.2,0.00,0.00] R=0.23
+[  629] evo_g000007_c4                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.16
+[  630] evo_g000007_c5                PASS   fitness=16.497  Q=[0.2,0.00,0.00] R=2.48
+[  635] evo_g000008_c2                FAIL   fitness=9999.000  Q=[0.2,0.00,0.00] R=0.25
+[  637] evo_g000008_c4                PASS   fitness=17.811  Q=[0.1,0.00,0.00] R=0.74
+[  643] evo_g000009_c2                FAIL   fitness=9999.000  Q=[0.4,0.01,0.00] R=0.33
+[  646] evo_g000009_c5                PASS   fitness=24.336  Q=[0.2,0.02,0.00] R=1.07
+[  650] evo_g000010_c1                PASS   fitness=16.224  Q=[0.2,0.01,0.00] R=1.19
+[  659] evo_g000011_c2                PASS   fitness=19.743  Q=[0.1,0.01,0.00] R=0.48
+[  665] evo_g000012_c0                FAIL   fitness=9999.000  Q=[0.2,0.01,0.00] R=0.48
+[  670] evo_g000012_c5                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.21
+[  673] evo_g000013_c0                FAIL   fitness=9999.000  Q=[0.2,0.01,0.00] R=0.22
+[  677] evo_g000013_c4                PASS   fitness=24.783  Q=[0.2,0.01,0.00] R=0.46
+[  682] evo_g000014_c1                FAIL   fitness=168.633  Q=[0.1,0.01,0.00] R=0.38
+[  687] evo_g000014_c6                PASS   fitness=24.953  Q=[0.2,0.01,0.00] R=0.42
+[  691] evo_g000015_c2                PASS   fitness=25.546  Q=[0.2,0.01,0.00] R=0.44
+[  695] evo_g000015_c6                PASS   fitness=25.391  Q=[0.2,0.01,0.00] R=0.57
+[  700] evo_g000016_c3                PASS   fitness=25.125  Q=[0.2,0.01,0.00] R=0.48
+[  702] evo_g000016_c5                PASS   fitness=25.757  Q=[0.2,0.01,0.00] R=0.52
+[  707] evo_g000017_c2                PASS   fitness=25.066  Q=[0.2,0.00,0.00] R=0.53
+[  710] evo_g000017_c5                PASS   fitness=5.890  Q=[0.2,0.00,0.00] R=0.45
+[  713] evo_g000018_c0                FAIL   fitness=167.987  Q=[0.1,0.00,0.00] R=0.39
+[  717] evo_g000018_c4                FAIL   fitness=9999.000  Q=[0.2,0.00,0.00] R=0.41
+[  718] evo_g000018_c5                PASS   fitness=23.543  Q=[0.2,0.00,0.00] R=0.40
+[  722] evo_g000019_c1                PASS   fitness=21.811  Q=[0.2,0.00,0.00] R=0.47
+[  726] evo_g000019_c5                FAIL   fitness=206.835  Q=[0.1,0.00,0.00] R=0.43
+[  730] evo_g000020_c1                PASS   fitness=25.488  Q=[0.2,0.00,0.00] R=0.44
+[  734] evo_g000020_c5                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.39
+[  737] evo_g000021_c0                PASS   fitness=5.588  Q=[0.2,0.00,0.00] R=0.45
+[  742] evo_g000021_c5                PASS   fitness=19.167  Q=[0.1,0.00,0.00] R=0.46
+[  746] evo_g000022_c1                PASS   fitness=9.125  Q=[0.2,0.00,0.00] R=0.44
+[  749] evo_g000022_c4                PASS   fitness=7.438  Q=[0.2,0.00,0.00] R=0.44
+[  755] evo_g000023_c2                PASS   fitness=32.824  Q=[0.2,0.00,0.00] R=0.45
+[  757] evo_g000023_c4                PASS   fitness=6.067  Q=[0.2,0.00,0.00] R=0.46
+[  761] evo_g000024_c0                PASS   fitness=7.719  Q=[0.2,0.00,0.00] R=0.43
+[  767] evo_g000024_c6                PASS   fitness=17.989  Q=[0.2,0.00,0.00] R=0.44
+[  771] evo_g000025_c2                PASS   fitness=24.648  Q=[0.2,0.00,0.00] R=0.45
+[  773] evo_g000025_c4                PASS   fitness=7.231  Q=[0.2,0.00,0.00] R=0.45
+[  777] evo_g000026_c0                PASS   fitness=21.361  Q=[0.2,0.00,0.00] R=0.47
+[  781] evo_g000026_c4                PASS   fitness=21.897  Q=[0.2,0.00,0.00] R=0.44
+[  786] evo_g000027_c1                FAIL   fitness=169.070  Q=[0.2,0.00,0.00] R=0.44
+[  789] evo_g000027_c4                PASS   fitness=23.362  Q=[0.2,0.00,0.00] R=0.46
+[  793] evo_g000028_c0                PASS   fitness=6.076  Q=[0.2,0.00,0.00] R=0.45
+[  797] evo_g000028_c4                FAIL   fitness=203.714  Q=[0.2,0.00,0.00] R=0.46
+[  801] evo_g000029_c0                PASS   fitness=24.613  Q=[0.2,0.00,0.00] R=0.44
+[  805] evo_g000029_c4                PASS   fitness=23.117  Q=[0.2,0.00,0.00] R=0.44
+[  810] evo_g000030_c1                PASS   fitness=19.009  Q=[0.2,0.00,0.00] R=0.44
+[  813] evo_g000030_c4                PASS   fitness=5.863  Q=[0.2,0.00,0.00] R=0.46
+[  817] evo_g000031_c0                PASS   fitness=19.604  Q=[0.2,0.00,0.00] R=0.45
+[  822] evo_g000031_c5                PASS   fitness=19.247  Q=[0.2,0.00,0.00] R=0.46
+[  827] evo_g000032_c2                PASS   fitness=14.671  Q=[0.2,0.00,0.00] R=0.45
+[  829] evo_g000032_c4                PASS   fitness=14.965  Q=[0.2,0.00,0.00] R=0.45
+[  833] evo_g000033_c0                PASS   fitness=19.637  Q=[0.2,0.00,0.00] R=0.47
+[  837] evo_g000033_c4                PASS   fitness=5.652  Q=[0.2,0.00,0.00] R=0.45
+[  842] evo_g000034_c1                PASS   fitness=21.102  Q=[0.2,0.00,0.00] R=0.47
+[  846] evo_g000034_c5                PASS   fitness=24.391  Q=[0.2,0.00,0.00] R=0.46
+[  850] evo_g000035_c1                PASS   fitness=23.118  Q=[0.2,0.00,0.00] R=0.46
+[  854] evo_g000035_c5                PASS   fitness=18.331  Q=[0.2,0.00,0.00] R=0.47
+[  858] evo_g000036_c1                PASS   fitness=14.147  Q=[0.2,0.00,0.00] R=0.44
+[  862] evo_g000036_c5                PASS   fitness=11.044  Q=[0.2,0.00,0.00] R=0.45
+[  866] evo_g000037_c1                PASS   fitness=15.463  Q=[0.2,0.00,0.00] R=0.45
+[  871] evo_g000037_c6                PASS   fitness=17.910  Q=[0.2,0.00,0.00] R=0.46
+[  874] evo_g000038_c1                PASS   fitness=15.816  Q=[0.2,0.00,0.00] R=0.45
+[  879] evo_g000038_c6                PASS   fitness=20.398  Q=[0.2,0.00,0.00] R=0.47
+[  883] evo_g000039_c2                PASS   fitness=21.694  Q=[0.2,0.00,0.00] R=0.46
+[  886] evo_g000039_c5                PASS   fitness=7.703  Q=[0.2,0.00,0.00] R=0.45
+[  889] evo_g000040_c0                PASS   fitness=32.769  Q=[0.2,0.00,0.00] R=0.44
+[  893] evo_g000040_c4                PASS   fitness=16.417  Q=[0.2,0.00,0.00] R=0.43
+[  897] evo_g000041_c0                PASS   fitness=5.774  Q=[0.2,0.00,0.00] R=0.44
+[  902] evo_g000041_c5                PASS   fitness=16.261  Q=[0.2,0.00,0.00] R=0.46
+[  906] evo_g000042_c1                FAIL   fitness=9999.000  Q=[0.2,0.00,0.00] R=0.43
+[  909] evo_g000042_c4                PASS   fitness=10.341  Q=[0.2,0.00,0.00] R=0.46
+[  913] evo_g000043_c0                PASS   fitness=21.895  Q=[0.2,0.00,0.00] R=0.46
+[  918] evo_g000043_c5                PASS   fitness=6.044  Q=[0.2,0.00,0.00] R=0.43
+[  921] evo_g000044_c0                PASS   fitness=5.706  Q=[0.2,0.00,0.00] R=0.45
+[  927] evo_g000044_c6                PASS   fitness=22.001  Q=[0.2,0.00,0.00] R=0.46
+[  930] evo_g000045_c1                PASS   fitness=18.545  Q=[0.2,0.00,0.00] R=0.45
+[  933] evo_g000045_c4                PASS   fitness=17.355  Q=[0.2,0.00,0.00] R=0.45
+[  937] evo_g000046_c0                PASS   fitness=22.292  Q=[0.2,0.00,0.00] R=0.46[  572] evo_g000000_c3                PASS   fitness=22.192  Q=[0.1,0.02,0.00] R=0.79
+[  576] evo_g000000_c7                PASS   fitness=19.187  Q=[0.2,0.03,0.00] R=1.90
+[  580] evo_g000001_c3                PASS   fitness=23.120  Q=[0.3,0.00,0.00] R=0.72
+[  585] evo_g000002_c0                PASS   fitness=24.569  Q=[0.2,0.01,0.00] R=0.46
+[  595] evo_g000003_c2                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.39
+[  599] evo_g000003_c6                PASS   fitness=20.160  Q=[0.1,0.01,0.00] R=1.12
+[  603] evo_g000004_c2                PASS   fitness=27.011  Q=[0.1,0.00,0.00] R=1.07
+[  608] evo_g000004_c7                FAIL   fitness=9999.000  Q=[0.2,0.00,0.01] R=0.10
+[  609] evo_g000005_c0                FAIL   fitness=9999.000  Q=[0.2,0.02,0.01] R=0.62
+[  614] evo_g000005_c5                PASS   fitness=20.670  Q=[0.3,0.00,0.00] R=1.19
+[  619] evo_g000006_c2                PASS   fitness=24.307  Q=[0.2,0.00,0.00] R=0.39
+[  624] evo_g000006_c7                PASS   fitness=24.122  Q=[0.3,0.01,0.00] R=0.87
+[  628] evo_g000007_c3                PASS   fitness=25.843  Q=[0.1,0.00,0.00] R=0.49
+[  632] evo_g000007_c7                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.33
+[  636] evo_g000008_c3                PASS   fitness=15.857  Q=[0.3,0.00,0.00] R=1.71
+[  639] evo_g000008_c6                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.19
+[  644] evo_g000009_c3                FAIL   fitness=9999.000  Q=[0.5,0.01,0.00] R=0.16
+[  647] evo_g000009_c6                FAIL   fitness=9999.000  Q=[0.2,0.01,0.00] R=0.13
+[  648] evo_g000009_c7                PASS   fitness=21.864  Q=[0.3,0.01,0.00] R=1.24
+[  652] evo_g000010_c3                PASS   fitness=25.126  Q=[0.1,0.01,0.00] R=0.77
+[  660] evo_g000011_c3                FAIL   fitness=9999.000  Q=[0.2,0.01,0.00] R=0.55
+[  661] evo_g000011_c4                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.45
+[  662] evo_g000011_c5                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.23
+[  663] evo_g000011_c6                FAIL   fitness=169.606  Q=[0.1,0.01,0.00] R=0.48
+[  667] evo_g000012_c2                PASS   fitness=24.489  Q=[0.2,0.01,0.00] R=0.41
+[  675] evo_g000013_c2                FAIL   fitness=9999.000  Q=[0.2,0.01,0.00] R=0.36
+[  678] evo_g000013_c5                PASS   fitness=24.406  Q=[0.4,0.01,0.00] R=0.64
+[  683] evo_g000014_c2                PASS   fitness=23.372  Q=[0.2,0.00,0.00] R=0.48
+[  688] evo_g000014_c7                PASS   fitness=27.571  Q=[0.2,0.01,0.00] R=0.47
+[  692] evo_g000015_c3                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.34
+[  693] evo_g000015_c4                PASS   fitness=25.403  Q=[0.2,0.00,0.00] R=0.53
+[  698] evo_g000016_c1                PASS   fitness=5.729  Q=[0.2,0.00,0.00] R=0.43
+[  703] evo_g000016_c6                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.39
+[  706] evo_g000017_c1                PASS   fitness=26.850  Q=[0.1,0.00,0.00] R=0.58
+[  709] evo_g000017_c4                PASS   fitness=24.529  Q=[0.2,0.00,0.00] R=0.57
+[  714] evo_g000018_c1                PASS   fitness=22.113  Q=[0.1,0.01,0.00] R=0.49
+[  720] evo_g000018_c7                PASS   fitness=27.123  Q=[0.2,0.00,0.00] R=0.40
+[  724] evo_g000019_c3                PASS   fitness=23.312  Q=[0.1,0.00,0.00] R=0.45
+[  727] evo_g000019_c6                PASS   fitness=21.902  Q=[0.2,0.00,0.00] R=0.48
+[  732] evo_g000020_c3                PASS   fitness=17.595  Q=[0.2,0.00,0.00] R=0.45
+[  735] evo_g000020_c6                PASS   fitness=16.048  Q=[0.1,0.00,0.00] R=0.44
+[  739] evo_g000021_c2                PASS   fitness=23.518  Q=[0.2,0.00,0.00] R=0.46
+[  743] evo_g000021_c6                PASS   fitness=25.783  Q=[0.2,0.00,0.00] R=0.44
+[  747] evo_g000022_c2                PASS   fitness=23.912  Q=[0.2,0.00,0.00] R=0.46
+[  751] evo_g000022_c6                PASS   fitness=22.318  Q=[0.2,0.00,0.00] R=0.44
+[  753] evo_g000023_c0                PASS   fitness=21.480  Q=[0.2,0.00,0.00] R=0.47
+[  759] evo_g000023_c6                PASS   fitness=24.123  Q=[0.2,0.00,0.00] R=0.44
+[  763] evo_g000024_c2                PASS   fitness=29.086  Q=[0.2,0.00,0.00] R=0.48
+[  768] evo_g000024_c7                PASS   fitness=6.134  Q=[0.2,0.00,0.00] R=0.45
+[  772] evo_g000025_c3                PASS   fitness=16.385  Q=[0.2,0.00,0.00] R=0.47
+[  775] evo_g000025_c6                PASS   fitness=6.965  Q=[0.2,0.00,0.00] R=0.43
+[  778] evo_g000026_c1                PASS   fitness=6.354  Q=[0.2,0.00,0.00] R=0.44
+[  783] evo_g000026_c6                PASS   fitness=22.344  Q=[0.2,0.00,0.00] R=0.47
+[  787] evo_g000027_c2                PASS   fitness=22.009  Q=[0.2,0.00,0.00] R=0.47
+[  791] evo_g000027_c6                PASS   fitness=14.235  Q=[0.2,0.00,0.00] R=0.46
+[  795] evo_g000028_c2                PASS   fitness=25.883  Q=[0.2,0.00,0.00] R=0.47
+[  799] evo_g000028_c6                PASS   fitness=34.719  Q=[0.2,0.00,0.00] R=0.44
+[  803] evo_g000029_c2                PASS   fitness=27.429  Q=[0.2,0.00,0.00] R=0.46
+[  807] evo_g000029_c6                PASS   fitness=10.075  Q=[0.2,0.00,0.00] R=0.45
+[  811] evo_g000030_c2                PASS   fitness=20.388  Q=[0.2,0.00,0.00] R=0.46
+[  815] evo_g000030_c6                PASS   fitness=23.325  Q=[0.2,0.00,0.00] R=0.45
+[  819] evo_g000031_c2                PASS   fitness=5.428  Q=[0.2,0.00,0.00] R=0.45
+[  823] evo_g000031_c6                PASS   fitness=18.649  Q=[0.2,0.00,0.00] R=0.47
+[  826] evo_g000032_c1                PASS   fitness=20.555  Q=[0.2,0.00,0.00] R=0.44
+[  831] evo_g000032_c6                PASS   fitness=20.026  Q=[0.2,0.00,0.00] R=0.48
+[  834] evo_g000033_c1                PASS   fitness=19.557  Q=[0.2,0.00,0.00] R=0.46
+[  839] evo_g000033_c6                PASS   fitness=17.923  Q=[0.2,0.00,0.00] R=0.46
+[  844] evo_g000034_c3                PASS   fitness=7.679  Q=[0.2,0.00,0.00] R=0.44
+[  847] evo_g000034_c6                PASS   fitness=16.134  Q=[0.2,0.00,0.00] R=0.44
+[  851] evo_g000035_c2                PASS   fitness=5.710  Q=[0.2,0.00,0.00] R=0.44
+[  855] evo_g000035_c6                PASS   fitness=25.662  Q=[0.2,0.00,0.00] R=0.43
+[  859] evo_g000036_c2                PASS   fitness=23.563  Q=[0.2,0.00,0.00] R=0.48
+[  864] evo_g000036_c7                FAIL   fitness=168.336  Q=[0.2,0.00,0.00] R=0.44
+[  865] evo_g000037_c0                PASS   fitness=14.270  Q=[0.2,0.00,0.00] R=0.45
+[  869] evo_g000037_c4                PASS   fitness=21.802  Q=[0.1,0.00,0.00] R=0.46
+[  875] evo_g000038_c2                PASS   fitness=21.757  Q=[0.2,0.00,0.00] R=0.47
+[  877] evo_g000038_c4                PASS   fitness=6.187  Q=[0.2,0.00,0.00] R=0.46
+[  881] evo_g000039_c0                PASS   fitness=24.720  Q=[0.2,0.00,0.00] R=0.44
+[  885] evo_g000039_c4                PASS   fitness=20.283  Q=[0.2,0.00,0.00] R=0.45
+[  890] evo_g000040_c1                PASS   fitness=9.544  Q=[0.1,0.00,0.00] R=0.46
+[  895] evo_g000040_c6                PASS   fitness=25.131  Q=[0.2,0.00,0.00] R=0.44
+[  899] evo_g000041_c2                PASS   fitness=16.098  Q=[0.2,0.00,0.00] R=0.45
+[  903] evo_g000041_c6                PASS   fitness=6.756  Q=[0.2,0.00,0.00] R=0.44
+[  907] evo_g000042_c2                PASS   fitness=18.937  Q=[0.2,0.00,0.00] R=0.46
+[  911] evo_g000042_c6                PASS   fitness=17.669  Q=[0.2,0.00,0.00] R=0.45
+[  915] evo_g000043_c2                PASS   fitness=28.390  Q=[0.2,0.00,0.00] R=0.45
+[  917] evo_g000043_c4                PASS   fitness=17.914  Q=[0.2,0.00,0.00] R=0.45
+[  923] evo_g000044_c2                FAIL   fitness=167.506  Q=[0.2,0.00,0.00] R=0.44
+[  925] evo_g000044_c4                PASS   fitness=17.445  Q=[0.2,0.00,0.00] R=0.45
+[  929] evo_g000045_c0                PASS   fitness=23.358  Q=[0.2,0.00,0.00] R=0.46
+[  935] evo_g000045_c6                PASS   fitness=19.836  Q=[0.2,0.00,0.00] R=0.45
+[  938] evo_g000046_c1                PASS   fitness=18.838  Q=[0.2,0.00,0.00] R=0.43
+[  941] evo_g000046_c4                PASS   fitness=18.765  Q=[0.2,0.00,0.00] R=0.47
+[  946] evo_g000047_c1                PASS   fitness=11.464  Q=[0.2,0.00,0.00] R=0.44[  569] evo_g000000_c0                PASS   fitness=22.404  Q=[0.3,0.01,0.00] R=0.72
+[  573] evo_g000000_c4                PASS   fitness=14.376  Q=[0.1,0.01,0.00] R=1.48
+[  578] evo_g000001_c1                FAIL   fitness=9999.000  Q=[0.2,0.01,0.01] R=0.50
+[  584] evo_g000001_c7                PASS   fitness=23.649  Q=[0.2,0.01,0.00] R=0.61
+[  588] evo_g000002_c3                FAIL   fitness=167.734  Q=[0.4,0.02,0.00] R=0.25
+[  593] evo_g000003_c0                FAIL   fitness=9999.000  Q=[0.2,0.00,0.01] R=0.39
+[  597] evo_g000003_c4                FAIL   fitness=9999.000  Q=[0.3,0.01,0.00] R=0.22
+[  600] evo_g000003_c7                PASS   fitness=25.059  Q=[0.1,0.01,0.00] R=0.66
+[  604] evo_g000004_c3                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.11
+[  605] evo_g000004_c4                PASS   fitness=24.793  Q=[0.2,0.02,0.00] R=0.97
+[  610] evo_g000005_c1                FAIL   fitness=9999.000  Q=[0.7,0.01,0.00] R=0.38
+[  615] evo_g000005_c6                PASS   fitness=24.486  Q=[0.1,0.01,0.00] R=0.67
+[  620] evo_g000006_c3                PASS   fitness=21.701  Q=[0.3,0.00,0.00] R=0.41
+[  625] evo_g000007_c0                PASS   fitness=23.885  Q=[0.3,0.01,0.00] R=0.18
+[  633] evo_g000008_c0                PASS   fitness=25.180  Q=[0.2,0.01,0.00] R=0.38
+[  640] evo_g000008_c7                FAIL   fitness=9999.000  Q=[0.1,0.01,0.01] R=0.16
+[  642] evo_g000009_c1                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.12
+[  645] evo_g000009_c4                PASS   fitness=25.538  Q=[0.1,0.00,0.01] R=1.70
+[  651] evo_g000010_c2                FAIL   fitness=9999.000  Q=[0.2,0.00,0.01] R=0.19
+[  653] evo_g000010_c4                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.14
+[  655] evo_g000010_c6                FAIL   fitness=9999.000  Q=[0.1,0.00,0.00] R=0.30
+[  657] evo_g000011_c0                PASS   fitness=21.506  Q=[0.2,0.01,0.00] R=0.30
+[  666] evo_g000012_c1                FAIL   fitness=9999.000  Q=[0.4,0.01,0.00] R=0.58
+[  671] evo_g000012_c6                FAIL   fitness=9999.000  Q=[0.3,0.00,0.00] R=0.25
+[  672] evo_g000012_c7                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.39
+[  674] evo_g000013_c1                FAIL   fitness=9999.000  Q=[0.1,0.01,0.00] R=0.30
+[  679] evo_g000013_c6                PASS   fitness=24.223  Q=[0.2,0.01,0.00] R=0.53
+[  684] evo_g000014_c3                PASS   fitness=23.130  Q=[0.2,0.01,0.00] R=0.76
+[  689] evo_g000015_c0                PASS   fitness=25.475  Q=[0.2,0.01,0.00] R=0.51
+[  696] evo_g000015_c7                FAIL   fitness=9999.000  Q=[0.2,0.00,0.00] R=0.38
+[  699] evo_g000016_c2                PASS   fitness=6.501  Q=[0.2,0.01,0.00] R=0.40
+[  704] evo_g000016_c7                PASS   fitness=24.742  Q=[0.1,0.01,0.00] R=0.43
+[  708] evo_g000017_c3                PASS   fitness=25.681  Q=[0.2,0.00,0.00] R=0.50
+[  712] evo_g000017_c7                PASS   fitness=25.322  Q=[0.2,0.01,0.00] R=0.43
+[  716] evo_g000018_c3                PASS   fitness=25.112  Q=[0.2,0.00,0.00] R=0.51
+[  721] evo_g000019_c0                PASS   fitness=21.942  Q=[0.2,0.00,0.00] R=0.42
+[  728] evo_g000019_c7                FAIL   fitness=9999.000  Q=[0.2,0.01,0.00] R=0.40
+[  729] evo_g000020_c0                PASS   fitness=25.673  Q=[0.2,0.00,0.00] R=0.41
+[  736] evo_g000020_c7                PASS   fitness=23.642  Q=[0.2,0.00,0.00] R=0.47
+[  740] evo_g000021_c3                PASS   fitness=20.294  Q=[0.1,0.00,0.00] R=0.42
+[  744] evo_g000021_c7                PASS   fitness=10.267  Q=[0.2,0.00,0.00] R=0.44
+[  748] evo_g000022_c3                PASS   fitness=23.553  Q=[0.2,0.00,0.00] R=0.47
+[  752] evo_g000022_c7                PASS   fitness=24.723  Q=[0.2,0.00,0.00] R=0.53
+[  756] evo_g000023_c3                PASS   fitness=21.071  Q=[0.2,0.00,0.00] R=0.46
+[  760] evo_g000023_c7                PASS   fitness=6.620  Q=[0.2,0.00,0.00] R=0.43
+[  764] evo_g000024_c3                FAIL   fitness=183.876  Q=[0.2,0.00,0.00] R=0.44
+[  766] evo_g000024_c5                PASS   fitness=22.279  Q=[0.2,0.00,0.00] R=0.43
+[  770] evo_g000025_c1                PASS   fitness=5.750  Q=[0.2,0.00,0.00] R=0.45
+[  776] evo_g000025_c7                PASS   fitness=28.497  Q=[0.2,0.00,0.00] R=0.45
+[  780] evo_g000026_c3                PASS   fitness=18.933  Q=[0.2,0.00,0.00] R=0.45
+[  784] evo_g000026_c7                PASS   fitness=18.620  Q=[0.2,0.00,0.00] R=0.48
+[  788] evo_g000027_c3                PASS   fitness=5.809  Q=[0.2,0.00,0.00] R=0.46
+[  792] evo_g000027_c7                PASS   fitness=20.322  Q=[0.2,0.00,0.00] R=0.47
+[  796] evo_g000028_c3                PASS   fitness=6.061  Q=[0.2,0.00,0.00] R=0.46
+[  800] evo_g000028_c7                PASS   fitness=5.655  Q=[0.2,0.00,0.00] R=0.46
+[  804] evo_g000029_c3                PASS   fitness=6.429  Q=[0.2,0.00,0.00] R=0.46
+[  808] evo_g000029_c7                PASS   fitness=15.536  Q=[0.2,0.00,0.00] R=0.45
+[  812] evo_g000030_c3                PASS   fitness=7.447  Q=[0.2,0.00,0.00] R=0.44
+[  816] evo_g000030_c7                PASS   fitness=15.961  Q=[0.2,0.00,0.00] R=0.45
+[  820] evo_g000031_c3                PASS   fitness=5.761  Q=[0.2,0.00,0.00] R=0.46
+[  824] evo_g000031_c7                PASS   fitness=23.793  Q=[0.2,0.00,0.00] R=0.46
+[  828] evo_g000032_c3                PASS   fitness=6.124  Q=[0.2,0.00,0.00] R=0.45
+[  832] evo_g000032_c7                PASS   fitness=18.945  Q=[0.2,0.00,0.00] R=0.46
+[  836] evo_g000033_c3                PASS   fitness=19.977  Q=[0.2,0.00,0.00] R=0.46
+[  840] evo_g000033_c7                FAIL   fitness=168.129  Q=[0.2,0.00,0.00] R=0.44
+[  841] evo_g000034_c0                PASS   fitness=22.267  Q=[0.2,0.00,0.00] R=0.46
+[  848] evo_g000034_c7                PASS   fitness=18.941  Q=[0.2,0.00,0.00] R=0.45
+[  852] evo_g000035_c3                PASS   fitness=20.871  Q=[0.2,0.00,0.00] R=0.44
+[  856] evo_g000035_c7                PASS   fitness=19.401  Q=[0.2,0.00,0.00] R=0.44
+[  860] evo_g000036_c3                PASS   fitness=11.253  Q=[0.2,0.00,0.00] R=0.45
+[  863] evo_g000036_c6                PASS   fitness=6.112  Q=[0.2,0.00,0.00] R=0.46
+[  868] evo_g000037_c3                PASS   fitness=22.145  Q=[0.2,0.00,0.00] R=0.45
+[  872] evo_g000037_c7                PASS   fitness=18.895  Q=[0.2,0.00,0.00] R=0.46
+[  876] evo_g000038_c3                PASS   fitness=21.208  Q=[0.2,0.00,0.00] R=0.46
+[  880] evo_g000038_c7                PASS   fitness=5.861  Q=[0.2,0.00,0.00] R=0.45
+[  884] evo_g000039_c3                PASS   fitness=6.204  Q=[0.2,0.00,0.00] R=0.45
+[  888] evo_g000039_c7                PASS   fitness=20.026  Q=[0.2,0.00,0.00] R=0.46
+[  892] evo_g000040_c3                PASS   fitness=26.260  Q=[0.1,0.00,0.00] R=0.45
+[  896] evo_g000040_c7                PASS   fitness=20.034  Q=[0.2,0.00,0.00] R=0.48
+[  900] evo_g000041_c3                PASS   fitness=16.893  Q=[0.2,0.00,0.00] R=0.44
+[  904] evo_g000041_c7                PASS   fitness=6.083  Q=[0.2,0.00,0.00] R=0.46
+[  908] evo_g000042_c3                PASS   fitness=19.217  Q=[0.2,0.00,0.00] R=0.46
+[  912] evo_g000042_c7                PASS   fitness=19.452  Q=[0.2,0.00,0.00] R=0.46
+[  916] evo_g000043_c3                PASS   fitness=19.711  Q=[0.1,0.00,0.00] R=0.45
+[  920] evo_g000043_c7                PASS   fitness=21.312  Q=[0.2,0.00,0.00] R=0.44
+[  924] evo_g000044_c3                PASS   fitness=25.273  Q=[0.2,0.00,0.00] R=0.47
+[  928] evo_g000044_c7                PASS   fitness=27.453  Q=[0.2,0.00,0.00] R=0.46
+[  932] evo_g000045_c3                PASS   fitness=24.774  Q=[0.2,0.00,0.00] R=0.45
+[  936] evo_g000045_c7                PASS   fitness=16.134  Q=[0.2,0.00,0.00] R=0.44
+[  940] evo_g000046_c3                PASS   fitness=20.949  Q=[0.2,0.00,0.00] R=0.46
+[  944] evo_g000046_c7                PASS   fitness=20.229  Q=[0.2,0.00,0.00] R=0.46
+[  948] evo_g000047_c3                PASS   fitness=6.012  Q=[0.2,0.00,0.00] R=0.43
+[  952] evo_g000047_c7                PASS   fitness=6.508  Q=[0.2,0.00,0.00] R=0.43
+[  956] evo_g000048_c3                PASS   fitness=18.424  Q=[0.2,0.00,0.00] R=0.44
+[  943] evo_g000046_c6                PASS   fitness=6.019  Q=[0.2,0.00,0.00] R=0.43
+[  945] evo_g000047_c0                PASS   fitness=20.944  Q=[0.2,0.00,0.00] R=0.45
+[  949] evo_g000047_c4                FAIL   fitness=9999.000  Q=[0.2,0.00,0.00] R=0.45
+[  953] evo_g000048_c0                PASS   fitness=6.611  Q=[0.2,0.00,0.00] R=0.45
+[  958] evo_g000048_c5                PASS   fitness=8.333  Q=[0.2,0.00,0.00] R=0.45
+[  961] evo_g000049_c0                PASS   fitness=36.115  Q=[0.2,0.00,0.00] R=0.44
+[  965] evo_g000049_c4                PASS   fitness=23.843  Q=[0.2,0.00,0.00] R=0.45
+
+[  934] evo_g000045_c5                PASS   fitness=20.901  Q=[0.2,0.00,0.00] R=0.45
+[  939] evo_g000046_c2                PASS   fitness=17.142  Q=[0.2,0.00,0.00] R=0.45
+[  942] evo_g000046_c5                PASS   fitness=24.796  Q=[0.2,0.00,0.00] R=0.44
+[  947] evo_g000047_c2                PASS   fitness=20.397  Q=[0.2,0.00,0.00] R=0.43
+[  950] evo_g000047_c5                PASS   fitness=16.021  Q=[0.2,0.00,0.00] R=0.44
+[  954] evo_g000048_c1                PASS   fitness=6.146  Q=[0.2,0.00,0.00] R=0.45
+[  957] evo_g000048_c4                PASS   fitness=22.028  Q=[0.2,0.00,0.00] R=0.44
+[  962] evo_g000049_c1                PASS   fitness=25.902  Q=[0.2,0.00,0.00] R=0.46
+[  967] evo_g000049_c6                PASS   fitness=16.616  Q=[0.2,0.00,0.00] R=0.46
+
+[  951] evo_g000047_c6                PASS   fitness=19.828  Q=[0.2,0.00,0.00] R=0.48
+[  955] evo_g000048_c2                PASS   fitness=21.140  Q=[0.2,0.00,0.00] R=0.45
+[  959] evo_g000048_c6                PASS   fitness=17.269  Q=[0.2,0.00,0.00] R=0.45
+[  963] evo_g000049_c2                PASS   fitness=5.809  Q=[0.2,0.00,0.00] R=0.45
+[  966] evo_g000049_c5                PASS   fitness=5.991  Q=[0.2,0.00,0.00] R=0.46
+
+[  960] evo_g000048_c7                PASS   fitness=20.383  Q=[0.2,0.00,0.00] R=0.46
+[  964] evo_g000049_c3                PASS   fitness=5.736  Q=[0.2,0.00,0.00] R=0.45
+[  968] evo_g000049_c7                PASS   fitness=28.202  Q=[0.2,0.00,0.00] R=0.46
+No prior results found — evaluating default weights first...
+[  568] evo_seed                      PASS   fitness=18.561  Q=[0.1,0.01,0.00] R=1.00
+Seed fitness: 18.561
+
+================================================================================
+LQR Cost Weight Optimizer (1+8)-ES
+  workers=4  |  params=['Q_PITCH', 'Q_PITCH_RATE', 'Q_VEL', 'R']
+  Max generations: 50
+================================================================================
+
+[gen     5]  best=6.238  parent=6.238  evals=40  elapsed=0.1min
+  parent: Q_PITCH=0.156  Q_PITCH_RATE=0.00585  Q_VEL=0.00201  R=0.452
+  sigma:  Q_PITCH=0.30  Q_PITCH_RATE=0.30  Q_VEL=0.30  R=0.30
+
+[gen    10]  best=6.238  parent=6.238  evals=80  elapsed=0.1min
+  parent: Q_PITCH=0.156  Q_PITCH_RATE=0.00585  Q_VEL=0.00201  R=0.452
+  sigma:  Q_PITCH=0.25  Q_PITCH_RATE=0.25  Q_VEL=0.25  R=0.25
+
+[gen    15]  best=6.238  parent=6.238  evals=120  elapsed=0.2min
+  parent: Q_PITCH=0.156  Q_PITCH_RATE=0.00585  Q_VEL=0.00201  R=0.452
+  sigma:  Q_PITCH=0.09  Q_PITCH_RATE=0.09  Q_VEL=0.09  R=0.09
+
+[gen    20]  best=5.729  parent=5.729  evals=160  elapsed=0.3min
+  parent: Q_PITCH=0.154  Q_PITCH_RATE=0.00438  Q_VEL=0.0019  R=0.435
+  sigma:  Q_PITCH=0.03  Q_PITCH_RATE=0.03  Q_VEL=0.03  R=0.03
+
+[gen    25]  best=5.588  parent=5.588  evals=200  elapsed=0.3min
+  parent: Q_PITCH=0.16  Q_PITCH_RATE=0.00409  Q_VEL=0.002  R=0.452
+  sigma:  Q_PITCH=0.01  Q_PITCH_RATE=0.01  Q_VEL=0.01  R=0.01
+
+[gen    30]  best=5.588  parent=5.588  evals=240  elapsed=0.4min
+  parent: Q_PITCH=0.16  Q_PITCH_RATE=0.00409  Q_VEL=0.002  R=0.452
+  sigma:  Q_PITCH=0.01  Q_PITCH_RATE=0.01  Q_VEL=0.01  R=0.01
+
+[gen    35]  best=5.428  parent=5.428  evals=280  elapsed=0.5min
+  parent: Q_PITCH=0.158  Q_PITCH_RATE=0.00419  Q_VEL=0.00196  R=0.451
+  sigma:  Q_PITCH=0.01  Q_PITCH_RATE=0.01  Q_VEL=0.01  R=0.01
+
+[gen    40]  best=5.428  parent=5.428  evals=320  elapsed=0.6min
+  parent: Q_PITCH=0.158  Q_PITCH_RATE=0.00419  Q_VEL=0.00196  R=0.451
+  sigma:  Q_PITCH=0.01  Q_PITCH_RATE=0.01  Q_VEL=0.01  R=0.01
+
+[gen    45]  best=5.428  parent=5.428  evals=360  elapsed=0.7min
+  parent: Q_PITCH=0.158  Q_PITCH_RATE=0.00419  Q_VEL=0.00196  R=0.451
+  sigma:  Q_PITCH=0.01  Q_PITCH_RATE=0.01  Q_VEL=0.01  R=0.01
+
+[gen    50]  best=5.428  parent=5.428  evals=400  elapsed=0.8min
+  parent: Q_PITCH=0.158  Q_PITCH_RATE=0.00419  Q_VEL=0.00196  R=0.451
+  sigma:  Q_PITCH=0.01  Q_PITCH_RATE=0.01  Q_VEL=0.01  R=0.01
+
+================================================================================
+Optimization complete: 50 generations, 400 evals, 0.8 min
+All-time best: fitness=5.428  (found gen 31)
+Best weights: Q_PITCH=0.158  Q_PITCH_RATE=0.00419  Q_VEL=0.00196  R=0.451
+
+To replay best result:
+  python replay.py --top 1

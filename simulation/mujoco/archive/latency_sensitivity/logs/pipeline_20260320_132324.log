@@ -1,0 +1,28 @@
+[13:23:24] ========================================================================
+[13:23:24]   S1-S8 Pipeline -- 1 steps  |  0.17h/step  |  20260320_132324
+[13:23:24] ========================================================================
+[13:23:24]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\logs\pipeline_20260320_132324.log
+[13:23:24]   Steps: ['S2']
+[13:23:24]   seed=scratch  patience=200  tol=0.0001  fresh=True
+[13:23:24] ========================================================================
+[13:23:24]   [2/1] S2 -- optimize_lqr.py -- 2_leg_height_gain_sched
+[13:23:24] ========================================================================
+[13:23:24]   Seeding from S1: Q_PITCH=0.001581,Q_PITCH_RATE=0.140558,Q_VEL=0.0001,R=1269.7851
+[13:23:24]   Deleted S2_leg_height_gain_sched.csv (--fresh)
+[13:23:24]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_lqr.py --scenario 2_leg_height_gain_sched --hours 0.1667 --patience 200 --tol 0.0001 --seed-gains Q_PITCH=0.001581,Q_PITCH_RATE=0.140558,Q_VEL=0.0001,R=1269.7851
+[13:28:16]   Step S2 done in 4.9 min — best: Q_PITCH=0.000217,Q_PITCH_RATE=0.025979,Q_VEL=3.3e-05,R=4998.9477
+[13:28:16]   [BASELINE] Writing to sim_config.py:
+[13:28:16]     LQR_Q_PITCH = 0.000217
+[13:28:16]     LQR_Q_PITCH_RATE = 0.025979
+[13:28:16]     LQR_Q_VEL = 3.3e-05
+[13:28:16]     LQR_R = 4998.9477
+[13:28:16]   sim_config.py updated.
+[13:28:16] ========================================================================
+[13:28:16]   Pipeline complete — 5 min total
+[13:28:16] ========================================================================
+[13:28:16]   S1: Q_PITCH=0.001581,Q_PITCH_RATE=0.140558,Q_VEL=0.0001,R=1269.7851
+[13:28:16]   S2 [BASELINED]: Q_PITCH=0.000217,Q_PITCH_RATE=0.025979,Q_VEL=3.3e-05,R=4998.9477
+[13:28:16] 
+  All steps completed successfully.
+[13:28:16]   sim_config.py has been updated with all baselined gains.
+[13:28:16]   Run 'python replay.py' to visualize any scenario.

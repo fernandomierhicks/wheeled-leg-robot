@@ -153,7 +153,7 @@ def plot_performance(drive: DriveTrain):
 if __name__ == "__main__":
     # --- Configuration ---
     
-    # Motor: Maytech 5065 70KV (Baseline 1 Design)
+    # Motor: Maytech 5065 70KV (Purchased)
     motor = Motor(
         name="Maytech 5065 70KV",
         kv=70,

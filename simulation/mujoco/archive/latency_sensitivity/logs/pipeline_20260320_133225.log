@@ -1,0 +1,35 @@
+[13:32:25] ========================================================================
+[13:32:25]   S1-S8 Pipeline -- 2 steps  |  0.17h/step  |  20260320_133225
+[13:32:25] ========================================================================
+[13:32:25]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\logs\pipeline_20260320_133225.log
+[13:32:25]   Steps: ['S1', 'S2']
+[13:32:25]   seed=scratch  patience=200  tol=0.0001  fresh=True
+[13:32:25] ========================================================================
+[13:32:25]   [1/2] S1 -- optimize_lqr.py -- 1_LQR_pitch_step
+[13:32:25] ========================================================================
+[13:32:25]   Seeding from optimizer hardcoded SEED_WEIGHTS (--seed scratch)
+[13:32:25]   Deleted S1_LQR_pitch_step.csv (--fresh)
+[13:32:25]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_lqr.py --scenario 1_LQR_pitch_step --hours 0.1667 --patience 200 --tol 0.0001
+[13:34:43]   Step S1 done in 2.3 min — best: Q_PITCH=0.005848,Q_PITCH_RATE=0.00259,Q_VEL=1.1e-05,R=1399.1494
+[13:34:43] ========================================================================
+[13:34:43]   [2/2] S2 -- optimize_lqr.py -- 2_leg_height_gain_sched
+[13:34:43] ========================================================================
+[13:34:43]   Seeding from S1: Q_PITCH=0.005848,Q_PITCH_RATE=0.00259,Q_VEL=1.1e-05,R=1399.1494
+[13:34:43]   Deleted S2_leg_height_gain_sched.csv (--fresh)
+[13:34:43]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_lqr.py --scenario 2_leg_height_gain_sched --hours 0.1667 --patience 200 --tol 0.0001 --seed-gains Q_PITCH=0.005848,Q_PITCH_RATE=0.00259,Q_VEL=1.1e-05,R=1399.1494
+[13:39:39]   Step S2 done in 4.9 min — best: Q_PITCH=0.005408,Q_PITCH_RATE=0.001177,Q_VEL=2e-06,R=1100.1681
+[13:39:39]   [BASELINE] Writing to sim_config.py:
+[13:39:39]     LQR_Q_PITCH = 0.005408
+[13:39:39]     LQR_Q_PITCH_RATE = 0.001177
+[13:39:39]     LQR_Q_VEL = 2e-06
+[13:39:39]     LQR_R = 1100.1681
+[13:39:39]   sim_config.py updated.
+[13:39:39] ========================================================================
+[13:39:39]   Pipeline complete — 7 min total
+[13:39:39] ========================================================================
+[13:39:39]   S1: Q_PITCH=0.005848,Q_PITCH_RATE=0.00259,Q_VEL=1.1e-05,R=1399.1494
+[13:39:39]   S2 [BASELINED]: Q_PITCH=0.005408,Q_PITCH_RATE=0.001177,Q_VEL=2e-06,R=1100.1681
+[13:39:39] 
+  All steps completed successfully.
+[13:39:39]   sim_config.py has been updated with all baselined gains.
+[13:39:39]   Run 'python replay.py' to visualize any scenario.

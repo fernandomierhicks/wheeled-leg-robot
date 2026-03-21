@@ -1,0 +1,97 @@
+[13:04:32] ========================================================================
+[13:04:32]   S1-S8 Pipeline -- 8 steps  |  0.08h/step  |  20260320_130432
+[13:04:32] ========================================================================
+[13:04:32]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\logs\pipeline_20260320_130432.log
+[13:04:32]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']
+[13:04:32]   seed=scratch  patience=50  tol=0.0001  fresh=True
+[13:04:32] ========================================================================
+[13:04:32]   [1/8] S1 -- optimize_lqr.py -- 1_LQR_pitch_step
+[13:04:32] ========================================================================
+[13:04:32]   Seeding from optimizer hardcoded SEED_WEIGHTS (--seed scratch)
+[13:04:32]   Deleted S1_LQR_pitch_step.csv (--fresh)
+[13:04:32]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_lqr.py --scenario 1_LQR_pitch_step --hours 0.0833 --patience 50 --tol 0.0001
+[13:05:02]   Step S1 done in 0.5 min — best: Q_PITCH=0.001581,Q_PITCH_RATE=0.140558,Q_VEL=0.0001,R=1269.7851
+[13:05:02] ========================================================================
+[13:05:02]   [2/8] S2 -- optimize_lqr.py -- 2_leg_height_gain_sched
+[13:05:02] ========================================================================
+[13:05:02]   Seeding from S1: Q_PITCH=0.001581,Q_PITCH_RATE=0.140558,Q_VEL=0.0001,R=1269.7851
+[13:05:02]   Deleted S2_leg_height_gain_sched.csv (--fresh)
+[13:05:02]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_lqr.py --scenario 2_leg_height_gain_sched --hours 0.0833 --patience 50 --tol 0.0001 --seed-gains Q_PITCH=0.001581,Q_PITCH_RATE=0.140558,Q_VEL=0.0001,R=1269.7851
+[13:06:16]   Step S2 done in 1.2 min — best: Q_PITCH=0.001126,Q_PITCH_RATE=0.05083,Q_VEL=0.011379,R=3743.791
+[13:06:16]   [BASELINE] Writing to sim_config.py:
+[13:06:16]     LQR_Q_PITCH = 0.001126
+[13:06:16]     LQR_Q_PITCH_RATE = 0.05083
+[13:06:16]     LQR_Q_VEL = 0.011379
+[13:06:16]     LQR_R = 3743.791
+[13:06:16]   sim_config.py updated.
+[13:06:16] ========================================================================
+[13:06:16]   [3/8] S3 -- optimize_vel_pi.py -- 3_VEL_PI_disturbance
+[13:06:16] ========================================================================
+[13:06:16]   Seeding from optimizer hardcoded SEED_WEIGHTS (--seed scratch)
+[13:06:16]   Deleted S3_VEL_PI_disturbance.csv (--fresh)
+[13:06:16]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_vel_pi.py --scenario 3_VEL_PI_disturbance --hours 0.0833 --patience 50 --tol 0.0001
+[13:07:15]   Step S3 done in 1.0 min — best: KP_V=0.079912,KI_V=0.115362
+[13:07:15] ========================================================================
+[13:07:15]   [4/8] S4 -- optimize_vel_pi.py -- 4_VEL_PI_staircase
+[13:07:15] ========================================================================
+[13:07:15]   Seeding from S3: KP_V=0.079912,KI_V=0.115362
+[13:07:15]   Deleted S4_VEL_PI_staircase.csv (--fresh)
+[13:07:15]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_vel_pi.py --scenario 4_VEL_PI_staircase --hours 0.0833 --patience 50 --tol 0.0001 --seed-gains KP_V=0.079912,KI_V=0.115362
+[13:08:20]   Step S4 done in 1.1 min — best: KP_V=0.053662,KI_V=6.45113
+[13:08:20] ========================================================================
+[13:08:20]   [5/8] S5 -- optimize_vel_pi.py -- 5_VEL_PI_leg_cycling
+[13:08:20] ========================================================================
+[13:08:20]   Seeding from S4: KP_V=0.053662,KI_V=6.45113
+[13:08:20]   Deleted S5_VEL_PI_leg_cycling.csv (--fresh)
+[13:08:20]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_vel_pi.py --scenario 5_VEL_PI_leg_cycling --hours 0.0833 --patience 50 --tol 0.0001 --seed-gains KP_V=0.053662,KI_V=6.45113
+[13:09:18]   Step S5 done in 1.0 min — best: KP_V=0.003203,KI_V=20
+[13:09:18]   [BASELINE] Writing to sim_config.py:
+[13:09:18]     VELOCITY_PI_KP = 0.003203
+[13:09:18]     VELOCITY_PI_KI = 20
+[13:09:18]   sim_config.py updated.
+[13:09:18] ========================================================================
+[13:09:18]   [6/8] S6 -- optimize_yaw_pi.py -- 6_YAW_PI_turn
+[13:09:18] ========================================================================
+[13:09:18]   Seeding from optimizer hardcoded SEED_WEIGHTS (--seed scratch)
+[13:09:18]   Deleted S6_YAW_PI_turn.csv (--fresh)
+[13:09:18]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_yaw_pi.py --scenario 6_YAW_PI_turn --hours 0.0833 --patience 50 --tol 0.0001
+[13:10:19]   Step S6 done in 1.0 min — best: KP_YAW=13.710218,KI_YAW=3.762847
+[13:10:19] ========================================================================
+[13:10:19]   [7/8] S7 -- optimize_yaw_pi.py -- 7_DRIVE_TURN
+[13:10:19] ========================================================================
+[13:10:19]   Seeding from S6: KP_YAW=13.710218,KI_YAW=3.762847
+[13:10:19]   Deleted S7_DRIVE_TURN.csv (--fresh)
+[13:10:19]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_yaw_pi.py --scenario 7_DRIVE_TURN --hours 0.0833 --patience 50 --tol 0.0001 --seed-gains KP_YAW=13.710218,KI_YAW=3.762847
+[13:11:19]   Step S7 done in 1.0 min — best: KP_YAW=20,KI_YAW=1.172637
+[13:11:19]   [BASELINE] Writing to sim_config.py:
+[13:11:19]     YAW_PI_KP = 20
+[13:11:19]     YAW_PI_KI = 1.172637
+[13:11:19]   sim_config.py updated.
+[13:11:19] ========================================================================
+[13:11:19]   [8/8] S8 -- optimize_suspension.py -- 8_terrain_compliance
+[13:11:19] ========================================================================
+[13:11:19]   Seeding from optimizer hardcoded SEED_WEIGHTS (--seed scratch)
+[13:11:19]   Deleted S8_terrain_compliance.csv (--fresh)
+[13:11:19]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\latency_sensitivity\optimize_suspension.py --scenario 8_terrain_compliance --hours 0.0833 --patience 50 --tol 0.0001
+[13:12:39]   Step S8 done in 1.3 min — best: LEG_K_S=0.388999,LEG_B_S=5.171191,LEG_K_ROLL=5.6489,LEG_D_ROLL=0.063168
+[13:12:39]   [BASELINE] Writing to sim_config.py:
+[13:12:39]     LEG_K_S = 0.388999
+[13:12:39]     LEG_B_S = 5.171191
+[13:12:39]     LEG_K_ROLL = 5.6489
+[13:12:39]     LEG_D_ROLL = 0.063168
+[13:12:39]   sim_config.py updated.
+[13:12:39] ========================================================================
+[13:12:39]   Pipeline complete — 8 min total
+[13:12:39] ========================================================================
+[13:12:39]   S1: Q_PITCH=0.001581,Q_PITCH_RATE=0.140558,Q_VEL=0.0001,R=1269.7851
+[13:12:39]   S2 [BASELINED]: Q_PITCH=0.001126,Q_PITCH_RATE=0.05083,Q_VEL=0.011379,R=3743.791
+[13:12:39]   S3: KP_V=0.079912,KI_V=0.115362
+[13:12:39]   S4: KP_V=0.053662,KI_V=6.45113
+[13:12:39]   S5 [BASELINED]: KP_V=0.003203,KI_V=20
+[13:12:39]   S6: KP_YAW=13.710218,KI_YAW=3.762847
+[13:12:39]   S7 [BASELINED]: KP_YAW=20,KI_YAW=1.172637
+[13:12:39]   S8 [BASELINED]: LEG_K_S=0.388999,LEG_B_S=5.171191,LEG_K_ROLL=5.6489,LEG_D_ROLL=0.063168
+[13:12:39] 
+  All steps completed successfully.
+[13:12:39]   sim_config.py has been updated with all baselined gains.
+[13:12:39]   Run 'python replay.py' to visualize any scenario.

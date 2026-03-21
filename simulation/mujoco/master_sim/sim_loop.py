@@ -1,0 +1,581 @@
+"""sim_loop.py — THE single simulation core for all scenarios.
+
+Ported from latency_sensitivity/scenarios.py (_run_sim_loop + init_sim +
+_build_model_and_data).  All parameters come from SimParams; no module-level
+mutable globals.
+
+Usage:
+    # Headless optimizer
+    metrics = run(params, scenario_config)
+
+    # Replay with callbacks
+    metrics = run(params, scenario_config, callbacks=[telemetry_recorder])
+
+    # Sandbox with command queue
+    metrics = run(params, scenario_config, callbacks=[live_chart], command_queue=q)
+"""
+import math
+import numpy as np
+import mujoco
+
+from master_sim.params import SimParams
+from master_sim.scenarios.base import ScenarioConfig, WorldConfig
+from master_sim.physics import build_xml, build_assets, solve_ik, get_equilibrium_pitch
+from master_sim.models.battery import BatteryModel
+from master_sim.models.motor import motor_taper, motor_currents
+from master_sim.models.latency import LatencyBuffer
+from master_sim.controllers.lqr import compute_gain_table, lqr_torque
+from master_sim.controllers.velocity_pi import VelocityPI
+from master_sim.controllers.yaw_pi import YawPI
+from master_sim.controllers.hip import (
+    hip_position_torque, hip_impedance_torque, roll_leveling_offsets,
+)
+
+
+# ── Constants ────────────────────────────────────────────────────────────────
+FALL_THRESHOLD    = 0.785   # [rad] ~45° — robot considered fallen
+SETTLE_THRESHOLD  = 2.0     # [deg] |pitch| below this = settled
+SETTLE_WINDOW     = 0.5     # [s]  must stay settled this long
+VEL_ERR_START     = 1.0     # [s]  skip first 1.0 s for velocity metric
+TRANSIENT_WINDOW  = 1.0     # [s]  penalise |v_error| after step change
+
+
+# ── Model construction ───────────────────────────────────────────────────────
+
+def build_model_and_data(params: SimParams,
+                         world: WorldConfig = None) -> tuple:
+    """Construct MuJoCo model + data from SimParams and WorldConfig."""
+    if world is None:
+        world = WorldConfig()
+    xml = build_xml(
+        robot=params.robot,
+        motors=params.motors,
+        obstacle_height=world.obstacle_height,
+        bumps=list(world.bumps) if world.bumps else None,
+        sandbox_obstacles=list(world.sandbox_obstacles) if world.sandbox_obstacles else None,
+        prop_bodies=list(world.prop_bodies) if world.prop_bodies else None,
+        floor_size=world.floor_size[:2] if world.floor_size else None,
+    )
+    assets = build_assets()
+    model = mujoco.MjModel.from_xml_string(xml, assets)
+    data = mujoco.MjData(model)
+    return model, data
+
+
+def init_sim(model, data, params: SimParams,
+             q_hip_init: float = None) -> None:
+    """Reset and place robot at q_hip_init (defaults to Q_NOM)."""
+    robot = params.robot
+    p = robot.as_dict()
+    if q_hip_init is None:
+        q_hip_init = robot.Q_NOM
+
+    mujoco.mj_resetData(model, data)
+
+    # Fix 4-bar closure anchors
+    for side in ('L', 'R'):
+        eq_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_EQUALITY,
+                                   f"4bar_close_{side}")
+        if eq_id >= 0:
+            model.eq_data[eq_id, 0:3] = [-p['Lc'], 0.0, 0.0]
+            model.eq_data[eq_id, 3:6] = [0.0, 0.0, p['L_stub']]
+
+    def _jqp(name):
+        return model.jnt_qposadr[mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_JOINT, name)]
+
+    s_root   = _jqp("root_free")
+    s_hF_L   = _jqp("hinge_F_L");    s_hF_R   = _jqp("hinge_F_R")
+    s_hip_L  = _jqp("hip_L");        s_hip_R  = _jqp("hip_R")
+    s_knee_L = _jqp("knee_joint_L"); s_knee_R = _jqp("knee_joint_R")
+
+    ik = solve_ik(q_hip_init, p)
+    if ik is None:
+        raise RuntimeError(f"IK failed at q_hip={q_hip_init:.3f}")
+
+    for s_hF, s_hip, s_knee in [
+        (s_hF_L, s_hip_L, s_knee_L),
+        (s_hF_R, s_hip_R, s_knee_R),
+    ]:
+        data.qpos[s_hF]   = ik['q_coupler_F']
+        data.qpos[s_hip]  = ik['q_hip']
+        data.qpos[s_knee] = ik['q_knee']
+
+    mujoco.mj_forward(model, data)
+
+    wheel_bid_L = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "wheel_asm_L")
+    wheel_bid_R = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "wheel_asm_R")
+    wz = (data.xpos[wheel_bid_L][2] + data.xpos[wheel_bid_R][2]) / 2.0
+    data.qpos[s_root + 2] += robot.wheel_r - wz
+
+    theta = get_equilibrium_pitch(robot, q_hip_init)
+    data.qpos[s_root + 3] = math.cos(theta / 2.0)
+    data.qpos[s_root + 4] = 0.0
+    data.qpos[s_root + 5] = math.sin(theta / 2.0)
+    data.qpos[s_root + 6] = 0.0
+
+    mujoco.mj_forward(model, data)
+
+
+# ── Sensor helpers ───────────────────────────────────────────────────────────
+
+def get_pitch_and_rate(data, box_bid: int, d_pitch: int) -> tuple:
+    """Return (pitch_rad, pitch_rate_rad_s) from body world quaternion."""
+    q = data.xquat[box_bid]
+    pitch = math.asin(max(-1.0, min(1.0, 2.0 * (q[0]*q[2] - q[3]*q[1]))))
+    return pitch, float(data.qvel[d_pitch])
+
+
+def get_roll_and_rate(data, box_bid: int, d_roll: int) -> tuple:
+    """Return (roll_rad, roll_rate_rad_s) from body world quaternion."""
+    q = data.xquat[box_bid]
+    roll = math.atan2(
+        2.0 * (q[0]*q[1] + q[2]*q[3]),
+        1.0 - 2.0 * (q[1]**2 + q[2]**2))
+    return roll, float(data.qvel[d_roll])
+
+
+# ── SimController — single source of truth for the control cascade ──────────
+
+class SimController:
+    """Encapsulates all mutable controller state.
+
+    Both ``run()`` (headless scenarios) and ``sandbox()`` (interactive viewer)
+    call ``tick()`` for each control step, guaranteeing identical physics.
+
+    Usage:
+        ctrl = SimController(model, data, params, rng_seed=42)
+        tick = ctrl.tick(model, data, v_target_ms=0.5, omega_target=0.0)
+    """
+
+    def __init__(self, model, data, params: SimParams, rng_seed=None):
+        self.params = params
+        self.rng = np.random.default_rng(rng_seed)
+        self._lookup_addresses(model)
+        self._init_controllers(params, model)
+
+    # ── Address lookups (cached once per model) ──────────────────────────────
+
+    def _lookup_addresses(self, model):
+        def _jqp(n):
+            return model.jnt_qposadr[mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_JOINT, n)]
+        def _jdof(n):
+            return model.jnt_dofadr[mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_JOINT, n)]
+        def _act(n):
+            return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, n)
+        def _bid(n):
+            return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, n)
+
+        d_root = _jdof("root_free")
+        self.d_pitch = d_root + 4
+        self.d_roll  = d_root + 3
+        self.d_yaw   = d_root + 5
+        self.s_root  = _jqp("root_free")
+
+        self.s_hip_L = _jqp("hip_L");   self.s_hip_R = _jqp("hip_R")
+        self.d_hip_L = _jdof("hip_L");  self.d_hip_R = _jdof("hip_R")
+        self.d_whl_L = _jdof("wheel_spin_L")
+        self.d_whl_R = _jdof("wheel_spin_R")
+
+        self.act_hip_L   = _act("hip_act_L")
+        self.act_hip_R   = _act("hip_act_R")
+        self.act_wheel_L = _act("wheel_act_L")
+        self.act_wheel_R = _act("wheel_act_R")
+
+        self.box_bid     = _bid("box")
+        self.wheel_bid_L = _bid("wheel_asm_L")
+        self.wheel_bid_R = _bid("wheel_asm_R")
+
+    # ── Controller objects (re-created on reset) ─────────────────────────────
+
+    def _init_controllers(self, params, model):
+        robot = params.robot
+        ctrl_steps = params.timing.ctrl_steps
+        self.dt_ctrl = model.opt.timestep * ctrl_steps
+
+        self.K_table = compute_gain_table(robot, params.gains.lqr)
+        self.vel_pi = VelocityPI(params.gains.velocity_pi, self.dt_ctrl)
+        self.yaw_pi_ctrl = YawPI(params.gains.yaw_pi, self.dt_ctrl)
+        self.prev_theta_ref = 0.0
+        self.prev_v_target = 0.0
+
+        n_sens = round(params.latency.sensor_delay_s / self.dt_ctrl) \
+            if params.latency.sensor_delay_s > 0 else 0
+        n_act = round(params.latency.actuator_delay_s / self.dt_ctrl) \
+            if params.latency.actuator_delay_s > 0 else 0
+        self.n_sens = n_sens
+        self.n_act = n_act
+        pitch0 = get_equilibrium_pitch(robot, robot.Q_NOM)
+        self.sens_buf = LatencyBuffer(n_sens, (pitch0, 0.0, 0.0))
+        self.ctrl_buf = LatencyBuffer(n_act, (0.0, 0.0))
+
+        self.battery = BatteryModel(params.battery)
+        self.battery.reset()
+        self.v_batt = params.battery.V_nom
+
+    def reset(self, model, data):
+        """Reset all controller state (e.g. after sandbox auto-restart)."""
+        self._init_controllers(self.params, model)
+
+    # ── THE control tick — called by run() and sandbox() ─────────────────────
+
+    def tick(self, model, data, *,
+             v_target_ms: float = 0.0,
+             omega_target: float = 0.0,
+             q_hip_target: float = None,
+             dq_hip_target: float = 0.0,
+             use_lqr: bool = True,
+             use_velocity_pi: bool = True,
+             use_yaw_pi: bool = True,
+             use_impedance: bool = True,
+             use_roll_leveling: bool = True,
+             use_suspension: bool = True) -> dict:
+        """Execute one control tick.  Writes actuator commands to ``data.ctrl``.
+
+        Returns a telemetry dict with all values needed for metrics, callbacks,
+        and live visualisation.
+        """
+        params = self.params
+        robot  = params.robot
+        rng    = self.rng
+
+        if q_hip_target is None:
+            q_hip_target = robot.Q_NOM
+
+        # ── Sensors ──────────────────────────────────────────────────────────
+        pitch_true, pitch_rate_true = get_pitch_and_rate(
+            data, self.box_bid, self.d_pitch)
+        pitch      = pitch_true      + rng.normal(0, params.noise.pitch_std_rad)
+        pitch_rate = pitch_rate_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
+        wheel_vel  = (data.qvel[self.d_whl_L] + data.qvel[self.d_whl_R]) / 2.0
+        hip_q_avg  = (data.qpos[self.s_hip_L] + data.qpos[self.s_hip_R]) / 2.0
+        pitch_ff   = get_equilibrium_pitch(robot, hip_q_avg)
+
+        # ── Velocity PI (uses NON-delayed wheel_vel — canonical order) ───────
+        v_measured_ms = wheel_vel * robot.wheel_r
+        v_ref_rads    = v_target_ms / robot.wheel_r
+
+        # Direction reversal → reset PI integrator
+        if (use_velocity_pi and self.prev_v_target != 0.0 and
+                math.copysign(1, v_target_ms) != math.copysign(1, self.prev_v_target)):
+            self.vel_pi.reset()
+        self.prev_v_target = v_target_ms
+
+        if use_velocity_pi:
+            theta_ref = self.vel_pi.update(v_target_ms, v_measured_ms)
+            _d_max = params.gains.velocity_pi.theta_ref_rate_limit * self.dt_ctrl
+            theta_ref = float(np.clip(
+                theta_ref,
+                self.prev_theta_ref - _d_max,
+                self.prev_theta_ref + _d_max))
+        else:
+            self.vel_pi.reset()
+            theta_ref  = 0.0
+            v_ref_rads = 0.0
+        self.prev_theta_ref = theta_ref
+
+        # ── Sensor delay buffer ──────────────────────────────────────────────
+        _pitch_d, _pitch_rate_d, _wheel_vel_d = self.sens_buf.push(
+            (pitch, pitch_rate, wheel_vel))
+
+        # ── LQR controller (symmetric torque) ────────────────────────────────
+        if use_lqr:
+            tau_sym = lqr_torque(
+                _pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
+                self.K_table, robot, params.motors.wheel,
+                v_ref=v_ref_rads, theta_ref=theta_ref)
+        else:
+            tau_sym = 0.0
+
+        # ── Yaw PI (differential torque) ─────────────────────────────────────
+        yaw_rate = data.qvel[self.d_yaw]
+        if use_yaw_pi:
+            tau_yaw = self.yaw_pi_ctrl.update(omega_target, yaw_rate)
+        else:
+            self.yaw_pi_ctrl.reset()
+            tau_yaw = 0.0
+
+        # ── Actuator delay buffer + motor taper → wheel ctrl ─────────────────
+        _tau_L_d, _tau_R_d = self.ctrl_buf.push(
+            (tau_sym - tau_yaw, tau_sym + tau_yaw))
+        data.ctrl[self.act_wheel_L] = motor_taper(
+            _tau_L_d, data.qvel[self.d_whl_L],
+            self.v_batt, params.motors, params.battery)
+        data.ctrl[self.act_wheel_R] = motor_taper(
+            _tau_R_d, data.qvel[self.d_whl_R],
+            self.v_batt, params.motors, params.battery)
+
+        # ── Hip control ──────────────────────────────────────────────────────
+        roll_true, roll_rate = get_roll_and_rate(
+            data, self.box_bid, self.d_roll)
+
+        if use_impedance:
+            roll_meas = roll_true + rng.normal(0, params.noise.roll_std_rad)
+            if use_roll_leveling:
+                q_nom_L, q_nom_R = roll_leveling_offsets(
+                    roll_meas, roll_rate, q_hip_target,
+                    params.gains.suspension, robot)
+            else:
+                q_nom_L = q_nom_R = q_hip_target
+            for s_hip, d_hip, act_hip, q_nom_leg in [
+                (self.s_hip_L, self.d_hip_L, self.act_hip_L, q_nom_L),
+                (self.s_hip_R, self.d_hip_R, self.act_hip_R, q_nom_R),
+            ]:
+                if not use_suspension:
+                    data.ctrl[act_hip] = 0.0
+                    continue
+                tau_hip = hip_impedance_torque(
+                    data.qpos[s_hip], data.qvel[d_hip], q_nom_leg,
+                    params.gains.suspension, params.motors.hip)
+                data.ctrl[act_hip] = tau_hip
+        else:
+            q_nom_L = q_nom_R = q_hip_target
+            for s_hip, d_hip, act_hip in [
+                (self.s_hip_L, self.d_hip_L, self.act_hip_L),
+                (self.s_hip_R, self.d_hip_R, self.act_hip_R),
+            ]:
+                if not use_suspension:
+                    data.ctrl[act_hip] = 0.0
+                    continue
+                tau_hip = (params.motors.hip.position_Kp * (q_hip_target - data.qpos[s_hip])
+                           + params.motors.hip.position_Kd * (dq_hip_target - data.qvel[d_hip]))
+                data.ctrl[act_hip] = float(np.clip(
+                    tau_hip,
+                    -params.motors.hip.impedance_torque_limit,
+                    params.motors.hip.impedance_torque_limit))
+
+        # ── Battery step ─────────────────────────────────────────────────────
+        self.v_batt = self.battery.step(self.dt_ctrl, motor_currents(
+            float(data.ctrl[self.act_wheel_L]),
+            float(data.ctrl[self.act_wheel_R]),
+            float(data.ctrl[self.act_hip_L]),
+            float(data.ctrl[self.act_hip_R]),
+            params.motors, params.battery.I_quiescent))
+
+        # ── Fall detection ───────────────────────────────────────────────────
+        fell = abs(pitch_true) > FALL_THRESHOLD
+
+        # ── Telemetry dict (superset of what callbacks + sandbox need) ────────
+        return dict(
+            t=data.time,
+            pitch=pitch_true, pitch_rate=pitch_rate_true, pitch_ff=pitch_ff,
+            roll=roll_true, roll_rate=roll_rate,
+            wheel_vel=wheel_vel,
+            v_target=v_target_ms, v_measured=v_measured_ms,
+            theta_ref=theta_ref,
+            tau_sym=tau_sym, tau_yaw=tau_yaw,
+            tau_whl_L=float(data.ctrl[self.act_wheel_L]),
+            tau_whl_R=float(data.ctrl[self.act_wheel_R]),
+            tau_hip_L=float(data.ctrl[self.act_hip_L]),
+            tau_hip_R=float(data.ctrl[self.act_hip_R]),
+            hip_q_L=float(data.qpos[self.s_hip_L]),
+            hip_q_R=float(data.qpos[self.s_hip_R]),
+            hip_q_avg=hip_q_avg,
+            q_nom_L=q_nom_L, q_nom_R=q_nom_R,
+            v_batt=self.v_batt,
+            batt_soc=self.battery.soc_pct,
+            batt_temp=self.battery.temperature_c,
+            i_total=self.battery.i_total,
+            yaw_rate=yaw_rate,
+            omega_tgt=omega_target,
+            pos_x=float(data.qpos[self.s_root]),
+            fell=fell,
+        )
+
+
+# ── Main simulation loop ────────────────────────────────────────────────────
+
+def run(params: SimParams, scenario: ScenarioConfig,
+        callbacks: list = None, command_queue=None,
+        rng_seed: int = None) -> dict:
+    """THE single simulation loop — all scenarios funnel through here.
+
+    Parameters
+    ----------
+    params        : SimParams (immutable, from optimizer or DEFAULT_PARAMS)
+    scenario      : ScenarioConfig (what to run)
+    callbacks     : list of callable(tick_data_dict) for live telemetry
+    command_queue : queue.Queue for runtime commands (sandbox mode)
+    rng_seed      : reproducible noise seed
+
+    Returns
+    -------
+    dict of all metrics (ISE, RMS, tracking errors, settle time, survival, etc.)
+    """
+    robot = params.robot
+
+    # ── Build model + init ───────────────────────────────────────────────────
+    model, data = build_model_and_data(params, scenario.world)
+    init_sim(model, data, params)
+
+    # Apply scenario-specific initial conditions (e.g., pitch step for S1)
+    if scenario.init_fn is not None:
+        scenario.init_fn(model, data, params)
+
+    # ── Controller (single source of truth) ──────────────────────────────────
+    ctrl = SimController(model, data, params, rng_seed=rng_seed)
+
+    # ── Which controllers are active ─────────────────────────────────────────
+    use_velocity_pi = "velocity_pi" in scenario.active_controllers
+    use_yaw_pi      = "yaw_pi"      in scenario.active_controllers
+    use_impedance   = scenario.hip_mode == "impedance"
+
+    # ── Resolve profile callables ────────────────────────────────────────────
+    v_profile_fn     = scenario.v_profile or (lambda t: 0.0)
+    omega_profile_fn = scenario.omega_profile  # may be None
+    hip_profile_fn   = scenario.hip_profile    # may be None
+    hip_vel_fn       = getattr(scenario, 'hip_vel_profile', None)
+    dist_fn          = scenario.dist_fn        # may be None
+
+    ctrl_steps = params.timing.ctrl_steps
+    dt = model.opt.timestep * ctrl_steps
+
+    # ── Liftoff threshold ────────────────────────────────────────────────────
+    LIFTOFF_THRESHOLD = robot.wheel_r + 0.005
+
+    # ── Metric accumulators ──────────────────────────────────────────────────
+    duration = scenario.duration
+    pitch_sq_sum      = 0.0
+    ise_pitch         = 0.0
+    ise_pitch_rate    = 0.0
+    roll_sq_sum       = 0.0
+    max_roll          = 0.0
+    vel_sq_sum        = 0.0
+    yaw_sq_sum        = 0.0
+    max_pitch         = 0.0
+    wheel_travel_m    = 0.0
+    wheel_liftoff_s   = 0.0
+    n_samples         = 0
+    n_vel             = 0
+    n_yaw             = 0
+    survived_s        = duration
+    settle_time       = duration
+    settled           = False
+    settle_start      = None
+
+    # Transient tracking
+    prev_v_target     = 0.0
+    transient_end     = -1.0
+    transient_lag_sum = 0.0
+
+    # Yaw error start
+    yaw_err_start = getattr(params.scenarios, 'yaw_err_start', 1.0)
+
+    # ── Simulation loop ─────────────────────────────────────────────────────
+    step = 0
+    while data.time < duration:
+        if step % ctrl_steps == 0:
+            v_target_ms = v_profile_fn(data.time)
+            omega_tgt   = omega_profile_fn(data.time) if omega_profile_fn else 0.0
+            q_hip_sym   = hip_profile_fn(data.time) if hip_profile_fn else robot.Q_NOM
+            dq_hip_tgt  = hip_vel_fn(data.time) if hip_vel_fn else 0.0
+
+            tick = ctrl.tick(
+                model, data,
+                v_target_ms=v_target_ms,
+                omega_target=omega_tgt,
+                q_hip_target=q_hip_sym,
+                dq_hip_target=dq_hip_tgt,
+                use_lqr=True,
+                use_velocity_pi=use_velocity_pi,
+                use_yaw_pi=use_yaw_pi,
+                use_impedance=use_impedance)
+
+            # ── Unpack for metrics ───────────────────────────────────────────
+            pitch_true      = tick['pitch']
+            pitch_rate_true = tick['pitch_rate']
+            pitch_ff        = tick['pitch_ff']
+            roll_true       = tick['roll']
+            wheel_vel       = tick['wheel_vel']
+            v_measured_ms   = tick['v_measured']
+            yaw_rate        = tick['yaw_rate']
+
+            # ── Transient detection ──────────────────────────────────────────
+            if abs(v_target_ms - prev_v_target) > 0.05 and data.time >= VEL_ERR_START:
+                transient_end = data.time + TRANSIENT_WINDOW
+            prev_v_target = v_target_ms
+
+            # ── Yaw tracking error ───────────────────────────────────────────
+            if omega_profile_fn and data.time >= yaw_err_start:
+                yaw_sq_sum += (omega_tgt - yaw_rate) ** 2
+                n_yaw += 1
+
+            # ── Metrics ──────────────────────────────────────────────────────
+            pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff))
+            pitch_err_rad = pitch_true - pitch_ff
+            pitch_sq_sum     += pitch_err_deg ** 2
+            ise_pitch        += pitch_err_rad ** 2 * dt
+            ise_pitch_rate   += pitch_rate_true ** 2 * dt
+            roll_deg_now      = math.degrees(roll_true)
+            roll_sq_sum      += roll_deg_now ** 2
+            max_roll          = max(max_roll, abs(roll_deg_now))
+            max_pitch         = max(max_pitch, pitch_err_deg)
+            vel_est           = (wheel_vel + pitch_rate_true) * robot.wheel_r
+            wheel_travel_m   += abs(vel_est) * dt
+            n_samples        += 1
+
+            if data.time >= VEL_ERR_START:
+                vel_sq_sum += (v_target_ms - v_measured_ms) ** 2
+                n_vel += 1
+
+            if data.time < transient_end:
+                transient_lag_sum += abs(v_target_ms - v_measured_ms) * dt
+
+            if (data.xpos[ctrl.wheel_bid_L][2] > LIFTOFF_THRESHOLD or
+                    data.xpos[ctrl.wheel_bid_R][2] > LIFTOFF_THRESHOLD):
+                wheel_liftoff_s += dt
+
+            if not settled:
+                if pitch_err_deg < SETTLE_THRESHOLD:
+                    if settle_start is None:
+                        settle_start = data.time
+                    elif data.time - settle_start >= SETTLE_WINDOW:
+                        settle_time = settle_start
+                        settled = True
+                else:
+                    settle_start = None
+
+            if tick['fell']:
+                survived_s = data.time
+                break
+
+            # ── Callbacks (replay/sandbox telemetry) ─────────────────────────
+            if callbacks:
+                for cb in callbacks:
+                    cb(tick)
+
+        # ── Disturbance impulse ──────────────────────────────────────────────
+        data.xfrc_applied[ctrl.box_bid, 0] = dist_fn(data.time) if dist_fn else 0.0
+
+        mujoco.mj_step(model, data)
+        step += 1
+
+    # ── Compute final metrics ────────────────────────────────────────────────
+    rms_pitch_deg      = math.sqrt(pitch_sq_sum / max(1, n_samples))
+    rms_roll_deg       = math.sqrt(roll_sq_sum  / max(1, n_samples))
+    rms_vel_ms         = math.sqrt(vel_sq_sum / max(1, n_vel)) if n_vel > 0 else 0.0
+    yaw_track_rms_rads = math.sqrt(yaw_sq_sum / max(1, n_yaw)) if n_yaw > 0 else 0.0
+    final_x            = data.qpos[ctrl.s_root]
+    fell               = survived_s < duration - 0.05
+
+    return dict(
+        rms_pitch_deg           = round(rms_pitch_deg,          4),
+        ise_pitch               = round(ise_pitch,              6),
+        ise_pitch_rate          = round(ise_pitch_rate,         6),
+        rms_roll_deg            = round(rms_roll_deg,           4),
+        max_roll_deg            = round(max_roll,               4),
+        vel_track_rms_ms        = round(rms_vel_ms,             4),
+        transient_lag_ms        = round(transient_lag_sum,      4),
+        yaw_track_rms_rads      = round(yaw_track_rms_rads,    4),
+        max_pitch_deg           = round(max_pitch,              4),
+        wheel_travel_m          = round(wheel_travel_m,         4),
+        wheel_liftoff_s         = round(wheel_liftoff_s,        4),
+        final_x_m               = round(final_x,               3),
+        settle_time_s           = round(settle_time,            3),
+        survived_s              = round(survived_s,             3),
+        fell                    = fell,
+        status                  = "FAIL" if fell else "PASS",
+        fail_reason             = "fell over" if fell else "",
+    )

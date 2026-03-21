@@ -1,44 +1,7 @@
 
-
---- Overnight optimization ideas ---
-1. Widen suspension bounds and re-run optimize_suspension.py overnight
-   - LEG_K_S: (2.0, 16.0) -> (2.0, 40.0)   [currently at upper bound]
-   - LEG_K_ROLL: (0.01, 4.0) -> (0.01, 8.0) [currently at upper bound]
-   - Expected: better bump absorption and roll leveling
-
-2. Re-run optimize_lqr.py pointed at S5 instead of S4
-   - S5 includes velocity tracking + leg cycling + kicks
-   - Ensures LQR gains robust under combined load, not just passive cycling
-
-3. Write optimize_joint_pi.py — joint VelocityPI + YawPI (6 params)
-   - Fitness = weighted S5 + S6 + S7
-   - Finds gains that work for both driving and turning simultaneously
-   - Safe: doesn't touch LQR or suspension
-
-
 ---Fernandos note dont change below
+-joystick
+-Jump controller
+-Spring for higher jumps. 
 
-Refractor sim:
-
--Single source simulation truth and any physics model. Never double booked in code
-
--Replay secnario and sandbox use the same simulation logic.
-
--Scenarios
----Each only with specific controllers running. 
----Each with specific robot command. 
----Each with specific world. 
----Each with specific metrics
----Make it easy to add more scenarios and tweak the optimization order
----A single file never double boooked elsewhere in code, single source of truth
-
-
-
--Chart motor thermals in sandbox 
--Port fast sandbox to replay and real sandbox or replace altogether
--Do we need absolute encoder on hub motors? select/model...
--Torque analysis onhub motors. Do we need ODESC motor controller.
-
-
-Wheel motor: https://maytech.cn/products/mto5065-170-ha-c?variant=29503884492894
 

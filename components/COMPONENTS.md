@@ -11,11 +11,12 @@ Structural sizing source: `simulation/mujoco/baseline1_leg_analysis/size_report.
 |---|---|---|---|---|---|---|---|---|
 | MCU | Arduino UNO R4 WiFi | 1 | 45 | 45 | 28 | 28 | designed | RA4M1 + ESP32-S3, native CAN, WiFi OTA |
 | IMU | BNO086 | 1 | 3 | 3 | 20 | 20 | designed | 500 Hz Game Rotation Vector, I2C |
-| WHEEL_CTRL | ODESC 3.6 Dual Drive | 1 | 160 | 160 | 60 | 60 | designed | ODrive v0.5.x, axis0=L axis1=R, CAN id=3 |
+| WHEEL_CTRL | ODESC 3.6 Dual Drive | 1 | 160 | 160 | 41 | 41 | purchased | ODrive v0.5.x, axis0=L axis1=R, CAN id=3 |
 | CAN_XCVR | SN65HVD230 | 1 | 1 | 1 | 4 | 4 | designed | 3.3V CAN transceiver |
 | BUCK_5V | DC-DC buck 24V→5V | 1 | 20 | 20 | 8 | 8 | designed | Powers MCU + IMU |
+| RECEIVER | FlySky FS-iA6B | 1 | 15 | 15 | 10 | 10 | purchased | AFHDS 2A, iBUS to Arduino Serial1, Telemetry |
 
-**Subtotal electronics:** 229 g / $120
+**Subtotal electronics:** 244 g / $111
 
 ---
 
@@ -24,9 +25,9 @@ Structural sizing source: `simulation/mujoco/baseline1_leg_analysis/size_report.
 | ID | Part | Qty | Mass ea (g) | Total (g) | Cost ea ($) | Total ($) | Status | Notes |
 |---|---|---|---|---|---|---|---|---|
 | HIP_MOTOR | CubeMars AK45-10 KV75 | 2 | 260 | 520 | 149 | 298 | designed | Φ53×43 mm, 10:1, 7 N·m peak, MIT CAN, CAN id L=1 R=2 |
-| WHEEL_MOTOR | Maytech MTO5065-70-HA-C | 2 | 200 | 400 | 30 | 60 | designed | KV70, direct drive, Hall sensors req. for ODESC; Kt=0.1364 Nm/A, T_peak=6.82 Nm @ 50A, ω_noload=175.9 rad/s @ 24V; https://maytech.cn/products/mto5065-170-ha-c?variant=29503884492894 |
+| WHEEL_MOTOR | Maytech MTO5065-70-HA-C | 2 | 200 | 400 | 90 | 180 | purchased | KV70, direct drive, Hall sensors req. for ODESC; Kt=0.1364 Nm/A, T_peak=6.82 Nm @ 50A, ω_noload=175.9 rad/s @ 24V; https://michobby.com/products/maytech-5065-220kv-brushless-outrunner-motor-for-electric-skateboards-e-bike (70KV variant) |
 
-**Subtotal motors:** 920 g / $358
+**Subtotal motors:** 920 g / $478
 
 ---
 
@@ -89,12 +90,13 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 
 ## Wiring & Fasteners
 
-| ID | Part | Qty | Mass (g) | Cost ($) | Notes |
-|---|---|---|---|---|---|
-| WIRING | Wiring harness | 1 lot | 100 | 15 | CAN bus, power, signal |
-| FASTENERS | M3/M4 hardware | 1 lot | 50 | 5 | Bolts, standoffs, inserts |
+| ID | Part | Qty | Mass (g) | Cost ($) | Status | Notes |
+|---|---|---|---|---|---|---|
+| MOTOR_CONN | Amass MR30 | 2 sets | 6 | 12 | purchased | 3-pin, 30A cont / 60A pulse |
+| WIRING | Wiring harness | 1 lot | 100 | 15 | planned | CAN bus, power, signal |
+| FASTENERS | M3/M4 hardware | 1 lot | 50 | 5 | planned | Bolts, standoffs, inserts |
 
-**Subtotal wiring/fasteners:** 150 g / $20
+**Subtotal wiring/fasteners:** 156 g / $32
 
 ---
 
@@ -102,15 +104,15 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 
 | Category | Mass (g) | Cost ($) |
 |---|---|---|
-| Electronics & Controls | 229 | 120 |
-| Motors | 920 | 358 |
+| Electronics & Controls | 244 | 111 |
+| Motors | 920 | 478 |
 | Links (Al tube) | 94 | 28 |
 | Bearings | 140 | 18 |
 | Printed parts | 440 | ~35 (filament) |
 | Power | 765 | 47 |
-| Wiring & Fasteners | 150 | 20 |
-| **TOTAL** | **2738** | **626** |
-| **+10% contingency** | **~3012 g = 3.0 kg** | **~$689** |
+| Wiring & Fasteners | 156 | 32 |
+| **TOTAL** | **2759** | **749** |
+| **+10% contingency** | **~3035 g = 3.0 kg** | **~$824** |
 
 ---
 

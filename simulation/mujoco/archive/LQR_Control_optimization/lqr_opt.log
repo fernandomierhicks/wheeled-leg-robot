@@ -1,0 +1,193 @@
+[  409] evo_g000000_c1                FAIL   fitness=9999.000  Q=[9.6,1.61,0.11] R=0.67
+[  413] evo_g000000_c5                FAIL   fitness=9999.000  Q=[13.8,1.24,0.17] R=1.03
+[  417] evo_g000001_c1                FAIL   fitness=9999.000  Q=[33.9,1.31,0.43] R=0.69
+[  421] evo_g000001_c5                FAIL   fitness=9999.000  Q=[32.6,1.53,0.15] R=1.29
+[  425] evo_g000002_c1                FAIL   fitness=9999.000  Q=[22.7,1.44,0.20] R=1.54
+[  428] evo_g000002_c4                FAIL   fitness=9999.000  Q=[10.5,1.07,1.44] R=2.83
+[  434] evo_g000003_c2                FAIL   fitness=9999.000  Q=[23.0,1.87,0.48] R=0.33
+[  438] evo_g000003_c6                FAIL   fitness=9999.000  Q=[19.1,2.75,0.15] R=0.44
+[  442] evo_g000004_c2                FAIL   fitness=9999.000  Q=[13.5,2.94,0.19] R=0.59
+[  446] evo_g000004_c6                FAIL   fitness=9999.000  Q=[8.0,0.99,0.11] R=0.64
+[  450] evo_g000005_c2                FAIL   fitness=9999.000  Q=[21.9,1.65,0.85] R=3.46
+[  454] evo_g000005_c6                FAIL   fitness=9999.000  Q=[24.4,2.86,0.65] R=1.25
+[  457] evo_g000006_c1                FAIL   fitness=9999.000  Q=[24.3,0.32,0.21] R=0.81
+[  463] evo_g000006_c7                FAIL   fitness=9999.000  Q=[6.0,1.60,0.16] R=4.21
+[  467] evo_g000007_c3                FAIL   fitness=9999.000  Q=[48.2,4.24,0.34] R=3.58
+[  470] evo_g000007_c6                FAIL   fitness=9999.000  Q=[5.4,1.86,0.65] R=0.97
+[  473] evo_g000008_c1                FAIL   fitness=9999.000  Q=[9.0,0.53,0.87] R=1.90
+[  477] evo_g000008_c5                FAIL   fitness=9999.000  Q=[7.2,2.79,0.20] R=1.73
+[  482] evo_g000009_c2                FAIL   fitness=9999.000  Q=[8.6,0.60,0.21] R=0.59
+[  486] evo_g000009_c6                FAIL   fitness=9999.000  Q=[35.1,1.27,0.51] R=2.26
+[  489] evo_g000010_c1                FAIL   fitness=9999.000  Q=[15.7,1.50,0.07] R=0.41
+[  492] evo_g000010_c4                FAIL   fitness=9999.000  Q=[23.1,1.66,0.52] R=0.83
+[  496] evo_g000011_c0                FAIL   fitness=9999.000  Q=[12.2,1.88,0.24] R=0.72
+[  503] evo_g000011_c7                FAIL   fitness=9999.000  Q=[23.0,1.52,0.74] R=2.65
+[  507] evo_g000012_c3                FAIL   fitness=9999.000  Q=[11.5,1.81,0.20] R=2.03
+[  511] evo_g000012_c7                FAIL   fitness=9999.000  Q=[19.1,1.52,0.21] R=1.06
+[  515] evo_g000013_c3                FAIL   fitness=9999.000  Q=[16.9,2.16,0.47] R=1.05
+[  519] evo_g000013_c7                FAIL   fitness=9999.000  Q=[13.4,1.85,0.28] R=1.13
+[  523] evo_g000014_c3                FAIL   fitness=9999.000  Q=[7.1,1.34,0.27] R=1.26
+[  525] evo_g000014_c5                FAIL   fitness=9999.000  Q=[16.5,1.56,0.29] R=0.65
+[  530] evo_g000015_c2                FAIL   fitness=9999.000  Q=[9.3,1.05,0.31] R=0.70
+[  534] evo_g000015_c6                FAIL   fitness=9999.000  Q=[20.7,1.48,0.31] R=0.99
+[  539] evo_g000016_c3                FAIL   fitness=9999.000  Q=[11.6,2.14,0.35] R=0.74
+[  543] evo_g000016_c7                FAIL   fitness=9999.000  Q=[10.5,1.73,0.39] R=1.20
+[  544] evo_g000017_c0                FAIL   fitness=9999.000  Q=[15.4,1.67,0.35] R=1.04
+[  548] evo_g000017_c4                FAIL   fitness=9999.000  Q=[17.1,1.21,0.32] R=0.93
+[  552] evo_g000018_c0                FAIL   fitness=9999.000  Q=[13.3,1.44,0.35] R=0.75
+[  556] evo_g000018_c4                FAIL   fitness=9999.000  Q=[14.2,1.27,0.32] R=1.03
+[  560] evo_g000019_c0                FAIL   fitness=9999.000  Q=[13.6,1.50,0.31] R=1.21
+[  567] evo_g000019_c7                FAIL   fitness=9999.000  Q=[13.6,1.26,0.30] R=0.86
+[  411] evo_g000000_c3                FAIL   fitness=9999.000  Q=[22.1,1.12,0.51] R=1.05
+[  415] evo_g000000_c7                FAIL   fitness=9999.000  Q=[18.2,0.69,1.06] R=0.53
+[  419] evo_g000001_c3                FAIL   fitness=9999.000  Q=[23.9,2.37,0.44] R=0.88
+[  422] evo_g000001_c6                FAIL   fitness=9999.000  Q=[18.0,1.07,0.22] R=0.25
+[  426] evo_g000002_c2                FAIL   fitness=9999.000  Q=[19.9,0.78,0.24] R=0.76
+[  429] evo_g000002_c5                FAIL   fitness=9999.000  Q=[5.7,5.94,0.41] R=0.50
+[  432] evo_g000003_c0                FAIL   fitness=9999.000  Q=[4.8,0.70,0.14] R=1.97
+[  439] evo_g000003_c7                FAIL   fitness=9999.000  Q=[6.2,1.47,0.32] R=0.52
+[  443] evo_g000004_c3                FAIL   fitness=9999.000  Q=[45.7,0.97,0.12] R=1.31
+[  447] evo_g000004_c7                FAIL   fitness=9999.000  Q=[5.5,0.59,0.40] R=0.61
+[  451] evo_g000005_c3                FAIL   fitness=9999.000  Q=[8.8,1.36,0.83] R=2.81
+[  455] evo_g000005_c7                FAIL   fitness=9999.000  Q=[7.4,1.27,0.73] R=0.93
+[  458] evo_g000006_c2                FAIL   fitness=9999.000  Q=[5.4,1.09,0.80] R=2.89
+[  462] evo_g000006_c6                FAIL   fitness=9999.000  Q=[13.8,1.88,0.23] R=1.14
+[  466] evo_g000007_c2                FAIL   fitness=9999.000  Q=[52.5,2.92,0.25] R=0.83
+[  471] evo_g000007_c7                FAIL   fitness=9999.000  Q=[49.0,0.45,0.38] R=1.40
+[  475] evo_g000008_c3                FAIL   fitness=9999.000  Q=[12.4,1.69,0.51] R=0.91
+[  478] evo_g000008_c6                FAIL   fitness=9999.000  Q=[7.3,1.79,0.24] R=0.90
+[  481] evo_g000009_c1                FAIL   fitness=9999.000  Q=[10.5,1.35,0.44] R=0.92
+[  487] evo_g000009_c7                FAIL   fitness=9999.000  Q=[18.1,0.80,0.09] R=4.50
+[  491] evo_g000010_c3                FAIL   fitness=9999.000  Q=[15.5,0.62,0.31] R=1.95
+[  494] evo_g000010_c6                FAIL   fitness=9999.000  Q=[24.3,2.34,0.16] R=0.47
+[  497] evo_g000011_c1                FAIL   fitness=9999.000  Q=[11.2,1.92,0.42] R=0.64
+[  500] evo_g000011_c4                FAIL   fitness=9999.000  Q=[19.2,1.16,0.43] R=1.79
+[  505] evo_g000012_c1                FAIL   fitness=9999.000  Q=[14.3,1.19,0.26] R=1.20
+[  509] evo_g000012_c5                FAIL   fitness=9999.000  Q=[9.1,1.07,0.16] R=0.73
+[  514] evo_g000013_c2                FAIL   fitness=9999.000  Q=[26.1,1.30,0.28] R=1.41
+[  517] evo_g000013_c5                FAIL   fitness=9999.000  Q=[12.9,1.70,0.30] R=1.01
+[  522] evo_g000014_c2                FAIL   fitness=9999.000  Q=[11.2,1.33,0.31] R=0.94
+[  527] evo_g000014_c7                FAIL   fitness=9999.000  Q=[9.8,1.68,0.30] R=1.36
+[  531] evo_g000015_c3                FAIL   fitness=9999.000  Q=[13.6,1.46,0.34] R=1.15
+[  535] evo_g000015_c7                FAIL   fitness=9999.000  Q=[9.3,0.97,0.41] R=1.19
+[  537] evo_g000016_c1                FAIL   fitness=9999.000  Q=[14.0,1.68,0.31] R=1.14
+[  541] evo_g000016_c5                FAIL   fitness=9999.000  Q=[12.6,1.30,0.23] R=0.94
+[  547] evo_g000017_c3                FAIL   fitness=9999.000  Q=[14.8,1.17,0.34] R=0.85
+[  550] evo_g000017_c6                FAIL   fitness=9999.000  Q=[16.5,1.42,0.38] R=0.90
+[  553] evo_g000018_c1                FAIL   fitness=9999.000  Q=[15.4,1.51,0.29] R=1.02
+[  559] evo_g000018_c7                FAIL   fitness=9999.000  Q=[15.0,1.55,0.28] R=0.98
+[  563] evo_g000019_c3                FAIL   fitness=9999.000  Q=[13.8,1.41,0.26] R=1.00
+[  564] evo_g000019_c4                FAIL   fitness=9999.000  Q=[15.7,1.40,0.29] R=1.04
+[  410] evo_g000000_c2                FAIL   fitness=9999.000  Q=[6.8,2.56,0.66] R=0.69
+[  414] evo_g000000_c6                FAIL   fitness=9999.000  Q=[28.8,2.93,0.19] R=4.01
+[  418] evo_g000001_c2                FAIL   fitness=9999.000  Q=[20.3,2.15,0.13] R=1.38
+[  423] evo_g000001_c7                FAIL   fitness=9999.000  Q=[40.8,0.67,0.34] R=0.39
+[  427] evo_g000002_c3                FAIL   fitness=9999.000  Q=[11.0,1.59,0.53] R=1.78
+[  430] evo_g000002_c6                FAIL   fitness=9999.000  Q=[10.3,0.44,0.33] R=1.09
+[  433] evo_g000003_c1                FAIL   fitness=9999.000  Q=[28.6,0.75,0.30] R=1.25
+[  436] evo_g000003_c4                FAIL   fitness=9999.000  Q=[4.4,1.41,0.39] R=1.64
+[  441] evo_g000004_c1                FAIL   fitness=9999.000  Q=[5.7,1.75,0.73] R=5.08
+[  444] evo_g000004_c4                FAIL   fitness=9999.000  Q=[33.8,1.52,0.50] R=0.60
+[  448] evo_g000005_c0                FAIL   fitness=9999.000  Q=[4.0,2.32,0.47] R=0.42
+[  453] evo_g000005_c5                FAIL   fitness=9999.000  Q=[39.7,1.18,0.75] R=1.62
+[  459] evo_g000006_c3                FAIL   fitness=9999.000  Q=[8.7,1.44,0.48] R=0.43
+[  461] evo_g000006_c5                FAIL   fitness=9999.000  Q=[12.6,0.89,0.17] R=0.49
+[  464] evo_g000007_c0                FAIL   fitness=9999.000  Q=[19.8,2.44,0.27] R=0.50
+[  468] evo_g000007_c4                FAIL   fitness=9999.000  Q=[16.1,0.16,0.26] R=0.96
+[  474] evo_g000008_c2                FAIL   fitness=9999.000  Q=[4.8,0.71,0.72] R=0.94
+[  476] evo_g000008_c4                FAIL   fitness=9999.000  Q=[19.3,0.92,0.16] R=0.34
+[  483] evo_g000009_c3                FAIL   fitness=9999.000  Q=[8.4,1.55,0.23] R=0.63
+[  485] evo_g000009_c5                FAIL   fitness=9999.000  Q=[17.7,0.47,0.14] R=0.42
+[  488] evo_g000010_c0                FAIL   fitness=9999.000  Q=[10.4,1.00,0.27] R=1.06
+[  493] evo_g000010_c5                FAIL   fitness=9999.000  Q=[8.9,1.54,0.26] R=1.08
+[  499] evo_g000011_c3                FAIL   fitness=9999.000  Q=[15.6,1.04,0.44] R=0.57
+[  502] evo_g000011_c6                FAIL   fitness=9999.000  Q=[22.7,2.23,0.86] R=0.65
+[  506] evo_g000012_c2                FAIL   fitness=9999.000  Q=[14.2,2.19,0.27] R=0.92
+[  508] evo_g000012_c4                FAIL   fitness=9999.000  Q=[8.2,1.33,0.34] R=0.73
+[  513] evo_g000013_c1                FAIL   fitness=9999.000  Q=[19.6,0.93,0.23] R=1.17
+[  516] evo_g000013_c4                FAIL   fitness=9999.000  Q=[9.4,2.02,0.26] R=0.98
+[  521] evo_g000014_c1                FAIL   fitness=9999.000  Q=[28.7,1.32,0.27] R=0.89
+[  526] evo_g000014_c6                FAIL   fitness=9999.000  Q=[21.2,1.07,0.40] R=1.09
+[  529] evo_g000015_c1                FAIL   fitness=9999.000  Q=[21.7,1.24,0.27] R=0.93
+[  532] evo_g000015_c4                FAIL   fitness=9999.000  Q=[17.9,1.72,0.32] R=1.15
+[  538] evo_g000016_c2                FAIL   fitness=9999.000  Q=[18.1,1.20,0.37] R=0.56
+[  542] evo_g000016_c6                FAIL   fitness=9999.000  Q=[11.3,1.65,0.29] R=1.77
+[  546] evo_g000017_c2                FAIL   fitness=9999.000  Q=[11.0,1.47,0.32] R=1.23
+[  551] evo_g000017_c7                FAIL   fitness=9999.000  Q=[14.4,1.51,0.36] R=0.96
+[  555] evo_g000018_c3                FAIL   fitness=9999.000  Q=[18.2,1.27,0.27] R=0.84
+[  557] evo_g000018_c5                FAIL   fitness=9999.000  Q=[12.4,1.65,0.30] R=1.02
+[  561] evo_g000019_c1                FAIL   fitness=9999.000  Q=[13.0,1.47,0.33] R=0.89
+[  566] evo_g000019_c6                FAIL   fitness=9999.000  Q=[13.1,1.53,0.26] R=0.80
+[  408] evo_g000000_c0                FAIL   fitness=9999.000  Q=[6.3,1.46,0.16] R=0.57
+[  412] evo_g000000_c4                FAIL   fitness=9999.000  Q=[39.0,1.60,0.26] R=4.80
+[  416] evo_g000001_c0                FAIL   fitness=9999.000  Q=[21.0,1.37,0.26] R=2.94
+[  420] evo_g000001_c4                FAIL   fitness=9999.000  Q=[4.7,1.52,0.13] R=0.66
+[  424] evo_g000002_c0                FAIL   fitness=9999.000  Q=[13.8,0.75,0.22] R=0.84
+[  431] evo_g000002_c7                FAIL   fitness=9999.000  Q=[16.7,1.15,0.13] R=0.98
+[  435] evo_g000003_c3                FAIL   fitness=9999.000  Q=[61.1,4.58,0.51] R=3.17
+[  437] evo_g000003_c5                FAIL   fitness=9999.000  Q=[14.4,1.23,0.35] R=2.34
+[  440] evo_g000004_c0                FAIL   fitness=9999.000  Q=[58.3,2.66,0.58] R=0.64
+[  445] evo_g000004_c5                FAIL   fitness=9999.000  Q=[7.6,1.02,0.14] R=0.79
+[  449] evo_g000005_c1                FAIL   fitness=9999.000  Q=[6.6,1.07,0.52] R=1.22
+[  452] evo_g000005_c4                FAIL   fitness=9999.000  Q=[3.2,1.28,0.51] R=1.10
+[  456] evo_g000006_c0                FAIL   fitness=9999.000  Q=[29.5,3.16,0.54] R=1.97
+[  460] evo_g000006_c4                FAIL   fitness=9999.000  Q=[5.8,2.41,0.93] R=0.49
+[  465] evo_g000007_c1                FAIL   fitness=9999.000  Q=[9.2,1.44,0.54] R=0.88
+[  469] evo_g000007_c5                FAIL   fitness=9999.000  Q=[14.2,3.16,0.41] R=1.87
+[  472] evo_g000008_c0                FAIL   fitness=9999.000  Q=[9.0,3.95,0.35] R=0.45
+[  479] evo_g000008_c7                FAIL   fitness=9999.000  Q=[22.2,0.45,0.19] R=1.72
+[  480] evo_g000009_c0                FAIL   fitness=9999.000  Q=[31.9,0.64,0.68] R=1.02
+[  484] evo_g000009_c4                FAIL   fitness=9999.000  Q=[26.4,1.86,0.15] R=2.27
+[  490] evo_g000010_c2                FAIL   fitness=9999.000  Q=[10.0,1.95,0.85] R=0.96
+[  495] evo_g000010_c7                FAIL   fitness=9999.000  Q=[11.4,1.12,0.35] R=1.02
+[  498] evo_g000011_c2                FAIL   fitness=9999.000  Q=[17.5,0.87,0.54] R=1.75
+[  501] evo_g000011_c5                FAIL   fitness=9999.000  Q=[13.1,0.98,0.45] R=0.93
+[  504] evo_g000012_c0                FAIL   fitness=9999.000  Q=[15.6,1.94,0.25] R=1.36
+[  510] evo_g000012_c6                FAIL   fitness=9999.000  Q=[15.8,1.53,0.30] R=0.98
+[  512] evo_g000013_c0                FAIL   fitness=9999.000  Q=[15.3,1.85,0.30] R=1.08
+[  518] evo_g000013_c6                FAIL   fitness=9999.000  Q=[14.2,1.93,0.26] R=1.48
+[  520] evo_g000014_c0                FAIL   fitness=9999.000  Q=[6.7,1.47,0.44] R=1.18
+[  524] evo_g000014_c4                FAIL   fitness=9999.000  Q=[10.8,1.16,0.29] R=1.02
+[  528] evo_g000015_c0                FAIL   fitness=9999.000  Q=[14.6,1.48,0.27] R=0.81
+[  533] evo_g000015_c5                FAIL   fitness=9999.000  Q=[17.4,1.62,0.16] R=1.23
+[  536] evo_g000016_c0                FAIL   fitness=9999.000  Q=[14.6,1.06,0.29] R=1.38
+[  540] evo_g000016_c4                FAIL   fitness=9999.000  Q=[19.9,1.00,0.26] R=1.33
+[  545] evo_g000017_c1                FAIL   fitness=9999.000  Q=[15.7,0.97,0.30] R=0.91
+[  549] evo_g000017_c5                FAIL   fitness=9999.000  Q=[13.5,1.95,0.32] R=0.96
+[  554] evo_g000018_c2                FAIL   fitness=9999.000  Q=[12.3,1.51,0.35] R=1.01
+[  558] evo_g000018_c6                FAIL   fitness=9999.000  Q=[12.8,1.44,0.31] R=1.00
+[  562] evo_g000019_c2                FAIL   fitness=9999.000  Q=[16.0,1.53,0.31] R=1.08
+[  565] evo_g000019_c5                FAIL   fitness=9999.000  Q=[15.0,1.48,0.29] R=1.04
+No prior results found — evaluating default weights first...
+[  407] evo_seed                      FAIL   fitness=9999.000  Q=[14.1,1.41,0.32] R=1.00
+Seed fitness: 9999.000
+
+================================================================================
+LQR Cost Weight Optimizer (1+8)-ES
+  workers=4  |  params=['Q_PITCH', 'Q_PITCH_RATE', 'Q_VEL', 'R']
+  Max generations: 20
+================================================================================
+
+[gen     5]  best=9999.000  parent=9999.000  evals=40  elapsed=0.0min
+  parent: Q_PITCH=14.1  Q_PITCH_RATE=1.41  Q_VEL=0.316  R=1
+  sigma:  Q_PITCH=0.30  Q_PITCH_RATE=0.30  Q_VEL=0.30  R=0.30
+
+[gen    10]  best=9999.000  parent=9999.000  evals=80  elapsed=0.0min
+  parent: Q_PITCH=14.1  Q_PITCH_RATE=1.41  Q_VEL=0.316  R=1
+  sigma:  Q_PITCH=0.25  Q_PITCH_RATE=0.25  Q_VEL=0.25  R=0.25
+
+[gen    15]  best=9999.000  parent=9999.000  evals=120  elapsed=0.0min
+  parent: Q_PITCH=14.1  Q_PITCH_RATE=1.41  Q_VEL=0.316  R=1
+  sigma:  Q_PITCH=0.09  Q_PITCH_RATE=0.09  Q_VEL=0.09  R=0.09
+
+[gen    20]  best=9999.000  parent=9999.000  evals=160  elapsed=0.0min
+  parent: Q_PITCH=14.1  Q_PITCH_RATE=1.41  Q_VEL=0.316  R=1
+  sigma:  Q_PITCH=0.03  Q_PITCH_RATE=0.03  Q_VEL=0.03  R=0.03
+
+================================================================================
+Optimization complete: 20 generations, 160 evals, 0.0 min
+All-time best: fitness=9999.000  (found gen 0)
+Best weights: Q_PITCH=14.1  Q_PITCH_RATE=1.41  Q_VEL=0.316  R=1
+
+To replay best result:
+  python replay.py --top 1
