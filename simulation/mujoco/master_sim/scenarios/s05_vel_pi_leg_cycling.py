@@ -14,18 +14,12 @@ from master_sim.scenarios.profiles import (
 
 _robot   = DEFAULT_PARAMS.robot
 _timings = DEFAULT_PARAMS.scenarios
-_bumps   = DEFAULT_PARAMS.s5_bumps
-
-W_VEL_ERR = 3.0
-W_RMS     = 1.0
-W_FALL    = 200.0
-
 
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
-    return (W_VEL_ERR * m['vel_track_rms_ms']
-            + 0.1 * W_RMS * m['rms_pitch_deg']
-            + (W_FALL if fell else 0.0))
+    return (CONFIG.W_VEL_ERR * m['vel_track_rms_ms']
+            + 0.1 * CONFIG.W_RMS * m['rms_pitch_deg']
+            + (CONFIG.W_FALL if fell else 0.0))
 
 
 # ── Scenario config ──────────────────────────────────────────────────────────
@@ -33,14 +27,14 @@ def fitness(m: dict) -> float:
 CONFIG = ScenarioConfig(
     name="s05_vel_pi_leg_cycling",
     display_name="S5 — VelPI Leg Cycling",
-    duration=13.0,                               # SCENARIO_5_DURATION
+    duration=_timings.s5_duration,
     active_controllers=frozenset({"lqr", "velocity_pi"}),
     hip_mode="position",
     v_profile=s3_velocity_profile,
     hip_profile=make_leg_cycle_fn(_robot, _timings),
     hip_vel_profile=make_leg_cycle_vel_fn(_robot, _timings),
     dist_fn=s2_dist_fn,
-    world=WorldConfig(bumps=tuple(_bumps)),
+    world=WorldConfig(),  # no bumps — keep sim deterministic
     fitness_fn=fitness,
     group="velocity_pi",
     order=5.0,

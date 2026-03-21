@@ -8,9 +8,12 @@ Fitness = ISE_pitch + 0.05 * ISE_pitch_rate + 0.01 * settle_time + 200 * fell
 import math
 import mujoco
 
+from master_sim.defaults import DEFAULT_PARAMS
 from master_sim.scenarios.base import ScenarioConfig
 from master_sim.scenarios.profiles import s1_dist_fn
 from master_sim.physics import get_equilibrium_pitch
+
+_timings = DEFAULT_PARAMS.scenarios
 
 
 # ── Init function: apply pitch step perturbation ─────────────────────────────
@@ -30,17 +33,12 @@ def _s1_init(model, data, params):
 
 # ── Fitness ──────────────────────────────────────────────────────────────────
 
-W_PITCH_RATE = 0.05
-W_SETTLE     = 0.01
-W_FALL       = 200.0
-
-
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
     return (m['ise_pitch']
-            + W_PITCH_RATE * m['ise_pitch_rate']
-            + W_SETTLE * m['settle_time_s']
-            + (W_FALL if fell else 0.0))
+            + CONFIG.W_PITCH_RATE * m['ise_pitch_rate']
+            + CONFIG.W_SETTLE * m['settle_time_s']
+            + (CONFIG.W_FALL if fell else 0.0))
 
 
 # ── Scenario config ──────────────────────────────────────────────────────────
@@ -48,7 +46,7 @@ def fitness(m: dict) -> float:
 CONFIG = ScenarioConfig(
     name="s01_lqr_pitch_step",
     display_name="S1 — LQR Pitch Step",
-    duration=5.0,                               # SCENARIO_1_DURATION
+    duration=_timings.s1_duration,
     active_controllers=frozenset({"lqr"}),       # LQR only, no VelocityPI
     hip_mode="position",
     dist_fn=s1_dist_fn,

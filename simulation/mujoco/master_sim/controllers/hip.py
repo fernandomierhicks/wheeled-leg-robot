@@ -16,7 +16,8 @@ from master_sim.params import RobotGeometry, HipMotorParams, SuspensionGains
 
 
 def hip_position_torque(q_hip: float, dq_hip: float, q_target: float,
-                        hip: HipMotorParams) -> float:
+                        hip: HipMotorParams,
+                        dq_target: float = 0.0) -> float:
     """Stiff PD position servo for hip joint (S1–S7).
 
     Args:
@@ -24,13 +25,14 @@ def hip_position_torque(q_hip: float, dq_hip: float, q_target: float,
         dq_hip: current hip velocity [rad/s]
         q_target: target hip angle [rad]
         hip: HipMotorParams (for Kp, Kd, torque limit)
+        dq_target: target hip velocity [rad/s] (feed-forward)
 
     Returns:
         Clamped hip torque [Nm]
     """
-    tau = hip.position_Kp * (q_target - q_hip) - hip.position_Kd * dq_hip
-    return float(np.clip(tau, -hip.impedance_torque_limit,
-                         hip.impedance_torque_limit))
+    tau = hip.position_Kp * (q_target - q_hip) + hip.position_Kd * (dq_target - dq_hip)
+    return float(np.clip(tau, -hip.torque_limit,
+                         hip.torque_limit))
 
 
 def hip_impedance_torque(q_hip: float, dq_hip: float, q_nom: float,

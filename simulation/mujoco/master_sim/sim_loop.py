@@ -32,14 +32,6 @@ from master_sim.controllers.hip import (
 )
 
 
-# ── Constants ────────────────────────────────────────────────────────────────
-FALL_THRESHOLD    = 0.785   # [rad] ~45° — robot considered fallen
-SETTLE_THRESHOLD  = 2.0     # [deg] |pitch| below this = settled
-SETTLE_WINDOW     = 0.5     # [s]  must stay settled this long
-VEL_ERR_START     = 1.0     # [s]  skip first 1.0 s for velocity metric
-TRANSIENT_WINDOW  = 1.0     # [s]  penalise |v_error| after step change
-
-
 # ── Model construction ───────────────────────────────────────────────────────
 
 def build_model_and_data(params: SimParams,
@@ -339,12 +331,10 @@ class SimController:
                 if not use_suspension:
                     data.ctrl[act_hip] = 0.0
                     continue
-                tau_hip = (params.motors.hip.position_Kp * (q_hip_target - data.qpos[s_hip])
-                           + params.motors.hip.position_Kd * (dq_hip_target - data.qvel[d_hip]))
-                data.ctrl[act_hip] = float(np.clip(
-                    tau_hip,
-                    -params.motors.hip.impedance_torque_limit,
-                    params.motors.hip.impedance_torque_limit))
+                data.ctrl[act_hip] = hip_position_torque(
+                    data.qpos[s_hip], data.qvel[d_hip],
+                    q_hip_target, params.motors.hip,
+                    dq_target=dq_hip_target)
 
         # ── Battery step ─────────────────────────────────────────────────────
         self.v_batt = self.battery.step(self.dt_ctrl, motor_currents(
@@ -355,7 +345,7 @@ class SimController:
             params.motors, params.battery.I_quiescent))
 
         # ── Fall detection ───────────────────────────────────────────────────
-        fell = abs(pitch_true) > FALL_THRESHOLD
+        fell = abs(pitch_true) > params.thresholds.fall_rad
 
         # ── Telemetry dict (superset of what callbacks + sandbox need) ────────
         return dict(
@@ -417,10 +407,8 @@ def run(params: SimParams, scenario: ScenarioConfig,
     # ── Controller (single source of truth) ──────────────────────────────────
     ctrl = SimController(model, data, params, rng_seed=rng_seed)
 
-    # ── Which controllers are active ─────────────────────────────────────────
-    use_velocity_pi = "velocity_pi" in scenario.active_controllers
-    use_yaw_pi      = "yaw_pi"      in scenario.active_controllers
-    use_impedance   = scenario.hip_mode == "impedance"
+    # ── Which controllers are active (from scenario — single source of truth) ─
+    flags = scenario.tick_flags
 
     # ── Resolve profile callables ────────────────────────────────────────────
     v_profile_fn     = scenario.v_profile or (lambda t: 0.0)
@@ -432,8 +420,9 @@ def run(params: SimParams, scenario: ScenarioConfig,
     ctrl_steps = params.timing.ctrl_steps
     dt = model.opt.timestep * ctrl_steps
 
-    # ── Liftoff threshold ────────────────────────────────────────────────────
-    LIFTOFF_THRESHOLD = robot.wheel_r + 0.005
+    # ── Thresholds ────────────────────────────────────────────────────────────
+    th = params.thresholds
+    liftoff_threshold = robot.wheel_r + th.liftoff_margin_m
 
     # ── Metric accumulators ──────────────────────────────────────────────────
     duration = scenario.duration
@@ -478,10 +467,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
                 omega_target=omega_tgt,
                 q_hip_target=q_hip_sym,
                 dq_hip_target=dq_hip_tgt,
-                use_lqr=True,
-                use_velocity_pi=use_velocity_pi,
-                use_yaw_pi=use_yaw_pi,
-                use_impedance=use_impedance)
+                **flags)
 
             # ── Unpack for metrics ───────────────────────────────────────────
             pitch_true      = tick['pitch']
@@ -493,8 +479,8 @@ def run(params: SimParams, scenario: ScenarioConfig,
             yaw_rate        = tick['yaw_rate']
 
             # ── Transient detection ──────────────────────────────────────────
-            if abs(v_target_ms - prev_v_target) > 0.05 and data.time >= VEL_ERR_START:
-                transient_end = data.time + TRANSIENT_WINDOW
+            if abs(v_target_ms - prev_v_target) > 0.05 and data.time >= th.vel_err_start_s:
+                transient_end = data.time + th.transient_window_s
             prev_v_target = v_target_ms
 
             # ── Yaw tracking error ───────────────────────────────────────────
@@ -516,22 +502,22 @@ def run(params: SimParams, scenario: ScenarioConfig,
             wheel_travel_m   += abs(vel_est) * dt
             n_samples        += 1
 
-            if data.time >= VEL_ERR_START:
+            if data.time >= th.vel_err_start_s:
                 vel_sq_sum += (v_target_ms - v_measured_ms) ** 2
                 n_vel += 1
 
             if data.time < transient_end:
                 transient_lag_sum += abs(v_target_ms - v_measured_ms) * dt
 
-            if (data.xpos[ctrl.wheel_bid_L][2] > LIFTOFF_THRESHOLD or
-                    data.xpos[ctrl.wheel_bid_R][2] > LIFTOFF_THRESHOLD):
+            if (data.xpos[ctrl.wheel_bid_L][2] > liftoff_threshold or
+                    data.xpos[ctrl.wheel_bid_R][2] > liftoff_threshold):
                 wheel_liftoff_s += dt
 
             if not settled:
-                if pitch_err_deg < SETTLE_THRESHOLD:
+                if pitch_err_deg < th.settle_deg:
                     if settle_start is None:
                         settle_start = data.time
-                    elif data.time - settle_start >= SETTLE_WINDOW:
+                    elif data.time - settle_start >= th.settle_window_s:
                         settle_time = settle_start
                         settled = True
                 else:

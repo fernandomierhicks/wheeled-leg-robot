@@ -74,3 +74,19 @@ class ScenarioConfig:
     W_LIFTOFF: float = 50.0
     W_PITCH_RATE: float = 0.05
     W_SETTLE: float = 0.01
+
+    @property
+    def tick_flags(self) -> dict:
+        """Controller flags for SimController.tick() — single source of truth.
+
+        Sandbox mode uses its own UI-driven flags; all scenario replay paths
+        (sim_loop.run, visualizer replay, etc.) should use these.
+        """
+        use_impedance = self.hip_mode == "impedance"
+        return dict(
+            use_lqr="lqr" in self.active_controllers,
+            use_velocity_pi="velocity_pi" in self.active_controllers,
+            use_yaw_pi="yaw_pi" in self.active_controllers,
+            use_impedance=use_impedance,
+            use_roll_leveling=use_impedance,
+        )

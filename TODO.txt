@@ -1,6 +1,6 @@
 
 ---Fernandos note dont change below
--joystick
+-search for any inlnie copy paste or duplication of code. Single source of truth. 
 -Jump controller
 -Spring for higher jumps. 
 

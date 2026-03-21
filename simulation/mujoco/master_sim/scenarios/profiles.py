@@ -101,6 +101,14 @@ def make_leg_cycle_vel_fn(robot: RobotGeometry, timings: ScenarioTimings):
 
 # ── Yaw profile functions ───────────────────────────────────────────────────
 
+def s6_velocity_profile(t: float) -> float:
+    """S6 forward/backward: 0 → +0.3 → −0.3 → 0 m/s during yaw turn."""
+    if   t < 1.0: return  0.0
+    elif t < 3.5: return  0.3
+    elif t < 6.0: return -0.3
+    else:         return  0.0
+
+
 def make_yaw_step_fn(rate: float, start_time: float = 1.0):
     """Return a closure: 0 until start_time, then constant yaw rate."""
     def _fn(t: float) -> float:

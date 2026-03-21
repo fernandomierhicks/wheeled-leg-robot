@@ -1,18 +1,24 @@
-"""launcher.py — GUI launcher for master_sim visualizer.
+"""launcher.py — Persistent GUI launcher for master_sim visualizer.
 
-Launches viz/visualizer.py in sandbox or replay mode.
+Spawns a single visualizer process and sends live switch commands via mp.Queue.
+The launcher stays open — clicking buttons switches scenarios without restarting.
 
 Usage:
     python launcher.py
 """
 
-import subprocess
+import multiprocessing as mp
 import sys
+import os
 import tkinter as tk
 from pathlib import Path
 
-VISUALIZER = Path(__file__).resolve().parent / "viz" / "visualizer.py"
-MASTER_SIM_DIR = Path(__file__).resolve().parent.parent  # parent of master_sim for module imports
+# Ensure master_sim is importable when running this file directly
+_MUJOCO_DIR = str(Path(__file__).resolve().parent.parent)
+if _MUJOCO_DIR not in sys.path:
+    sys.path.insert(0, _MUJOCO_DIR)
+
+from master_sim.viz.visualizer import run_unified
 
 SCENARIOS = [
     ("s01_lqr_pitch_step",        "S1 — LQR Pitch Step"),
@@ -26,22 +32,33 @@ SCENARIOS = [
 ]
 
 
-def launch(args: list[str]):
-    subprocess.Popen(
-        [sys.executable, str(VISUALIZER)] + args,
-        cwd=str(MASTER_SIM_DIR),
-    )
+switch_q: mp.Queue = None
+viz_proc: mp.Process = None
 
 
-def launch_scenario(name: str):
-    launch(["--mode", "replay", "--scenario", name])
-
-
-def launch_sandbox():
-    launch(["--mode", "sandbox"])
+def on_click(scenario_key: str):
+    """Handle button click — spawn or switch."""
+    global viz_proc, switch_q
+    if viz_proc is None or not viz_proc.is_alive():
+        # First click or process died — spawn fresh
+        switch_q = mp.Queue(maxsize=8)
+        viz_proc = mp.Process(
+            target=run_unified,
+            args=(scenario_key,),
+            kwargs={"switch_q": switch_q},
+        )
+        viz_proc.start()
+    else:
+        # Already running — send switch command
+        try:
+            switch_q.put_nowait(("SWITCH", scenario_key))
+        except Exception:
+            pass
 
 
 def main():
+    mp.freeze_support()
+
     root = tk.Tk()
     root.title("Sim Launcher")
     root.resizable(False, False)
@@ -57,7 +74,7 @@ def main():
         fg="white",
         activebackground="#388E3C",
         activeforeground="white",
-        command=launch_sandbox,
+        command=lambda: on_click("sandbox"),
     ).pack(padx=10, pady=(10, 5))
 
     # Separator
@@ -71,13 +88,18 @@ def main():
             font=("Segoe UI", 10),
             width=36,
             anchor="w",
-            command=lambda n=name: launch_scenario(n),
+            command=lambda n=name: on_click(n),
         ).pack(padx=10, pady=2)
 
     # Bottom padding
     tk.Frame(root, height=8).pack()
 
     root.mainloop()
+
+    # Clean up on launcher exit
+    if viz_proc is not None and viz_proc.is_alive():
+        viz_proc.terminate()
+        viz_proc.join(timeout=2)
 
 
 if __name__ == "__main__":

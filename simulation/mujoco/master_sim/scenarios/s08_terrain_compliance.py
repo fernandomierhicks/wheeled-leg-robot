@@ -6,23 +6,19 @@ v_desired = 1.0 m/s constant.  One-sided bumps hit left wheel → roll disturban
 Fitness = 3.0 * vel_rms + 1.0 * max_roll_deg + 0.1 * rms_pitch + 200 * fell
 """
 from master_sim.defaults import DEFAULT_PARAMS
+from master_sim.params import S8Bump
 from master_sim.scenarios.base import ScenarioConfig, WorldConfig
 from master_sim.scenarios.profiles import constant_velocity
 
 _timings = DEFAULT_PARAMS.scenarios
 _s8_bumps = DEFAULT_PARAMS.s8_bumps
 
-W_VEL_ERR = 3.0
-W_RMS     = 1.0
-W_FALL    = 200.0
-
-
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
-    return (W_VEL_ERR * m['vel_track_rms_ms']
-            + W_RMS * m['max_roll_deg']
-            + 0.1 * W_RMS * m['rms_pitch_deg']
-            + (W_FALL if fell else 0.0))
+    return (CONFIG.W_VEL_ERR * m['vel_track_rms_ms']
+            + CONFIG.W_RMS * m['max_roll_deg']
+            + 0.1 * CONFIG.W_RMS * m['rms_pitch_deg']
+            + (CONFIG.W_FALL if fell else 0.0))
 
 
 # ── Scenario config ──────────────────────────────────────────────────────────
@@ -30,7 +26,7 @@ def fitness(m: dict) -> float:
 CONFIG = ScenarioConfig(
     name="s08_terrain_compliance",
     display_name="S8 — Terrain Compliance",
-    duration=12.0,                               # SCENARIO_8_DURATION
+    duration=_timings.s8_duration,
     active_controllers=frozenset({"lqr", "velocity_pi"}),
     hip_mode="impedance",
     v_profile=constant_velocity(_timings.s8_drive_speed),

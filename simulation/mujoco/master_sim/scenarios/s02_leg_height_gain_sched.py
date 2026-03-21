@@ -18,17 +18,12 @@ _timings = DEFAULT_PARAMS.scenarios
 
 # ── Fitness ──────────────────────────────────────────────────────────────────
 
-W_PITCH_RATE = 0.05
-W_SETTLE     = 0.01
-W_FALL       = 200.0
-
-
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
     return (m['ise_pitch']
-            + W_PITCH_RATE * m['ise_pitch_rate']
-            + W_SETTLE * m['settle_time_s']
-            + (W_FALL if fell else 0.0))
+            + CONFIG.W_PITCH_RATE * m['ise_pitch_rate']
+            + CONFIG.W_SETTLE * m['settle_time_s']
+            + (CONFIG.W_FALL if fell else 0.0))
 
 
 # ── Scenario config ──────────────────────────────────────────────────────────
@@ -36,7 +31,7 @@ def fitness(m: dict) -> float:
 CONFIG = ScenarioConfig(
     name="s02_leg_height_gain_sched",
     display_name="S2 — Leg Height Gain Sched",
-    duration=12.0,                               # SCENARIO_4_DURATION
+    duration=_timings.s2_duration,
     active_controllers=frozenset({"lqr"}),        # LQR only
     hip_mode="position",
     hip_profile=make_leg_cycle_fn(_robot, _timings),

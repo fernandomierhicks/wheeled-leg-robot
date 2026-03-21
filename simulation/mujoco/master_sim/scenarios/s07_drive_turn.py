@@ -11,18 +11,12 @@ from master_sim.scenarios.profiles import constant_velocity, make_yaw_step_fn
 
 _timings = DEFAULT_PARAMS.scenarios
 
-W_VEL_ERR = 3.0
-W_YAW_ERR = 3.0
-W_RMS     = 1.0
-W_FALL    = 200.0
-
-
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
-    return (0.5 * W_VEL_ERR * m['vel_track_rms_ms']
-            + 0.5 * W_YAW_ERR * m['yaw_track_rms_rads']
-            + 0.1 * W_RMS * m['rms_pitch_deg']
-            + (W_FALL if fell else 0.0))
+    return (0.5 * CONFIG.W_VEL_ERR * m['vel_track_rms_ms']
+            + 0.5 * CONFIG.W_YAW_ERR * m['yaw_track_rms_rads']
+            + 0.1 * CONFIG.W_RMS * m['rms_pitch_deg']
+            + (CONFIG.W_FALL if fell else 0.0))
 
 
 # ── Scenario config ──────────────────────────────────────────────────────────
@@ -30,7 +24,7 @@ def fitness(m: dict) -> float:
 CONFIG = ScenarioConfig(
     name="s07_drive_turn",
     display_name="S7 — Drive + Turn",
-    duration=8.0,                                # SCENARIO_7_DURATION
+    duration=_timings.s7_duration,
     active_controllers=frozenset({"lqr", "velocity_pi", "yaw_pi"}),
     hip_mode="position",
     v_profile=constant_velocity(_timings.drive_turn_speed),

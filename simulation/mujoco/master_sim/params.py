@@ -174,10 +174,10 @@ class YawPIGains:
 @dataclass(frozen=True)
 class SuspensionGains:
     """Leg impedance + roll leveling (Phase 4)."""
-    K_s: float = 39.35506            # [N·m/rad] spring stiffness
-    B_s: float = 0.85589542         # [N·m·s/rad] damping
-    K_roll: float = 16.999368       # [rad/rad] roll proportional
-    D_roll: float = 0.047780938     # [rad·s/rad] roll rate damping
+    K_s: float = 9.838765            # [N·m/rad] spring stiffness  (TEMP: /4)
+    B_s: float = 0.213973855        # [N·m·s/rad] damping          (TEMP: /4)
+    K_roll: float = 85.0            # [rad/rad] roll proportional  (TEMP: 5× for 5cm step test)
+    D_roll: float = 0.24            # [rad·s/rad] roll rate damping (TEMP: 5× for 5cm step test)
 
     @staticmethod
     def hip_safe_range(robot: RobotGeometry) -> Tuple[float, float]:
@@ -214,8 +214,8 @@ class GainSet:
 @dataclass(frozen=True)
 class LatencyParams:
     """Ring-buffer delays for sensor and actuator pipelines."""
-    sensor_delay_s: float = 0.0        # [s] 0 = disabled; set ~0.005 for realistic BNO086+I2C
-    actuator_delay_s: float = 0.0      # [s] 0 = disabled; set ~0.0025 for realistic ODESC FOC
+    sensor_delay_s: float = 0.001      # [s] 0 = disabled; set ~0.005 for realistic BNO086+I2C
+    actuator_delay_s: float = 0.001    # [s] 0 = disabled; set ~0.0025 for realistic ODESC FOC
 
     def sensor_delay_steps(self, sim_timestep: float) -> int:
         return round(self.sensor_delay_s / sim_timestep)
@@ -233,6 +233,19 @@ class NoiseParams:
     pitch_rate_std_rad_s: float = field(default_factory=lambda: math.radians(0.5))
     accel_std: float = 0.2             # [m/s²]
     roll_std_rad: float = field(default_factory=lambda: math.radians(0.05))
+
+
+# ── Metric thresholds ─────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class MetricThresholds:
+    """Thresholds used by sim_loop for fall detection, settle detection, etc."""
+    fall_rad: float = 0.785            # [rad] ~45° — robot considered fallen
+    settle_deg: float = 2.0            # [deg] |pitch| below this = settled
+    settle_window_s: float = 0.5       # [s]  must stay settled this long
+    vel_err_start_s: float = 1.0       # [s]  skip first 1.0 s for velocity metric
+    transient_window_s: float = 1.0    # [s]  penalise |v_error| after step change
+    liftoff_margin_m: float = 0.005    # [m]  wheel Z > wheel_r + this = liftoff
 
 
 # ── Simulation timing ─────────────────────────────────────────────────────
@@ -267,8 +280,8 @@ class ScenarioTimings:
     """Duration and timing constants for all scenarios."""
     s1_duration: float = 5.0
     s2_duration: float = 12.0
-    s3_duration: float = 13.0
-    s4_duration: float = 12.0
+    s3_duration: float = 12.0
+    s4_duration: float = 13.0
     s5_duration: float = 13.0
     s6_duration: float = 8.0
     s7_duration: float = 8.0
@@ -350,11 +363,12 @@ class SimParams:
     noise: NoiseParams = field(default_factory=NoiseParams)
     timing: SimTiming = field(default_factory=SimTiming)
     limits: HardwareLimits = field(default_factory=HardwareLimits)
+    thresholds: MetricThresholds = field(default_factory=MetricThresholds)
     scenarios: ScenarioTimings = field(default_factory=ScenarioTimings)
     s5_bumps: Tuple[S5Bump, ...] = field(default_factory=lambda: (
         S5Bump(0.8, 0.01), S5Bump(2.0, 0.03), S5Bump(3.5, 0.01),
         S5Bump(-0.8, 0.03), S5Bump(-2.0, 0.01),
     ))
     s8_bumps: Tuple[S8Bump, ...] = field(default_factory=lambda: (
-        S8Bump(shape='box', x=1.2, y=0.1430, h=0.05, rx=0.02, ry=0.15),
+        S8Bump(shape='box', x=1.2, y=0.1430, h=0.025, rx=0.02, ry=0.15),  # TEMP: h/2
     ))

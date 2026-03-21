@@ -53,6 +53,12 @@ TICK_COLOR  = "#d8d8d8"
 GRID_ALPHA  = 0.20
 LINE_WIDTH  = 1.8
 
+# Window layout padding (pixels) — avoid vertical taskbar on the left
+# and leave a gap between fastchart and MuJoCo windows.
+PAD_LEFT    = 90    # clear vertical taskbar
+PAD_TOP     = 35    # keep title bar visible
+PAD_MID     = 10    # gap between the two side-by-side windows
+
 # 10-color palette: vivid, distinguishable on dark background
 PALETTE = [
     "#60d0ff",   # cyan
@@ -71,6 +77,47 @@ DASH = QtCore.Qt.PenStyle.DashLine
 
 TELEMETRY_HZ = 60
 WINDOW_S     = 15.0
+
+
+def _add_world_axes(viewer, length=0.3, radius=0.006):
+    """Draw RGB XYZ axis arrows at the world origin in the MuJoCo viewer."""
+    z_up = np.array([0.0, 0.0, 1.0])
+
+    def _rotation_z_to(d_norm):
+        """Rotation matrix that maps Z-up to d_norm (column-major flat)."""
+        if np.allclose(d_norm, z_up):
+            return np.eye(3).flatten()
+        if np.allclose(d_norm, -z_up):
+            return np.diag([1.0, -1.0, -1.0]).flatten()
+        v = np.cross(z_up, d_norm)
+        s = np.linalg.norm(v)
+        c = np.dot(z_up, d_norm)
+        vx = np.array([[0, -v[2], v[1]],
+                       [v[2], 0, -v[0]],
+                       [-v[1], v[0], 0]])
+        R = np.eye(3) + vx + vx @ vx * ((1 - c) / (s * s))
+        return R.flatten()
+
+    axes = [
+        ([1, 0, 0], [1, 0, 0, 0.9]),   # X = red
+        ([0, 1, 0], [0, 1, 0, 0.9]),   # Y = green
+        ([0, 0, 1], [0, 0, 1, 0.9]),   # Z = blue
+    ]
+    scn = viewer.user_scn
+    for direction, rgba in axes:
+        if scn.ngeom >= scn.maxgeom:
+            break
+        d = np.array(direction, dtype=np.float64)
+        mat = _rotation_z_to(d)
+        mujoco.mjv_initGeom(
+            scn.geoms[scn.ngeom],
+            type=mujoco.mjtGeom.mjGEOM_ARROW,
+            size=[radius, radius, length],
+            pos=np.array([0.0, 0.0, 0.0]),
+            mat=mat,
+            rgba=np.array(rgba, dtype=np.float32),
+        )
+        scn.ngeom += 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -356,9 +403,9 @@ def show(csv_paths, x_col=None, y_cols=None, filter_expr=None,
     try:
         screen = app.primaryScreen()
         rect = screen.geometry()
-        win.setGeometry(rect.x(), rect.y(),
-                        min(rect.width(), 1600),
-                        min(rect.height(), 1000))
+        win.setGeometry(rect.x() + PAD_LEFT, rect.y() + PAD_TOP,
+                        min(rect.width() - PAD_LEFT, 1600),
+                        min(rect.height() - PAD_TOP, 1000))
     except Exception:
         win.resize(1400, 900)
 
@@ -468,10 +515,11 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
     act_wheel_L = _act("wheel_act_L"); act_wheel_R = _act("wheel_act_R")
     box_bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "box")
 
-    # Controllers
-    use_velocity_pi = "velocity_pi" in cfg.active_controllers
-    use_yaw_pi      = "yaw_pi"      in cfg.active_controllers
-    use_impedance   = cfg.hip_mode == "impedance"
+    # Controllers — flags from scenario (single source of truth)
+    flags = cfg.tick_flags
+    use_velocity_pi = flags['use_velocity_pi']
+    use_yaw_pi      = flags['use_yaw_pi']
+    use_impedance   = flags['use_impedance']
     v_profile_fn     = cfg.v_profile or (lambda t: 0.0)
     omega_profile_fn = cfg.omega_profile
     hip_profile_fn   = cfg.hip_profile
@@ -510,14 +558,17 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
         viewer.cam.elevation = -15
         viewer.cam.distance  = 2.5
         viewer.cam.lookat    = np.array([0.0, 0.0, 0.30])
+        _add_world_axes(viewer)
 
-        # Snap viewer to right half
+        # Snap viewer to right half (with mid-padding)
         def _snap():
             time.sleep(1.5)
             try:
                 import ctypes as _ct
                 _EnumProc = _ct.WINFUNCTYPE(_ct.c_bool, _ct.c_int, _ct.c_int)
                 half = sw // 2
+                mj_x = half + PAD_MID // 2
+                mj_w = sw - mj_x
                 def _cb(hwnd, _):
                     if _ct.windll.user32.IsWindowVisible(hwnd):
                         buf = _ct.create_unicode_buffer(256)
@@ -525,7 +576,7 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
                         if "mujoco" in buf.value.lower():
                             SWP = 0x0004
                             _ct.windll.user32.SetWindowPos(
-                                hwnd, 0, half, 0, half, sh, SWP)
+                                hwnd, 0, mj_x, 0, mj_w, sh, SWP)
                             return False
                     return True
                 _ct.windll.user32.EnumWindows(_EnumProc(_cb), 0)
@@ -609,12 +660,10 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
                             (s_hip_L, d_hip_L, act_hip_L),
                             (s_hip_R, d_hip_R, act_hip_R),
                         ]:
-                            tau_hip = (params.motors.hip.position_Kp * (q_hip_sym - data.qpos[s_hip])
-                                       + params.motors.hip.position_Kd * (dq_hip_tgt - data.qvel[d_hip]))
-                            data.ctrl[act_hip] = float(np.clip(
-                                tau_hip,
-                                -params.motors.hip.impedance_torque_limit,
-                                params.motors.hip.impedance_torque_limit))
+                            data.ctrl[act_hip] = hip_position_torque(
+                                data.qpos[s_hip], data.qvel[d_hip],
+                                q_hip_sym, params.motors.hip,
+                                dq_target=dq_hip_tgt)
 
                     # Battery
                     v_batt = battery.step(dt, motor_currents(
@@ -818,12 +867,13 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
 
     _proxy = pg.SignalProxy(glw.scene().sigMouseMoved, rateLimit=60, slot=_on_mouse)
 
-    # ── Window sizing — left half of screen ───────────────────────────────
+    # ── Window sizing — left half of screen (with taskbar padding) ──────────
     try:
         screen = app.primaryScreen()
         rect = screen.geometry()
         half_w = rect.width() // 2
-        win.setGeometry(rect.x(), rect.y(), half_w, rect.height())
+        win.setGeometry(rect.x() + PAD_LEFT, rect.y() + PAD_TOP,
+                        half_w - PAD_LEFT - PAD_MID // 2, rect.height() - PAD_TOP)
     except Exception:
         win.resize(900, 1000)
 
@@ -876,10 +926,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
     hip_vel_fn       = cfg.hip_vel_profile
     dist_fn          = cfg.dist_fn
 
-    # Controller enable flags from scenario config
-    use_velocity_pi = "velocity_pi" in cfg.active_controllers
-    use_yaw_pi      = "yaw_pi"      in cfg.active_controllers
-    use_impedance   = cfg.hip_mode == "impedance"
+    # Controller enable flags from scenario (single source of truth)
+    flags = cfg.tick_flags
 
     # Controller — single source of truth (shared with scenarios/optimizer)
     ctrl = SimController(model, data, params, rng_seed=rng_seed)
@@ -937,14 +985,17 @@ def replay(scenario_name: str, with_viewer: bool = False,
         viewer.cam.elevation = -15
         viewer.cam.distance  = 2.5
         viewer.cam.lookat    = np.array([0.0, 0.0, 0.30])
+        _add_world_axes(viewer)
 
-        # Snap viewer to right half (Windows)
+        # Snap viewer to right half (Windows, with mid-padding)
         def _snap():
             time.sleep(1.5)
             try:
                 import ctypes as _ct
                 _EnumProc = _ct.WINFUNCTYPE(_ct.c_bool, _ct.c_int, _ct.c_int)
                 half = sw // 2
+                mj_x = half + PAD_MID // 2
+                mj_w = sw - mj_x
                 def _cb(hwnd, _):
                     if _ct.windll.user32.IsWindowVisible(hwnd):
                         buf = _ct.create_unicode_buffer(256)
@@ -952,7 +1003,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
                         if "mujoco" in buf.value.lower():
                             SWP = 0x0004
                             _ct.windll.user32.SetWindowPos(
-                                hwnd, 0, half, 0, half, sh, SWP)
+                                hwnd, 0, mj_x, 0, mj_w, sh, SWP)
                             return False
                     return True
                 _ct.windll.user32.EnumWindows(_EnumProc(_cb), 0)
@@ -996,12 +1047,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
                         omega_target=omega_target,
                         q_hip_target=q_hip_target,
                         dq_hip_target=dq_hip_tgt,
-                        use_lqr=True,
-                        use_velocity_pi=use_velocity_pi,
-                        use_yaw_pi=use_yaw_pi,
-                        use_impedance=use_impedance,
-                        use_roll_leveling=use_impedance,
-                        use_suspension=use_impedance)
+                        **flags)
 
                     _last_tick = tick
 
@@ -1349,11 +1395,13 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
         vbox.addWidget(slider_row)
 
-    # Position window on left half of primary monitor
+    # Position window on left half of primary monitor (with taskbar padding)
     try:
         screen = app.primaryScreen()
         rect   = screen.geometry()
-        main_win.setGeometry(rect.x(), rect.y(), rect.width() // 2, rect.height())
+        half_w = rect.width() // 2
+        main_win.setGeometry(rect.x() + PAD_LEFT, rect.y() + PAD_TOP,
+                             half_w - PAD_LEFT - PAD_MID // 2, rect.height() - PAD_TOP)
     except Exception:
         main_win.resize(960, 1000)
 
@@ -1566,6 +1614,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                 return
             if item == "RESET":
                 _reset_bufs()
+                continue
+            if isinstance(item, tuple) and len(item) == 2 and item[0] == "TITLE":
+                main_win.setWindowTitle(item[1])
                 continue
 
             (t, pitch, pitch_ref, pitch_rate,
@@ -1799,14 +1850,17 @@ def sandbox(rng_seed: int = 0):
         viewer.cam.elevation = -15
         viewer.cam.distance  = 2.5
         viewer.cam.lookat    = np.array([0.0, 0.0, 0.30])
+        _add_world_axes(viewer)
 
-        # Snap viewer to right half (Windows)
+        # Snap viewer to right half (Windows, with mid-padding)
         def _snap():
             time.sleep(1.5)
             try:
                 import ctypes as _ct
                 _EnumProc = _ct.WINFUNCTYPE(_ct.c_bool, _ct.c_int, _ct.c_int)
                 half = sw // 2
+                mj_x = half + PAD_MID // 2
+                mj_w = sw - mj_x
                 def _cb(hwnd, _):
                     if _ct.windll.user32.IsWindowVisible(hwnd):
                         buf = _ct.create_unicode_buffer(256)
@@ -1814,7 +1868,7 @@ def sandbox(rng_seed: int = 0):
                         if "mujoco" in buf.value.lower():
                             SWP = 0x0004
                             _ct.windll.user32.SetWindowPos(
-                                hwnd, 0, half, 0, half, sh, SWP)
+                                hwnd, 0, mj_x, 0, mj_w, sh, SWP)
                             return False
                     return True
                 _ct.windll.user32.EnumWindows(_EnumProc(_cb), 0)
@@ -1952,6 +2006,429 @@ def sandbox(rng_seed: int = 0):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# UNIFIED MODE — single function for both replay & sandbox, with live switching
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def run_unified(initial_scenario: str = "sandbox",
+                switch_q: mp.Queue = None,
+                rng_seed: int = 0):
+    """Run the visualizer with optional live scenario switching.
+
+    Parameters
+    ----------
+    initial_scenario : "sandbox" or a key in SCENARIOS (e.g. "s01_lqr_pitch_step")
+    switch_q         : mp.Queue receiving ("SWITCH", scenario_key) from launcher.
+                       If None, no external switching (backward-compat CLI usage).
+    rng_seed         : reproducible noise seed
+    """
+    from master_sim.defaults import DEFAULT_PARAMS
+    from master_sim.scenarios import SCENARIOS
+    from master_sim.sim_loop import (
+        build_model_and_data, init_sim, SimController, get_pitch_and_rate,
+    )
+
+    params = DEFAULT_PARAMS
+    robot  = params.robot
+
+    # ── Gamepad init (once, survives all switches) ────────────────────────────
+    JOY_DEADZONE = 0.08
+    _joy = None
+    _joy_axes = {}
+    try:
+        import os as _os
+        _os.environ['SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS'] = '1'
+        import pygame
+        pygame.display.init()
+        pygame.display.set_mode((1, 1), pygame.NOFRAME)
+        pygame.joystick.init()
+        if pygame.joystick.get_count() > 0:
+            _joy = pygame.joystick.Joystick(0)
+            _joy.init()
+            print(f"  Joystick: {_joy.get_name()}")
+        else:
+            print("  Joystick: none detected — sliders only")
+    except ImportError:
+        print("  pygame not installed — sliders only")
+
+    has_gamepad = _joy is not None
+
+    # ── Screen metrics (once) ─────────────────────────────────────────────────
+    try:
+        import ctypes
+        ctypes.windll.user32.SetProcessDPIAware()
+        sw = ctypes.windll.user32.GetSystemMetrics(0)
+        sh = ctypes.windll.user32.GetSystemMetrics(1)
+    except Exception:
+        sw, sh = 1920, 1080
+
+    # ── Helper: resolve scenario key → (cfg_or_None, world, title) ────────────
+    def _resolve(key):
+        """Return (cfg, world, title).  cfg is None for sandbox."""
+        if key == "sandbox":
+            return None, sandbox_world(), "Sandbox — free drive"
+        cfg = SCENARIOS[key]
+        return cfg, cfg.world, f"Replay — {cfg.display_name}"
+
+    # ── Launch plot process ONCE (survives all switches) ──────────────────────
+    wheel_limit = params.motors.wheel.torque_limit
+    hip_limit   = params.motors.hip.impedance_torque_limit
+
+    data_q = mp.Queue(maxsize=12000)
+    cmd_q  = mp.Queue(maxsize=32)
+
+    _, _, init_title = _resolve(initial_scenario)
+    plot_proc = mp.Process(
+        target=_plot_process,
+        args=(data_q, cmd_q, WINDOW_S, init_title,
+              wheel_limit, hip_limit, has_gamepad),
+        daemon=True)
+    plot_proc.start()
+    print(f"  Plot process started (PID {plot_proc.pid})")
+
+    # ── Mutable state shared across switches ──────────────────────────────────
+    current_key = initial_scenario
+
+    # Sandbox-mode interactive targets
+    _en_lqr        = [True]
+    _en_vel_pi     = [True]
+    _en_yaw_pi     = [True]
+    _en_suspension = [True]
+    _en_roll_lev   = [True]
+    _hip_mode      = ["impedance"]
+    _v_desired     = [0.0]
+    _omega_desired = [0.0]
+    _HIP_MAX_Q     = robot.Q_EXT + math.radians(10)
+    _HIP_NOM_PCT   = (robot.Q_NOM - robot.Q_RET) / (_HIP_MAX_Q - robot.Q_RET) * 100.0
+    _hip_pct       = [_HIP_NOM_PCT]
+
+    def _hip_target():
+        pct = max(0.0, min(100.0, _hip_pct[0])) / 100.0
+        return robot.Q_RET + pct * (_HIP_MAX_Q - robot.Q_RET)
+
+    def _reset_sandbox_targets():
+        _v_desired[0] = 0.0
+        _omega_desired[0] = 0.0
+        _hip_pct[0] = _HIP_NOM_PCT
+
+    # ── OUTER LOOP — one iteration per world ──────────────────────────────────
+    user_quit = False
+
+    while not user_quit:
+        cfg, world, title = _resolve(current_key)
+
+        print(f"  Building world for: {title}")
+        model, data = build_model_and_data(params, world)
+        init_sim(model, data, params)
+        if cfg and cfg.init_fn:
+            cfg.init_fn(model, data, params)
+
+        RENDER_HZ    = 60
+        PHYSICS_HZ   = round(1.0 / model.opt.timestep)
+        steps_per_frame = max(1, PHYSICS_HZ // RENDER_HZ)
+        ctrl_steps   = params.timing.ctrl_steps
+
+        ctrl = SimController(model, data, params, rng_seed=rng_seed)
+
+        # Replay-mode state
+        if cfg is not None:
+            v_profile_fn     = cfg.v_profile or (lambda t: 0.0)
+            omega_profile_fn = cfg.omega_profile
+            hip_profile_fn   = cfg.hip_profile
+            hip_vel_fn       = cfg.hip_vel_profile
+            dist_fn          = cfg.dist_fn
+            flags = cfg.tick_flags
+
+        step         = 0
+        _last_tick   = {}
+        last_push    = -1.0
+        scenario_logged = False
+        sim_fell     = False
+        world_switch = False     # set True to break inner loop for new world
+
+        def _reset_sim():
+            nonlocal step, _last_tick, last_push, scenario_logged, sim_fell
+            mujoco.mj_resetData(model, data)
+            init_sim(model, data, params)
+            if cfg and cfg.init_fn:
+                cfg.init_fn(model, data, params)
+            ctrl.reset(model, data)
+            step = 0
+            _last_tick = {}
+            last_push = -1.0
+            scenario_logged = False
+            sim_fell = False
+            _reset_sandbox_targets()
+            if not data_q.full():
+                data_q.put_nowait("RESET")
+
+        # Send title + reset to plot process
+        if not data_q.full():
+            data_q.put_nowait("RESET")
+        if not data_q.full():
+            data_q.put_nowait(("TITLE", title))
+
+        print(f"  Launching MuJoCo viewer ...")
+
+        with mujoco.viewer.launch_passive(model, data) as viewer:
+            viewer.cam.azimuth   = 35
+            viewer.cam.elevation = -15
+            viewer.cam.distance  = 2.5
+            viewer.cam.lookat    = np.array([0.0, 0.0, 0.30])
+            _add_world_axes(viewer)
+
+            # Snap viewer to right half (Windows, with mid-padding)
+            def _snap():
+                time.sleep(1.5)
+                try:
+                    import ctypes as _ct
+                    _EnumProc = _ct.WINFUNCTYPE(_ct.c_bool, _ct.c_int, _ct.c_int)
+                    half = sw // 2
+                    mj_x = half + PAD_MID // 2
+                    mj_w = sw - mj_x
+                    def _cb(hwnd, _):
+                        if _ct.windll.user32.IsWindowVisible(hwnd):
+                            buf = _ct.create_unicode_buffer(256)
+                            _ct.windll.user32.GetWindowTextW(hwnd, buf, 256)
+                            if "mujoco" in buf.value.lower():
+                                SWP = 0x0004
+                                _ct.windll.user32.SetWindowPos(
+                                    hwnd, 0, mj_x, 0, mj_w, sh, SWP)
+                                return False
+                        return True
+                    _ct.windll.user32.EnumWindows(_EnumProc(_cb), 0)
+                except Exception:
+                    pass
+            threading.Thread(target=_snap, daemon=True).start()
+
+            # ── INNER LOOP — frames within one world ──────────────────────
+            while viewer.is_running():
+                frame_start = time.perf_counter()
+
+                # ── Drain switch_q (from launcher) ──
+                if switch_q is not None:
+                    try:
+                        while True:
+                            sw_cmd = switch_q.get_nowait()
+                            if (isinstance(sw_cmd, tuple) and len(sw_cmd) == 2
+                                    and sw_cmd[0] == "SWITCH"):
+                                new_key = sw_cmd[1]
+                                if new_key == current_key:
+                                    # Same scenario — just restart
+                                    _reset_sim()
+                                    continue
+
+                                new_cfg, new_world, new_title = _resolve(new_key)
+
+                                if new_world == world:
+                                    # ── SAME world — instant switch ──
+                                    current_key = new_key
+                                    cfg = new_cfg
+                                    if cfg is not None:
+                                        v_profile_fn     = cfg.v_profile or (lambda t: 0.0)
+                                        omega_profile_fn = cfg.omega_profile
+                                        hip_profile_fn   = cfg.hip_profile
+                                        hip_vel_fn       = cfg.hip_vel_profile
+                                        dist_fn          = cfg.dist_fn
+                                        flags = cfg.tick_flags
+                                    title = new_title
+                                    _reset_sim()
+                                    if cfg and cfg.init_fn:
+                                        cfg.init_fn(model, data, params)
+                                    if not data_q.full():
+                                        data_q.put_nowait(("TITLE", title))
+                                    print(f"  Switched (same world): {title}")
+                                else:
+                                    # ── DIFFERENT world — rebuild ──
+                                    current_key = new_key
+                                    world_switch = True
+                                    if not data_q.full():
+                                        data_q.put_nowait("RESET")
+                                    print(f"  World change → rebuilding: {new_title}")
+                                    break
+                    except Exception:
+                        pass
+
+                if world_switch:
+                    break
+
+                # ── Drain cmd_q (from plot process UI) ──
+                try:
+                    while True:
+                        cmd = cmd_q.get_nowait()
+                        if cmd == "RESTART":
+                            _reset_sim()
+                            if cfg and cfg.init_fn:
+                                cfg.init_fn(model, data, params)
+                        elif isinstance(cmd, tuple):
+                            if cmd[0] == "V_DESIRED":
+                                _v_desired[0] = float(cmd[1])
+                            elif cmd[0] == "OMEGA_DESIRED":
+                                _omega_desired[0] = float(cmd[1])
+                            elif cmd[0] == "HIP_PCT":
+                                _hip_pct[0] = float(cmd[1])
+                            elif cmd[0] == "CTRL_EN":
+                                key, val = cmd[1], cmd[2]
+                                if   key == "LQR":        _en_lqr[0]        = val
+                                elif key == "VelPI":      _en_vel_pi[0]     = val
+                                elif key == "YawPI":      _en_yaw_pi[0]     = val
+                                elif key == "Suspension": _en_suspension[0] = val
+                                elif key == "RollLev":    _en_roll_lev[0]   = val
+                            elif cmd[0] == "HIP_MODE":
+                                _hip_mode[0] = cmd[1]
+                except Exception:
+                    pass
+
+                # ── Gamepad polling (sandbox mode) ──
+                if cfg is None and _joy is not None:
+                    for _ev in pygame.event.get():
+                        if _ev.type == pygame.JOYAXISMOTION:
+                            _joy_axes[_ev.axis] = _ev.value
+                        elif _ev.type == pygame.JOYBUTTONDOWN and _ev.button == 0:
+                            _reset_sim()
+
+                    raw_v = _joy_axes.get(1, 0.0)
+                    raw_w = _joy_axes.get(2, 0.0)
+                    raw_h = _joy_axes.get(3, 0.0)
+                    _v_desired[0]     = (-raw_v * 3.0) if abs(raw_v) > JOY_DEADZONE else 0.0
+                    _omega_desired[0] = (-raw_w * 5.0) if abs(raw_w) > JOY_DEADZONE else 0.0
+                    if abs(raw_h) > JOY_DEADZONE:
+                        _hip_pct[0] = (1.0 - raw_h) / 2.0 * 100.0
+
+                # ── Physics stepping ──
+                for _ in range(steps_per_frame):
+                    if sim_fell:
+                        break
+                    if step % ctrl_steps == 0:
+                        t_now = float(data.time)
+
+                        if cfg is not None:
+                            # ── Replay mode ──
+                            past_duration = t_now >= cfg.duration
+                            if not scenario_logged and past_duration:
+                                scenario_logged = True
+                                print(f"  Scenario complete ({cfg.duration:.1f}s). "
+                                      f"Continuing — close viewer to exit.")
+
+                            v_target     = v_profile_fn(t_now) if not past_duration else 0.0
+                            omega_target = (omega_profile_fn(t_now)
+                                            if omega_profile_fn and not past_duration else 0.0)
+                            q_hip_target = hip_profile_fn(t_now) if hip_profile_fn else robot.Q_NOM
+                            dq_hip_tgt   = hip_vel_fn(t_now) if hip_vel_fn else 0.0
+
+                            tick = ctrl.tick(
+                                model, data,
+                                v_target_ms=v_target,
+                                omega_target=omega_target,
+                                q_hip_target=q_hip_target,
+                                dq_hip_target=dq_hip_tgt,
+                                **flags)
+
+                            _last_tick = tick
+                            if tick['fell']:
+                                sim_fell = True
+                                print(f"  Robot fell at t={t_now:.2f}s.")
+                                break
+                        else:
+                            # ── Sandbox mode ──
+                            tick = ctrl.tick(
+                                model, data,
+                                v_target_ms=_v_desired[0],
+                                omega_target=_omega_desired[0],
+                                q_hip_target=_hip_target(),
+                                use_lqr=_en_lqr[0],
+                                use_velocity_pi=_en_vel_pi[0],
+                                use_yaw_pi=_en_yaw_pi[0],
+                                use_impedance=(_hip_mode[0] != "position_pd"),
+                                use_roll_leveling=_en_roll_lev[0],
+                                use_suspension=_en_suspension[0])
+
+                            _last_tick = tick
+                            if tick['fell']:
+                                _reset_sim()
+                                break
+
+                    # Disturbance (replay only, during scenario duration)
+                    if cfg is not None:
+                        if dist_fn and data.time < cfg.duration:
+                            data.xfrc_applied[ctrl.box_bid, 0] = dist_fn(float(data.time))
+                        else:
+                            data.xfrc_applied[ctrl.box_bid, 0] = 0.0
+
+                    mujoco.mj_step(model, data)
+                    step += 1
+
+                # Camera follow
+                viewer.cam.lookat[0] = data.xpos[ctrl.box_bid][0]
+                viewer.cam.lookat[1] = data.xpos[ctrl.box_bid][1]
+                viewer.sync()
+
+                # ── Push 25-value telemetry tuple at ~60 Hz ──
+                wall_now = time.perf_counter()
+                if (wall_now - last_push >= 1.0 / TELEMETRY_HZ
+                        and not data_q.full() and _last_tick):
+                    tk = _last_tick
+                    pitch_true_now, _ = get_pitch_and_rate(
+                        data, ctrl.box_bid, ctrl.d_pitch)
+                    pitch_ref_display = tk['pitch_ff'] + tk['theta_ref']
+
+                    if cfg is not None:
+                        v_cmd_display = v_profile_fn(float(data.time))
+                        omega_cmd_display = (omega_profile_fn(float(data.time))
+                                             if omega_profile_fn else 0.0)
+                    else:
+                        v_cmd_display = _v_desired[0]
+                        omega_cmd_display = _omega_desired[0]
+
+                    data_q.put_nowait((
+                        float(data.time),
+                        math.degrees(pitch_true_now),
+                        math.degrees(pitch_ref_display),
+                        math.degrees(tk['pitch_rate']),
+                        tk['v_measured'],
+                        v_cmd_display,
+                        math.degrees(tk['yaw_rate']),
+                        math.degrees(omega_cmd_display),
+                        math.degrees(tk['hip_q_L']),
+                        math.degrees(tk['hip_q_R']),
+                        math.degrees(tk['q_nom_L']),
+                        math.degrees(tk['q_nom_R']),
+                        math.degrees(tk['roll']),
+                        tk['tau_whl_L'],
+                        tk['tau_whl_R'],
+                        tk['v_batt'],
+                        tk['batt_temp'],
+                        tk['batt_soc'],
+                        abs(tk['tau_whl_L']) / params.motors.wheel.Kt,
+                        abs(tk['tau_whl_R']) / params.motors.wheel.Kt,
+                        abs(tk['tau_hip_L']) / params.motors.hip.Kt_output,
+                        abs(tk['tau_hip_R']) / params.motors.hip.Kt_output,
+                        tk['i_total'],
+                        tk['tau_hip_L'],
+                        tk['tau_hip_R'],
+                    ))
+                    last_push = wall_now
+
+                elapsed = time.perf_counter() - frame_start
+                sleep_t = 1.0 / RENDER_HZ - elapsed
+                if sleep_t > 0:
+                    time.sleep(sleep_t)
+
+        # Viewer closed — was it a world switch or user quit?
+        if not world_switch:
+            user_quit = True
+
+    # ── Clean up ──────────────────────────────────────────────────────────────
+    if _joy is not None:
+        pygame.quit()
+    data_q.put(None)
+    plot_proc.join(timeout=2)
+    if plot_proc.is_alive():
+        plot_proc.terminate()
+    print("  Unified visualizer closed.")
+    os._exit(0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CLI ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2010,10 +2487,10 @@ Examples:
     if mode == "replay":
         if not args.scenario:
             ap.error("--scenario is required for replay mode")
-        replay(args.scenario, with_viewer=args.viewer, rng_seed=args.seed)
+        run_unified(args.scenario, rng_seed=args.seed)
 
     elif mode == "sandbox":
-        sandbox(rng_seed=args.seed)
+        run_unified("sandbox", rng_seed=args.seed)
 
     else:  # chart
         if not args.csv:
