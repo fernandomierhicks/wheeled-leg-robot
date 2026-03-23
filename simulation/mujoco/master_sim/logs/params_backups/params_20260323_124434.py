@@ -146,7 +146,7 @@ class BatteryParams:
 @dataclass(frozen=True)
 class LQRGains:
     """LQR cost weights — state: [pitch-θ_ref, pitch_rate, wheel_vel_avg-v_ref].
-    From 'params good gains 3_22_26.py': 500 Hz, 0 ms delay, no forecaster.
+    Ported from 'params good gains 3_22_26.py' (tuned at 500 Hz, 0 ms delay, no forecaster).
     """
     Q_pitch: float = 5.40254
     Q_pitch_rate: float = 0.033408
@@ -226,7 +226,7 @@ class LatencyParams:
     round(delay_s / dt_ctrl) control steps.  Total round-trip delay seen by
     the controller = sensor_delay_s + actuator_delay_s.
     """
-    sensor_delay_s: float = 0.002        # [s] 0 = disabled
+    sensor_delay_s: float = 0.002      # [s] 2 ms — 2 control steps @ 1 kHz
     actuator_delay_s: float = 0.0     # [s] 0 = disabled
 
 
@@ -262,7 +262,7 @@ class MetricThresholds:
 class SimTiming:
     """MuJoCo timestep and control rate."""
     sim_timestep: float = 0.0005       # [s] 2 kHz physics
-    ctrl_hz: int = 1000                 # [Hz] balance controller rate
+    ctrl_hz: int = 1000                # [Hz] balance controller rate
 
     @property
     def ctrl_steps(self) -> int:

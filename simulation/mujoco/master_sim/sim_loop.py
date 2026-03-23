@@ -14,6 +14,7 @@ Usage:
     # Sandbox with command queue
     metrics = run(params, scenario_config, callbacks=[live_chart], command_queue=q)
 """
+import collections
 import math
 import numpy as np
 import mujoco
@@ -24,7 +25,10 @@ from master_sim.physics import build_xml, build_assets, solve_ik, get_equilibriu
 from master_sim.models.battery import BatteryModel
 from master_sim.models.motor import motor_taper, motor_currents
 from master_sim.models.latency import LatencyBuffer
-from master_sim.controllers.lqr import compute_gain_table, lqr_torque
+from master_sim.controllers.lqr import (
+    compute_gain_table, lqr_torque, compute_AB_table, interpolate_AB,
+    discretize_AB,
+)
 from master_sim.controllers.velocity_pi import VelocityPI
 from master_sim.controllers.yaw_pi import YawPI
 from master_sim.controllers.hip import (
@@ -125,6 +129,52 @@ def get_roll_and_rate(data, box_bid: int, d_roll: int) -> tuple:
         2.0 * (q[0]*q[1] + q[2]*q[3]),
         1.0 - 2.0 * (q[1]**2 + q[2]**2))
     return roll, float(data.qvel[d_roll])
+
+
+# ── State predictor ─────────────────────────────────────────────────────────
+
+def predict_state(pitch: float, pitch_rate: float,
+                  sensor_delay_s: float, l_eff: float) -> tuple:
+    """One Euler step of the linearised inverted pendulum forward by sensor_delay_s.
+
+    Dynamics: θ̈ = (g/l) * θ  (unstable, α > 0).
+    Used to partially cancel phase lag introduced by the sensor delay buffer.
+
+    Parameters
+    ----------
+    pitch, pitch_rate : delayed sensor readings (rad, rad/s)
+    sensor_delay_s    : how far ahead to integrate [s]
+    l_eff             : effective pendulum length [m]
+
+    Returns
+    -------
+    (pitch_pred, pitch_rate_pred) : forward-predicted state
+    """
+    pitch_pred      = pitch      + pitch_rate * sensor_delay_s
+    pitch_rate_pred = pitch_rate + (9.81 / l_eff * pitch) * sensor_delay_s
+    return pitch_pred, pitch_rate_pred
+
+
+def smith_predict(pitch: float, pitch_rate: float,
+                  tau_hist: collections.deque,
+                  dt_ctrl: float, l_eff: float, B1: float) -> tuple:
+    """Smith predictor: step forward through stored torque history one tick at a time.
+
+    For each stored torque u_i (oldest first), one Euler step:
+        θ     ← θ  + θ̇ * dt
+        θ̇    ← θ̇ + (g/l * θ  +  B1 * u_i) * dt
+
+    B1 is B[1,0] of the linearised model — maps wheel torque → pitch angular accel.
+    Including the torque history prevents the phase over-correction that occurs when
+    predict_state is used alone (which ignores control effort during the delay window).
+    """
+    g_over_l = 9.81 / l_eff
+    p, pdot = pitch, pitch_rate
+    for tau in tau_hist:          # deque iterates oldest → newest
+        p_new    = p    + pdot * dt_ctrl
+        pdot_new = pdot + (g_over_l * p + B1 * tau) * dt_ctrl
+        p, pdot = p_new, pdot_new
+    return p, pdot
 
 
 # ── Disturbance application — single source of truth ────────────────────────
@@ -241,10 +291,30 @@ class SimController:
         self.sens_buf = LatencyBuffer(n_sens, (pitch0, 0.0, 0.0))
         self.ctrl_buf = LatencyBuffer(n_act, (0.0, 0.0))
 
+        ik0 = solve_ik(robot.Q_NOM, robot.as_dict())
+        self._l_eff_nom = abs(ik0['W_z']) if ik0 else 0.2
+
+        # Matrix predictor: discretise A, B at nominal leg position and
+        # pre-compute the n_sens-step prediction coefficients.
+        #   x̂(t) = A_d^n * x(t-n) + sum_{k=0}^{n-1} A_d^{n-1-k} * B_d * u(t-n+k)
+        # where tau_hist[k] = u(t-n+k) (oldest → newest).
+        AB_table = compute_AB_table(robot)
+        A_nom, B_nom = interpolate_AB(AB_table, robot.Q_NOM, robot)
+        self._B1_nom = float(B_nom[1, 0])          # kept for legacy reference
+        if n_sens > 0:
+            A_d, B_d = discretize_AB(A_nom, B_nom, self.dt_ctrl)
+            self._Ad_n   = np.linalg.matrix_power(A_d, n_sens)
+            self._BdPow  = [np.linalg.matrix_power(A_d, n_sens - 1 - k) @ B_d
+                            for k in range(n_sens)]
+        else:
+            self._Ad_n  = None
+            self._BdPow = None
+        # Ring buffer of last n_sens symmetric torque commands (oldest → newest)
+        self._tau_hist = collections.deque([0.0] * n_sens, maxlen=max(n_sens, 1))
+
         self.battery = BatteryModel(params.battery)
         self.battery.reset()
         self.v_batt = params.battery.V_nom
-        self._delayed_sens = None   # populated by sample_sensors() at physics rate
 
     def reset(self, model, data):
         """Reset all controller state (e.g. after sandbox auto-restart)."""
@@ -266,25 +336,6 @@ class SimController:
         new_gains = replace(self.params.gains, lqr=new_lqr)
         self.params = replace(self.params, gains=new_gains)
         self.K_table = compute_gain_table(self.params.robot, new_lqr)
-
-    # ── Physics-rate sensor sampling ──────────────────────────────────────────
-
-    def sample_sensors(self, model, data):
-        """Push one sensor reading into the delay buffer.
-
-        Must be called every **physics step** (not just every control tick)
-        so that the ring buffer operates at sim_timestep resolution (0.5 ms),
-        giving much finer delay granularity than the 2 ms control period.
-        """
-        params = self.params
-        rng = self.rng
-        pitch_true, pitch_rate_true = get_pitch_and_rate(
-            data, self.box_bid, self.d_pitch)
-        pitch      = pitch_true      + rng.normal(0, params.noise.pitch_std_rad)
-        pitch_rate = pitch_rate_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
-        wheel_vel  = (data.qvel[self.d_whl_L] + data.qvel[self.d_whl_R]) / 2.0
-        self._delayed_sens = self.sens_buf.push(
-            (pitch, pitch_rate, wheel_vel))
 
     # ── THE control tick — called by run() and sandbox() ─────────────────────
 
@@ -321,15 +372,31 @@ class SimController:
         hip_q_avg  = (data.qpos[self.s_hip_L] + data.qpos[self.s_hip_R]) / 2.0
         pitch_ff   = get_equilibrium_pitch(robot, hip_q_avg)
 
-        # ── Velocity PI (uses NON-delayed wheel_vel — canonical order) ───────
-        v_measured_ms = wheel_vel * robot.wheel_r
-        v_ref_rads    = v_target_ms / robot.wheel_r
+        # ── Velocity reference + direction-reversal guard ────────────────────
+        v_ref_rads = v_target_ms / robot.wheel_r
 
-        # Direction reversal → reset PI integrator
         if (use_velocity_pi and self.prev_v_target != 0.0 and
                 math.copysign(1, v_target_ms) != math.copysign(1, self.prev_v_target)):
             self.vel_pi.reset()
         self.prev_v_target = v_target_ms
+
+        # ── Sensor delay buffer ──────────────────────────────────────────────
+        _pitch_d, _pitch_rate_d, _wheel_vel_d = self.sens_buf.push(
+            (pitch, pitch_rate, wheel_vel))
+
+        # ── Matrix predictor — ZOH-discretised 3-state prediction ──────────────
+        # Propagates the delayed state x(t-n) forward n steps using the exact
+        # discrete A_d, B_d and the stored torque history, giving x̂(t).
+        # Replaces the scalar Smith predictor which ignored wheel_vel coupling.
+        if self.n_sens > 0:
+            x_del = np.array([_pitch_d, _pitch_rate_d, _wheel_vel_d])
+            x_pred = self._Ad_n @ x_del
+            for k, tau in enumerate(self._tau_hist):
+                x_pred += self._BdPow[k].ravel() * tau
+            _pitch_d, _pitch_rate_d, _wheel_vel_d = x_pred
+
+        # ── Velocity PI (uses delayed wheel_vel — matches real CAN telemetry) ─
+        v_measured_ms = _wheel_vel_d * robot.wheel_r
 
         if use_velocity_pi:
             theta_ref = self.vel_pi.update(v_target_ms, v_measured_ms)
@@ -343,16 +410,6 @@ class SimController:
             theta_ref  = theta_ref_cmd
             # v_ref_rads passes through to LQR even without VelocityPI
         self.prev_theta_ref = theta_ref
-
-        # ── Sensor delay buffer ──────────────────────────────────────────────
-        # If sample_sensors() was called at physics rate, use its result;
-        # otherwise push here at control rate (headless run() path).
-        if self._delayed_sens is not None:
-            _pitch_d, _pitch_rate_d, _wheel_vel_d = self._delayed_sens
-            self._delayed_sens = None
-        else:
-            _pitch_d, _pitch_rate_d, _wheel_vel_d = self.sens_buf.push(
-                (pitch, pitch_rate, wheel_vel))
 
         # ── LQR controller (symmetric torque) ────────────────────────────────
         if use_lqr:
@@ -370,6 +427,9 @@ class SimController:
         else:
             self.yaw_pi_ctrl.reset()
             tau_yaw = 0.0
+
+        # Store torque in Smith predictor history (symmetric, before yaw split)
+        self._tau_hist.append(tau_sym)
 
         # ── Actuator delay buffer + motor taper → wheel ctrl ─────────────────
         _tau_L_d, _tau_R_d = self.ctrl_buf.push(

@@ -8,7 +8,7 @@ Gain table is precomputed at 3 leg positions and interpolated at runtime.
 """
 import math
 import numpy as np
-from scipy.linalg import solve_continuous_are
+from scipy.linalg import solve_continuous_are, expm
 
 from master_sim.params import RobotGeometry, LQRGains, WheelMotorParams
 from master_sim.physics import solve_ik, get_equilibrium_pitch
@@ -180,6 +180,22 @@ def interpolate_AB(AB_table: dict, q_hip: float,
     A_ret, B_ret = AB_table['retracted']
     A_ext, B_ext = AB_table['extended']
     return (1 - alpha) * A_ret + alpha * A_ext, (1 - alpha) * B_ret + alpha * B_ext
+
+
+def discretize_AB(A: np.ndarray, B: np.ndarray, dt: float) -> tuple:
+    """Discretize continuous (A, B) via zero-order hold (matrix exponential).
+
+    Uses the standard block-matrix method:
+        expm([[A, B], [0, 0]] * dt) = [[A_d, B_d], [0, I]]
+
+    Returns (A_d, B_d).
+    """
+    n, m = A.shape[0], B.shape[1]
+    block = np.zeros((n + m, n + m))
+    block[:n, :n] = A
+    block[:n, n:n + m] = B
+    Md = expm(block * dt)
+    return Md[:n, :n], Md[:n, n:n + m]
 
 
 def lqr_torque(pitch: float, pitch_rate: float, wheel_vel: float,

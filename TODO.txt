@@ -3,9 +3,12 @@
 
 
 
-Overall status of sim:
--Trying to tune LQR with sensor delay non-zero. Likely bug in sim or delay or similar.
---Set wheel torque to 2N to see if thast helps
+sim works with controller running at 1khz with sensor delay of 0, 1 milliseconds. Same gains for both delays.
+As soon as I put 2ms  indelayit starts showing the offn ominal behaviour. 
+
+Why? I suspect code bug somehwre. 
+
+
 
 
 -Arduino
@@ -25,3 +28,9 @@ add filter on cmd_hip joint, setpoints are too noisy
 -Spring for higher jumps. 
 
 
+
+-AI usage Monday
+
+fernandomierhicks	30%	Sunday 5PM
+fernandomierhicks2	42%	Friday 4PM
+fernandomierhicks1	100%	Wednesday 12pm
