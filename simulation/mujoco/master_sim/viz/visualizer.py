@@ -534,11 +534,14 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
 
     rng = np.random.default_rng(rng_seed)
     dt_ctrl = model.opt.timestep * ctrl_steps
-    n_sens = round(params.latency.sensor_delay_s / dt_ctrl) if params.latency.sensor_delay_s > 0 else 0
+    dt_sim = model.opt.timestep
+    # Sensor delay quantized at physics rate for smooth delay modelling
+    n_sens = round(params.latency.sensor_delay_s / dt_sim) if params.latency.sensor_delay_s > 0 else 0
     n_act  = round(params.latency.actuator_delay_s / dt_ctrl) if params.latency.actuator_delay_s > 0 else 0
     pitch0 = get_equilibrium_pitch(robot, robot.Q_NOM)
     sens_buf = LatencyBuffer(n_sens, (pitch0, 0.0, 0.0))
     ctrl_buf = LatencyBuffer(n_act, (0.0, 0.0))
+    _delayed_sens = [pitch0, 0.0, 0.0]  # mutable — updated every physics step
     battery = BatteryModel(params.battery)
     battery.reset()
     v_batt = params.battery.V_nom
@@ -594,13 +597,19 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
             for _ in range(steps_per_frame):
                 if data.time >= cfg.duration:
                     break
+
+                # ── Physics-rate sensor sampling (every step) ─────────
+                from master_sim.sim_loop import get_pitch_and_rate, get_roll_and_rate
+                _p_true, _pr_true = get_pitch_and_rate(data, box_bid, d_pitch)
+                _p_noisy  = _p_true  + rng.normal(0, params.noise.pitch_std_rad)
+                _pr_noisy = _pr_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
+                _wv = (data.qvel[d_whl_L] + data.qvel[d_whl_R]) / 2.0
+                _delayed_sens[:] = sens_buf.push((_p_noisy, _pr_noisy, _wv))
+
                 if step[0] % ctrl_steps == 0:
-                    # Sensors
-                    from master_sim.sim_loop import get_pitch_and_rate, get_roll_and_rate
-                    pitch_true, pitch_rate_true = get_pitch_and_rate(data, box_bid, d_pitch)
-                    pitch      = pitch_true      + rng.normal(0, params.noise.pitch_std_rad)
-                    pitch_rate = pitch_rate_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
-                    wheel_vel = (data.qvel[d_whl_L] + data.qvel[d_whl_R]) / 2.0
+                    # True sensors for telemetry / fall detection
+                    pitch_true, pitch_rate_true = _p_true, _pr_true
+                    wheel_vel = _wv
                     hip_q_avg = (data.qpos[s_hip_L] + data.qpos[s_hip_R]) / 2.0
 
                     # Velocity PI
@@ -618,9 +627,8 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
                         theta_ref = theta_ref_fn(data.time) if theta_ref_fn else 0.0
                         # v_ref_rads passes through to LQR even without VelocityPI
 
-                    # Sensor delay
-                    _pitch_d, _pitch_rate_d, _wheel_vel_d = sens_buf.push(
-                        (pitch, pitch_rate, wheel_vel))
+                    # Delayed sensor readings (populated at physics rate above)
+                    _pitch_d, _pitch_rate_d, _wheel_vel_d = _delayed_sens
 
                     # LQR
                     tau_sym = lqr_torque(
@@ -1053,6 +1061,10 @@ def replay(scenario_name: str, with_viewer: bool = False,
             for _ in range(steps_per_frame):
                 if sim_fell:
                     break
+
+                # Physics-rate sensor sampling (every step)
+                ctrl.sample_sensors(model, data)
+
                 if step % ctrl_steps == 0:
                     t_now = float(data.time)
                     past_duration = t_now >= cfg.duration
@@ -2053,6 +2065,9 @@ def sandbox(rng_seed: int = 0):
                     _hip_pct[0] = (1.0 - raw_h) / 2.0 * 100.0
 
             for _ in range(steps_per_frame):
+                # Physics-rate sensor sampling (every step)
+                ctrl.sample_sensors(model, data)
+
                 if step % ctrl_steps == 0:
                     # ── Single source of truth: SimController.tick() ──
                     tick = ctrl.tick(
@@ -2498,6 +2513,9 @@ def run_unified(initial_scenario: str = "sandbox",
                     if cfg is not None and data.time < cfg.duration:
                         apply_disturbance(data, data.time, cfg,
                                           ctrl.box_bid, ctrl.wheel_bid_L, ctrl.wheel_bid_R)
+
+                    # Physics-rate sensor sampling (every step, not just control ticks)
+                    ctrl.sample_sensors(model, data)
 
                     mujoco.mj_step(model, data)
                     step += 1

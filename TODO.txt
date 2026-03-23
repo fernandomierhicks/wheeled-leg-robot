@@ -1,5 +1,20 @@
 
 ---Fernandos note dont change below
+
+
+
+Overall status of sim:
+-Trying to tune LQR with sensor delay non-zero. Likely bug in sim or delay or similar.
+--Set wheel torque to 2N to see if thast helps
+
+
+-Arduino
+--Slugish dashboard telemetry, not sure why. 
+
+
+
+
+-Set wheel motor back to 6.8nM torque limit. 
 -Fancier optimizer 
 -Update sim with IMU characterization and delay
 add filter on cmd_hip joint, setpoints are too noisy

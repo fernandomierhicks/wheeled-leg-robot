@@ -151,6 +151,37 @@ def interpolate_gains(K_table: dict, q_hip: float,
     return (1 - alpha) * K_ret + alpha * K_ext
 
 
+def compute_AB_table(robot: RobotGeometry) -> dict:
+    """Precompute continuous A, B matrices at 3 leg positions for state prediction.
+
+    Returns dict with 'retracted', 'nominal', 'extended' keys mapping to (A, B) tuples.
+    """
+    m_b = (robot.m_box
+           + 2 * (robot.m_femur + robot.m_tibia + robot.m_coupler + robot.m_bearing)
+           + 2 * robot.motor_mass)
+    m_w = 2 * robot.m_wheel
+
+    def _ab_at(q_hip):
+        ik = solve_ik(q_hip, robot.as_dict())
+        l_eff = abs(ik['W_z'])
+        return _build_continuous_matrices(l_eff, m_b, m_w, robot.wheel_r)
+
+    return {
+        'retracted': _ab_at(robot.Q_RET),
+        'nominal':   _ab_at(robot.Q_NOM),
+        'extended':  _ab_at(robot.Q_EXT),
+    }
+
+
+def interpolate_AB(AB_table: dict, q_hip: float,
+                   robot: RobotGeometry) -> tuple:
+    """Interpolate A, B matrices across leg stroke (same scheme as gain interpolation)."""
+    alpha = np.clip((q_hip - robot.Q_RET) / (robot.Q_EXT - robot.Q_RET), 0.0, 1.0)
+    A_ret, B_ret = AB_table['retracted']
+    A_ext, B_ext = AB_table['extended']
+    return (1 - alpha) * A_ret + alpha * A_ext, (1 - alpha) * B_ret + alpha * B_ext
+
+
 def lqr_torque(pitch: float, pitch_rate: float, wheel_vel: float,
                hip_q_avg: float, K_table: dict, robot: RobotGeometry,
                wheel: WheelMotorParams,

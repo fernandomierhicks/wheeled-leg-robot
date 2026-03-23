@@ -67,4 +67,7 @@ struct RobotState {
     float tau_wheel_R;          // [N·m] right wheel torque command
     float tau_hip_L;            // [N·m] left hip torque command
     float tau_hip_R;            // [N·m] right hip torque command
+
+    // Debug
+    float debug_sine;           // noisy sine for telemetry rate check
 };

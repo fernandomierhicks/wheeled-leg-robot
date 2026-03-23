@@ -12,6 +12,13 @@
 // ── Module state ────────────────────────────────────────────────────────────
 static BNO08x sensor;
 
+// Direct register read for INT pin (D2 = P104 on RA4M1).
+// Avoids ~3 µs digitalRead() overhead — matches characterization code.
+#define PORT1_PIDR  (*(volatile const uint16_t *)0x40040026)
+static inline bool imu_int_asserted() {
+    return (PORT1_PIDR & (1U << 4)) == 0;  // INT is active-low
+}
+
 // ── Quaternion → pitch/roll ─────────────────────────────────────────────────
 // BNO086 Game Rotation Vector outputs (qi, qj, qk, qr) in NED-ish frame.
 // We convert to our body-frame pitch (rotation about Y, positive = forward lean)
@@ -98,28 +105,31 @@ void imu_poll(RobotState *state) {
         enable_reports();
     }
 
-    // Non-blocking: getSensorEvent returns true when new data is available
-    if (!sensor.getSensorEvent()) {
-        return;  // no new data this tick — keep previous values
-    }
+    // Drain all queued events (GRV + Gyro each generate their own events).
+    // Without draining, the BNO086 buffer backs up and INT stays asserted,
+    // causing getSensorEvent() to read stale data on every tick.
+    // Cap iterations to avoid stalling the loop if sensor misbehaves.
+    for (int i = 0; i < 10; i++) {
+        if (!imu_int_asserted()) break;       // no more data waiting
+        if (!sensor.getSensorEvent()) break;   // SPI read failed
 
-    uint8_t report = sensor.getSensorEventID();
+        uint8_t report = sensor.getSensorEventID();
 
-    if (report == SENSOR_REPORTID_GAME_ROTATION_VECTOR) {
-        float qi = sensor.getGameQuatI();
-        float qj = sensor.getGameQuatJ();
-        float qk = sensor.getGameQuatK();
-        float qr = sensor.getGameQuatReal();
+        if (report == SENSOR_REPORTID_GAME_ROTATION_VECTOR) {
+            float qi = sensor.getGameQuatI();
+            float qj = sensor.getGameQuatJ();
+            float qk = sensor.getGameQuatK();
+            float qr = sensor.getGameQuatReal();
 
-        quat_to_pitch_roll(qi, qj, qk, qr,
-                           &state->pitch, &state->roll);
+            quat_to_pitch_roll(qi, qj, qk, qr,
+                               &state->pitch, &state->roll);
 
-        state->imu_ok = true;
-        state->imu_last_ms = millis();
-    }
-    else if (report == SENSOR_REPORTID_GYROSCOPE_CALIBRATED) {
-        // BNO086 gyro is in rad/s, axes: x=roll_rate, y=pitch_rate, z=yaw
-        state->pitch_rate = sensor.getGyroY();
-        state->roll_rate  = sensor.getGyroX();
+            state->imu_ok = true;
+            state->imu_last_ms = millis();
+        }
+        else if (report == SENSOR_REPORTID_GYROSCOPE_CALIBRATED) {
+            state->pitch_rate = sensor.getGyroY();
+            state->roll_rate  = sensor.getGyroX();
+        }
     }
 }

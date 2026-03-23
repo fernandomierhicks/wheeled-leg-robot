@@ -4,7 +4,7 @@
 // We divide it into 4 horizontal bars (2 rows each):
 //   Rows 0-1: WiFi      solid=connected, blink=connecting, off=disconnected
 //   Rows 2-3: Host      solid=host connected
-//   Rows 4-5: Heartbeat toggles at 1 Hz (main loop alive indicator)
+//   Rows 4-5: Heartbeat toggles at ~3 Hz (main loop alive indicator)
 //   Rows 6-7: Fault     solid=fault active
 //
 // Update is called from the soft-RT section of the main loop at a
@@ -54,8 +54,9 @@ void led_matrix_update(const RobotState *state) {
     // Host bar (rows 2-3): solid if host connected (placeholder — future telemetry)
     set_bar(2, state->host_connected);
 
-    // Heartbeat bar (rows 4-5): toggles at 3 Hz
-    bool hb = (state->tick / (LOOP_RATE_HZ / 6)) & 1;
+    // Heartbeat bar (rows 4-5): toggles every call → 3 Hz blink at 6 Hz update rate
+    static bool hb = false;
+    hb = !hb;
     set_bar(4, hb);
 
     // Fault bar (rows 6-7): solid if in FAULT mode

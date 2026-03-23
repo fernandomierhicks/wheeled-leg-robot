@@ -1,15 +1,3 @@
-#### BEFORE IMU-as tested perfromance.
-#With sensor delay of 0 ms vs the "As-measured" 3.5ms...
-# no forecast prediction
-#controller running at 500Hz
-#sim running at 2khz
-
-
-
-
-
-
-
 """params.py — Frozen dataclass hierarchy for all simulation parameters.
 
 Every parameter that was a module-level global in sim_config.py is now a field
@@ -231,11 +219,17 @@ class GainSet:
 
 @dataclass(frozen=True)
 class LatencyParams:
-    """Ring-buffer delays for sensor and actuator pipelines."""
-    sensor_delay_s: float = 0.001      # [s] 0 = disabled; set ~0.005 for realistic BNO086+I2C
+    """Ring-buffer delays for sensor and actuator pipelines.
+
+    Sensor delay is sampled at the **physics rate** (sim_timestep) for fine
+    granularity (0.5 ms steps at 2 kHz).  Actuator delay is sampled at the
+    control rate (dt_ctrl).
+    """
+    sensor_delay_s: float = 0.001     # [s] measured: 2.5ms fusion + 1.0ms ISR + 0.05ms SPI
     actuator_delay_s: float = 0.001    # [s] 0 = disabled; set ~0.0025 for realistic ODESC FOC
 
     def sensor_delay_steps(self, sim_timestep: float) -> int:
+        """Steps at physics rate (pass sim_timestep, NOT dt_ctrl)."""
         return round(self.sensor_delay_s / sim_timestep)
 
     def actuator_delay_steps(self, sim_timestep: float) -> int:

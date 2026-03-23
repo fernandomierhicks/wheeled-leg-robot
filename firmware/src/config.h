@@ -8,9 +8,13 @@
 #endif
 #define LOOP_PERIOD_US      (1000000UL / LOOP_RATE_HZ)  // 2000 us
 
-#define TELEMETRY_DIV       10        // send every 10 ticks → 50 Hz
+#define TELEMETRY_DIV       1         // send every tick (actual rate = loop rate)
 #define COMMAND_DIV         50        // receive every 50 ticks → 10 Hz
-#define LED_MATRIX_DIV      167       // update every 167 ticks → ~3 Hz
+#define LED_MATRIX_DIV      83        // update every 83 ticks → ~6 Hz
+
+// ── Network (telemetry + commands) ───────────────────────────────────────────
+#define TELEMETRY_PORT      4210      // UDP port: Arduino → Dashboard
+#define COMMAND_PORT        4211      // UDP port: Dashboard → Arduino
 
 // ── WiFi credentials ────────────────────────────────────────────────────────
 #define WIFI_SSID           "Minnexico"

@@ -244,6 +244,7 @@ class SimController:
         self.battery = BatteryModel(params.battery)
         self.battery.reset()
         self.v_batt = params.battery.V_nom
+        self._delayed_sens = None   # populated by sample_sensors() at physics rate
 
     def reset(self, model, data):
         """Reset all controller state (e.g. after sandbox auto-restart)."""
@@ -265,6 +266,25 @@ class SimController:
         new_gains = replace(self.params.gains, lqr=new_lqr)
         self.params = replace(self.params, gains=new_gains)
         self.K_table = compute_gain_table(self.params.robot, new_lqr)
+
+    # ── Physics-rate sensor sampling ──────────────────────────────────────────
+
+    def sample_sensors(self, model, data):
+        """Push one sensor reading into the delay buffer.
+
+        Must be called every **physics step** (not just every control tick)
+        so that the ring buffer operates at sim_timestep resolution (0.5 ms),
+        giving much finer delay granularity than the 2 ms control period.
+        """
+        params = self.params
+        rng = self.rng
+        pitch_true, pitch_rate_true = get_pitch_and_rate(
+            data, self.box_bid, self.d_pitch)
+        pitch      = pitch_true      + rng.normal(0, params.noise.pitch_std_rad)
+        pitch_rate = pitch_rate_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
+        wheel_vel  = (data.qvel[self.d_whl_L] + data.qvel[self.d_whl_R]) / 2.0
+        self._delayed_sens = self.sens_buf.push(
+            (pitch, pitch_rate, wheel_vel))
 
     # ── THE control tick — called by run() and sandbox() ─────────────────────
 
@@ -325,8 +345,14 @@ class SimController:
         self.prev_theta_ref = theta_ref
 
         # ── Sensor delay buffer ──────────────────────────────────────────────
-        _pitch_d, _pitch_rate_d, _wheel_vel_d = self.sens_buf.push(
-            (pitch, pitch_rate, wheel_vel))
+        # If sample_sensors() was called at physics rate, use its result;
+        # otherwise push here at control rate (headless run() path).
+        if self._delayed_sens is not None:
+            _pitch_d, _pitch_rate_d, _wheel_vel_d = self._delayed_sens
+            self._delayed_sens = None
+        else:
+            _pitch_d, _pitch_rate_d, _wheel_vel_d = self.sens_buf.push(
+                (pitch, pitch_rate, wheel_vel))
 
         # ── LQR controller (symmetric torque) ────────────────────────────────
         if use_lqr:

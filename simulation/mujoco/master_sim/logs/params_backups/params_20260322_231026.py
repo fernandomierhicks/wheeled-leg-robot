@@ -1,15 +1,3 @@
-#### BEFORE IMU-as tested perfromance.
-#With sensor delay of 0 ms vs the "As-measured" 3.5ms...
-# no forecast prediction
-#controller running at 500Hz
-#sim running at 2khz
-
-
-
-
-
-
-
 """params.py — Frozen dataclass hierarchy for all simulation parameters.
 
 Every parameter that was a module-level global in sim_config.py is now a field
@@ -158,11 +146,16 @@ class BatteryParams:
 @dataclass(frozen=True)
 class LQRGains:
     """LQR cost weights — state: [pitch-θ_ref, pitch_rate, wheel_vel_avg-v_ref]."""
-    Q_pitch: float = 5.40254
-    Q_pitch_rate: float = 0.033408
-    Q_vel: float = 0.00165213
-    R: float = 39.647
+    Q_pitch: float = 0.539028
+    Q_pitch_rate: float = 5.7634
+    Q_vel: float = 1.0338e-07
+    R: float = 7.33846
 
+    #good gains from before delay test
+    #Q_pitch: float = 5.40254
+    #Q_pitch_rate: float = 0.033408
+    #Q_vel: float = 0.00165213
+    #R: float = 39.647
 
 @dataclass(frozen=True)
 class VelocityPIGains:
@@ -231,11 +224,18 @@ class GainSet:
 
 @dataclass(frozen=True)
 class LatencyParams:
-    """Ring-buffer delays for sensor and actuator pipelines."""
-    sensor_delay_s: float = 0.001      # [s] 0 = disabled; set ~0.005 for realistic BNO086+I2C
+    """Ring-buffer delays for sensor and actuator pipelines.
+
+    Sensor delay is sampled at the **physics rate** (sim_timestep) for fine
+    granularity (0.5 ms steps at 2 kHz).  Actuator delay is sampled at the
+    control rate (dt_ctrl).
+    """
+    sensor_delay_s: float = 0.001     # [s] measured: 2.5ms fusion + 1.0ms ISR + 0.05ms SPI
     actuator_delay_s: float = 0.001    # [s] 0 = disabled; set ~0.0025 for realistic ODESC FOC
+    predict_state: bool = False        # forward-predict state to compensate sensor delay
 
     def sensor_delay_steps(self, sim_timestep: float) -> int:
+        """Steps at physics rate (pass sim_timestep, NOT dt_ctrl)."""
         return round(self.sensor_delay_s / sim_timestep)
 
     def actuator_delay_steps(self, sim_timestep: float) -> int:
@@ -274,7 +274,7 @@ class MetricThresholds:
 class SimTiming:
     """MuJoCo timestep and control rate."""
     sim_timestep: float = 0.0005       # [s] 2 kHz physics
-    ctrl_hz: int = 500                 # [Hz] balance controller rate
+    ctrl_hz: int = 1000                # [Hz] balance controller rate
 
     @property
     def ctrl_steps(self) -> int:
