@@ -1,12 +1,21 @@
 
 ---Fernandos note dont change below
 
+Fix visualizer. When it comes up it should disable enable checkboxes as per scenario. 
+S1 comes up with all controllers except LQR unchedked. Suspesion = PD
+Show fitness, every factor,  after runnign scenario. 
+
+Do estimator delay test on pitch and pitch rate
+Plot mujocu actual, delayed data and estimator
+Estiamtor should kidn of match mujoco actual. 
+
+The same for torque applicaiton. 
 
 
-sim works with controller running at 1khz with sensor delay of 0, 1 milliseconds. Same gains for both delays.
-As soon as I put 2ms  indelayit starts showing the offn ominal behaviour. 
+USe raw gyro (faster) for pitch rate and use complimentary filter?
+angle = α * (angle + gyro * dt) + (1 - α) * accel_angle
 
-Why? I suspect code bug somehwre. 
+Then use accel or game vector for tilt?
 
 
 
@@ -17,13 +26,12 @@ Why? I suspect code bug somehwre.
 
 
 
--Set wheel motor back to 6.8nM torque limit. 
+
 -Fancier optimizer 
 -Update sim with IMU characterization and delay
-add filter on cmd_hip joint, setpoints are too noisy
--Show all components of fitness function after scenario vis.
---DEtailed anayis of why LQR + VI is not wokring. Enalytic analysi of max vel acceleration due to gravity
--tune VI gains
+
+
+
 -Jump controller
 -Spring for higher jumps. 
 
@@ -34,3 +42,6 @@ add filter on cmd_hip joint, setpoints are too noisy
 fernandomierhicks	30%	Sunday 5PM
 fernandomierhicks2	42%	Friday 4PM
 fernandomierhicks1	100%	Wednesday 12pm
+
+
+One long OPUS task, 7minutes consumes 25% 5 hour limit and 3% weekly limit. 
