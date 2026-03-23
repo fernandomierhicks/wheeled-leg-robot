@@ -46,6 +46,8 @@ class ESConfig:
     adapt_window: int = 10          # generations for success rate estimate
     patience: int = 200             # gens without improvement → early stop
     tol: float = 1e-4               # relative improvement threshold
+    restart_patience: int | None = None  # stagnant gens → random restart (None = patience // 2)
+    max_restarts: int = 10          # cap on total restarts per run
     n_workers: int | None = None    # None → min(lambda_, cpu_count)
     rng_seed: int | None = None
 
@@ -61,8 +63,10 @@ class ESProgress:
     parent_fitness: float = float("inf")
     best_gen: int = 0
     best_params: Dict[str, float] = field(default_factory=dict)
+    last_tried: Dict[str, float] = field(default_factory=dict)
     success_rate: float = 0.0
     gens_without_improvement: int = 0
+    n_restarts: int = 0
     elapsed_s: float = 0.0
     remaining_s: float = 0.0
     pct: float = 0.0
@@ -126,6 +130,10 @@ class ESOptimizer:
         if self.cfg.n_workers is None:
             self.cfg.n_workers = min(self.cfg.lambda_, multiprocessing.cpu_count())
 
+        # Resolve restart patience
+        if self.cfg.restart_patience is None:
+            self.cfg.restart_patience = self.cfg.patience // 2
+
         # RNG
         self._rng = np.random.default_rng(self.cfg.rng_seed)
 
@@ -184,6 +192,7 @@ class ESOptimizer:
         n_evals = 0 if seed_fitness is not None else 1
         gens_without_improvement = 0
         prev_best_for_patience = best_fit
+        n_restarts = 0
 
         t_start = time.perf_counter()
         deadline = (t_start + hours * 3600.0) if hours else None
@@ -264,6 +273,23 @@ class ESOptimizer:
                         else:
                             sigmas[k] = max(sigmas[k] / 1.22, self.cfg.sigma_min)
 
+                # Random restart on stagnation (preserves global best)
+                if (gens_without_improvement >= self.cfg.restart_patience
+                        and n_restarts < self.cfg.max_restarts):
+                    n_restarts += 1
+                    parent = self.space.random_init(self._rng)
+                    result = self.eval_fn(parent)
+                    parent_fit = float(result.get("fitness", float("inf")))
+                    n_evals += 1
+                    self._log_eval(parent, result, f"restart{n_restarts}", gen)
+                    sigmas = self.space.init_sigmas(self.cfg.sigma_init)
+                    success_window.clear()
+                    gens_without_improvement = 0
+                    prev_best_for_patience = best_fit
+                    print(f"\n  *** RESTART {n_restarts}/{self.cfg.max_restarts} "
+                          f"at gen {gen} — new parent fit={parent_fit:.5f}, "
+                          f"global best={best_fit:.5f} ***")
+
                 gen += 1
 
                 # ── Progress reporting ───────────────────────────────────────
@@ -285,8 +311,10 @@ class ESOptimizer:
                     parent_fitness=parent_fit,
                     best_gen=best_gen,
                     best_params=dict(parent),
+                    last_tried=dict(gen_best_params) if gen_best_params else dict(children[0]),
                     success_rate=sr,
                     gens_without_improvement=gens_without_improvement,
+                    n_restarts=n_restarts,
                     elapsed_s=elapsed_s,
                     remaining_s=remain_s,
                     pct=pct,
@@ -303,7 +331,7 @@ class ESOptimizer:
         elapsed_min = elapsed_s / 60.0
 
         print(f"\n{'=' * 72}")
-        print(f"Optimization complete: {gen} gens, {n_evals} evals, {elapsed_min:.1f} min")
+        print(f"Optimization complete: {gen} gens, {n_evals} evals, {n_restarts} restarts, {elapsed_min:.1f} min")
         print(f"Best fitness: {best_fit:.5f}  (gen {best_gen})  stopped: {stopped_reason}")
         print(f"Best params: {_params_to_str(best_params)}")
 
@@ -340,7 +368,8 @@ class ESOptimizer:
         print("=" * 72)
         print(f"(1+{self.cfg.lambda_})-ES  |  {self.space.dim}D  |  workers={self.cfg.n_workers}")
         print(f"  params: {list(self.space.names)}")
-        print(f"  patience={self.cfg.patience}  tol={self.cfg.tol:.1e}")
+        print(f"  patience={self.cfg.patience}  tol={self.cfg.tol:.1e}  "
+              f"restart_patience={self.cfg.restart_patience}  max_restarts={self.cfg.max_restarts}")
         if hours:
             print(f"  time limit: {hours:.2f} h")
         else:
@@ -355,7 +384,7 @@ class ESOptimizer:
         elapsed_min = p.elapsed_s / 60.0
         print(f"\n{bar} {p.pct:5.1f}%  remain={remain_str}  "
               f"evals={p.n_evals}  elapsed={elapsed_min:.1f}min  "
-              f"stagnant={p.gens_without_improvement}/{200}")
+              f"stagnant={p.gens_without_improvement}  restarts={p.n_restarts}")
         print(f"  best={p.best_fitness:.5f}  parent={p.parent_fitness:.5f}  best@gen={p.best_gen}")
         print(f"  params: {_params_to_str(p.best_params)}")
 

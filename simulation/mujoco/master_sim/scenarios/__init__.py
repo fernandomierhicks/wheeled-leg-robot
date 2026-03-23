@@ -12,12 +12,13 @@ from master_sim.scenarios.s05_vel_pi_leg_cycling import CONFIG as S05
 from master_sim.scenarios.s06_yaw_pi_turn import CONFIG as S06
 from master_sim.scenarios.s07_drive_turn import CONFIG as S07
 from master_sim.scenarios.s08_terrain_compliance import CONFIG as S08
+from master_sim.scenarios.s09_integrated import CONFIG as S09
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 SCENARIOS: dict[str, ScenarioConfig] = {
-    s.name: s for s in [S01, S02, S03, S04, S05, S06, S07, S08]
+    s.name: s for s in [S01, S02, S03, S04, S05, S06, S07, S08, S09]
 }
 
 

@@ -28,14 +28,15 @@ CSV_COLS = [
     # LQR cost weights
     "Q_PITCH", "Q_PITCH_RATE", "Q_VEL", "R",
     # Velocity PI gains
-    "KP_V", "KI_V",
+    "KP_V", "KI_V", "KFF_V",
     # Yaw PI gains
     "KP_YAW", "KI_YAW",
     # Suspension / roll gains
     "LEG_K_S", "LEG_B_S", "LEG_K_ROLL", "LEG_D_ROLL",
     # Performance metrics
     "rms_pitch_deg", "max_pitch_deg", "wheel_travel_m", "wheel_liftoff_s",
-    "vel_track_rms_ms", "settle_time_s", "survived_s",
+    "vel_track_rms_ms", "hip_track_rms_rad", "hip_cmd_rate_rms",
+    "settle_time_s", "survived_s",
     # Fitness breakdown
     "fitness_balance", "fitness_disturbance",
     "fitness_drive_slow", "fitness_drive_med", "fitness_obstacle",

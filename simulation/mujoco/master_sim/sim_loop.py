@@ -127,6 +127,44 @@ def get_roll_and_rate(data, box_bid: int, d_roll: int) -> tuple:
     return roll, float(data.qvel[d_roll])
 
 
+# ── Disturbance application — single source of truth ────────────────────────
+
+def apply_disturbance(data, t: float, scenario: ScenarioConfig,
+                      box_bid: int, wheel_bid_L: int, wheel_bid_R: int):
+    """Apply scenario disturbance forces to the correct bodies.
+
+    Called by sim_loop.run() AND the replay viewer so both paths produce
+    identical physics.  Returns the (target_body_id, force_value) actually
+    applied by dist_fn (for visualisation), or (None, 0.0) if inactive.
+    """
+    dist_fn      = scenario.dist_fn
+    roll_dist_fn = scenario.roll_dist_fn
+    dist_target  = scenario.dist_target
+
+    fz_roll = roll_dist_fn(t) if roll_dist_fn else 0.0
+    fd = dist_fn(t) if dist_fn else 0.0
+    vis_bid, vis_force = None, 0.0
+
+    if dist_fn and abs(fd) > 1e-9:
+        vis_force = fd
+    if dist_target == "wheel_L":
+        data.xfrc_applied[wheel_bid_L, 2] = fd + fz_roll
+        if vis_force:
+            vis_bid = wheel_bid_L
+    elif dist_target == "wheel_R":
+        data.xfrc_applied[wheel_bid_R, 2] = fd
+        data.xfrc_applied[wheel_bid_L, 2] = fz_roll
+        if vis_force:
+            vis_bid = wheel_bid_R
+    else:
+        data.xfrc_applied[box_bid, 0] = fd
+        data.xfrc_applied[wheel_bid_L, 2] = fz_roll
+        if vis_force:
+            vis_bid = box_bid
+
+    return vis_bid, vis_force
+
+
 # ── SimController — single source of truth for the control cascade ──────────
 
 class SimController:
@@ -211,11 +249,29 @@ class SimController:
         """Reset all controller state (e.g. after sandbox auto-restart)."""
         self._init_controllers(self.params, model)
 
+    def update_velocity_pi_gain(self, field: str, value: float):
+        """Hot-swap a single VelocityPI gain field (preserves integrator + survives reset)."""
+        from dataclasses import replace
+        new_vp = replace(self.vel_pi.gains, **{field: value})
+        self.vel_pi.gains = new_vp
+        # Persist into params so reset() picks up the change
+        new_gains = replace(self.params.gains, velocity_pi=new_vp)
+        self.params = replace(self.params, gains=new_gains)
+
+    def update_lqr_gain(self, field: str, value: float):
+        """Hot-swap a single LQR cost weight and recompute the gain table."""
+        from dataclasses import replace
+        new_lqr = replace(self.params.gains.lqr, **{field: value})
+        new_gains = replace(self.params.gains, lqr=new_lqr)
+        self.params = replace(self.params, gains=new_gains)
+        self.K_table = compute_gain_table(self.params.robot, new_lqr)
+
     # ── THE control tick — called by run() and sandbox() ─────────────────────
 
     def tick(self, model, data, *,
              v_target_ms: float = 0.0,
              omega_target: float = 0.0,
+             theta_ref_cmd: float = 0.0,
              q_hip_target: float = None,
              dq_hip_target: float = 0.0,
              use_lqr: bool = True,
@@ -264,8 +320,8 @@ class SimController:
                 self.prev_theta_ref + _d_max))
         else:
             self.vel_pi.reset()
-            theta_ref  = 0.0
-            v_ref_rads = 0.0
+            theta_ref  = theta_ref_cmd
+            # v_ref_rads passes through to LQR even without VelocityPI
         self.prev_theta_ref = theta_ref
 
         # ── Sensor delay buffer ──────────────────────────────────────────────
@@ -412,10 +468,11 @@ def run(params: SimParams, scenario: ScenarioConfig,
 
     # ── Resolve profile callables ────────────────────────────────────────────
     v_profile_fn     = scenario.v_profile or (lambda t: 0.0)
+    theta_ref_fn     = scenario.theta_ref_profile  # may be None
     omega_profile_fn = scenario.omega_profile  # may be None
     hip_profile_fn   = scenario.hip_profile    # may be None
     hip_vel_fn       = getattr(scenario, 'hip_vel_profile', None)
-    dist_fn          = scenario.dist_fn        # may be None
+    use_theta_ref_correction = scenario.use_theta_ref_correction
 
     ctrl_steps = params.timing.ctrl_steps
     dt = model.opt.timestep * ctrl_steps
@@ -429,6 +486,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
     pitch_sq_sum      = 0.0
     ise_pitch         = 0.0
     ise_pitch_rate    = 0.0
+    pitch_rate_sq_sum = 0.0
     roll_sq_sum       = 0.0
     max_roll          = 0.0
     vel_sq_sum        = 0.0
@@ -436,6 +494,15 @@ def run(params: SimParams, scenario: ScenarioConfig,
     max_pitch         = 0.0
     wheel_travel_m    = 0.0
     wheel_liftoff_s   = 0.0
+    hip_track_sq_sum  = 0.0
+    hip_rate_sq_sum   = 0.0
+    prev_tau_hip_L    = 0.0
+    prev_tau_hip_R    = 0.0
+    hip_cmd_rate_sq   = 0.0
+    prev_q_nom_L      = None
+    prev_q_nom_R      = None
+    liftoff_kill      = False
+    vel_error_kill    = False
     n_samples         = 0
     n_vel             = 0
     n_yaw             = 0
@@ -457,6 +524,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
     while data.time < duration:
         if step % ctrl_steps == 0:
             v_target_ms = v_profile_fn(data.time)
+            theta_ref_c = theta_ref_fn(data.time) if theta_ref_fn else 0.0
             omega_tgt   = omega_profile_fn(data.time) if omega_profile_fn else 0.0
             q_hip_sym   = hip_profile_fn(data.time) if hip_profile_fn else robot.Q_NOM
             dq_hip_tgt  = hip_vel_fn(data.time) if hip_vel_fn else 0.0
@@ -464,6 +532,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
             tick = ctrl.tick(
                 model, data,
                 v_target_ms=v_target_ms,
+                theta_ref_cmd=theta_ref_c,
                 omega_target=omega_tgt,
                 q_hip_target=q_hip_sym,
                 dq_hip_target=dq_hip_tgt,
@@ -489,17 +558,33 @@ def run(params: SimParams, scenario: ScenarioConfig,
                 n_yaw += 1
 
             # ── Metrics ──────────────────────────────────────────────────────
-            pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff))
-            pitch_err_rad = pitch_true - pitch_ff
+            theta_ref_corr = tick['theta_ref'] if use_theta_ref_correction else 0.0
+            pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff - theta_ref_corr))
+            pitch_err_rad = pitch_true - pitch_ff - theta_ref_corr
             pitch_sq_sum     += pitch_err_deg ** 2
             ise_pitch        += pitch_err_rad ** 2 * dt
             ise_pitch_rate   += pitch_rate_true ** 2 * dt
+            pitch_rate_sq_sum += math.degrees(pitch_rate_true) ** 2
             roll_deg_now      = math.degrees(roll_true)
             roll_sq_sum      += roll_deg_now ** 2
             max_roll          = max(max_roll, abs(roll_deg_now))
             max_pitch         = max(max_pitch, pitch_err_deg)
             vel_est           = (wheel_vel + pitch_rate_true) * robot.wheel_r
             wheel_travel_m   += abs(vel_est) * dt
+            hip_track_sq_sum += (tick['hip_q_avg'] - q_hip_sym) ** 2
+            tau_hip_L = tick['tau_hip_L']
+            tau_hip_R = tick['tau_hip_R']
+            hip_rate_sq_sum += ((tau_hip_L - prev_tau_hip_L) / dt) ** 2
+            hip_rate_sq_sum += ((tau_hip_R - prev_tau_hip_R) / dt) ** 2
+            prev_tau_hip_L = tau_hip_L
+            prev_tau_hip_R = tau_hip_R
+            q_nom_L = tick['q_nom_L']
+            q_nom_R = tick['q_nom_R']
+            if prev_q_nom_L is not None:
+                hip_cmd_rate_sq += ((q_nom_L - prev_q_nom_L) / dt) ** 2
+                hip_cmd_rate_sq += ((q_nom_R - prev_q_nom_R) / dt) ** 2
+            prev_q_nom_L = q_nom_L
+            prev_q_nom_R = q_nom_R
             n_samples        += 1
 
             if data.time >= th.vel_err_start_s:
@@ -512,6 +597,20 @@ def run(params: SimParams, scenario: ScenarioConfig,
             if (data.xpos[ctrl.wheel_bid_L][2] > liftoff_threshold or
                     data.xpos[ctrl.wheel_bid_R][2] > liftoff_threshold):
                 wheel_liftoff_s += dt
+
+            # ── Liftoff early-termination ─────────────────────────────────
+            if (scenario.max_liftoff_s is not None and
+                    wheel_liftoff_s > scenario.max_liftoff_s):
+                survived_s = data.time
+                liftoff_kill = True
+                break
+
+            # ── Velocity-error early-termination ─────────────────────────
+            if (scenario.max_vel_error_ms is not None and
+                    abs(v_target_ms - v_measured_ms) > scenario.max_vel_error_ms):
+                survived_s = data.time
+                vel_error_kill = True
+                break
 
             if not settled:
                 if pitch_err_deg < th.settle_deg:
@@ -533,23 +632,29 @@ def run(params: SimParams, scenario: ScenarioConfig,
                     cb(tick)
 
         # ── Disturbance impulse ──────────────────────────────────────────────
-        data.xfrc_applied[ctrl.box_bid, 0] = dist_fn(data.time) if dist_fn else 0.0
+        apply_disturbance(data, data.time, scenario,
+                          ctrl.box_bid, ctrl.wheel_bid_L, ctrl.wheel_bid_R)
 
         mujoco.mj_step(model, data)
         step += 1
 
     # ── Compute final metrics ────────────────────────────────────────────────
     rms_pitch_deg      = math.sqrt(pitch_sq_sum / max(1, n_samples))
+    rms_pitch_rate_dps = math.sqrt(pitch_rate_sq_sum / max(1, n_samples))
     rms_roll_deg       = math.sqrt(roll_sq_sum  / max(1, n_samples))
+    hip_track_rms_rad  = math.sqrt(hip_track_sq_sum / max(1, n_samples))
+    hip_rate_rms       = math.sqrt(hip_rate_sq_sum / max(1, 2 * n_samples))
+    hip_cmd_rate_rms   = math.sqrt(hip_cmd_rate_sq / max(1, 2 * max(1, n_samples - 1)))
     rms_vel_ms         = math.sqrt(vel_sq_sum / max(1, n_vel)) if n_vel > 0 else 0.0
     yaw_track_rms_rads = math.sqrt(yaw_sq_sum / max(1, n_yaw)) if n_yaw > 0 else 0.0
     final_x            = data.qpos[ctrl.s_root]
-    fell               = survived_s < duration - 0.05
+    fell               = survived_s < duration - 0.05 or liftoff_kill or vel_error_kill
 
     return dict(
         rms_pitch_deg           = round(rms_pitch_deg,          4),
         ise_pitch               = round(ise_pitch,              6),
         ise_pitch_rate          = round(ise_pitch_rate,         6),
+        rms_pitch_rate_dps      = round(rms_pitch_rate_dps,    4),
         rms_roll_deg            = round(rms_roll_deg,           4),
         max_roll_deg            = round(max_roll,               4),
         vel_track_rms_ms        = round(rms_vel_ms,             4),
@@ -558,10 +663,15 @@ def run(params: SimParams, scenario: ScenarioConfig,
         max_pitch_deg           = round(max_pitch,              4),
         wheel_travel_m          = round(wheel_travel_m,         4),
         wheel_liftoff_s         = round(wheel_liftoff_s,        4),
+        hip_track_rms_rad       = round(hip_track_rms_rad,      6),
+        hip_rate_rms            = round(hip_rate_rms,            4),
+        hip_cmd_rate_rms        = round(hip_cmd_rate_rms,        4),
         final_x_m               = round(final_x,               3),
         settle_time_s           = round(settle_time,            3),
         survived_s              = round(survived_s,             3),
         fell                    = fell,
         status                  = "FAIL" if fell else "PASS",
-        fail_reason             = "fell over" if fell else "",
+        fail_reason             = ("wheels off ground" if liftoff_kill
+                                   else "vel error exceeded" if vel_error_kill
+                                   else "fell over" if fell else ""),
     )

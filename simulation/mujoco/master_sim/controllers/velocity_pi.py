@@ -23,6 +23,7 @@ class VelocityPI:
         self.gains = gains
         self.dt = dt
         self.integral = 0.0
+        self.prev_v_desired = 0.0
 
     def update(self, v_desired_ms: float, v_measured_ms: float) -> float:
         """Compute lean angle command from velocity error.
@@ -38,13 +39,19 @@ class VelocityPI:
         self.integral = float(np.clip(
             self.integral + v_err * self.dt,
             -self.gains.int_max, self.gains.int_max))
+        # Feed-forward: θ = a/g ≈ Kff * dv_cmd/dt
+        dv_cmd_dt = (v_desired_ms - self.prev_v_desired) / self.dt
+        self.prev_v_desired = v_desired_ms
         theta_ref = float(np.clip(
-            self.gains.Kp * v_err + self.gains.Ki * self.integral,
+            self.gains.Kp * v_err
+            + self.gains.Ki * self.integral
+            + self.gains.Kff * dv_cmd_dt,
             -self.gains.theta_max, self.gains.theta_max))
         return theta_ref
 
     def reset(self) -> None:
         self.integral = 0.0
+        self.prev_v_desired = 0.0
 
 
 # ── Self-test ────────────────────────────────────────────────────────────────

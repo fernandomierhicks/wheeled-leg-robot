@@ -126,25 +126,43 @@ class SearchSpace:
 # ── Pre-built search spaces for each optimizer ──────────────────────────────
 
 LQR_SPACE = SearchSpace(params={
-    "Q_PITCH":      ParamSpec(1e-5,  1000.0),
-    "Q_PITCH_RATE": ParamSpec(1e-3,  100.0,  zero_ok=True),
-    "Q_VEL":        ParamSpec(1e-7,  10.0,   zero_ok=True),
-    "R":            ParamSpec(1e-4,  1500.0),
+    "Q_PITCH":      ParamSpec(0.01,  10.0),
+    "Q_PITCH_RATE": ParamSpec(1e-3,  10.0,   zero_ok=True),
+    "Q_VEL":        ParamSpec(1e-7,  10.0),
+    "R":            ParamSpec(0.01,  1000.0),
 })
 
 VELOCITY_PI_SPACE = SearchSpace(params={
-    "KP_V": ParamSpec(1e-3, 20.0),
-    "KI_V": ParamSpec(1e-4, 20.0, zero_ok=True),
+    "KP_V":  ParamSpec(0.05, 0.15),
+    "KI_V":  ParamSpec(0.01, 0.1),
+    "KFF_V": ParamSpec(0.1,  1.2),
 })
 
 YAW_PI_SPACE = SearchSpace(params={
-    "KP_YAW": ParamSpec(1e-3, 20.0),
-    "KI_YAW": ParamSpec(1e-4, 10.0, zero_ok=True),
+    "KP_YAW": ParamSpec(1e-3, 100.0),
+    "KI_YAW": ParamSpec(1e-4, 100.0, zero_ok=True),
 })
 
 SUSPENSION_SPACE = SearchSpace(params={
-    "LEG_K_S":    ParamSpec(0.1,  60.0),
-    "LEG_B_S":    ParamSpec(0.01, 40.0,  zero_ok=True),
-    "LEG_K_ROLL": ParamSpec(1e-3, 20.0,  zero_ok=True),
-    "LEG_D_ROLL": ParamSpec(1e-4, 10.0,  zero_ok=True),
+    "LEG_K_S":    ParamSpec(0.1,  100.0),
+    "LEG_B_S":    ParamSpec(0.01, 100.0,  zero_ok=True),
+    "LEG_K_ROLL": ParamSpec(1e-3, 100.0,  zero_ok=True),
+    "LEG_D_ROLL": ParamSpec(1e-4, 100.0,  zero_ok=True),
 })
+
+INTEGRATED_SPACE = SearchSpace(params={
+    **LQR_SPACE.params,
+    **VELOCITY_PI_SPACE.params,
+    **YAW_PI_SPACE.params,
+    **SUSPENSION_SPACE.params,
+})
+
+# Maps scenario group → search space.  Used by optimize_integrated to restrict
+# the search to only the gains that the chosen scenario actually exercises.
+SPACE_BY_GROUP: Dict[str, SearchSpace] = {
+    "lqr":         LQR_SPACE,
+    "velocity_pi": VELOCITY_PI_SPACE,
+    "yaw_pi":      YAW_PI_SPACE,
+    "suspension":  SUSPENSION_SPACE,
+    "integrated":  INTEGRATED_SPACE,
+}

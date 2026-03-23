@@ -1,15 +1,23 @@
 """s07_drive_turn — Cross-coupling check: simultaneous drive + turn.
 
 YawPI + VelocityPI + LQR.
-v_desired = 0.3 m/s constant, omega_desired = 0.5 rad/s constant (CCW).
+v_desired = 1.0 m/s constant, omega_desired = +60 deg/s first half → −60 deg/s second half.
 
 Fitness = 0.5*3.0*vel_rms + 0.5*3.0*yaw_rms + 0.1*rms_pitch + 200*fell
 """
 from master_sim.defaults import DEFAULT_PARAMS
 from master_sim.scenarios.base import ScenarioConfig
-from master_sim.scenarios.profiles import constant_velocity, make_yaw_step_fn
+from master_sim.scenarios.profiles import constant_velocity
 
 _timings = DEFAULT_PARAMS.scenarios
+
+
+def _yaw_inversion(rate: float, t_flip: float):
+    """Return closure: +rate until t_flip, then −rate."""
+    def _fn(t: float) -> float:
+        return rate if t < t_flip else -rate
+    return _fn
+
 
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
@@ -28,7 +36,8 @@ CONFIG = ScenarioConfig(
     active_controllers=frozenset({"lqr", "velocity_pi", "yaw_pi"}),
     hip_mode="position",
     v_profile=constant_velocity(_timings.drive_turn_speed),
-    omega_profile=constant_velocity(_timings.drive_turn_yaw_rate),
+    omega_profile=_yaw_inversion(_timings.drive_turn_yaw_rate,
+                                 _timings.s7_duration / 2.0),
     fitness_fn=fitness,
     group="yaw_pi",
     order=7.0,

@@ -12,6 +12,29 @@ from dataclasses import replace
 
 # ── Eval helper (called inside each module-level eval function) ──────────────
 
+class EvalWithGains:
+    """Picklable callable for multiprocessing — replaces module-global hack."""
+
+    def __init__(self, scenario_name: str, gains_key: str, param_mapping: dict):
+        self.scenario_name = scenario_name
+        self.gains_key = gains_key
+        self.param_mapping = param_mapping
+
+    def __call__(self, candidate: dict) -> dict:
+        return eval_with_gains(candidate, self.scenario_name,
+                               self.gains_key, self.param_mapping)
+
+
+class EvalWithAllGains:
+    """Picklable callable for the integrated optimizer."""
+
+    def __init__(self, scenario_name: str):
+        self.scenario_name = scenario_name
+
+    def __call__(self, candidate: dict) -> dict:
+        return eval_with_all_gains(candidate, self.scenario_name)
+
+
 def eval_with_gains(candidate: dict, scenario_name: str,
                     gains_key: str, param_mapping: dict) -> dict:
     """Evaluate one candidate by replacing gains and running a scenario.
@@ -43,6 +66,62 @@ def eval_with_gains(candidate: dict, scenario_name: str,
     return metrics
 
 
+# ── All-gains eval for integrated optimizer ──────────────────────────────────
+
+# Maps search-space keys → (gains_key, field_name)
+_ALL_GAINS_MAP = {
+    "Q_PITCH":      ("lqr", "Q_pitch"),
+    "Q_PITCH_RATE": ("lqr", "Q_pitch_rate"),
+    "Q_VEL":        ("lqr", "Q_vel"),
+    "R":            ("lqr", "R"),
+    "KP_V":         ("velocity_pi", "Kp"),
+    "KI_V":         ("velocity_pi", "Ki"),
+    "KFF_V":        ("velocity_pi", "Kff"),
+    "KP_YAW":       ("yaw_pi", "Kp"),
+    "KI_YAW":       ("yaw_pi", "Ki"),
+    "LEG_K_S":      ("suspension", "K_s"),
+    "LEG_B_S":      ("suspension", "B_s"),
+    "LEG_K_ROLL":   ("suspension", "K_roll"),
+    "LEG_D_ROLL":   ("suspension", "D_roll"),
+}
+
+
+def eval_with_all_gains(candidate: dict, scenario_name: str) -> dict:
+    """Evaluate one candidate by replacing ALL 4 gain groups at once."""
+    from master_sim.defaults import DEFAULT_PARAMS
+    from master_sim.scenarios import evaluate
+
+    p = DEFAULT_PARAMS
+
+    # Group candidate keys by gains_key
+    updates = {}  # gains_key → {field: value}
+    for cand_key, value in candidate.items():
+        gains_key, field_name = _ALL_GAINS_MAP[cand_key]
+        updates.setdefault(gains_key, {})[field_name] = value
+
+    # Build new GainSet
+    new_gains = p.gains
+    for gains_key, fields in updates.items():
+        current_sub = getattr(new_gains, gains_key)
+        new_sub = replace(current_sub, **fields)
+        new_gains = replace(new_gains, **{gains_key: new_sub})
+
+    params = replace(p, gains=new_gains)
+    metrics = evaluate(params, scenario_name)
+    metrics["scenario"] = scenario_name
+    return metrics
+
+
+def default_seed_all() -> dict:
+    """Extract all 12 default gains as a seed dict for the integrated optimizer."""
+    from master_sim.defaults import DEFAULT_PARAMS
+    p = DEFAULT_PARAMS
+    seed = {}
+    for cand_key, (gains_key, field_name) in _ALL_GAINS_MAP.items():
+        seed[cand_key] = getattr(getattr(p.gains, gains_key), field_name)
+    return seed
+
+
 # ── Seed helpers ─────────────────────────────────────────────────────────────
 
 def parse_seed_gains(raw: str) -> dict:
@@ -63,16 +142,14 @@ def default_seed(gains_key: str, param_mapping: dict) -> dict:
 # ── Shared main() ────────────────────────────────────────────────────────────
 
 def optimizer_main(*, description: str, default_scenario: str,
-                   search_space, eval_fn, gains_key: str,
+                   search_space, eval_fn=None, gains_key: str,
                    param_mapping: dict, ui_label: str,
-                   set_scenario) -> None:
+                   set_scenario=None) -> None:
     """Common argparse + ESOptimizer loop for all four optimizers.
 
-    Parameters
-    ----------
-    set_scenario : callable(str) -> None
-        Callback that sets the caller's module-level _SCENARIO_NAME global
-        (required for Windows multiprocessing pickling).
+    The eval function is built internally as a picklable EvalWithGains
+    instance so that multiprocessing workers on Windows (spawn) use the
+    correct scenario name.  Legacy eval_fn / set_scenario args are ignored.
     """
     from master_sim.optimizer.es_engine import ESOptimizer, ESConfig
     from master_sim.optimizer.progress_ui import ProgressUI
@@ -87,15 +164,21 @@ def optimizer_main(*, description: str, default_scenario: str,
     ap.add_argument("--tol",      type=float, default=1e-4)
     ap.add_argument("--seed-gains", type=str, default=None,
                     help='e.g. "K1=0.5,K2=1.2"')
+    ap.add_argument("--no-baseline", action="store_true",
+                    help="Skip auto-baselining after optimizer finishes")
     args = ap.parse_args()
 
-    set_scenario(args.scenario)
+    # Picklable eval — scenario name baked in, safe for Windows spawn
+    eval_fn = EvalWithGains(args.scenario, gains_key, param_mapping)
 
     csv_path = get_scenario_csv_path(args.scenario)
     seed = (parse_seed_gains(args.seed_gains) if args.seed_gains
             else default_seed(gains_key, param_mapping))
 
-    ui = ProgressUI(f"{ui_label} Optimizer — {args.scenario}")
+    all_defaults = default_seed_all()
+    active_names = set(seed.keys())
+    ui = ProgressUI(f"{ui_label} Optimizer — {args.scenario}",
+                    all_defaults=all_defaults, active_names=active_names)
     cfg = ESConfig(patience=args.patience, tol=args.tol, n_workers=args.workers)
     opt = ESOptimizer(
         search_space=search_space,
@@ -106,6 +189,15 @@ def optimizer_main(*, description: str, default_scenario: str,
         pause_fn=ui.wait_if_paused,
     )
     try:
-        opt.run(hours=args.hours, max_iters=args.iters, seed_params=seed)
+        result = opt.run(hours=args.hours, max_iters=args.iters, seed_params=seed)
     finally:
         ui.finish()
+
+    # Auto-baseline best gains
+    if not args.no_baseline and result and result.get("best_params"):
+        from master_sim.optimizer.baseline import save_baseline_gains
+        save_baseline_gains(
+            best_params=result["best_params"],
+            best_fitness=result["best_fitness"],
+            scenario=args.scenario,
+        )

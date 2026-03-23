@@ -1,16 +1,17 @@
 """s01_lqr_pitch_step — LQR pitch step-response test.
 
 Pure LQR inner-loop only.  Robot starts at equilibrium + 5° perturbation,
-must recover under +4 N / −4 N impulse disturbances.
+must recover to upright.  No external force disturbances, v_ref = 0.
 
-Fitness = ISE_pitch + 0.05 * ISE_pitch_rate + 0.01 * settle_time + 200 * fell
+Fitness = weighted sum of raw metrics + fell penalty.
+Currently optimising for pitch tracking only (vel/settle weights zeroed).
 """
 import math
 import mujoco
 
 from master_sim.defaults import DEFAULT_PARAMS
 from master_sim.scenarios.base import ScenarioConfig
-from master_sim.scenarios.profiles import s1_dist_fn
+from master_sim.scenarios.profiles import s1_velocity_profile, s1_theta_ref_profile
 from master_sim.physics import get_equilibrium_pitch
 
 _timings = DEFAULT_PARAMS.scenarios
@@ -31,14 +32,41 @@ def _s1_init(model, data, params):
     mujoco.mj_forward(model, data)
 
 
+# ── REF values: normalise each metric so 1 REF-unit ≈ 1.0 ───────────────────
+#
+# First-principles estimates for S1 (5° pitch step, no disturbances, 5 s):
+#
+#   ISE_PITCH [rad²·s]:  Assume exponential recovery with τ ≈ 0.5 s.
+#       Single recovery event: ISE ≈ (0.087)² × τ/2 ≈ 0.0019 → ~0.005.
+#
+#   ISE_PITCH_RATE [rad²/s]:  Peak rate ≈ amplitude/τ ≈ 0.17 rad/s.
+#       Single event: ISE ≈ (0.17)² × τ/2 ≈ 0.007 → ~0.02.
+#
+#   SETTLE_S [s]:  From 5° a well-tuned LQR should decay below ±2° in
+#       roughly 1–2 s.
+#
+REF_ISE_PITCH       = 0.005
+REF_ISE_PITCH_RATE  = 0.02
+REF_SETTLE_S        = 2.0
+REF_VEL_MS          = 0.2
+
+# ── Weights: fraction of fitness budget per metric (must sum to 1.0) ──────────
+W_PITCH      = 0.50
+W_PITCH_RATE = 0.50
+W_SETTLE     = 0.0
+W_VEL        = 0.0
+W_FELL       = 200.0
+
+
 # ── Fitness ──────────────────────────────────────────────────────────────────
 
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
-    return (m['ise_pitch']
-            + CONFIG.W_PITCH_RATE * m['ise_pitch_rate']
-            + CONFIG.W_SETTLE * m['settle_time_s']
-            + (CONFIG.W_FALL if fell else 0.0))
+    return (W_PITCH      * m['ise_pitch']          / REF_ISE_PITCH
+            + W_PITCH_RATE * m['ise_pitch_rate']     / REF_ISE_PITCH_RATE
+            + W_SETTLE     * m['settle_time_s']      / REF_SETTLE_S
+            + W_VEL        * m['vel_track_rms_ms']   / REF_VEL_MS
+            + (W_FELL if fell else 0.0))
 
 
 # ── Scenario config ──────────────────────────────────────────────────────────
@@ -49,9 +77,12 @@ CONFIG = ScenarioConfig(
     duration=_timings.s1_duration,
     active_controllers=frozenset({"lqr"}),       # LQR only, no VelocityPI
     hip_mode="position",
-    dist_fn=s1_dist_fn,
+    v_profile=s1_velocity_profile,               # zero throughout
+    theta_ref_profile=s1_theta_ref_profile,      # −5° step at t=2.5s
+    dist_fn=None,
     init_fn=_s1_init,
     fitness_fn=fitness,
     group="lqr",
     order=1.0,
+    max_liftoff_s=0.1,     # kill bouncing gains — wheels must stay on ground
 )

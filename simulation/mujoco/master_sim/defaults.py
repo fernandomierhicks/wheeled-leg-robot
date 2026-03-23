@@ -1,9 +1,7 @@
-"""defaults.py — DEFAULT_PARAMS instance with Phase 6 (latency-retuned) values.
+"""defaults.py — DEFAULT_PARAMS instance.
 
-All default values are baked into the dataclass definitions in params.py,
-so this file simply instantiates the top-level SimParams.  If a future
-pipeline writes optimized gains to logs/baseline_gains.json, this file
-can load and overlay them.
+params.py is the single source of truth for all simulation parameters
+including gains. The optimizer writes best gains directly into params.py.
 """
 from master_sim.params import SimParams
 

@@ -146,27 +146,33 @@ class BatteryParams:
 @dataclass(frozen=True)
 class LQRGains:
     """LQR cost weights — state: [pitch-θ_ref, pitch_rate, wheel_vel_avg-v_ref]."""
-    Q_pitch: float = 0.13139915
-    Q_pitch_rate: float = 0.225951
-    Q_vel: float = 0.00027807062
-    R: float = 111.34964
+    Q_pitch: float = 5.40254
+    Q_pitch_rate: float = 0.033408
+    Q_vel: float = 0.00165213
+    R: float = 39.647
 
 
 @dataclass(frozen=True)
 class VelocityPIGains:
     """Velocity PI outer loop — velocity error → lean angle."""
-    Kp: float = 0.59884887
-    Ki: float = 0.0041092313
-    theta_max: float = 0.26        # [rad] ±15° clamp
-    int_max: float = 2.0           # [rad·s] anti-windup
-    theta_ref_rate_limit: float = 5.0  # [rad/s]
+    Kp: float = 0.05
+    Ki: float = 0.1
+    Kff: float = 0.108498             # [s²·rad/m] ≈ 1/g — feed-forward: lean per unit dv_target/dt
+
+    #to mcuh and robot linkages touch ground. 
+    theta_max: float = 0.5        # [rad] ±46° clamp  Max commandable lean angle.
+    
+    int_max: float = 1.0           # [rad·s] anti-windup ( theta_max / Ki)
+
+    #Allows for more aggresiv egains without making LQR unstable
+    theta_ref_rate_limit: float = 5.0  # [rad/s]  How fast can commanded lean angle change every tick (larger number = more aggresive)
 
 
 @dataclass(frozen=True)
 class YawPIGains:
     """Yaw PI — differential torque for yaw rate tracking."""
-    Kp: float = 0.66915358
-    Ki: float = 1.6580613
+    Kp: float = 0.193246
+    Ki: float = 0.221219
     torque_max: float = 0.5        # [N·m] differential clamp
     int_max: float = 0.5           # [N·m·s] anti-windup
 
@@ -174,10 +180,10 @@ class YawPIGains:
 @dataclass(frozen=True)
 class SuspensionGains:
     """Leg impedance + roll leveling (Phase 4)."""
-    K_s: float = 9.838765            # [N·m/rad] spring stiffness  (TEMP: /4)
-    B_s: float = 0.213973855        # [N·m·s/rad] damping          (TEMP: /4)
-    K_roll: float = 85.0            # [rad/rad] roll proportional  (TEMP: 5× for 5cm step test)
-    D_roll: float = 0.24            # [rad·s/rad] roll rate damping (TEMP: 5× for 5cm step test)
+    K_s: float = 12.9624               # [N·m/rad] spring stiffness
+    B_s: float = 0.109151              # [N·m·s/rad] damping
+    K_roll: float = 45.2559            # [rad/rad] roll proportional
+    D_roll: float = 0.491916           # [rad·s/rad] roll rate damping
 
     @staticmethod
     def hip_safe_range(robot: RobotGeometry) -> Tuple[float, float]:
@@ -214,7 +220,7 @@ class GainSet:
 @dataclass(frozen=True)
 class LatencyParams:
     """Ring-buffer delays for sensor and actuator pipelines."""
-    sensor_delay_s: float = 0.001      # [s] 0 = disabled; set ~0.005 for realistic BNO086+I2C
+    sensor_delay_s: float = 0.0011     # [s] measured: 2.5ms fusion + 1.0ms ISR + 0.05ms SPI
     actuator_delay_s: float = 0.001    # [s] 0 = disabled; set ~0.0025 for realistic ODESC FOC
 
     def sensor_delay_steps(self, sim_timestep: float) -> int:
@@ -228,11 +234,13 @@ class LatencyParams:
 
 @dataclass(frozen=True)
 class NoiseParams:
-    """BNO086 realistic noise model."""
-    pitch_std_rad: float = field(default_factory=lambda: math.radians(0.1))
-    pitch_rate_std_rad_s: float = field(default_factory=lambda: math.radians(0.5))
-    accel_std: float = 0.2             # [m/s²]
-    roll_std_rad: float = field(default_factory=lambda: math.radians(0.05))
+    """BNO086 measured noise (Test 5, 2026-03-22).
+    GRV fused: 333 Hz, 30s stationary.  Raw gyro: 100 Hz, 60s.  Raw accel: 32 Hz, 30s.
+    """
+    pitch_std_rad: float = 0.000176        # 0.0101 deg — GRV fused pitch noise
+    pitch_rate_std_rad_s: float = 0.002116 # 0.121 deg/s — raw gyro Y-axis
+    accel_std: float = 0.008               # [m/s²] RMS across X/Y/Z
+    roll_std_rad: float = 0.000156         # 0.0090 deg — GRV fused roll noise
 
 
 # ── Metric thresholds ─────────────────────────────────────────────────────
@@ -286,6 +294,7 @@ class ScenarioTimings:
     s6_duration: float = 8.0
     s7_duration: float = 8.0
     s8_duration: float = 12.0
+    s9_duration: float = 16.0
 
     # S1 — LQR pitch step
     pitch_step_rad: float = field(default_factory=lambda: math.radians(5.0))
@@ -306,8 +315,8 @@ class ScenarioTimings:
     yaw_err_start: float = 1.0
 
     # S7 — drive+turn
-    drive_turn_speed: float = 0.3
-    drive_turn_yaw_rate: float = 0.5
+    drive_turn_speed: float = 1.0
+    drive_turn_yaw_rate: float = 1.0472  # 60 deg/s
 
     # S8 — terrain compliance
     s8_drive_speed: float = 1.0

@@ -1,6 +1,11 @@
 
 ---Fernandos note dont change below
--search for any inlnie copy paste or duplication of code. Single source of truth. 
+-Fancier optimizer 
+-Update sim with IMU characterization and delay
+add filter on cmd_hip joint, setpoints are too noisy
+-Show all components of fitness function after scenario vis.
+--DEtailed anayis of why LQR + VI is not wokring. Enalytic analysi of max vel acceleration due to gravity
+-tune VI gains
 -Jump controller
 -Spring for higher jumps. 
 

@@ -1,6 +1,6 @@
-"""pipeline.py — S1→S8 automated tuning pipeline.
+"""pipeline.py — S1→S9 automated tuning pipeline.
 
-Runs the full 8-step gain chain sequentially:
+Runs the full 9-step gain chain sequentially:
   S1: LQR on s01_lqr_pitch_step            (seed: defaults)
   S2: LQR on s02_leg_height_gain_sched     (seed: S1 best)  → baseline
   S3: VelPI on s03_vel_pi_disturbance       (seed: defaults)
@@ -9,8 +9,9 @@ Runs the full 8-step gain chain sequentially:
   S6: YawPI on s06_yaw_pi_turn              (seed: defaults)
   S7: YawPI on s07_drive_turn               (seed: S6 best)  → baseline
   S8: Susp  on s08_terrain_compliance       (seed: defaults)  → baseline
+  S9: All   on s09_integrated               (seed: defaults)  → baseline
 
-After each baseline step, gains are written to logs/baseline_gains.json.
+After each baseline step, gains are written directly into params.py.
 
 Usage:
     python -m master_sim.optimizer.pipeline
@@ -22,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import json
 import os
 import pathlib
 import subprocess
@@ -31,7 +31,6 @@ import time
 
 _PACKAGE = pathlib.Path(__file__).parent.parent.resolve()
 LOGS_DIR = _PACKAGE / "logs"
-BASELINE_JSON = LOGS_DIR / "baseline_gains.json"
 
 
 # ── Pipeline step definitions ────────────────────────────────────────────────
@@ -50,17 +49,17 @@ STEPS = [
 
     ("S3", "master_sim.optimizer.optimize_vel_pi",
      "s03_vel_pi_disturbance",
-     ["KP_V", "KI_V"],
+     ["KP_V", "KI_V", "KFF_V"],
      None, False),
 
     ("S4", "master_sim.optimizer.optimize_vel_pi",
      "s04_vel_pi_staircase",
-     ["KP_V", "KI_V"],
+     ["KP_V", "KI_V", "KFF_V"],
      "S3", False),
 
     ("S5", "master_sim.optimizer.optimize_vel_pi",
      "s05_vel_pi_leg_cycling",
-     ["KP_V", "KI_V"],
+     ["KP_V", "KI_V", "KFF_V"],
      "S4", True),
 
     ("S6", "master_sim.optimizer.optimize_yaw_pi",
@@ -77,6 +76,13 @@ STEPS = [
      "s08_terrain_compliance",
      ["LEG_K_S", "LEG_B_S", "LEG_K_ROLL", "LEG_D_ROLL"],
      None, True),
+
+    ("S9", "master_sim.optimizer.optimize_integrated",
+     "s09_integrated",
+     ["Q_PITCH", "Q_PITCH_RATE", "Q_VEL", "R",
+      "KP_V", "KI_V", "KFF_V", "KP_YAW", "KI_YAW",
+      "LEG_K_S", "LEG_B_S", "LEG_K_ROLL", "LEG_D_ROLL"],
+     None, True),
 ]
 
 # Map from search-space param key to defaults.py dataclass field path
@@ -88,6 +94,7 @@ _DEFAULTS_MAP = {
     "R":            ("gains", "lqr", "R"),
     "KP_V":         ("gains", "velocity_pi", "Kp"),
     "KI_V":         ("gains", "velocity_pi", "Ki"),
+    "KFF_V":        ("gains", "velocity_pi", "Kff"),
     "KP_YAW":       ("gains", "yaw_pi", "Kp"),
     "KI_YAW":       ("gains", "yaw_pi", "Ki"),
     "LEG_K_S":      ("gains", "suspension", "K_s"),
@@ -133,6 +140,15 @@ def _read_defaults_seed(param_keys: list[str]) -> dict:
     return seed
 
 
+def _random_seed(param_keys: list[str]) -> dict:
+    """Random sample from the search space for the given param keys."""
+    import numpy as np
+    from master_sim.optimizer.search_space import INTEGRATED_SPACE
+    rng = np.random.default_rng()
+    full = INTEGRATED_SPACE.random_init(rng)
+    return {k: full[k] for k in param_keys}
+
+
 def _read_best_from_csv(scenario: str, param_keys: list[str]) -> dict | None:
     """Read best gains from a scenario's CSV."""
     from master_sim.optimizer.run_log import get_scenario_csv_path, load_best_params
@@ -144,12 +160,16 @@ def _format_seed(gains: dict) -> str:
     return ",".join(f"{k}={v:.8g}" for k, v in gains.items())
 
 
-def _save_baseline(step_results: dict):
-    """Write all baseline gains to logs/baseline_gains.json."""
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    with BASELINE_JSON.open("w", encoding="utf-8") as f:
-        json.dump(step_results, f, indent=2)
-    _log(f"  Wrote baseline gains to {BASELINE_JSON.name}")
+def _save_baseline(step_id: str, best: dict, fitness: float = 0.0):
+    """Write baseline gains directly into params.py."""
+    from master_sim.optimizer.baseline import save_baseline_gains
+    save_baseline_gains(
+        best_params=best,
+        best_fitness=fitness,
+        scenario=step_id,
+        source="pipeline",
+    )
+    _log(f"  Wrote baseline gains into params.py")
 
 
 # ── Step runner ──────────────────────────────────────────────────────────────
@@ -214,15 +234,16 @@ def main():
     global _LOG_FILE
 
     ap = argparse.ArgumentParser(
-        description="S1→S8 automated tuning pipeline.",
+        description="S1→S9 automated tuning pipeline.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m master_sim.optimizer.pipeline                  # all 8, 1h each
+  python -m master_sim.optimizer.pipeline                  # all 9, 1h each
   python -m master_sim.optimizer.pipeline --hours 2        # 2h per step
   python -m master_sim.optimizer.pipeline --hours 0.02     # smoke test
   python -m master_sim.optimizer.pipeline --start S3 --end S5
   python -m master_sim.optimizer.pipeline --fresh
+  python -m master_sim.optimizer.pipeline --fresh --random --hours 2
 """)
     ap.add_argument("--hours",    type=float, default=1.0)
     ap.add_argument("--workers",  type=int,   default=None)
@@ -231,6 +252,8 @@ Examples:
     ap.add_argument("--start",    type=str,   default=None)
     ap.add_argument("--end",      type=str,   default=None)
     ap.add_argument("--fresh",    action="store_true")
+    ap.add_argument("--random",   action="store_true",
+                    help="Random initial seed for chain-starting steps instead of defaults")
     args = ap.parse_args()
 
     # Set up log file
@@ -244,7 +267,7 @@ Examples:
     end_idx = step_ids.index(args.end) + 1 if args.end else len(STEPS)
     active_steps = STEPS[start_idx:end_idx]
 
-    _banner(f"S1->S8 Pipeline  |  {len(active_steps)} steps  |  {args.hours:.2f}h/step  |  {ts_str}")
+    _banner(f"S1->S9 Pipeline  |  {len(active_steps)} steps  |  {args.hours:.2f}h/step  |  {ts_str}")
     _log(f"  Log: {_LOG_FILE}")
     _log(f"  Steps: {[s[0] for s in active_steps]}")
 
@@ -272,8 +295,30 @@ Examples:
                 _log(f"  WARNING: {seed_from} has no result — falling back to defaults")
 
         if seed_gains is None:
-            seed_gains = _read_defaults_seed(param_keys)
-            _log(f"  Seeding from defaults: {_format_seed(seed_gains)}")
+            if args.random:
+                seed_gains = _random_seed(param_keys)
+                _log(f"  Seeding from RANDOM: {_format_seed(seed_gains)}")
+            else:
+                seed_gains = _read_defaults_seed(param_keys)
+                _log(f"  Seeding from defaults: {_format_seed(seed_gains)}")
+
+        # Overlay seed with best gains from earlier pipeline steps.
+        # Fixes stale-cache issue: DEFAULT_PARAMS is cached at import time
+        # but baseline steps write updated gains to params.py on disk.
+        # This ensures e.g. S9 starts from the S2/S5/S7/S8 optimized gains.
+        overlaid_keys = []
+        for prev_id, _, _, _, _, _ in STEPS:
+            if prev_id == step_id:
+                break
+            prev_gains = step_results.get(prev_id)
+            if prev_gains:
+                for k, v in prev_gains.items():
+                    if k in seed_gains:
+                        seed_gains[k] = v
+                        overlaid_keys.append(k)
+        if overlaid_keys:
+            _log(f"  Overlaid {len(overlaid_keys)} keys from earlier steps: "
+                 f"{_format_seed(seed_gains)}")
 
         best = _run_step(
             step_id=step_id,
@@ -297,7 +342,7 @@ Examples:
 
         if is_baseline:
             _log(f"  [BASELINE] {step_id}: {_format_seed(best)}")
-            _save_baseline(step_results)
+            _save_baseline(step_id, best)
 
     # Final summary
     total_min = (time.perf_counter() - pipeline_t0) / 60.0

@@ -44,20 +44,33 @@ class ProgressUI:
     ----------
     title : str
         Window title.
+    all_defaults : dict, optional
+        All 12 gain defaults {name: float}.  When provided a live gains
+        panel is shown — active gains update each generation, inactive
+        ones stay dimmed at their default value.
+    active_names : set, optional
+        Names of gains currently being optimised (subset of all_defaults).
     """
 
-    def __init__(self, title: str = "Optimizer Progress"):
+    def __init__(self, title: str = "Optimizer Progress",
+                 all_defaults: dict | None = None,
+                 active_names: set | None = None):
         self._lock = threading.Lock()
+        self._all_defaults = all_defaults or {}
+        self._active_names = active_names or set()
         self._state: dict = dict(
             pct=0.0, elapsed_s=0, remaining_s=0,
             n_evals=0, gen=0,
             best_fit=float("inf"), best_params="—",
             status="starting", success_rate=0.0,
             gens_without_improvement=0,
+            current_params={},
+            last_tried={},
         )
         self._paused = threading.Event()       # set = paused
         self._done = threading.Event()
         self._closed = threading.Event()
+        self._auto_close_s: float | None = None  # set by finish(auto_close=True)
         self._t = threading.Thread(target=self._run_gui, args=(title,), daemon=True)
         self._t.start()
 
@@ -88,15 +101,32 @@ class ProgressUI:
                 status=p.status,
                 success_rate=p.success_rate,
                 gens_without_improvement=p.gens_without_improvement,
+                n_restarts=p.n_restarts,
+                current_params=dict(p.best_params),
+                last_tried=dict(p.last_tried),
             )
 
-    def finish(self):
-        """Signal that optimization is complete (window stays open)."""
+    def finish(self, auto_close: bool = True, linger_s: float = 3.0):
+        """Signal that optimization is complete.
+
+        Parameters
+        ----------
+        auto_close : bool
+            If True (default), the window closes automatically after *linger_s*
+            seconds.  Set False to keep the window open until the user closes it.
+        linger_s : float
+            Seconds to keep the window visible before auto-closing.
+        """
         with self._lock:
             self._state["status"] = "done"
             self._state["pct"] = 100.0
             self._state["remaining_s"] = 0
         self._done.set()
+        if auto_close:
+            self._auto_close_s = linger_s
+        # Wait for window to close (auto or manual) so tkinter vars are
+        # cleaned up on the GUI thread (avoids cross-thread StringVar.__del__)
+        self._closed.wait()
 
     def wait_closed(self):
         """Block until the user closes the window."""
@@ -171,6 +201,89 @@ class ProgressUI:
                  bg=BG, fg=FG, anchor="w", wraplength=W - PAD * 2
                  ).pack(anchor="w")
 
+        # ── Live gains panel ────────────────────────────────────────────────
+        gain_best_vars: dict[str, tk.StringVar] = {}
+        gain_try_vars: dict[str, tk.StringVar] = {}
+        if self._all_defaults:
+            sep_gains = tk.Frame(root, height=1, bg=BAR_BG)
+            sep_gains.pack(fill="x", padx=PAD, pady=(6, 4))
+
+            gains_frame = tk.Frame(root, bg=BG)
+            gains_frame.pack(fill="x", padx=PAD, pady=(0, 4))
+
+            tk.Label(gains_frame, text="Controller Gains", font=FONT_SM,
+                     bg=BG, fg=FG_DIM, anchor="w").pack(anchor="w")
+
+            gains_grid = tk.Frame(gains_frame, bg=BG)
+            gains_grid.pack(fill="x", pady=(2, 0))
+
+            # Group gains by controller for visual clarity
+            _GAIN_GROUPS = [
+                ("LQR",        ["Q_PITCH", "Q_PITCH_RATE", "Q_VEL", "R"]),
+                ("Velocity PI", ["KP_V", "KI_V", "KFF_V"]),
+                ("Yaw PI",     ["KP_YAW", "KI_YAW"]),
+                ("Suspension", ["LEG_K_S", "LEG_B_S", "LEG_K_ROLL", "LEG_D_ROLL"]),
+            ]
+
+            # Column headers
+            tk.Label(gains_grid, text="", font=FONT_SM, bg=BG, width=2
+                     ).grid(row=0, column=0)
+            tk.Label(gains_grid, text="", font=FONT_SM, bg=BG
+                     ).grid(row=0, column=1)
+            tk.Label(gains_grid, text="Best", font=FONT_SM, bg=BG, fg=FG_DIM,
+                     anchor="e", width=12).grid(row=0, column=2, sticky="e")
+            tk.Label(gains_grid, text="Trying", font=FONT_SM, bg=BG, fg=FG_DIM,
+                     anchor="e", width=12).grid(row=0, column=3, sticky="e", padx=(8, 0))
+
+            row_idx = 1
+            for group_label, keys in _GAIN_GROUPS:
+                # Only show groups that have at least one key in all_defaults
+                group_keys = [k for k in keys if k in self._all_defaults]
+                if not group_keys:
+                    continue
+
+                tk.Label(gains_grid, text=group_label, font=FONT_SM,
+                         bg=BG, fg=ACCENT, anchor="w"
+                         ).grid(row=row_idx, column=0, columnspan=4,
+                                sticky="w", pady=(4, 0))
+                row_idx += 1
+
+                for k in group_keys:
+                    is_active = k in self._active_names
+                    name_fg = FG if is_active else FG_DIM
+                    val_fg = ACCENT2 if is_active else FG_DIM
+                    marker = "\u25b6" if is_active else " "
+
+                    tk.Label(gains_grid, text=marker, font=FONT_SM,
+                             bg=BG, fg=ACCENT2, width=2
+                             ).grid(row=row_idx, column=0, sticky="w")
+                    tk.Label(gains_grid, text=k, font=FONT_SM,
+                             bg=BG, fg=name_fg, anchor="w"
+                             ).grid(row=row_idx, column=1, sticky="w", padx=(0, 8))
+
+                    default_str = f"{self._all_defaults[k]:.6g}"
+
+                    # Best column — updates for active gains
+                    best_var = tk.StringVar(value=default_str)
+                    gain_best_vars[k] = best_var
+                    tk.Label(gains_grid, textvariable=best_var, font=FONT_MONO,
+                             bg=BG, fg=val_fg, anchor="e", width=12
+                             ).grid(row=row_idx, column=2, sticky="e")
+
+                    # Trying column — only for active gains
+                    if is_active:
+                        try_var = tk.StringVar(value=default_str)
+                        gain_try_vars[k] = try_var
+                        tk.Label(gains_grid, textvariable=try_var, font=FONT_MONO,
+                                 bg=BG, fg=FG, anchor="e", width=12
+                                 ).grid(row=row_idx, column=3, sticky="e", padx=(8, 0))
+                    else:
+                        tk.Label(gains_grid, text="—", font=FONT_MONO,
+                                 bg=BG, fg=FG_DIM, anchor="e", width=12
+                                 ).grid(row=row_idx, column=3, sticky="e", padx=(8, 0))
+
+                    row_idx += 1
+
         # ── Play / Pause button ──────────────────────────────────────────────
         sep2 = tk.Frame(root, height=1, bg=BAR_BG)
         sep2.pack(fill="x", padx=PAD, pady=(6, 4))
@@ -240,23 +353,56 @@ class ProgressUI:
             v_best_fit.set(f"{bf:.5f}" if bf < 1e9 else "—")
             v_best_params.set(s["best_params"])
 
+            # Live gains — Best column (current parent)
+            cp = s.get("current_params", {})
+            for k, var in gain_best_vars.items():
+                if k in cp:
+                    var.set(f"{cp[k]:.6g}")
+
+            # Live gains — Trying column (last generation's best child)
+            lt = s.get("last_tried", {})
+            for k, var in gain_try_vars.items():
+                if k in lt:
+                    var.set(f"{lt[k]:.6g}")
+
             # Status
             if s["status"] == "done":
-                v_status.set("Optimization complete — you may close this window")
                 btn_var.set("Done")
                 btn.configure(state="disabled", bg=FG_DIM)
+                if self._auto_close_s is not None:
+                    secs = max(0, int(self._auto_close_s))
+                    v_status.set(f"Done — closing in {secs}s")
+                    self._auto_close_s -= 0.3  # poll interval
+                    if self._auto_close_s <= 0:
+                        _on_close()
+                        return
+                else:
+                    v_status.set("Optimization complete — you may close this window")
             elif self._paused.is_set():
                 v_status.set("PAUSED — click Resume to continue")
             else:
                 sr = s.get("success_rate", 0.0)
                 stag = s.get("gens_without_improvement", 0)
-                v_status.set(f"Running  |  success rate {sr:.0%}  |  stagnant {stag}")
+                restarts = s.get("n_restarts", 0)
+                v_status.set(f"Running  |  success rate {sr:.0%}  |  stagnant {stag}  |  restarts {restarts}")
 
             if not self._closed.is_set():
                 root.after(300, _poll)
 
         root.after(300, _poll)
-        root.protocol("WM_DELETE_WINDOW", lambda: (self._closed.set(), root.destroy()))
+
+        def _on_close():
+            # Delete all StringVars on the GUI thread to avoid cross-thread errors
+            for var in gain_best_vars.values():
+                var.set("")
+            for var in gain_try_vars.values():
+                var.set("")
+            gain_best_vars.clear()
+            gain_try_vars.clear()
+            self._closed.set()
+            root.destroy()
+
+        root.protocol("WM_DELETE_WINDOW", _on_close)
         root.mainloop()
         self._closed.set()
 

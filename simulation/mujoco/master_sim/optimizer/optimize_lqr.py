@@ -7,9 +7,8 @@ Searches Q_PITCH, Q_PITCH_RATE, Q_VEL, R via (1+8)-ES.
 """
 import multiprocessing
 
-from master_sim.optimizer.common import eval_with_gains, optimizer_main
+from master_sim.optimizer.common import optimizer_main
 
-_SCENARIO_NAME = "s02_leg_height_gain_sched"
 _GAINS_KEY = "lqr"
 _PARAM_MAP = {
     "Q_PITCH": "Q_pitch",
@@ -19,26 +18,15 @@ _PARAM_MAP = {
 }
 
 
-def eval_lqr(candidate: dict) -> dict:
-    """Evaluate one LQR candidate — called in subprocess."""
-    return eval_with_gains(candidate, _SCENARIO_NAME, _GAINS_KEY, _PARAM_MAP)
-
-
 def main():
-    def _set(s):
-        global _SCENARIO_NAME
-        _SCENARIO_NAME = s
-
     from master_sim.optimizer.search_space import LQR_SPACE
     optimizer_main(
         description="LQR Q/R optimizer (1+8)-ES",
         default_scenario="s02_leg_height_gain_sched",
         search_space=LQR_SPACE,
-        eval_fn=eval_lqr,
         gains_key=_GAINS_KEY,
         param_mapping=_PARAM_MAP,
         ui_label="LQR",
-        set_scenario=_set,
     )
 
 

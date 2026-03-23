@@ -1,0 +1,11 @@
+[16:34:36] ========================================================================
+[16:34:36]   S1->S9 Pipeline  |  1 steps  |  0.08h/step  |  20260322_163436
+[16:34:36] ========================================================================
+[16:34:36]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260322_163436.log
+[16:34:36]   Steps: ['S3']
+[16:34:36] ========================================================================
+[16:34:36]   [1/1] S3 — s03_vel_pi_disturbance
+[16:34:36] ========================================================================
+[16:34:36]   Seeding from RANDOM: KP_V=0.36709903,KI_V=0.00037134422,KFF_V=0.0015374472
+[16:34:36]   Deleted S_s03_vel_pi_disturbance.csv (--fresh)
+[16:34:36]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s03_vel_pi_disturbance --hours 0.08333333333333333 --patience 50 --tol 0.0001 --workers 8 --seed-gains KP_V=0.36709903,KI_V=0.00037134422,KFF_V=0.0015374472

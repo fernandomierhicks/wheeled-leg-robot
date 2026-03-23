@@ -41,6 +41,7 @@ class ScenarioConfig:
     omega_profile  : callable(t) -> omega_desired [rad/s], or None (= 0.0)
     hip_profile    : callable(t) -> q_hip_target [rad], or None (= Q_NOM)
     dist_fn        : callable(t) -> force_x [N], or None (= 0.0)
+    roll_dist_fn   : callable(t) -> force_z [N] on left wheel hub, or None (= 0.0)
     world          : WorldConfig for MJCF builder
     fitness_fn     : callable(metrics_dict) -> float
     group          : optimizer group: "lqr" | "velocity_pi" | "yaw_pi" | "suspension"
@@ -55,15 +56,21 @@ class ScenarioConfig:
     active_controllers: FrozenSet[str] = frozenset({"lqr"})
     hip_mode: str = "position"
     v_profile: Optional[Callable] = None
+    theta_ref_profile: Optional[Callable] = None   # callable(t) -> theta_ref [rad], used when VelocityPI is off
     omega_profile: Optional[Callable] = None
     hip_profile: Optional[Callable] = None
     hip_vel_profile: Optional[Callable] = None
     dist_fn: Optional[Callable] = None
+    dist_target: str = "body"           # "body" | "wheel_L" | "wheel_R"
+    roll_dist_fn: Optional[Callable] = None
     world: WorldConfig = field(default_factory=WorldConfig)
     fitness_fn: Optional[Callable] = None
     group: str = "lqr"
     order: float = 0.0
     init_fn: Optional[Callable] = None
+    use_theta_ref_correction: bool = False
+    max_liftoff_s: Optional[float] = None   # early-terminate if cumulative liftoff exceeds this
+    max_vel_error_ms: Optional[float] = None  # early-terminate if |v_target - v_measured| exceeds this [m/s]
 
     # Fitness weights / constants used by fitness_fn — stored here so
     # the scenario definition is fully self-contained.
@@ -74,6 +81,8 @@ class ScenarioConfig:
     W_LIFTOFF: float = 50.0
     W_PITCH_RATE: float = 0.05
     W_SETTLE: float = 0.01
+    W_HIP_TRACK: float = 0.0
+    W_HIP_RATE: float = 0.0
 
     @property
     def tick_flags(self) -> dict:

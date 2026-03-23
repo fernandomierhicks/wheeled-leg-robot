@@ -1,0 +1,20 @@
+[19:08:28] ========================================================================
+[19:08:28]   S1->S9 Pipeline  |  1 steps  |  0.17h/step  |  20260322_190828
+[19:08:28] ========================================================================
+[19:08:28]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260322_190828.log
+[19:08:28]   Steps: ['S3']
+[19:08:28] ========================================================================
+[19:08:28]   [1/1] S3 — s03_vel_pi_disturbance
+[19:08:28] ========================================================================
+[19:08:28]   Seeding from defaults: KP_V=0.00980345,KI_V=0.307154,KFF_V=0.129776
+[19:08:28]   Deleted S_s03_vel_pi_disturbance.csv (--fresh)
+[19:08:28]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s03_vel_pi_disturbance --hours 0.16666666666666666 --patience 50 --tol 0.0001 --workers 8 --seed-gains KP_V=0.00980345,KI_V=0.307154,KFF_V=0.129776
+[19:10:44]   S3 done in 2.3 min — best: KP_V=0.011156208,KI_V=0.30819708,KFF_V=0.10849846
+[19:10:44] ========================================================================
+[19:10:44]   Pipeline complete — 2 min total
+[19:10:44] ========================================================================
+[19:10:44]   S1: Q_PITCH=0.31824234,Q_PITCH_RATE=8.6741191,Q_VEL=1.0272054e-07,R=7.0212944
+[19:10:44]   S2 [BASELINE]: Q_PITCH=5.4025381,Q_PITCH_RATE=0.033407993,Q_VEL=0.0016521331,R=39.646999
+[19:10:44]   S3: KP_V=0.011156208,KI_V=0.30819708,KFF_V=0.10849846
+[19:10:44] 
+  All steps completed successfully.

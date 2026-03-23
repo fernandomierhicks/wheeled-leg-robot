@@ -466,7 +466,7 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
     """
     from master_sim.defaults import DEFAULT_PARAMS
     from master_sim.scenarios import SCENARIOS
-    from master_sim.sim_loop import build_model_and_data, init_sim, run
+    from master_sim.sim_loop import build_model_and_data, init_sim, run, apply_disturbance
     from master_sim.physics import get_equilibrium_pitch
     from master_sim.controllers.lqr import compute_gain_table, lqr_torque
     from master_sim.controllers.velocity_pi import VelocityPI
@@ -514,6 +514,8 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
     act_hip_L   = _act("hip_act_L");   act_hip_R   = _act("hip_act_R")
     act_wheel_L = _act("wheel_act_L"); act_wheel_R = _act("wheel_act_R")
     box_bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "box")
+    wheel_bid_L = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "wheel_asm_L")
+    wheel_bid_R = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "wheel_asm_R")
 
     # Controllers — flags from scenario (single source of truth)
     flags = cfg.tick_flags
@@ -521,11 +523,10 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
     use_yaw_pi      = flags['use_yaw_pi']
     use_impedance   = flags['use_impedance']
     v_profile_fn     = cfg.v_profile or (lambda t: 0.0)
+    theta_ref_fn     = cfg.theta_ref_profile
     omega_profile_fn = cfg.omega_profile
     hip_profile_fn   = cfg.hip_profile
     hip_vel_fn       = getattr(cfg, 'hip_vel_profile', None)
-    dist_fn          = cfg.dist_fn
-
     K_table = compute_gain_table(robot, params.gains.lqr)
     vel_pi = VelocityPI(params.gains.velocity_pi, dt) if use_velocity_pi else None
     yaw_pi_ctrl = YawPI(params.gains.yaw_pi, dt) if use_yaw_pi else None
@@ -559,6 +560,9 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
         viewer.cam.distance  = 2.5
         viewer.cam.lookat    = np.array([0.0, 0.0, 0.30])
         _add_world_axes(viewer)
+
+        # Reserve a geom slot for the disturbance arrow indicator
+        _n_static_geoms = viewer.user_scn.ngeom   # after world axes
 
         # Snap viewer to right half (with mid-padding)
         def _snap():
@@ -611,8 +615,8 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
                             theta_ref, prev_theta_ref - _d_max, prev_theta_ref + _d_max))
                         prev_theta_ref = theta_ref
                     else:
-                        theta_ref = 0.0
-                        v_ref_rads = 0.0
+                        theta_ref = theta_ref_fn(data.time) if theta_ref_fn else 0.0
+                        # v_ref_rads passes through to LQR even without VelocityPI
 
                     # Sensor delay
                     _pitch_d, _pitch_rate_d, _wheel_vel_d = sens_buf.push(
@@ -675,10 +679,30 @@ def _replay_mujoco_viewer(scenario_name: str, params=None, rng_seed: int = 0):
                     if abs(pitch_true) > 0.785:
                         break
 
-                # Disturbance
-                data.xfrc_applied[box_bid, 0] = dist_fn(data.time) if dist_fn else 0.0
+                # Disturbance — shared with sim_loop
+                vis_bid, vis_force = apply_disturbance(
+                    data, data.time, cfg,
+                    box_bid, wheel_bid_L, wheel_bid_R)
+
                 mujoco.mj_step(model, data)
                 step[0] += 1
+
+            # ── Disturbance arrow indicator ─────────────────────────
+            scn = viewer.user_scn
+            scn.ngeom = _n_static_geoms          # reset dynamic geoms
+            if vis_bid is not None and scn.ngeom < scn.maxgeom:
+                _arrow_len = 0.25
+                _arrow_pos = data.xpos[vis_bid].copy()
+                _arrow_pos[2] -= 0.05   # start slightly below body
+                mujoco.mjv_initGeom(
+                    scn.geoms[scn.ngeom],
+                    type=mujoco.mjtGeom.mjGEOM_ARROW,
+                    size=np.array([0.015, 0.015, _arrow_len]),
+                    pos=_arrow_pos + np.array([0.0, 0.0, _arrow_len / 2]),
+                    mat=np.eye(3).flatten(),      # Z-up = arrow points up
+                    rgba=np.array([1.0, 0.2, 0.0, 0.9], dtype=np.float32),
+                )
+                scn.ngeom += 1
 
             viewer.sync()
             # Camera follow
@@ -900,6 +924,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
     from master_sim.scenarios import SCENARIOS
     from master_sim.sim_loop import (
         build_model_and_data, init_sim, SimController, get_pitch_and_rate,
+        apply_disturbance,
     )
 
     if params is None:
@@ -921,10 +946,10 @@ def replay(scenario_name: str, with_viewer: bool = False,
 
     # Scenario profiles
     v_profile_fn     = cfg.v_profile or (lambda t: 0.0)
+    theta_ref_fn     = cfg.theta_ref_profile
     omega_profile_fn = cfg.omega_profile
     hip_profile_fn   = cfg.hip_profile
     hip_vel_fn       = cfg.hip_vel_profile
-    dist_fn          = cfg.dist_fn
 
     # Controller enable flags from scenario (single source of truth)
     flags = cfg.tick_flags
@@ -938,6 +963,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
     # Launch plot process (identical to sandbox)
     wheel_limit = params.motors.wheel.torque_limit
     hip_limit   = params.motors.hip.impedance_torque_limit
+    _vp_init = _vel_pi_gains_dict(params)
+    _lqr_init = _lqr_gains_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -945,7 +972,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S,
               f"Replay — {cfg.display_name}",
-              wheel_limit, hip_limit, False),
+              wheel_limit, hip_limit, False, _vp_init, _lqr_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -1037,6 +1064,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
 
                     # After scenario duration, hold final profile values
                     v_target     = v_profile_fn(t_now) if not past_duration else 0.0
+                    theta_ref_c  = (theta_ref_fn(t_now) if theta_ref_fn and not past_duration else 0.0)
                     omega_target = (omega_profile_fn(t_now) if omega_profile_fn and not past_duration else 0.0)
                     q_hip_target = hip_profile_fn(t_now) if hip_profile_fn else robot.Q_NOM
                     dq_hip_tgt   = hip_vel_fn(t_now) if hip_vel_fn else 0.0
@@ -1044,6 +1072,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     tick = ctrl.tick(
                         model, data,
                         v_target_ms=v_target,
+                        theta_ref_cmd=theta_ref_c,
                         omega_target=omega_target,
                         q_hip_target=q_hip_target,
                         dq_hip_target=dq_hip_tgt,
@@ -1058,11 +1087,9 @@ def replay(scenario_name: str, with_viewer: bool = False,
                         break
 
                 # Disturbance only during scenario duration
-                if dist_fn and data.time < cfg.duration:
-                    data.xfrc_applied[ctrl.box_bid, 0] = dist_fn(
-                        float(data.time))
-                else:
-                    data.xfrc_applied[ctrl.box_bid, 0] = 0.0
+                if data.time < cfg.duration:
+                    apply_disturbance(data, data.time, cfg,
+                                      ctrl.box_bid, ctrl.wheel_bid_L, ctrl.wheel_bid_R)
 
                 mujoco.mj_step(model, data)
                 step += 1
@@ -1184,7 +1211,9 @@ def sandbox_world() -> 'WorldConfig':
 def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                   window_s: float, title: str,
                   wheel_limit: float, hip_limit: float,
-                  has_gamepad: bool = False) -> None:
+                  has_gamepad: bool = False,
+                  vel_pi_gains: dict = None,
+                  lqr_gains: dict = None) -> None:
     """Child process — independent Qt app with 10-panel pyqtgraph telemetry.
 
     Communication:
@@ -1323,6 +1352,89 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     hbox_ctrl.addWidget(_btn_hip)
 
     vbox.addWidget(ctrl_row)
+
+    # ── VelocityPI gain spinboxes ─────────────────────────────────────────────
+    _vp = vel_pi_gains or {}
+    gain_row = QtWidgets.QWidget()
+    gain_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
+    hbox_gain = QtWidgets.QHBoxLayout(gain_row)
+    hbox_gain.setContentsMargins(6, 3, 6, 3)
+    hbox_gain.setSpacing(12)
+
+    lbl_gain = QtWidgets.QLabel("VelPI Gains:")
+    lbl_gain.setStyleSheet(_SL)
+    hbox_gain.addWidget(lbl_gain)
+
+    _SPIN_STYLE = (
+        "QDoubleSpinBox{background:#2a2a4e;color:#80ffb0;border:1px solid #444;"
+        "border-radius:3px;font-family:Consolas,monospace;font-size:11px;"
+        "font-weight:bold;padding:1px 4px;min-width:70px}"
+        "QDoubleSpinBox::up-button,QDoubleSpinBox::down-button{"
+        "background:#3a3a5e;border:1px solid #555;width:14px}"
+        "QDoubleSpinBox::up-button:hover,QDoubleSpinBox::down-button:hover{"
+        "background:#5a5a9e}")
+    _SPIN_LBL = ("color:#e8e8e8;font-family:Consolas,monospace;"
+                 "font-size:11px;font-weight:bold;")
+
+    _gain_defs = [
+        ("Kp",             "Kp",                     0.0, 1.0,   0.005, 4, _vp.get("Kp", 0.0103)),
+        ("Ki",             "Ki",                     0.0, 2.0,   0.01,  4, _vp.get("Ki", 0.0554)),
+        ("Kff",            "Kff",                    0.0, 1.0,   0.005, 4, _vp.get("Kff", 0.102)),
+        ("θ_max",          "theta_max",              0.1, 1.5,   0.1,   2, _vp.get("theta_max", 0.8)),
+        ("rate_lim",       "theta_ref_rate_limit",   1.0, 200.0, 5.0,   1, _vp.get("theta_ref_rate_limit", 50.0)),
+    ]
+    for disp, field, lo, hi, step, dec, default in _gain_defs:
+        lbl = QtWidgets.QLabel(disp)
+        lbl.setStyleSheet(_SPIN_LBL)
+        hbox_gain.addWidget(lbl)
+
+        sb = QtWidgets.QDoubleSpinBox()
+        sb.setRange(lo, hi)
+        sb.setSingleStep(step)
+        sb.setDecimals(dec)
+        sb.setValue(default)
+        sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(
+            lambda val, f=field: _safe_cmd(("GAIN_VP", f, val)))
+        hbox_gain.addWidget(sb)
+
+    hbox_gain.addStretch()
+    vbox.addWidget(gain_row)
+
+    # ── LQR cost-weight spinboxes ──────────────────────────────────────────────
+    _lq = lqr_gains or {}
+    lqr_row = QtWidgets.QWidget()
+    lqr_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
+    hbox_lqr = QtWidgets.QHBoxLayout(lqr_row)
+    hbox_lqr.setContentsMargins(6, 3, 6, 3)
+    hbox_lqr.setSpacing(12)
+
+    lbl_lqr = QtWidgets.QLabel("LQR Weights:")
+    lbl_lqr.setStyleSheet(_SL)
+    hbox_lqr.addWidget(lbl_lqr)
+
+    _lqr_defs = [
+        ("Q_pitch",      "Q_pitch",      0.01, 50.0,  0.5,  3, _lq.get("Q_pitch", 1.0)),
+        ("Q_pitch_rate", "Q_pitch_rate", 0.001, 10.0,  0.1,  4, _lq.get("Q_pitch_rate", 1.0)),
+        ("R",            "R",            1e-7,  1.0,   1e-5, 7, _lq.get("R", 1e-5)),
+    ]
+    for disp, fld, lo, hi, step, dec, default in _lqr_defs:
+        lbl = QtWidgets.QLabel(disp)
+        lbl.setStyleSheet(_SPIN_LBL)
+        hbox_lqr.addWidget(lbl)
+
+        sb = QtWidgets.QDoubleSpinBox()
+        sb.setRange(lo, hi)
+        sb.setSingleStep(step)
+        sb.setDecimals(dec)
+        sb.setValue(default)
+        sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(
+            lambda val, f=fld: _safe_cmd(("GAIN_LQR", f, val)))
+        hbox_lqr.addWidget(sb)
+
+    hbox_lqr.addStretch()
+    vbox.addWidget(lqr_row)
 
     # ── Fallback sliders (shown when no gamepad detected) ─────────────────────
     if not has_gamepad:
@@ -1725,6 +1837,19 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     app.exec()
 
 
+def _vel_pi_gains_dict(params) -> dict:
+    """Extract VelocityPI gains as a plain dict for passing to plot process."""
+    g = params.gains.velocity_pi
+    return dict(Kp=g.Kp, Ki=g.Ki, Kff=g.Kff, theta_max=g.theta_max,
+                theta_ref_rate_limit=g.theta_ref_rate_limit)
+
+
+def _lqr_gains_dict(params) -> dict:
+    """Extract LQR cost weights as a plain dict for passing to plot process."""
+    g = params.gains.lqr
+    return dict(Q_pitch=g.Q_pitch, Q_pitch_rate=g.Q_pitch_rate, R=g.R)
+
+
 def sandbox(rng_seed: int = 0):
     """Launch sandbox mode — MuJoCo viewer + pyqtgraph telemetry (dual-process).
 
@@ -1811,13 +1936,15 @@ def sandbox(rng_seed: int = 0):
     # ── Launch plot process ───────────────────────────────────────────────────
     wheel_limit = params.motors.wheel.torque_limit
     hip_limit   = params.motors.hip.impedance_torque_limit
+    _vp_init = _vel_pi_gains_dict(params)
+    _lqr_init = _lqr_gains_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
     plot_proc = mp.Process(
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, "Sandbox — free drive",
-              wheel_limit, hip_limit, has_gamepad),
+              wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -1901,6 +2028,10 @@ def sandbox(rng_seed: int = 0):
                         elif key == "RollLev":    _en_roll_lev[0]   = val
                     elif cmd[0] == "HIP_MODE":
                         _hip_mode[0] = cmd[1]
+                    elif cmd[0] == "GAIN_VP":
+                        ctrl.update_velocity_pi_gain(cmd[1], cmd[2])
+                    elif cmd[0] == "GAIN_LQR":
+                        ctrl.update_lqr_gain(cmd[1], cmd[2])
             except Exception:
                 pass
 
@@ -2022,9 +2153,11 @@ def run_unified(initial_scenario: str = "sandbox",
     rng_seed         : reproducible noise seed
     """
     from master_sim.defaults import DEFAULT_PARAMS
+    from master_sim.params import SimParams
     from master_sim.scenarios import SCENARIOS
     from master_sim.sim_loop import (
         build_model_and_data, init_sim, SimController, get_pitch_and_rate,
+        apply_disturbance,
     )
 
     params = DEFAULT_PARAMS
@@ -2072,6 +2205,8 @@ def run_unified(initial_scenario: str = "sandbox",
     # ── Launch plot process ONCE (survives all switches) ──────────────────────
     wheel_limit = params.motors.wheel.torque_limit
     hip_limit   = params.motors.hip.impedance_torque_limit
+    _vp_init = _vel_pi_gains_dict(params)
+    _lqr_init = _lqr_gains_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -2080,7 +2215,7 @@ def run_unified(initial_scenario: str = "sandbox",
     plot_proc = mp.Process(
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, init_title,
-              wheel_limit, hip_limit, has_gamepad),
+              wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -2114,6 +2249,12 @@ def run_unified(initial_scenario: str = "sandbox",
     user_quit = False
 
     while not user_quit:
+        # Reload params.py on every world rebuild so optimizer changes are picked up
+        import importlib
+        import master_sim.params as _params_mod
+        importlib.reload(_params_mod)
+        params = _params_mod.SimParams()
+
         cfg, world, title = _resolve(current_key)
 
         print(f"  Building world for: {title}")
@@ -2132,10 +2273,10 @@ def run_unified(initial_scenario: str = "sandbox",
         # Replay-mode state
         if cfg is not None:
             v_profile_fn     = cfg.v_profile or (lambda t: 0.0)
+            theta_ref_fn     = cfg.theta_ref_profile
             omega_profile_fn = cfg.omega_profile
             hip_profile_fn   = cfg.hip_profile
             hip_vel_fn       = cfg.hip_vel_profile
-            dist_fn          = cfg.dist_fn
             flags = cfg.tick_flags
 
         step         = 0
@@ -2225,10 +2366,10 @@ def run_unified(initial_scenario: str = "sandbox",
                                     cfg = new_cfg
                                     if cfg is not None:
                                         v_profile_fn     = cfg.v_profile or (lambda t: 0.0)
+                                        theta_ref_fn     = cfg.theta_ref_profile
                                         omega_profile_fn = cfg.omega_profile
                                         hip_profile_fn   = cfg.hip_profile
                                         hip_vel_fn       = cfg.hip_vel_profile
-                                        dist_fn          = cfg.dist_fn
                                         flags = cfg.tick_flags
                                     title = new_title
                                     _reset_sim()
@@ -2275,6 +2416,10 @@ def run_unified(initial_scenario: str = "sandbox",
                                 elif key == "RollLev":    _en_roll_lev[0]   = val
                             elif cmd[0] == "HIP_MODE":
                                 _hip_mode[0] = cmd[1]
+                            elif cmd[0] == "GAIN_VP":
+                                ctrl.update_velocity_pi_gain(cmd[1], cmd[2])
+                            elif cmd[0] == "GAIN_LQR":
+                                ctrl.update_lqr_gain(cmd[1], cmd[2])
                 except Exception:
                     pass
 
@@ -2310,6 +2455,7 @@ def run_unified(initial_scenario: str = "sandbox",
                                       f"Continuing — close viewer to exit.")
 
                             v_target     = v_profile_fn(t_now) if not past_duration else 0.0
+                            theta_ref_c  = (theta_ref_fn(t_now) if theta_ref_fn and not past_duration else 0.0)
                             omega_target = (omega_profile_fn(t_now)
                                             if omega_profile_fn and not past_duration else 0.0)
                             q_hip_target = hip_profile_fn(t_now) if hip_profile_fn else robot.Q_NOM
@@ -2318,6 +2464,7 @@ def run_unified(initial_scenario: str = "sandbox",
                             tick = ctrl.tick(
                                 model, data,
                                 v_target_ms=v_target,
+                                theta_ref_cmd=theta_ref_c,
                                 omega_target=omega_target,
                                 q_hip_target=q_hip_target,
                                 dq_hip_target=dq_hip_tgt,
@@ -2348,11 +2495,9 @@ def run_unified(initial_scenario: str = "sandbox",
                                 break
 
                     # Disturbance (replay only, during scenario duration)
-                    if cfg is not None:
-                        if dist_fn and data.time < cfg.duration:
-                            data.xfrc_applied[ctrl.box_bid, 0] = dist_fn(float(data.time))
-                        else:
-                            data.xfrc_applied[ctrl.box_bid, 0] = 0.0
+                    if cfg is not None and data.time < cfg.duration:
+                        apply_disturbance(data, data.time, cfg,
+                                          ctrl.box_bid, ctrl.wheel_bid_L, ctrl.wheel_bid_R)
 
                     mujoco.mj_step(model, data)
                     step += 1

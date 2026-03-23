@@ -7,9 +7,8 @@ Searches KP_YAW, KI_YAW via (1+8)-ES.
 """
 import multiprocessing
 
-from master_sim.optimizer.common import eval_with_gains, optimizer_main
+from master_sim.optimizer.common import optimizer_main
 
-_SCENARIO_NAME = "s07_drive_turn"
 _GAINS_KEY = "yaw_pi"
 _PARAM_MAP = {
     "KP_YAW": "Kp",
@@ -17,25 +16,15 @@ _PARAM_MAP = {
 }
 
 
-def eval_yaw_pi(candidate: dict) -> dict:
-    return eval_with_gains(candidate, _SCENARIO_NAME, _GAINS_KEY, _PARAM_MAP)
-
-
 def main():
-    def _set(s):
-        global _SCENARIO_NAME
-        _SCENARIO_NAME = s
-
     from master_sim.optimizer.search_space import YAW_PI_SPACE
     optimizer_main(
         description="Yaw PI optimizer (1+8)-ES",
         default_scenario="s07_drive_turn",
         search_space=YAW_PI_SPACE,
-        eval_fn=eval_yaw_pi,
         gains_key=_GAINS_KEY,
         param_mapping=_PARAM_MAP,
         ui_label="YawPI",
-        set_scenario=_set,
     )
 
 
