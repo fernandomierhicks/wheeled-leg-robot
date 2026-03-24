@@ -80,7 +80,7 @@ CONFIG = ScenarioConfig(
     display_name="S1 — LQR Pitch Step",
     duration=_timings.s1_duration,
     active_controllers=frozenset({"lqr"}),       # LQR only, no VelocityPI
-    hip_mode="position",
+    hip_mode="none",
     v_profile=s1_velocity_profile,               # zero throughout
     theta_ref_profile=s1_theta_ref_profile,      # −5° step at t=2.5s
     dist_fn=None,

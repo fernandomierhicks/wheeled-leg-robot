@@ -98,5 +98,5 @@ class ScenarioConfig:
             use_yaw_pi="yaw_pi" in self.active_controllers,
             use_impedance=use_impedance,
             use_roll_leveling=use_impedance,
-            use_suspension=use_impedance,
+            use_suspension=self.hip_mode in ("position", "impedance"),
         )

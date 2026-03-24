@@ -135,7 +135,7 @@ LQR_SPACE = SearchSpace(params={
 VELOCITY_PI_SPACE = SearchSpace(params={
     "KP_V":  ParamSpec(1e-3, 10.0),
     "KI_V":  ParamSpec(1e-3, 10.0),
-    "KFF_V": ParamSpec(0.1,  1.2),
+    "KFF_V": ParamSpec(0.1,  0.15),
 })
 
 YAW_PI_SPACE = SearchSpace(params={

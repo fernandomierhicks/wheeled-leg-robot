@@ -362,6 +362,7 @@ class SimController:
 
         if q_hip_target is None:
             q_hip_target = robot.Q_NOM
+        q_hip_target = float(np.clip(q_hip_target, robot.Q_EXT, robot.Q_RET))
 
         # ── Sensors ──────────────────────────────────────────────────────────
         pitch_true, pitch_rate_true = get_pitch_and_rate(

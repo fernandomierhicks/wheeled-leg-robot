@@ -617,20 +617,20 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
     pl_prate.plot(t, pitch_rate_deg, pen=pg.mkPen(PALETTE[5], width=LINE_WIDTH))
     pl_prate.addLine(y=0, pen=pg.mkPen("#666688", width=0.7, style=DASH))
 
-    # [3,0] Wheel Torques
-    pl_tau = ChartPanel.create(glw, 3, 0, "Wheel Torques", "N-m", xr)
+    # [3,0] Hip Torques
+    tau_hip_L = telemetry.get('tau_hip_L', np.zeros_like(t))
+    tau_hip_R = telemetry.get('tau_hip_R', np.zeros_like(t))
+    pl_htau = ChartPanel.create(glw, 3, 0, "Hip Torques", "N-m", xr)
+    ChartPanel.add_legend(pl_htau)
+    pl_htau.plot(t, tau_hip_L, pen=pg.mkPen(PALETTE[5], width=LINE_WIDTH), name="hip_L")
+    pl_htau.plot(t, tau_hip_R, pen=pg.mkPen(PALETTE[8], width=1.2, style=DASH), name="hip_R")
+
+    # [3,1] Wheel Torques
+    pl_tau = ChartPanel.create(glw, 3, 1, "Wheel Torques", "N-m", xr)
     ChartPanel.add_legend(pl_tau)
     pl_tau.plot(t, tau_whl_L, pen=pg.mkPen(PALETTE[4], width=LINE_WIDTH), name="t_L")
     pl_tau.plot(t, tau_whl_R, pen=pg.mkPen(PALETTE[3], width=1.2, style=DASH), name="t_R")
     pl_tau.addLine(y=0, pen=pg.mkPen("#666688", width=0.7, style=DASH))
-
-    # [3,1] Hip Torques
-    tau_hip_L = telemetry.get('tau_hip_L', np.zeros_like(t))
-    tau_hip_R = telemetry.get('tau_hip_R', np.zeros_like(t))
-    pl_htau = ChartPanel.create(glw, 3, 1, "Hip Torques", "N-m", xr)
-    ChartPanel.add_legend(pl_htau)
-    pl_htau.plot(t, tau_hip_L, pen=pg.mkPen(PALETTE[5], width=LINE_WIDTH), name="hip_L")
-    pl_htau.plot(t, tau_hip_R, pen=pg.mkPen(PALETTE[8], width=1.2, style=DASH), name="hip_R")
 
     # [4,0] Battery Voltage
     pl_batt = ChartPanel.create(glw, 4, 0, "Battery Voltage", "V", xr)
@@ -649,7 +649,7 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
         ("Pitch", pl_pitch), ("Velocity", pl_vel),
         ("Yaw Rate", pl_yaw), ("Hip Angle", pl_hip),
         ("Roll", pl_roll), ("Pitch Rate", pl_prate),
-        ("Wheel Torques", pl_tau), ("Hip Torques", pl_htau),
+        ("Hip Torques", pl_htau), ("Wheel Torques", pl_tau),
         ("Battery V", pl_batt), ("Position X", pl_pos),
     ]
 
@@ -1142,6 +1142,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ("Suspension", "Suspension"),
         ("RollLev",    "Roll Leveling"),
     ]
+    _ctrl_widgets = {}   # key → QCheckBox, for CONFIG_UPDATE
     for key, label in _ctrl_defs:
         cb = QtWidgets.QCheckBox(label)
         cb.setChecked(_cd.get(key, True))
@@ -1149,6 +1150,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         cb.stateChanged.connect(
             lambda state, k=key: _safe_cmd(("CTRL_EN", k, bool(state))))
         hbox_ctrl.addWidget(cb)
+        _ctrl_widgets[key] = cb
 
     hbox_ctrl.addStretch()
 
@@ -1414,20 +1416,20 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _leg(p_roll)
     ln_roll = p_roll.plot(pen=pg.mkPen('#ffa040', width=W), name="roll")
 
-    # ── Row 3: Wheel Torque (±limit) | Hip Torque (±limit) ────────────────────
-    p_tau = _p(3, 0, "Wheel Torque", "N·m")
-    _leg(p_tau)
-    _limits(p_tau, wheel_limit)
-    p_tau.setYRange(-wheel_limit * 1.1, wheel_limit * 1.1, padding=0)
-    ln_tau_L = p_tau.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
-    ln_tau_R = p_tau.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
-
-    p_htau = _p(3, 1, "Hip Torque", "N·m")
+    # ── Row 3: Hip Torque (±limit) | Wheel Torque (±limit) ────────────────────
+    p_htau = _p(3, 0, "Hip Torque", "N·m")
     _leg(p_htau)
     _limits(p_htau, hip_limit)
     p_htau.setYRange(-hip_limit * 1.1, hip_limit * 1.1, padding=0)
     ln_htau_L = p_htau.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
     ln_htau_R = p_htau.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
+    p_tau = _p(3, 1, "Wheel Torque", "N·m")
+    _leg(p_tau)
+    _limits(p_tau, wheel_limit)
+    p_tau.setYRange(-wheel_limit * 1.1, wheel_limit * 1.1, padding=0)
+    ln_tau_L = p_tau.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_tau_R = p_tau.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
 
     # ── Row 4: Battery V + I_total (dual Y) | Motor Currents ─────────────────
     p_batt = _p(4, 0, "Battery", "V")
@@ -1471,7 +1473,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ("Pitch",         p_pitch), ("Pitch Rate",     p_prate),
         ("Velocity",      p_vel),   ("Yaw Rate",       p_yaw),
         ("Hip Joints",    p_hip),   ("Roll",           p_roll),
-        ("Wheel Torque",  p_tau),   ("Hip Torque",     p_htau),
+        ("Hip Torque",    p_htau),  ("Wheel Torque",   p_tau),
         ("Battery",       p_batt),  ("Motor Currents", p_cur),
     ]
 
@@ -1550,6 +1552,18 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                 continue
             if isinstance(item, tuple) and len(item) == 2 and item[0] == "TITLE":
                 main_win.setWindowTitle(item[1])
+                continue
+            if isinstance(item, tuple) and len(item) == 2 and item[0] == "CONFIG_UPDATE":
+                new_cd = item[1]
+                for key, cb in _ctrl_widgets.items():
+                    cb.blockSignals(True)
+                    cb.setChecked(new_cd.get(key, True))
+                    cb.blockSignals(False)
+                hip_pd = not new_cd.get("Suspension", True)
+                _btn_hip.blockSignals(True)
+                _btn_hip.setChecked(hip_pd)
+                _btn_hip.setText("Hip: Pos PD" if hip_pd else "Hip: Impedance")
+                _btn_hip.blockSignals(False)
                 continue
             if (isinstance(item, tuple) and len(item) == 4
                     and item[0] == "FITNESS"):
@@ -2216,12 +2230,20 @@ def run_unified(initial_scenario: str = "sandbox",
                                         hip_profile_fn   = cfg.hip_profile
                                         hip_vel_fn       = cfg.hip_vel_profile
                                         flags = cfg.tick_flags
+                                        new_cd = _ctrl_defaults_from_cfg(cfg)
+                                        _en_lqr[0]        = new_cd["LQR"]
+                                        _en_vel_pi[0]     = new_cd["VelPI"]
+                                        _en_yaw_pi[0]     = new_cd["YawPI"]
+                                        _en_suspension[0] = new_cd["Suspension"]
+                                        _en_roll_lev[0]   = new_cd["RollLev"]
                                     title = new_title
                                     _reset_sim()
                                     if cfg and cfg.init_fn:
                                         cfg.init_fn(model, data, params)
                                     if not data_q.full():
                                         data_q.put_nowait(("TITLE", title))
+                                    if cfg is not None and not data_q.full():
+                                        data_q.put_nowait(("CONFIG_UPDATE", new_cd))
                                     print(f"  Switched (same world): {title}")
                                 else:
                                     # ── DIFFERENT world — rebuild ──

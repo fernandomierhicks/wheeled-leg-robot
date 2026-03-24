@@ -80,11 +80,11 @@ def zero_velocity(t: float) -> float:
 
 def leg_cycle_profile(t: float, robot: RobotGeometry,
                       timings: ScenarioTimings) -> float:
-    """Sinusoidal leg-height cycle between leg_cycle_Q_RET and Q_EXT.
+    """Sinusoidal leg-height cycle between Q_RET and Q_EXT.
 
     Period = leg_cycle_period.  Starts at mid-stroke, first moves toward Q_EXT.
     """
-    q_ret = timings.leg_cycle_Q_RET
+    q_ret = robot.Q_RET
     q_ext = robot.Q_EXT
     period = timings.leg_cycle_period
     center = (q_ret + q_ext) / 2.0
@@ -95,7 +95,7 @@ def leg_cycle_profile(t: float, robot: RobotGeometry,
 def leg_cycle_velocity(t: float, robot: RobotGeometry,
                        timings: ScenarioTimings) -> float:
     """Derivative of leg_cycle_profile — target hip velocity for feed-forward."""
-    q_ret = timings.leg_cycle_Q_RET
+    q_ret = robot.Q_RET
     q_ext = robot.Q_EXT
     period = timings.leg_cycle_period
     amp = (q_ext - q_ret) / 2.0

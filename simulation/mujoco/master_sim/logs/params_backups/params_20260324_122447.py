@@ -148,17 +148,17 @@ class LQRGains:
     """LQR cost weights — state: [pitch-θ_ref, pitch_rate, wheel_vel_avg-v_ref].
     From 'params good gains 3_22_26.py': 500 Hz, 0 ms delay, no forecaster.
     """
-    Q_pitch: float = 0.692383
-    Q_pitch_rate: float = 0.001
-    Q_vel: float = 0.00161521
-    R: float = 43.7238
+    Q_pitch: float = 0.0960172
+    Q_pitch_rate: float = 0.0211277
+    Q_vel: float = 2.3407e-06
+    R: float = 98.9823
 
 @dataclass(frozen=True)
 class VelocityPIGains:
     """Velocity PI outer loop — velocity error → lean angle."""
-    Kp: float = 0.248651
-    Ki: float = 0.00113305
-    Kff: float = 0.336719             # [s²·rad/m] ≈ 1/g — feed-forward: lean per unit dv_target/dt
+    Kp: float = 0.05
+    Ki: float = 0.1
+    Kff: float = 0.108498             # [s²·rad/m] ≈ 1/g — feed-forward: lean per unit dv_target/dt
 
     #to mcuh and robot linkages touch ground. 
     theta_max: float = 0.5        # [rad] ±46° clamp  Max commandable lean angle.
@@ -172,8 +172,8 @@ class VelocityPIGains:
 @dataclass(frozen=True)
 class YawPIGains:
     """Yaw PI — differential torque for yaw rate tracking."""
-    Kp: float = 0.319839
-    Ki: float = 1.35094
+    Kp: float = 0.193246
+    Ki: float = 0.221219
     torque_max: float = 0.5        # [N·m] differential clamp
     int_max: float = 0.5           # [N·m·s] anti-windup
 
@@ -181,10 +181,10 @@ class YawPIGains:
 @dataclass(frozen=True)
 class SuspensionGains:
     """Leg impedance + roll leveling (Phase 4)."""
-    K_s: float = 8.74376               # [N·m/rad] spring stiffness
-    B_s: float = 0.0125435              # [N·m·s/rad] damping
-    K_roll: float = 29.0288            # [rad/rad] roll proportional
-    D_roll: float = 0.0372484           # [rad·s/rad] roll rate damping
+    K_s: float = 12.9624               # [N·m/rad] spring stiffness
+    B_s: float = 0.109151              # [N·m·s/rad] damping
+    K_roll: float = 45.2559            # [rad/rad] roll proportional
+    D_roll: float = 0.491916           # [rad·s/rad] roll rate damping
 
     @staticmethod
     def hip_safe_range(robot: RobotGeometry) -> Tuple[float, float]:

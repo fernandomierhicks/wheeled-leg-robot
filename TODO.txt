@@ -2,11 +2,12 @@
 ---Fernandos note dont change below
 
 -How does sim get pitch and pitch rate? is pitch rate from muujoco or manually derivated?
-Check every scneario for correct behaviour. S2 doesnt move legs...
+Does S8 need yaw controller active? maybe shut it off?
+Reoptimize PI velocity controller. 
+-Implemetn Jump controller per JumpController.MD
 
 
 
--Implemetn Jump controller
 -Spring for higher jumps. 
 
 

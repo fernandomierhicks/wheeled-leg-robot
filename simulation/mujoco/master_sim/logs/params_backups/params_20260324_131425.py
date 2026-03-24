@@ -172,8 +172,8 @@ class VelocityPIGains:
 @dataclass(frozen=True)
 class YawPIGains:
     """Yaw PI — differential torque for yaw rate tracking."""
-    Kp: float = 0.319839
-    Ki: float = 1.35094
+    Kp: float = 0.193246
+    Ki: float = 0.221219
     torque_max: float = 0.5        # [N·m] differential clamp
     int_max: float = 0.5           # [N·m·s] anti-windup
 
@@ -181,10 +181,10 @@ class YawPIGains:
 @dataclass(frozen=True)
 class SuspensionGains:
     """Leg impedance + roll leveling (Phase 4)."""
-    K_s: float = 8.74376               # [N·m/rad] spring stiffness
-    B_s: float = 0.0125435              # [N·m·s/rad] damping
-    K_roll: float = 29.0288            # [rad/rad] roll proportional
-    D_roll: float = 0.0372484           # [rad·s/rad] roll rate damping
+    K_s: float = 12.9624               # [N·m/rad] spring stiffness
+    B_s: float = 0.109151              # [N·m·s/rad] damping
+    K_roll: float = 45.2559            # [rad/rad] roll proportional
+    D_roll: float = 0.491916           # [rad·s/rad] roll rate damping
 
     @staticmethod
     def hip_safe_range(robot: RobotGeometry) -> Tuple[float, float]:
