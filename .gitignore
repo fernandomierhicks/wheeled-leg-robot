@@ -28,8 +28,8 @@ data/tuning/
 *.mjb
 
 # PlatformIO build artifacts
-firmware/.pio/
-firmware/.pioenvs/
+.pio/
+.pioenvs/
 
 # OS
 .DS_Store

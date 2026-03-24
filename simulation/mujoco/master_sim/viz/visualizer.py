@@ -546,6 +546,36 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
     hbox.addWidget(hover_lbl)
     vbox.addWidget(status_row)
 
+    # ── Fitness breakdown table ────────────────────────────────────────────
+    bd = metrics.get('fitness_breakdown', {})
+    if bd:
+        # Sort by value descending (worst penalty first), skip zero terms
+        items = [(k, v) for k, v in sorted(bd.items(), key=lambda x: -x[1]) if v != 0.0]
+        total = sum(bd.values())
+        bd_row = QtWidgets.QWidget()
+        bd_row.setStyleSheet(f"background:{BAR_COLOR}; border-radius:4px;")
+        bd_hbox = QtWidgets.QHBoxLayout(bd_row)
+        bd_hbox.setContentsMargins(6, 2, 6, 2)
+        bd_hbox.setSpacing(0)
+        _BDL = ("color:#e8e8e8; font-family:Consolas,monospace; "
+                "font-size:11px; padding:0 4px 0 0;")
+        _BDH = ("color:#ff6060; font-family:Consolas,monospace; "
+                "font-size:11px; font-weight:bold; padding:0 4px 0 0;")
+        parts = []
+        for i, (name, val) in enumerate(items):
+            # Highlight the worst (first) non-FELL term
+            style = _BDH if i == 0 else _BDL
+            parts.append(f'<span style="color:{"#ff6060" if i == 0 else "#e8e8e8"}">'
+                         f'{name}={val:.4f}</span>')
+        text = " | ".join(parts) + f'  ||  <b>TOTAL={total:.4f}</b>'
+        lbl_bd = QtWidgets.QLabel(text)
+        lbl_bd.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        lbl_bd.setStyleSheet("color:#e8e8e8; font-family:Consolas,monospace; "
+                             "font-size:11px; padding:0;")
+        bd_hbox.addWidget(lbl_bd)
+        bd_hbox.addStretch()
+        vbox.addWidget(bd_row)
+
     # ── 5x2 Panel layout (matching replay.py) ─────────────────────────────
     # Row 0: Pitch, Velocity
     # Row 1: Yaw Rate, Hip Angle
@@ -715,7 +745,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S,
               f"Replay — {cfg.display_name}",
-              wheel_limit, hip_limit, False, _vp_init, _lqr_init),
+              wheel_limit, hip_limit, False, _vp_init, _lqr_init,
+              _ctrl_defaults_from_cfg(cfg)),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -957,7 +988,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                   wheel_limit: float, hip_limit: float,
                   has_gamepad: bool = False,
                   vel_pi_gains: dict = None,
-                  lqr_gains: dict = None) -> None:
+                  lqr_gains: dict = None,
+                  ctrl_defaults: dict = None) -> None:
     """Child process — independent Qt app with 10-panel pyqtgraph telemetry.
 
     Communication:
@@ -985,6 +1017,48 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     glw = pg.GraphicsLayoutWidget()
     glw.setBackground("#12121e")
     vbox.addWidget(glw, stretch=1)
+
+    # ── Fitness breakdown overlay (hidden until scenario completes) ─────────
+    _fitness_overlay = QtWidgets.QLabel(glw)
+    _fitness_overlay.setStyleSheet(
+        "background:rgba(26,26,46,230); color:#e8e8e8; "
+        "font-family:Consolas,monospace; font-size:12px; "
+        "border:1px solid #3a3a5e; border-radius:6px; padding:8px 12px;")
+    _fitness_overlay.setTextFormat(QtCore.Qt.TextFormat.RichText)
+    _fitness_overlay.hide()
+    _fitness_overlay.setWordWrap(True)
+    _fitness_overlay.mousePressEvent = lambda e: _fitness_overlay.hide()
+
+    def _show_fitness_breakdown(bd, total, status):
+        """Build HTML table and show overlay in top-right of chart area."""
+        items = [(k, v) for k, v in sorted(bd.items(), key=lambda x: -x[1]) if v != 0.0]
+        if not items:
+            return
+        rows = ""
+        for i, (name, val) in enumerate(items):
+            color = "#ff6060" if i == 0 else "#e8e8e8"
+            bar_w = min(int(val / max(total, 0.001) * 120), 120) if total > 0 else 0
+            rows += (f'<tr><td style="color:{color};padding:1px 8px 1px 0">{name}</td>'
+                     f'<td style="color:{color};text-align:right;padding:1px 4px">'
+                     f'{val:.4f}</td>'
+                     f'<td><div style="background:{color};width:{bar_w}px;'
+                     f'height:8px;border-radius:2px"></div></td></tr>')
+        html = (f'<div style="color:#80ff80;font-size:11px;margin-bottom:4px">'
+                f'status={status} | click to dismiss</div>'
+                f'<table>{rows}'
+                f'<tr><td style="color:#60d0ff;padding:3px 8px 0 0;'
+                f'border-top:1px solid #3a3a5e"><b>TOTAL</b></td>'
+                f'<td style="color:#60d0ff;text-align:right;padding:3px 4px 0 0;'
+                f'border-top:1px solid #3a3a5e"><b>{total:.4f}</b></td>'
+                f'<td></td></tr></table>')
+        _fitness_overlay.setText(html)
+        _fitness_overlay.adjustSize()
+        # Position top-right of the chart area
+        pw = glw.width()
+        ow = _fitness_overlay.sizeHint().width()
+        _fitness_overlay.move(max(pw - ow - 12, 4), 8)
+        _fitness_overlay.raise_()
+        _fitness_overlay.show()
 
     # ── Status bar ─────────────────────────────────────────────────────────────
     status_row = QtWidgets.QWidget()
@@ -1060,6 +1134,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         "QCheckBox::indicator:unchecked{background:#333;"
         "border:1px solid #666;border-radius:2px}")
 
+    _cd = ctrl_defaults or {}
     _ctrl_defs = [
         ("LQR",        "LQR Balance"),
         ("VelPI",      "Vel PI"),
@@ -1069,7 +1144,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ]
     for key, label in _ctrl_defs:
         cb = QtWidgets.QCheckBox(label)
-        cb.setChecked(True)
+        cb.setChecked(_cd.get(key, True))
         cb.setStyleSheet(_CB_STYLE)
         cb.stateChanged.connect(
             lambda state, k=key: _safe_cmd(("CTRL_EN", k, bool(state))))
@@ -1078,10 +1153,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     hbox_ctrl.addStretch()
 
     # Hip mode toggle button
-    _btn_hip = QtWidgets.QPushButton("Hip: Impedance")
+    _hip_is_pd = not _cd.get("Suspension", True)   # position PD when suspension off
+    _btn_hip = QtWidgets.QPushButton("Hip: Pos PD" if _hip_is_pd else "Hip: Impedance")
     _btn_hip.setFixedHeight(24)
     _btn_hip.setCheckable(True)
-    _btn_hip.setChecked(False)   # False = Impedance, True = Position PD
+    _btn_hip.setChecked(_hip_is_pd)   # False = Impedance, True = Position PD
     _btn_hip.setStyleSheet(
         "QPushButton{background:#3a3a5e;color:#e8e8e8;font-family:Consolas,monospace;"
         "font-size:11px;font-weight:bold;border-radius:4px;padding:0 10px}"
@@ -1158,9 +1234,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     hbox_lqr.addWidget(lbl_lqr)
 
     _lqr_defs = [
-        ("Q_pitch",      "Q_pitch",      0.01, 50.0,  0.5,  3, _lq.get("Q_pitch", 1.0)),
-        ("Q_pitch_rate", "Q_pitch_rate", 0.001, 10.0,  0.1,  4, _lq.get("Q_pitch_rate", 1.0)),
-        ("R",            "R",            1e-7,  1.0,   1e-5, 7, _lq.get("R", 1e-5)),
+        ("Q_pitch",      "Q_pitch",      0.01, 50.0,  0.01, 3, _lq.get("Q_pitch", 1.0)),
+        ("Q_pitch_rate", "Q_pitch_rate", 0.001, 10.0,  0.01, 4, _lq.get("Q_pitch_rate", 1.0)),
+        ("R",            "R",            0.0,  100.0,  0.1,  4, _lq.get("R", 1e-5)),
     ]
     for disp, fld, lo, hi, step, dec, default in _lqr_defs:
         lbl = QtWidgets.QLabel(disp)
@@ -1470,9 +1546,14 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                 return
             if item == "RESET":
                 _reset_bufs()
+                _fitness_overlay.hide()
                 continue
             if isinstance(item, tuple) and len(item) == 2 and item[0] == "TITLE":
                 main_win.setWindowTitle(item[1])
+                continue
+            if (isinstance(item, tuple) and len(item) == 4
+                    and item[0] == "FITNESS"):
+                _show_fitness_breakdown(item[1], item[2], item[3])
                 continue
 
             (t, pitch, pitch_ref, pitch_rate,
@@ -1594,6 +1675,23 @@ def _lqr_gains_dict(params) -> dict:
     return dict(Q_pitch=g.Q_pitch, Q_pitch_rate=g.Q_pitch_rate, R=g.R)
 
 
+def _ctrl_defaults_from_cfg(cfg) -> dict:
+    """Build checkbox default states from a ScenarioConfig (or None for sandbox)."""
+    if cfg is None:
+        # Sandbox: everything enabled
+        return {"LQR": True, "VelPI": True, "YawPI": True,
+                "Suspension": True, "RollLev": True}
+    ac = cfg.active_controllers
+    imp = cfg.hip_mode == "impedance"
+    return {
+        "LQR":        "lqr" in ac,
+        "VelPI":      "velocity_pi" in ac,
+        "YawPI":      "yaw_pi" in ac,
+        "Suspension": imp,
+        "RollLev":    imp,
+    }
+
+
 def sandbox(rng_seed: int = 0):
     """Launch sandbox mode — MuJoCo viewer + pyqtgraph telemetry (dual-process).
 
@@ -1688,7 +1786,8 @@ def sandbox(rng_seed: int = 0):
     plot_proc = mp.Process(
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, "Sandbox — free drive",
-              wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init),
+              wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
+              None),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -1955,11 +2054,13 @@ def run_unified(initial_scenario: str = "sandbox",
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
 
-    _, _, init_title = _resolve(initial_scenario)
+    init_cfg, _, init_title = _resolve(initial_scenario)
+    _ctrl_init = _ctrl_defaults_from_cfg(init_cfg)
     plot_proc = mp.Process(
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, init_title,
-              wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init),
+              wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
+              _ctrl_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -1967,13 +2068,13 @@ def run_unified(initial_scenario: str = "sandbox",
     # ── Mutable state shared across switches ──────────────────────────────────
     current_key = initial_scenario
 
-    # Sandbox-mode interactive targets
-    _en_lqr        = [True]
-    _en_vel_pi     = [True]
-    _en_yaw_pi     = [True]
-    _en_suspension = [True]
-    _en_roll_lev   = [True]
-    _hip_mode      = ["impedance"]
+    # Sandbox-mode interactive targets (initialised from scenario defaults)
+    _en_lqr        = [_ctrl_init.get("LQR", True)]
+    _en_vel_pi     = [_ctrl_init.get("VelPI", True)]
+    _en_yaw_pi     = [_ctrl_init.get("YawPI", True)]
+    _en_suspension = [_ctrl_init.get("Suspension", True)]
+    _en_roll_lev   = [_ctrl_init.get("RollLev", True)]
+    _hip_mode      = ["position_pd" if not _ctrl_init.get("Suspension", True) else "impedance"]
     _v_desired     = [0.0]
     _omega_desired = [0.0]
     _HIP_MAX_Q     = robot.Q_EXT + math.radians(10)
@@ -2195,6 +2296,17 @@ def run_unified(initial_scenario: str = "sandbox",
                             past_duration = t_now >= cfg.duration
                             if not scenario_logged and past_duration:
                                 scenario_logged = True
+                                # Compute fitness breakdown via headless run
+                                try:
+                                    from master_sim.scenarios import evaluate
+                                    _metrics = evaluate(params, cfg.name)
+                                    _bd = _metrics.get('fitness_breakdown', {})
+                                    _fit = _metrics.get('fitness', '?')
+                                    _status = _metrics.get('status', '?')
+                                    if _bd and not data_q.full():
+                                        data_q.put_nowait(("FITNESS", _bd, _fit, _status))
+                                except Exception as _e:
+                                    print(f"  Fitness breakdown failed: {_e}")
                                 print(f"  Scenario complete ({cfg.duration:.1f}s). "
                                       f"Continuing — close viewer to exit.")
 

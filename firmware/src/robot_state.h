@@ -31,6 +31,7 @@ struct RobotState {
     float pitch_rate;           // [rad/s]
     float roll;                 // [rad] body roll
     float roll_rate;            // [rad/s]
+    float yaw;                  // [rad] body yaw (mag-fused, from Rotation Vector)
     bool  imu_ok;               // true if data is fresh
     uint32_t imu_last_ms;       // millis() of last good read
 
@@ -67,6 +68,14 @@ struct RobotState {
     float tau_wheel_R;          // [N·m] right wheel torque command
     float tau_hip_L;            // [N·m] left hip torque command
     float tau_hip_R;            // [N·m] right hip torque command
+
+    // Overrun tracking
+    uint8_t overrun_flash;      // >0 = flash fault bar (decremented each LED update)
+
+    // WiFi profiling (USE_WIFI=1 only, zero otherwise)
+    uint32_t wifi_send_us;      // last UDP telemetry send duration [µs]
+    uint32_t wifi_recv_us;      // last command receive duration [µs]
+    uint32_t wifi_skips;        // telemetry packets skipped (insufficient slack)
 
     // Debug
     float debug_sine;           // noisy sine for telemetry rate check

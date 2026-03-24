@@ -32,9 +32,13 @@ W_FELL  = 200.0
 
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
-    return (W_VEL   * m['vel_track_rms_ms']   / REF_VEL_MS
-            + W_RATE  * m['rms_pitch_rate_dps'] / REF_PITCH_RATE_DPS
-            + (W_FELL if fell else 0.0))
+    bd = {
+        'velocity':   W_VEL  * m['vel_track_rms_ms']   / REF_VEL_MS,
+        'pitch_rate': W_RATE * m['rms_pitch_rate_dps'] / REF_PITCH_RATE_DPS,
+        'FELL':       W_FELL if fell else 0.0,
+    }
+    m['fitness_breakdown'] = bd
+    return sum(bd.values())
 
 
 # ── Scenario config ──────────────────────────────────────────────────────────

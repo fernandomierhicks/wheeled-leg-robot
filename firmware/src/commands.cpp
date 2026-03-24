@@ -6,12 +6,31 @@
 #include "commands.h"
 #include "config.h"
 #include <Arduino.h>
+
+#if USE_WIFI
+// WiFi mode: command receive is handled by wifi_fast.cpp.
+// This file is only compiled for USB-UART fallback.
 #include <WiFiS3.h>
 #include <WiFiUdp.h>
 
-// Dashboard address — owned by telemetry.cpp
+// Dashboard address — owned by wifi_fast.cpp in WiFi mode
 extern IPAddress g_dashboard_ip;
 extern bool      g_dashboard_known;
+#endif
+
+#if !USE_WIFI
+// ── USB-UART mode: no UDP commands (future: Serial command parser) ──────────
+
+void commands_init() {
+    Serial.println("[Cmd]  No WiFi — commands via Serial (TODO)");
+}
+
+void commands_receive(RobotState& /* state */) {
+    // TODO: Serial binary command parser for USB-UART mode
+}
+
+#else
+// ── WiFi mode: UDP command receiver (legacy path, unused when wifi_fast active)
 
 // Command type IDs (must match Python dashboard)
 enum CmdType : uint8_t {
@@ -71,7 +90,7 @@ void commands_receive(RobotState& state) {
         uint8_t m = s_buf[1];
         if (m <= static_cast<uint8_t>(Mode::FAULT)) {
             state.mode = static_cast<Mode>(m);
-            Serial.print("[Cmd]   Mode → ");
+            Serial.print("[Cmd]   Mode -> ");
             Serial.println(m);
         }
         break;
@@ -83,7 +102,7 @@ void commands_receive(RobotState& state) {
         memcpy(&val, &s_buf[2], 4);
         Serial.print("[Cmd]   Gain ");
         Serial.print(gid);
-        Serial.print(" → ");
+        Serial.print(" -> ");
         Serial.println(val, 6);
         // TODO: apply gain by ID once controllers are implemented
         break;
@@ -94,3 +113,4 @@ void commands_receive(RobotState& state) {
         break;
     }
 }
+#endif // USE_WIFI

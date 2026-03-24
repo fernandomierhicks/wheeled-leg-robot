@@ -126,15 +126,15 @@ class SearchSpace:
 # ── Pre-built search spaces for each optimizer ──────────────────────────────
 
 LQR_SPACE = SearchSpace(params={
-    "Q_PITCH":      ParamSpec(0.01,  10.0),
+    "Q_PITCH":      ParamSpec(0.01,  50.0),
     "Q_PITCH_RATE": ParamSpec(1e-3,  10.0,   zero_ok=True),
-    "Q_VEL":        ParamSpec(1e-7,  10.0),
-    "R":            ParamSpec(0.01,  1000.0),
+    "Q_VEL":        ParamSpec(1e-7,  1.0),
+    "R":            ParamSpec(0.01,  100.0),
 })
 
 VELOCITY_PI_SPACE = SearchSpace(params={
-    "KP_V":  ParamSpec(0.05, 0.15),
-    "KI_V":  ParamSpec(0.01, 0.1),
+    "KP_V":  ParamSpec(1e-3, 10.0),
+    "KI_V":  ParamSpec(1e-3, 10.0),
     "KFF_V": ParamSpec(0.1,  1.2),
 })
 
@@ -146,7 +146,7 @@ YAW_PI_SPACE = SearchSpace(params={
 SUSPENSION_SPACE = SearchSpace(params={
     "LEG_K_S":    ParamSpec(0.1,  100.0),
     "LEG_B_S":    ParamSpec(0.01, 100.0,  zero_ok=True),
-    "LEG_K_ROLL": ParamSpec(1e-3, 100.0,  zero_ok=True),
+    "LEG_K_ROLL": ParamSpec(1e-3, 500.0,  zero_ok=True),
     "LEG_D_ROLL": ParamSpec(1e-4, 100.0,  zero_ok=True),
 })
 

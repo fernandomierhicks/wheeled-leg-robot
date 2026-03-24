@@ -83,12 +83,16 @@ W_FELL      = 200.0  # binary survival penalty (not part of the 1.0 budget)
 
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
-    return (W_VEL       * m['vel_track_rms_ms']  / REF_VEL_TRACK
-            + W_ROLL      * m['max_roll_deg']      / REF_MAX_ROLL
-            + W_PITCH     * m['rms_pitch_deg']     / REF_RMS_PITCH
-            + W_HIP_TRACK * m['hip_track_rms_rad'] / REF_HIP_TRACK
-            + W_HIP_RATE  * m['hip_rate_rms']      / REF_HIP_RATE
-            + (W_FELL if fell else 0.0))
+    bd = {
+        'velocity':  W_VEL       * m['vel_track_rms_ms']  / REF_VEL_TRACK,
+        'roll':      W_ROLL      * m['max_roll_deg']      / REF_MAX_ROLL,
+        'pitch':     W_PITCH     * m['rms_pitch_deg']     / REF_RMS_PITCH,
+        'hip_track': W_HIP_TRACK * m['hip_track_rms_rad'] / REF_HIP_TRACK,
+        'hip_rate':  W_HIP_RATE  * m['hip_rate_rms']      / REF_HIP_RATE,
+        'FELL':      W_FELL if fell else 0.0,
+    }
+    m['fitness_breakdown'] = bd
+    return sum(bd.values())
 
 
 # ── Scenario config ──────────────────────────────────────────────────────────

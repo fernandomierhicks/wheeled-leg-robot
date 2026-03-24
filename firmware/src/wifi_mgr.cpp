@@ -1,7 +1,11 @@
 // wifi_mgr.cpp — WiFi connection + ArduinoOTA for UNO R4 WiFi.
+// When USE_WIFI=1, wifi_fast.cpp handles WiFi — this file is unused.
 
 #include "wifi_mgr.h"
 #include "config.h"
+
+#if !USE_WIFI
+
 #include <Arduino.h>
 #include <WiFiS3.h>
 #include <ArduinoOTA.h>
@@ -43,3 +47,5 @@ void wifi_ota_poll() {
 bool wifi_is_connected() {
     return s_wifi_connected;
 }
+
+#endif // !USE_WIFI

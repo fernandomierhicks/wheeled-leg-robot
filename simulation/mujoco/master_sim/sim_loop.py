@@ -384,6 +384,11 @@ class SimController:
         _pitch_d, _pitch_rate_d, _wheel_vel_d = self.sens_buf.push(
             (pitch, pitch_rate, wheel_vel))
 
+        # Capture delayed (pre-predictor) values for diagnostics
+        _pitch_delayed     = float(_pitch_d)
+        _pitch_rate_delayed = float(_pitch_rate_d)
+        _wheel_vel_delayed = float(_wheel_vel_d)
+
         # ── Matrix predictor — ZOH-discretised 3-state prediction ──────────────
         # Propagates the delayed state x(t-n) forward n steps using the exact
         # discrete A_d, B_d and the stored torque history, giving x̂(t).
@@ -432,8 +437,9 @@ class SimController:
         self._tau_hist.append(tau_sym)
 
         # ── Actuator delay buffer + motor taper → wheel ctrl ─────────────────
-        _tau_L_d, _tau_R_d = self.ctrl_buf.push(
-            (tau_sym - tau_yaw, tau_sym + tau_yaw))
+        _tau_cmd_L = tau_sym - tau_yaw
+        _tau_cmd_R = tau_sym + tau_yaw
+        _tau_L_d, _tau_R_d = self.ctrl_buf.push((_tau_cmd_L, _tau_cmd_R))
         data.ctrl[self.act_wheel_L] = motor_taper(
             _tau_L_d, data.qvel[self.d_whl_L],
             self.v_batt, params.motors, params.battery)
@@ -514,6 +520,19 @@ class SimController:
             omega_tgt=omega_target,
             pos_x=float(data.qpos[self.s_root]),
             fell=fell,
+            # ── Diagnostic: delay / predictor intermediates ─────────────
+            pitch_noisy=pitch,
+            pitch_rate_noisy=pitch_rate,
+            pitch_delayed=_pitch_delayed,
+            pitch_rate_delayed=_pitch_rate_delayed,
+            wheel_vel_delayed=_wheel_vel_delayed,
+            pitch_predicted=float(_pitch_d),
+            pitch_rate_predicted=float(_pitch_rate_d),
+            wheel_vel_predicted=float(_wheel_vel_d),
+            tau_cmd_L=_tau_cmd_L,
+            tau_cmd_R=_tau_cmd_R,
+            tau_delayed_L=float(_tau_L_d),
+            tau_delayed_R=float(_tau_R_d),
         )
 
 

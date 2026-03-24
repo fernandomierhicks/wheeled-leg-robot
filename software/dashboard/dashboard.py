@@ -26,6 +26,7 @@ from queue import Queue, Empty
 
 import numpy as np
 import pyqtgraph as pg
+import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtWidgets, QtCore, QtGui
 
 try:
@@ -39,10 +40,10 @@ except ImportError:
 TELEMETRY_PORT = 4210
 COMMAND_PORT   = 4211
 
-# Telemetry packet: '<' = little-endian, I=uint32, B=uint8, 15f=15 floats
-TELEM_FMT  = '<IB15f'
-TELEM_SIZE = struct.calcsize(TELEM_FMT)  # 65 bytes
-assert TELEM_SIZE == 65
+# Telemetry packet: '<' = little-endian, I=uint32, B=uint8, 16f=16 floats
+TELEM_FMT  = '<IB16f'
+TELEM_SIZE = struct.calcsize(TELEM_FMT)  # 69 bytes
+assert TELEM_SIZE == 69
 
 # Command type IDs
 CMD_DRIVE = 1
@@ -102,9 +103,10 @@ class UDPReceiver(threading.Thread):
             self.last_rx_time = time.monotonic()
 
             vals = struct.unpack(TELEM_FMT, data)
-            # vals: (timestamp_ms, mode, pitch, pitch_rate, roll,
+            # vals: (timestamp_ms, mode, pitch, pitch_rate, roll, yaw,
             #        wheel_vel_avg, v_cmd, theta_ref, tau_sym, tau_yaw,
-            #        tau_wheel_L, tau_wheel_R, hip_q_avg, tau_hip_L, tau_hip_R, dt_us)
+            #        tau_wheel_L, tau_wheel_R, hip_q_avg, tau_hip_L, tau_hip_R, dt_us,
+            #        debug_sine)
             try:
                 self.data_q.put_nowait(vals)
             except Exception:
@@ -120,7 +122,7 @@ class UDPReceiver(threading.Thread):
 # ═════════════════════════════════════════════════════════════════════════════
 
 SERIAL_SYNC = bytes([0xAA, 0x55])
-SERIAL_FRAME_SIZE = 2 + TELEM_SIZE + 1  # sync(2) + packet(65) + checksum(1) = 68
+SERIAL_FRAME_SIZE = 2 + TELEM_SIZE + 1  # sync(2) + packet(69) + checksum(1) = 72
 
 
 def _find_serial_port():
@@ -285,9 +287,74 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     vbox.setContentsMargins(4, 4, 4, 2)
     vbox.setSpacing(2)
 
+    # ── Top area: charts left, 3D axis right ─────────────────────────────────
+    top_hbox = QtWidgets.QHBoxLayout()
+    top_hbox.setSpacing(4)
+    vbox.addLayout(top_hbox, stretch=1)
+
     glw = pg.GraphicsLayoutWidget()
     glw.setBackground(BG_COLOR)
-    vbox.addWidget(glw, stretch=1)
+    top_hbox.addWidget(glw, stretch=1)
+
+    # ── 3D IMU Axis Viewer ─────────────────────────────────────────────────
+    axis_frame = QtWidgets.QWidget()
+    axis_frame.setFixedWidth(240)
+    axis_frame.setStyleSheet(f"background:{BAR_COLOR}; border-radius:4px;")
+    axis_vbox = QtWidgets.QVBoxLayout(axis_frame)
+    axis_vbox.setContentsMargins(4, 4, 4, 4)
+    axis_vbox.setSpacing(2)
+
+    axis_title = QtWidgets.QLabel("IMU Orientation")
+    axis_title.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+    axis_title.setStyleSheet(
+        "color:#e0e0e0; font-family:Consolas,monospace; font-size:11px; font-weight:bold;")
+    axis_vbox.addWidget(axis_title)
+
+    axis_view = gl.GLViewWidget()
+    axis_view.opts['distance'] = 3.5
+    axis_view.opts['elevation'] = 25
+    axis_view.opts['azimuth'] = -50
+    axis_view.setBackgroundColor(BG_COLOR)
+    axis_vbox.addWidget(axis_view, stretch=1)
+
+    # Draw XYZ axes as colored lines
+    AXIS_LEN = 1.3
+    axis_defs = [
+        ('X', np.array([AXIS_LEN, 0, 0]), (1.0, 0.25, 0.25, 1.0)),   # red
+        ('Y', np.array([0, AXIS_LEN, 0]), (0.25, 1.0, 0.25, 1.0)),   # green
+        ('Z', np.array([0, 0, AXIS_LEN]), (0.3, 0.55, 1.0, 1.0)),    # blue
+    ]
+    axis_gl_lines = []
+    for name, vec, color in axis_defs:
+        pts = np.array([[0, 0, 0], vec.tolist()], dtype=np.float32)
+        line = gl.GLLinePlotItem(pos=pts, color=color, width=3.0, antialias=True)
+        axis_view.addItem(line)
+        axis_gl_lines.append((vec, color, line))
+
+    # Faint reference grid on the XY plane
+    grid = gl.GLGridItem()
+    grid.setSize(3, 3, 1)
+    grid.setSpacing(0.5, 0.5, 0.5)
+    grid.setColor((255, 255, 255, 25))
+    axis_view.addItem(grid)
+
+    # Color legend
+    legend_lbl = QtWidgets.QLabel(
+        '<span style="color:#ff4444;">X fwd</span> &nbsp; '
+        '<span style="color:#44ff44;">Y left</span> &nbsp; '
+        '<span style="color:#5599ff;">Z up</span>')
+    legend_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+    legend_lbl.setStyleSheet("font-family:Consolas; font-size:10px;")
+    axis_vbox.addWidget(legend_lbl)
+
+    # Pitch/roll readout
+    imu_readout = QtWidgets.QLabel("Pitch: --  Roll: --")
+    imu_readout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+    imu_readout.setStyleSheet(
+        "color:#c8c8c8; font-family:Consolas; font-size:10px;")
+    axis_vbox.addWidget(imu_readout)
+
+    top_hbox.addWidget(axis_frame)
 
     # ── Status bar ───────────────────────────────────────────────────────────
     status_row = QtWidgets.QWidget()
@@ -342,6 +409,71 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     btn_ping.setStyleSheet(_BTN_STYLE)
     btn_ping.clicked.connect(lambda: cmd.send_broadcast_ping())
     hbox_cmd.addWidget(btn_ping)
+
+    hbox_cmd.addSpacing(20)
+
+    # ── Transport toggle button ───────────────────────────────────────────
+    _TOGGLE_USB = "QPushButton{background:#2e6e3e;color:white;font-size:11px;font-family:Consolas;border-radius:4px;padding:4px 12px}QPushButton:hover{background:#3e8e5e}QPushButton:pressed{background:#5eae7e}"
+    _TOGGLE_WIFI = "QPushButton{background:#3e3e8e;color:white;font-size:11px;font-family:Consolas;border-radius:4px;padding:4px 12px}QPushButton:hover{background:#5e5eae}QPushButton:pressed{background:#7e7ece}"
+
+    btn_transport = QtWidgets.QPushButton()
+    # Track mutable state in a list so closures can modify it
+    _transport = ["serial" if serial_port else "wifi"]
+    _receiver_ref = [receiver]
+
+    def _update_transport_btn():
+        if _transport[0] == "serial":
+            btn_transport.setText("USB-UART ⇄ WiFi")
+            btn_transport.setStyleSheet(_TOGGLE_USB)
+            btn_transport.setToolTip("Currently USB-UART — click to switch to WiFi")
+        else:
+            btn_transport.setText("WiFi ⇄ USB-UART")
+            btn_transport.setStyleSheet(_TOGGLE_WIFI)
+            btn_transport.setToolTip("Currently WiFi — click to switch to USB-UART")
+
+    def _switch_transport():
+        nonlocal receiver
+        # Stop current receiver
+        _receiver_ref[0].stop()
+        # Clear stale data from queue
+        while not data_q.empty():
+            try:
+                data_q.get_nowait()
+            except Empty:
+                break
+
+        if _transport[0] == "serial":
+            # Switch to WiFi
+            _transport[0] = "wifi"
+            new_rx = UDPReceiver(data_q)
+            cmd.robot_ip = None  # will be discovered
+            print("[Dashboard] Switched to WiFi (UDP) transport")
+        else:
+            # Switch to USB-UART
+            if not HAS_SERIAL:
+                print("[Dashboard] ERROR: pyserial not installed — can't switch to USB-UART")
+                return
+            port = _find_serial_port()
+            if not port:
+                print("[Dashboard] ERROR: No serial port found")
+                return
+            _transport[0] = "serial"
+            new_rx = SerialReceiver(data_q, port)
+            cmd.robot_ip = None
+            print(f"[Dashboard] Switched to USB-UART on {port}")
+
+        receiver = new_rx
+        _receiver_ref[0] = new_rx
+        new_rx.start()
+        _update_transport_btn()
+
+        # Send ping if WiFi
+        if _transport[0] == "wifi":
+            cmd.send_broadcast_ping()
+
+    _update_transport_btn()
+    btn_transport.clicked.connect(_switch_transport)
+    hbox_cmd.addWidget(btn_transport)
 
     hbox_cmd.addStretch()
     vbox.addWidget(cmd_row)
@@ -485,6 +617,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     theta_buf     = deque(maxlen=MAXLEN)
     hip_buf       = deque(maxlen=MAXLEN)
     roll_buf      = deque(maxlen=MAXLEN)
+    yaw_buf       = deque(maxlen=MAXLEN)
     tau_wL_buf    = deque(maxlen=MAXLEN)
     tau_wR_buf    = deque(maxlen=MAXLEN)
     tau_hL_buf    = deque(maxlen=MAXLEN)
@@ -493,7 +626,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     sine_buf      = deque(maxlen=MAXLEN)
 
     all_bufs = [t_buf, pitch_buf, pitch_ref_buf, prate_buf, vel_buf, vcmd_buf,
-                tau_sym_buf, tau_yaw_buf, theta_buf, hip_buf, roll_buf,
+                tau_sym_buf, tau_yaw_buf, theta_buf, hip_buf, roll_buf, yaw_buf,
                 tau_wL_buf, tau_wR_buf, tau_hL_buf, tau_hR_buf, dt_buf, sine_buf]
 
     _pkt_count = [0]
@@ -512,7 +645,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             except Empty:
                 break
 
-            (ts_ms, mode, pitch, pitch_rate, roll,
+            (ts_ms, mode, pitch, pitch_rate, roll, yaw,
              wheel_vel_avg, v_cmd, theta_ref,
              tau_sym, tau_yaw,
              tau_wheel_L, tau_wheel_R,
@@ -535,6 +668,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             theta_buf.append(math.degrees(theta_ref))
             hip_buf.append(math.degrees(hip_q_avg))
             roll_buf.append(math.degrees(roll))
+            yaw_buf.append(math.degrees(yaw))
             tau_wL_buf.append(tau_wheel_L)
             tau_wR_buf.append(tau_wheel_R)
             tau_hL_buf.append(tau_hip_L)
@@ -598,6 +732,28 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
         ln_htau_R.setData(xw, _a(tau_hR_buf))
         ln_dt.setData(xw, _a(dt_buf))
         ln_sine.setData(xw, _a(sine_buf))
+
+        # ── Update 3D IMU axes ──
+        if len(pitch_buf) > 0:
+            p_rad = math.radians(pitch_buf[-1])
+            r_rad = math.radians(roll_buf[-1])
+            y_rad = math.radians(yaw_buf[-1]) if len(yaw_buf) > 0 else 0.0
+            cp, sp = math.cos(p_rad), math.sin(p_rad)
+            cr, sr = math.cos(r_rad), math.sin(r_rad)
+            cy, sy = math.cos(y_rad), math.sin(y_rad)
+            # R = R_yaw(Z) @ R_pitch(Y) @ R_roll(X)
+            R = np.array([
+                [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+                [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+                [-sp,     cp * sr,                cp * cr               ],
+            ])
+            for vec0, color, line_item in axis_gl_lines:
+                rotated = R @ vec0
+                pts = np.array([[0, 0, 0], rotated.tolist()], dtype=np.float32)
+                line_item.setData(pos=pts)
+            imu_readout.setText(
+                f"P: {pitch_buf[-1]:+.1f}\u00b0  R: {roll_buf[-1]:+.1f}\u00b0  Y: {yaw_buf[-1]:+.1f}\u00b0" if len(yaw_buf) > 0 else
+                f"Pitch: {pitch_buf[-1]:+.1f}\u00b0  Roll: {roll_buf[-1]:+.1f}\u00b0")
 
         # Auto-fit Y range (except fixed-range torque plots)
         for _, pl in named_plots:

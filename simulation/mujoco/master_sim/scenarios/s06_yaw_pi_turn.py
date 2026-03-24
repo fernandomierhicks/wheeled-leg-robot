@@ -13,9 +13,13 @@ _timings = DEFAULT_PARAMS.scenarios
 
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
-    return (CONFIG.W_YAW_ERR * m['yaw_track_rms_rads']
-            + 0.1 * CONFIG.W_RMS * m['rms_pitch_deg']
-            + (CONFIG.W_FALL if fell else 0.0))
+    bd = {
+        'yaw':   CONFIG.W_YAW_ERR * m['yaw_track_rms_rads'],
+        'pitch': 0.1 * CONFIG.W_RMS * m['rms_pitch_deg'],
+        'FELL':  CONFIG.W_FALL if fell else 0.0,
+    }
+    m['fitness_breakdown'] = bd
+    return sum(bd.values())
 
 
 # ── Scenario config ──────────────────────────────────────────────────────────

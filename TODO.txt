@@ -1,47 +1,25 @@
 
 ---Fernandos note dont change below
 
-Fix visualizer. When it comes up it should disable enable checkboxes as per scenario. 
-S1 comes up with all controllers except LQR unchedked. Suspesion = PD
-Show fitness, every factor,  after runnign scenario. 
-
-Do estimator delay test on pitch and pitch rate
-Plot mujocu actual, delayed data and estimator
-Estiamtor should kidn of match mujoco actual. 
-
-The same for torque applicaiton. 
-
-
-USe raw gyro (faster) for pitch rate and use complimentary filter?
-angle = α * (angle + gyro * dt) + (1 - α) * accel_angle
-
-Then use accel or game vector for tilt?
+-How does sim get pitch and pitch rate? is pitch rate from muujoco or manually derivated?
+Check every scneario for correct behaviour. S2 doesnt move legs...
 
 
 
-
--Arduino
---Slugish dashboard telemetry, not sure why. 
-
-
-
-
-
--Fancier optimizer 
--Update sim with IMU characterization and delay
-
-
-
--Jump controller
+-Implemetn Jump controller
 -Spring for higher jumps. 
 
 
 
--AI usage Monday
 
-fernandomierhicks	30%	Sunday 5PM
-fernandomierhicks2	42%	Friday 4PM
+
+
+
+
+-AI usage 
+
+fernandomierhicks	41%	    Sunday 5PM
+fernandomierhicks2	61%	    Friday 4PM
 fernandomierhicks1	100%	Wednesday 12pm
 
-
-One long OPUS task, 7minutes consumes 25% 5 hour limit and 3% weekly limit. 
+One long OPUS task, 7minutes consumes 25% 5-hour limit and 3% weekly limit. 

@@ -111,6 +111,18 @@ Each scenario enables only the controllers relevant to its tuning phase. The `ac
 
 When `hip_mode="impedance"` (S8, S9), suspension and roll-leveling are automatically enabled.
 
+## Delay predictor — what it can and can't do
+
+The matrix predictor (`sim_loop.py`, ZOH-discretised 3-state) compensates for the sensor delay buffer by propagating the delayed state forward using `x̂(t) = A_d^n · x(t−n) + Σ B_d · u(t−n+k)`.
+
+**Pitch prediction works well** (2.4× MAE reduction at 2 ms delay) because the correction is **kinematic**: `Δθ ≈ ω · Δt`. This is model-free — it only needs the current pitch rate, which is large during any dynamic motion.
+
+**Pitch rate and wheel velocity prediction are negligible** (~1.02× improvement at 2 ms). Their corrections are **dynamic** (acceleration-level): `Δω ≈ α·θ·Δt` and `Δv ≈ β·θ·Δt`. These scale with pitch angle (small during balancing) multiplied by a tiny Δt, producing corrections orders of magnitude smaller than the signal. Even at 20 ms delay, improvement is only ~1.08× because the linearised model diverges at the large angles reached during a fall.
+
+**Bottom line**: the pitch predictor is the channel that matters for LQR stability — and it works. The rate/velocity channels are mathematically correct but practically negligible at real-world sensor delays (≤ 5 ms).
+
+Run the diagnostic to verify: `python -m master_sim.diag_delay`
+
 ## Key entry points
 
 | What | Where |

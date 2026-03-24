@@ -1,0 +1,18 @@
+[20:59:20] ========================================================================
+[20:59:20]   S1->S9 Pipeline  |  1 steps  |  0.17h/step  |  20260323_205920
+[20:59:20] ========================================================================
+[20:59:20]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260323_205920.log
+[20:59:20]   Steps: ['S1']
+[20:59:20] ========================================================================
+[20:59:20]   [1/1] S1 — s01_lqr_pitch_step
+[20:59:20] ========================================================================
+[20:59:20]   Seeding from defaults: Q_PITCH=5.40254,Q_PITCH_RATE=0.033408,Q_VEL=0.00165213,R=39.647
+[20:59:20]   Deleted S_s01_lqr_pitch_step.csv (--fresh)
+[20:59:20]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s01_lqr_pitch_step --hours 0.16666666666666666 --patience 200 --tol 0.0001 --workers 8 --seed-gains Q_PITCH=5.40254,Q_PITCH_RATE=0.033408,Q_VEL=0.00165213,R=39.647
+[21:01:34]   ERROR: optimizer exited with code 2147483651
+[21:01:34]   FAILED: S1
+[21:01:34] ========================================================================
+[21:01:34]   Pipeline complete — 2 min total
+[21:01:34] ========================================================================
+[21:01:34] 
+  FAILED: ['S1']

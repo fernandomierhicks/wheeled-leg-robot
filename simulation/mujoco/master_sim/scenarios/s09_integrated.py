@@ -81,14 +81,18 @@ W_FELL      = 200.0
 
 def fitness(m: dict) -> float:
     fell = m.get('fell', m.get('status') == 'FAIL')
-    return (W_PITCH     * m['rms_pitch_deg']       / REF_PITCH_DEG
-            + W_RATE      * m['rms_pitch_rate_dps']  / REF_PITCH_RATE_DPS
-            + W_VEL       * m['vel_track_rms_ms']    / REF_VEL_MS
-            + W_YAW       * m['yaw_track_rms_rads']  / REF_YAW_RADS
-            + W_ROLL      * m['max_roll_deg']         / REF_ROLL_DEG
-            + W_HIP_TRACK * m['hip_track_rms_rad']   / REF_HIP_TRACK
-            + W_HIP_RATE  * m['hip_rate_rms']         / REF_HIP_RATE
-            + (W_FELL if fell else 0.0))
+    bd = {
+        'pitch':     W_PITCH     * m['rms_pitch_deg']       / REF_PITCH_DEG,
+        'pitch_rate':W_RATE      * m['rms_pitch_rate_dps']  / REF_PITCH_RATE_DPS,
+        'velocity':  W_VEL       * m['vel_track_rms_ms']    / REF_VEL_MS,
+        'yaw':       W_YAW       * m['yaw_track_rms_rads']  / REF_YAW_RADS,
+        'roll':      W_ROLL      * m['max_roll_deg']         / REF_ROLL_DEG,
+        'hip_track': W_HIP_TRACK * m['hip_track_rms_rad']   / REF_HIP_TRACK,
+        'hip_rate':  W_HIP_RATE  * m['hip_rate_rms']         / REF_HIP_RATE,
+        'FELL':      W_FELL if fell else 0.0,
+    }
+    m['fitness_breakdown'] = bd
+    return sum(bd.values())
 
 
 CONFIG = ScenarioConfig(

@@ -175,6 +175,88 @@ Add to existing file:
 
 ---
 
+## Future Path: ESP32-S3 as Main MCU
+
+> **Status**: Not planned — documenting for future reference if WiFiS3 latency
+> becomes a blocker on the UNO R4 WiFi.
+
+### Why Consider This
+
+The UNO R4 WiFi's WiFiS3 library talks to the on-board ESP32-S3 coprocessor via
+an AT-command-style UART bridge. Each `endPacket()` call **blocks 1–5 ms** waiting
+for the ESP32 ACK, which can blow the 2000 µs tick budget. The RA4M1 is single-core
+(Cortex-M4, 48 MHz) so there's no way to isolate WiFi from the control loop at the
+hardware level.
+
+### What Changes
+
+Replace the UNO R4 WiFi with an **ESP32-S3 dev board** (e.g. ESP32-S3-DevKitC-1).
+
+| Feature | UNO R4 WiFi (RA4M1) | ESP32-S3 |
+|---|---|---|
+| Cores | 1 (Cortex-M4, 48 MHz) | 2 (Xtensa LX7, 240 MHz) |
+| WiFi | AT bridge to coprocessor (1–5 ms blocking) | Native, zero-copy, core-pinnable |
+| RTOS | None (bare-metal superloop) | FreeRTOS built-in |
+| CAN | Built-in CAN peripheral | TWAI peripheral (same CAN 2.0B protocol) |
+| SPI | Works (BNO086 proven) | Works (faster clock available) |
+| Flash | 256 KB (128 KB usable with OTA) | 8–16 MB external flash |
+| RAM | 32 KB SRAM | 512 KB SRAM + 8 MB PSRAM |
+
+### Dual-Core Architecture
+
+```
+Core 1 (dedicated real-time)          Core 0 (WiFi + housekeeping)
+─────────────────────────             ─────────────────────────
+500 Hz hw timer ISR → flag            FreeRTOS task: wifi_task()
+
+control_task() pinned to core 1:      ├── AsyncUDP or ESP-NOW
+├── IMU SPI read                      ├── Read telemetry from ring buffer
+├── LQR + PI controllers              ├── Send 50 Hz to dashboard
+├── CAN (TWAI) motor output           ├── Receive commands → queue
+├── Write telemetry to ring buffer    ├── OTA handling
+└── Read commands from queue          └── LED matrix (non-critical)
+
+Budget: 2000 µs, zero WiFi jitter    No deadline — runs freely
+```
+
+Lock-free ring buffer between cores ensures control loop is never blocked by WiFi.
+
+### WiFi Protocol Options
+
+| | AsyncUDP | ESP-NOW |
+|---|---|---|
+| Needs router? | Yes | No — direct peer-to-peer |
+| Latency | ~2–5 ms | ~1–2 ms |
+| Max payload | ~1400 bytes (MTU) | 250 bytes (69B telemetry packet fits) |
+| Dashboard side | Standard UDP socket — any PC | Needs ESP32 USB dongle as receiver |
+| OTA | Works alongside ArduinoOTA | Requires switching to WiFi STA mode |
+| Best for | Lab/workshop testing with router | Field testing, no infrastructure |
+
+**AsyncUDP** is the pragmatic first choice (standard sockets on dashboard side, OTA
+works natively). **ESP-NOW** is worth adding later for untethered field testing.
+
+### Firmware Port Scope
+
+The port is mostly mechanical — ESP32-S3 has Arduino framework support + ESP-IDF:
+
+| Current (RA4M1) | ESP32-S3 Equivalent |
+|---|---|
+| `FspTimer` (hardware timer ISR) | `esp_timer_create()` or `hw_timer` |
+| `WiFiS3.h` | Native `WiFi.h` (ESP-IDF backed) |
+| Direct port register for IMU INT | `gpio_get_level()` (fast on ESP32) |
+| Built-in CAN peripheral | TWAI driver (`driver/twai.h`) |
+| `Serial.write()` telemetry | Still available, plus native UDP |
+| Bare-metal superloop | FreeRTOS task pinned to core 1 |
+
+### When to Pull This Trigger
+
+- WiFiS3 `endPacket()` causes >3 ms spikes that disrupt balance control
+- Need wireless telemetry at >50 Hz for real-time tuning
+- Want untethered operation (no USB cable, no router)
+- Need more flash/RAM for future features (path planning, SLAM, etc.)
+
+---
+
 ## Key Source Files to Reference
 
 | Firmware Module | Simulation Source |

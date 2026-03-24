@@ -59,8 +59,15 @@ void led_matrix_update(const RobotState *state) {
     hb = !hb;
     set_bar(4, hb);
 
-    // Fault bar (rows 6-7): solid if in FAULT mode
-    set_bar(6, state->mode == Mode::FAULT);
+    // Fault bar (rows 6-7): solid if FAULT mode, OR flash on overrun
+    bool fault_on = (state->mode == Mode::FAULT);
+    if (state->overrun_flash > 0) {
+        // Flash: toggle on odd counts for visible blink
+        fault_on = (state->overrun_flash & 1);
+        // Cast away const to decrement (LED update is the consumer of this flag)
+        const_cast<RobotState*>(state)->overrun_flash--;
+    }
+    set_bar(6, fault_on);
 
     matrix.renderBitmap(frame, 8, 12);
 }

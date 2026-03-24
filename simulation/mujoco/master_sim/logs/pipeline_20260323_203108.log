@@ -1,0 +1,28 @@
+[20:31:08] ========================================================================
+[20:31:08]   S1->S9 Pipeline  |  8 steps  |  0.17h/step  |  20260323_203108
+[20:31:08] ========================================================================
+[20:31:08]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260323_203108.log
+[20:31:08]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']
+[20:31:08] ========================================================================
+[20:31:08]   [1/8] S1 — s01_lqr_pitch_step
+[20:31:08] ========================================================================
+[20:31:08]   Seeding from RANDOM: Q_PITCH=2.8941138,Q_PITCH_RATE=0.22957707,Q_VEL=3.5692028e-07,R=0.045017936
+[20:31:08]   Deleted S_s01_lqr_pitch_step.csv (--fresh)
+[20:31:08]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s01_lqr_pitch_step --hours 0.16666666666666666 --patience 200 --tol 0.0001 --workers 8 --seed-gains Q_PITCH=2.8941138,Q_PITCH_RATE=0.22957707,Q_VEL=3.5692028e-07,R=0.045017936
+[20:41:12]   S1 done in 10.1 min — best: Q_PITCH=8.4798053,Q_PITCH_RATE=0.0063540846,Q_VEL=8.6473547e-07,R=126.30774
+[20:41:12] ========================================================================
+[20:41:12]   [2/8] S2 — s02_leg_height_gain_sched
+[20:41:12] ========================================================================
+[20:41:12]   Seeding from S1: Q_PITCH=8.4798053,Q_PITCH_RATE=0.0063540846,Q_VEL=8.6473547e-07,R=126.30774
+[20:41:12]   Overlaid 4 keys from earlier steps: Q_PITCH=8.4798053,Q_PITCH_RATE=0.0063540846,Q_VEL=8.6473547e-07,R=126.30774
+[20:41:12]   Deleted S_s02_leg_height_gain_sched.csv (--fresh)
+[20:41:12]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s02_leg_height_gain_sched --hours 0.16666666666666666 --patience 200 --tol 0.0001 --workers 8 --seed-gains Q_PITCH=8.4798053,Q_PITCH_RATE=0.0063540846,Q_VEL=8.6473547e-07,R=126.30774
+[20:51:17]   S2 done in 10.1 min — best: Q_PITCH=0.098808559,Q_PITCH_RATE=0.042972752,Q_VEL=0.0067126967,R=67.142095
+[20:51:17]   [BASELINE] S2: Q_PITCH=0.098808559,Q_PITCH_RATE=0.042972752,Q_VEL=0.0067126967,R=67.142095
+[20:51:17]   Wrote baseline gains into params.py
+[20:51:17] ========================================================================
+[20:51:17]   [3/8] S3 — s03_vel_pi_disturbance
+[20:51:17] ========================================================================
+[20:51:17]   Seeding from RANDOM: KP_V=0.074557528,KI_V=0.012976266,KFF_V=0.34145032
+[20:51:17]   Deleted S_s03_vel_pi_disturbance.csv (--fresh)
+[20:51:17]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s03_vel_pi_disturbance --hours 0.16666666666666666 --patience 200 --tol 0.0001 --workers 8 --seed-gains KP_V=0.074557528,KI_V=0.012976266,KFF_V=0.34145032

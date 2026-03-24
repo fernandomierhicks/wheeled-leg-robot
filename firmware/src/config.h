@@ -2,15 +2,26 @@
 // config.h — All firmware constants: pins, gains, geometry, timing.
 // Single source of truth for the firmware build.
 
+// ── Comms mode ──────────────────────────────────────────────────────────────
+// Set to 1 for WiFi UDP telemetry + commands (slack-time, double-buffered).
+// Set to 0 for USB-UART Serial telemetry + commands (in-tick, blocking).
+#ifndef USE_WIFI
+#define USE_WIFI            0
+#endif
+
 // ── Timing ──────────────────────────────────────────────────────────────────
 #ifndef LOOP_RATE_HZ
 #define LOOP_RATE_HZ        500       // [Hz] main control loop
 #endif
 #define LOOP_PERIOD_US      (1000000UL / LOOP_RATE_HZ)  // 2000 us
 
-#define TELEMETRY_DIV       1         // send every tick (actual rate = loop rate)
-#define COMMAND_DIV         50        // receive every 50 ticks → 10 Hz
-#define LED_MATRIX_DIV      83        // update every 83 ticks → ~6 Hz
+#define TELEMETRY_SEND_DIV  10        // telemetry every 10 ticks → 50 Hz
+#define COMMAND_RECV_DIV    50        // commands  every 50 ticks → 10 Hz
+#define LED_MATRIX_DIV      83        // LED matrix every 83 ticks → ~6 Hz
+
+// ── Slack-time WiFi guards (only used when USE_WIFI=1) ──────────────────────
+#define WIFI_SEND_MIN_SLACK_US  800   // [µs] minimum slack to attempt UDP send
+#define WIFI_RECV_MIN_SLACK_US  200   // [µs] minimum slack for parsePacket (~50 µs)
 
 // ── Network (telemetry + commands) ───────────────────────────────────────────
 #define TELEMETRY_PORT      4210      // UDP port: Arduino → Dashboard
@@ -46,7 +57,7 @@
 
 // ── IMU ─────────────────────────────────────────────────────────────────────
 #ifndef IMU_RATE_HZ
-#define IMU_RATE_HZ         500
+#define IMU_RATE_HZ         400       // BNO086 hard ceiling via SH2 scheduler
 #endif
 
 // ── Safety thresholds ───────────────────────────────────────────────────────
@@ -75,6 +86,12 @@
 #define LQR_Q_PITCH_RATE    0.033408f
 #define LQR_Q_VEL           0.00165213f
 #define LQR_R               39.647f
+
+// Pre-computed LQR K gains at nominal hip angle (Q_NOM).
+// TODO: re-export from simulation via tools/export_gains.py when plant changes.
+#define LQR_K_PITCH         (-3.694f)   // [N·m/rad]
+#define LQR_K_PITCH_RATE    (-0.494f)   // [N·m/(rad/s)]
+#define LQR_K_VEL           (-0.006f)   // [N·m/(rad/s)]
 
 // VelocityPI
 #define VEL_PI_KP           0.05f

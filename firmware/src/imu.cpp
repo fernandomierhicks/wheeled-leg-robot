@@ -1,16 +1,17 @@
-// imu.cpp — BNO086 SPI driver: Game Rotation Vector + Gyro reports.
+// imu.cpp — BNO086 SPI driver using patched Adafruit library (3 MHz SPI,
+// tight-spin INT poll) for ~400 Hz Game Rotation Vector + Gyro reports.
 //
-// Ported from components/characterization/IMU/include/bno086_common.h
 // Pin wiring: CS=D10, INT=D2, RST=D3, SPI bus on D11-D13, PS0+PS1 bridged.
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <SparkFun_BNO08x_Arduino_Library.h>
+#include <Adafruit_BNO08x.h>
 #include "config.h"
 #include "imu.h"
 
 // ── Module state ────────────────────────────────────────────────────────────
-static BNO08x sensor;
+static Adafruit_BNO08x sensor(PIN_IMU_RST);
+static sh2_SensorValue_t sensorValue;
 
 // Direct register read for INT pin (D2 = P104 on RA4M1).
 // Avoids ~3 µs digitalRead() overhead — matches characterization code.
@@ -20,20 +21,16 @@ static inline bool imu_int_asserted() {
 }
 
 // ── Quaternion → pitch/roll ─────────────────────────────────────────────────
-// BNO086 Game Rotation Vector outputs (qi, qj, qk, qr) in NED-ish frame.
+// BNO086 Game Rotation Vector outputs (i, j, k, real) in NED-ish frame.
 // We convert to our body-frame pitch (rotation about Y, positive = forward lean)
 // and roll (rotation about X, positive = lean right).
-//
-// Using small-angle-safe atan2 formulas (valid full range):
-//   pitch = atan2(2(qr*qj - qi*qk), 1 - 2(qi*qi + qj*qj))
-//   roll  = asin(clamp(2(qr*qi + qj*qk), -1, 1))
 
 static float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-static void quat_to_pitch_roll(float qi, float qj, float qk, float qr,
-                               float *pitch, float *roll) {
+static void quat_to_euler(float qi, float qj, float qk, float qr,
+                          float *pitch, float *roll, float *yaw) {
     // Pitch (about Y axis) — positive = leaning forward (+X down)
     float sinp = 2.0f * (qr * qj - qi * qk);
     float cosp = 1.0f - 2.0f * (qi * qi + qj * qj);
@@ -42,24 +39,29 @@ static void quat_to_pitch_roll(float qi, float qj, float qk, float qr,
     // Roll (about X axis) — positive = leaning right
     float sinr = 2.0f * (qr * qi + qj * qk);
     *roll = asinf(clampf(sinr, -1.0f, 1.0f));
+
+    // Yaw (about Z axis) — mag-fused heading
+    float siny = 2.0f * (qr * qk + qi * qj);
+    float cosy = 1.0f - 2.0f * (qj * qj + qk * qk);
+    *yaw = atan2f(siny, cosy);
 }
 
 // ── Enable sensor reports ───────────────────────────────────────────────────
 static bool enable_reports() {
-    uint32_t interval_us = 1000000UL / IMU_RATE_HZ;  // 2000 µs for 500 Hz
+    uint32_t interval_us = 1000000UL / IMU_RATE_HZ;  // 2500 µs for 400 Hz
 
-    if (!sensor.enableGameRotationVector(interval_us)) {
-        Serial.println("[IMU] Failed to enable Game Rotation Vector");
+    if (!sensor.enableReport(SH2_ROTATION_VECTOR, interval_us)) {
+        Serial.println("[IMU] Failed to enable Rotation Vector");
         return false;
     }
-    if (!sensor.enableGyro(interval_us)) {
+    if (!sensor.enableReport(SH2_GYROSCOPE_CALIBRATED, interval_us)) {
         Serial.println("[IMU] Failed to enable Gyro");
         return false;
     }
 
     Serial.print("[IMU] Reports enabled at ");
     Serial.print(IMU_RATE_HZ);
-    Serial.println(" Hz (GRV + Gyro)");
+    Serial.println(" Hz (RV + Gyro)");
     return true;
 }
 
@@ -68,9 +70,8 @@ static bool enable_reports() {
 bool imu_init() {
     // Retry up to 3 times (matches characterization code)
     for (int attempt = 1; attempt <= 3; attempt++) {
-        if (sensor.beginSPI(PIN_IMU_CS, PIN_IMU_INT, PIN_IMU_RST,
-                            3000000, SPI)) {
-            Serial.print("[IMU] BNO086 init OK (attempt ");
+        if (sensor.begin_SPI(PIN_IMU_CS, PIN_IMU_INT)) {
+            Serial.print("[IMU] BNO086 init OK (Adafruit lib, attempt ");
             Serial.print(attempt);
             Serial.println(")");
 
@@ -78,9 +79,10 @@ bool imu_init() {
             delay(100);
             if (sensor.wasReset()) {
                 Serial.println("[IMU] Post-init reset consumed");
+                sensor.enableReport(SH2_ROTATION_VECTOR, 100000);  // dummy to ack reset
             }
             for (int i = 0; i < 10; i++) {
-                sensor.getSensorEvent();
+                sensor.getSensorEvent(&sensorValue);
                 delay(10);
             }
 
@@ -111,25 +113,25 @@ void imu_poll(RobotState *state) {
     // Cap iterations to avoid stalling the loop if sensor misbehaves.
     for (int i = 0; i < 10; i++) {
         if (!imu_int_asserted()) break;       // no more data waiting
-        if (!sensor.getSensorEvent()) break;   // SPI read failed
+        if (!sensor.getSensorEvent(&sensorValue)) break;   // SPI read failed
 
-        uint8_t report = sensor.getSensorEventID();
+        uint8_t report = sensorValue.sensorId;
 
-        if (report == SENSOR_REPORTID_GAME_ROTATION_VECTOR) {
-            float qi = sensor.getGameQuatI();
-            float qj = sensor.getGameQuatJ();
-            float qk = sensor.getGameQuatK();
-            float qr = sensor.getGameQuatReal();
+        if (report == SH2_ROTATION_VECTOR) {
+            float qi = sensorValue.un.rotationVector.i;
+            float qj = sensorValue.un.rotationVector.j;
+            float qk = sensorValue.un.rotationVector.k;
+            float qr = sensorValue.un.rotationVector.real;
 
-            quat_to_pitch_roll(qi, qj, qk, qr,
-                               &state->pitch, &state->roll);
+            quat_to_euler(qi, qj, qk, qr,
+                          &state->pitch, &state->roll, &state->yaw);
 
             state->imu_ok = true;
             state->imu_last_ms = millis();
         }
-        else if (report == SENSOR_REPORTID_GYROSCOPE_CALIBRATED) {
-            state->pitch_rate = sensor.getGyroY();
-            state->roll_rate  = sensor.getGyroX();
+        else if (report == SH2_GYROSCOPE_CALIBRATED) {
+            state->pitch_rate = sensorValue.un.gyroscope.y;
+            state->roll_rate  = sensorValue.un.gyroscope.x;
         }
     }
 }
