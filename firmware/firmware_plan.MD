@@ -257,6 +257,40 @@ The port is mostly mechanical — ESP32-S3 has Arduino framework support + ESP-I
 
 ---
 
+## LED Matrix Display (12×8, UNO R4 WiFi built-in)
+
+The LED matrix shows a single full-screen icon selected by priority, with small
+corner overlays for connectivity status. Updated at ~6 Hz from the soft-RT
+section of the main loop.
+
+### Icon Priority (highest → lowest)
+
+| Priority | Condition | Icon | Description |
+|----------|-----------|------|-------------|
+| 1 | `mode == FAULT` | **Blinking X** | Unmistakable fault indicator (75% on-time) |
+| 2 | Loop overrun | **!** (exclamation) | Brief flash (~1 s), then returns to normal icon |
+| 3 | `imu_ok == false` | **Blinking ?** | "I don't know which way is up" — IMU data stale |
+| 4 | `mode == BALANCE` | **Pulsing blob** | Alternates small/large circle ~1.5 Hz — alive and balancing |
+| 5 | `mode == DRIVE` | **→ arrow** | Right-pointing arrow |
+| 6 | `mode == JUMP` | **↑ arrow** | Up-pointing arrow |
+| 7 | `mode == IDLE` / other | **Smiley :)** | All good, waiting for commands |
+
+### Corner Overlays
+
+| Position | Indicator | Meaning |
+|----------|-----------|---------|
+| Bottom-right 3×3 | WiFi wave arcs (solid) | WiFi connected |
+| Bottom-right 3×3 | WiFi wave arcs (blinking) | WiFi connecting |
+| Bottom-right 3×3 | Off | WiFi disconnected |
+| Bottom-left pixel | Solid dot | Host PC linked (`host_connected`) |
+
+### Source Files
+
+- `src/led_matrix.h` — public API (`led_matrix_init`, `led_matrix_update`)
+- `src/led_matrix.cpp` — icon bitmaps (8×12 `const` arrays) + priority logic + overlays
+
+---
+
 ## Key Source Files to Reference
 
 | Firmware Module | Simulation Source |

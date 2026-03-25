@@ -1,7 +1,8 @@
 # Components — Wheeled-Leg Robot
-**Single source of truth: BOM + MEL**
-Geometry source: `simulation/mujoco/baseline1_leg_analysis/sim_config.py` (run_id 51167, jump = 282.65 mm)
-Structural sizing source: `simulation/mujoco/baseline1_leg_analysis/size_report.txt` (SF = 2.0×, 6061-T6)
+**Shopping list / best estimate — not yet built.** Geometry and masses may differ
+from simulation params, which are tuned per-sim (see each sim folder's `params.py`).
+Original geometry source: `simulation/mujoco/archive/baseline1_leg_analysis/sim_config.py` (run_id 51167, jump = 282.65 mm)
+Structural sizing source: `simulation/mujoco/archive/baseline1_leg_analysis/size_report.txt` (SF = 2.0×, 6061-T6)
 
 ---
 

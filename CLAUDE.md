@@ -69,8 +69,8 @@ See `components/COMPONENTS.md` for full geometry table, BOM, and mass breakdown.
 
 ## Components
 
-Full BOM, geometry, and motor electrical specs: `components/COMPONENTS.md` (single source of truth).
-Machine-readable BOM: `components/database/bom.yaml`
+Shopping list and best-estimate specs: `components/COMPONENTS.md`.
+Each simulation folder owns its own parameters — sims may deviate from COMPONENTS.md intentionally.
 
 ---
 
@@ -86,7 +86,10 @@ Machine-readable BOM: `components/database/bom.yaml`
 
 ## Simulation — Current State
 
-### Active: `simulation\mujoco\master_sim\README.md`
+### Active: `simulation\mujoco\master_sim_jump\`
+
+Each sim folder owns all its parameters in `params.py`. New sims fork from the
+previous one and note lineage in a comment at the top of `params.py`.
 
 ## Folder Structure
 
@@ -97,25 +100,20 @@ software/
   tools/                             ← odrivetool scripts, calibration
 simulation/
   mujoco/
-    LQR_Control_optimization/        ← ✅ Active — control tuning (Phases 1–5)
-      sim_config.py                  ← all gains + scenario params
-      scenarios.py                   ← all scenario runners + controller classes
-      replay.py / sandbox_fastchart.py ← viewer + interactive arena
-    latency_sensitivity/             ← ✅ Active — Phase 6 (delayed plant re-tuning)
-      logs/                          ← CSV + log files (S{name}.csv naming)
-    baseline1_leg_analysis/          ← reference — geometry + jump sim
-      sim_config.py                  ← source of truth for geometry + mass
-    4bar_leg.xml / 4bar_leg_sim.py   ← single-leg kinematic reference
-    fourbar_ref/                     ← reference 4-bar implementations
+    master_sim_jump/                 ← ✅ Active — balance + jump (S1–S10)
+      params.py                      ← all parameters (geometry, gains, timing)
+      sim_loop.py                    ← main simulation loop
+      scenarios/                     ← per-scenario configs & profiles
+      controllers/                   ← LQR, VelocityPI, YawPI, hip, jump
+    master_sim/                      ← prior iteration (balance only, no jump)
+    archive/                         ← old sims (baseline1, LQR_opt, latency)
   sil/                               ← C++ DLL bridge (future)
 docs/
   math/                              ← LQR derivations, jump energy
   design_decisions/
   datasheets/
 components/
-  COMPONENTS.md                      ← Full BOM/MEL with subtotals
-  database/bom.yaml                  ← Machine-readable BOM (source of truth)
-params/robot_params.yaml             ← Physical params
+  COMPONENTS.md                      ← Shopping list / best-estimate BOM
 .claude/settings.json                ← Claude Code permissions
 ```
 

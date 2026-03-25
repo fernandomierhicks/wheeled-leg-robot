@@ -120,6 +120,31 @@ def _add_world_axes(viewer, length=0.3, radius=0.006):
         scn.ngeom += 1
 
 
+def _add_force_arrow(viewer, data, body_id, force_z, scale=0.04, radius=0.012):
+    """Draw a +Z arrow at *body_id* proportional to *force_z*.  No-op if zero."""
+    if abs(force_z) < 1e-9:
+        return
+    scn = viewer.user_scn
+    if scn.ngeom >= scn.maxgeom:
+        return
+    pos = data.xpos[body_id].copy()
+    length = abs(force_z) * scale
+    # Arrow points +Z by default; flip rotation if force is negative
+    if force_z >= 0:
+        mat = np.eye(3).flatten()
+    else:
+        mat = np.diag([1.0, -1.0, -1.0]).flatten()
+    mujoco.mjv_initGeom(
+        scn.geoms[scn.ngeom],
+        type=mujoco.mjtGeom.mjGEOM_ARROW,
+        size=[radius, radius, length],
+        pos=pos,
+        mat=mat,
+        rgba=np.array([1.0, 0.5, 0.0, 0.9], dtype=np.float32),
+    )
+    scn.ngeom += 1
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SANDBOX ARENA — 28 static obstacles + 6 movable props
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -870,9 +895,11 @@ def replay(scenario_name: str, with_viewer: bool = False,
                         break
 
                 # Disturbance only during scenario duration
+                _vis_bid, _vis_fz = None, 0.0
                 if data.time < cfg.duration:
-                    apply_disturbance(data, data.time, cfg,
-                                      ctrl.box_bid, ctrl.wheel_bid_L, ctrl.wheel_bid_R)
+                    _vis_bid, _vis_fz = apply_disturbance(
+                        data, data.time, cfg,
+                        ctrl.box_bid, ctrl.wheel_bid_L, ctrl.wheel_bid_R)
 
                 mujoco.mj_step(model, data)
                 step += 1
@@ -880,6 +907,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
             # Camera follow
             viewer.cam.lookat[0] = data.xpos[ctrl.box_bid][0]
             viewer.cam.lookat[1] = data.xpos[ctrl.box_bid][1]
+            if _vis_bid is not None:
+                _add_force_arrow(viewer, data, _vis_bid, _vis_fz)
             viewer.sync()
 
             # Push 25-value telemetry tuple at ~60 Hz
@@ -2425,9 +2454,11 @@ def run_unified(initial_scenario: str = "sandbox",
                                 break
 
                     # Disturbance (replay only, during scenario duration)
+                    _vis_bid2, _vis_fz2 = None, 0.0
                     if cfg is not None and data.time < cfg.duration:
-                        apply_disturbance(data, data.time, cfg,
-                                          ctrl.box_bid, ctrl.wheel_bid_L, ctrl.wheel_bid_R)
+                        _vis_bid2, _vis_fz2 = apply_disturbance(
+                            data, data.time, cfg,
+                            ctrl.box_bid, ctrl.wheel_bid_L, ctrl.wheel_bid_R)
 
                     mujoco.mj_step(model, data)
                     step += 1
@@ -2435,6 +2466,8 @@ def run_unified(initial_scenario: str = "sandbox",
                 # Camera follow
                 viewer.cam.lookat[0] = data.xpos[ctrl.box_bid][0]
                 viewer.cam.lookat[1] = data.xpos[ctrl.box_bid][1]
+                if _vis_bid2 is not None:
+                    _add_force_arrow(viewer, data, _vis_bid2, _vis_fz2)
                 viewer.sync()
 
                 # ── Push 25-value telemetry tuple at ~60 Hz ──

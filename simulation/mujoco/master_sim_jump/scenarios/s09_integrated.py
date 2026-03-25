@@ -19,8 +19,7 @@ during the continuous leg sweep.
 from master_sim_jump.defaults import DEFAULT_PARAMS
 from master_sim_jump.scenarios.base import ScenarioConfig
 from master_sim_jump.scenarios.profiles import (
-    s9_velocity_profile, s9_yaw_profile, s9_dist_fn,
-    s9_roll_dist_fn, s9_hip_sweep,
+    s9_velocity_profile, s9_yaw_profile, s9_dist_fn, s9_hip_sweep,
 )
 
 _timings = DEFAULT_PARAMS.scenarios
@@ -106,7 +105,6 @@ CONFIG = ScenarioConfig(
     hip_profile=s9_hip_sweep(_robot),
     dist_fn=s9_dist_fn,
     dist_target="wheel_L",
-    roll_dist_fn=s9_roll_dist_fn,
     fitness_fn=fitness,
     max_vel_error_ms=0.5,                             # kill if |v_err| > 0.5 m/s
     group="integrated",

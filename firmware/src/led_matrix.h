@@ -1,11 +1,16 @@
 #pragma once
-// led_matrix.h — 12×8 LED matrix status display for UNO R4 WiFi.
+// led_matrix.h — 12×8 LED matrix icon display for UNO R4 WiFi.
 //
-// Layout (each status = 2-row horizontal bar, full 12-col width):
-//   Rows 0-1: WiFi      solid=connected, blink=connecting, off=disconnected
-//   Rows 2-3: Host      solid=host connected
-//   Rows 4-5: Heartbeat toggles at ~3 Hz (proves main loop alive)
-//   Rows 6-7: Fault     solid=fault active
+// Shows a single full-screen icon based on robot state (priority order):
+//   FAULT     → blinking X
+//   Overrun   → flash "!" for ~1 s
+//   IMU lost  → "?"
+//   IDLE      → smiley face :)
+//   BALANCE   → animated heartbeat sweep
+//   DRIVE     → right-pointing arrow →
+//
+// WiFi overlay (bottom-right 3×3): wave arcs when connected, blink when connecting.
+// Host overlay (bottom-left dot): solid when host PC linked.
 
 #include "robot_state.h"
 

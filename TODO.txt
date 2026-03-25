@@ -8,7 +8,13 @@
 
 
 
-
+-Flip?
+Want me to build this as a new scenario (S11)? The sequence would be:
+Settle + drive forward at max speed for ~1.5s
+Brake hard (or just jump without braking — the hip extension alone might be enough)
+Jump
+Retract legs immediately after liftoff
+Land (somehow...)
 
 
 

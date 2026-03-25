@@ -1,5 +1,9 @@
 """params.py — Frozen dataclass hierarchy for all simulation parameters.
 
+Lineage: original — first dataclass-based sim with jump support.
+Forked from archive/LQR_Control_optimization + archive/latency_sensitivity,
+then re-optimised with BNO086-measured noise and reduced latency model.
+
 Every parameter that was a module-level global in sim_config.py is now a field
 on one of these immutable dataclasses.  Optimizer creates modified copies via
 dataclasses.replace().  No file I/O, no Pydantic, no YAML — pure Python.
@@ -41,8 +45,8 @@ class RobotGeometry:
 
     @property
     def Q_NOM(self) -> float:
-        """Nominal stance (30% of stroke from retracted)."""
-        return self.Q_RET + 0.30 * (self.Q_EXT - self.Q_RET)
+        """Nominal stance (midpoint of stroke)."""
+        return self.Q_RET + 0.50 * (self.Q_EXT - self.Q_RET)
 
     @property
     def STROKE_DEG(self) -> float:

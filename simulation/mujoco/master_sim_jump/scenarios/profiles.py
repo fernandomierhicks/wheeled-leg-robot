@@ -153,16 +153,9 @@ def s9_yaw_profile(t: float) -> float:
 
 
 def s9_dist_fn(t: float) -> float:
-    """S9 +Z kick on left wheel hub mid-drive at Q_NOM crossing: +10N at 7.7s (0.2s)."""
-    if 7.7 <= t < 7.9:
-        return 7.0
-    return 0.0
-
-
-def s9_roll_dist_fn(t: float) -> float:
-    """S9 Z-force pulses on left wheel hub: ~10N at t=6,8,11,13s (0.2s each)."""
-    for t0 in (6.0, 8.0, 11.0, 13.0):
-        if t0 <= t < t0 + 0.2:
+    """S9 +Z kicks on left wheel hub at Q_NOM crossings: 7N at t=6,8,10,12s (0.1s each)."""
+    for t0 in (6.0, 8.0, 10.0, 12.0):
+        if t0 <= t < t0 + 0.1:
             return 7.0
     return 0.0
 
