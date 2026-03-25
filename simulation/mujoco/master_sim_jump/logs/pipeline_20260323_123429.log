@@ -1,0 +1,18 @@
+[12:34:29] ========================================================================
+[12:34:29]   S1->S9 Pipeline  |  1 steps  |  0.17h/step  |  20260323_123429
+[12:34:29] ========================================================================
+[12:34:29]   Log: C:\Users\fmierhic\Desktop\Wheeled leg robot Claude\simulation\mujoco\master_sim\logs\pipeline_20260323_123429.log
+[12:34:29]   Steps: ['S1']
+[12:34:29] ========================================================================
+[12:34:29]   [1/1] S1 — s01_lqr_pitch_step
+[12:34:29] ========================================================================
+[12:34:29]   Seeding from defaults: Q_PITCH=5.40254,Q_PITCH_RATE=0.033408,Q_VEL=0.00165213,R=39.647
+[12:34:29]   Deleted S_s01_lqr_pitch_step.csv (--fresh)
+[12:34:29]   CMD: C:\Users\fmierhic\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s01_lqr_pitch_step --hours 0.16666666666666666 --patience 200 --tol 0.0001 --workers 8 --seed-gains Q_PITCH=5.40254,Q_PITCH_RATE=0.033408,Q_VEL=0.00165213,R=39.647
+[12:44:34]   S1 done in 10.1 min — best: Q_PITCH=0.010777808,Q_PITCH_RATE=8.6186905,Q_VEL=1.2226493e-07,R=1.8406485
+[12:44:34] ========================================================================
+[12:44:34]   Pipeline complete — 10 min total
+[12:44:34] ========================================================================
+[12:44:34]   S1: Q_PITCH=0.010777808,Q_PITCH_RATE=8.6186905,Q_VEL=1.2226493e-07,R=1.8406485
+[12:44:34] 
+  All steps completed successfully.

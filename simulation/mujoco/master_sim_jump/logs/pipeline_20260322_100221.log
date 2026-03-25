@@ -1,0 +1,28 @@
+[10:02:21] ========================================================================
+[10:02:21]   S1->S9 Pipeline  |  9 steps  |  0.00h/step  |  20260322_100221
+[10:02:21] ========================================================================
+[10:02:21]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260322_100221.log
+[10:02:21]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9']
+[10:02:21] ========================================================================
+[10:02:21]   [1/9] S1 — s01_lqr_pitch_step
+[10:02:21] ========================================================================
+[10:02:21]   Seeding from RANDOM: Q_PITCH=0.072732473,Q_PITCH_RATE=0.0073046517,Q_VEL=1.7842844,R=3.0048299
+[10:02:21]   Deleted S_s01_lqr_pitch_step.csv (--fresh)
+[10:02:21]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s01_lqr_pitch_step --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains Q_PITCH=0.072732473,Q_PITCH_RATE=0.0073046517,Q_VEL=1.7842844,R=3.0048299
+[10:02:28]   ERROR: no PASS result after optimization
+[10:02:28]   FAILED: S1
+[10:02:28] ========================================================================
+[10:02:28]   [2/9] S2 — s02_leg_height_gain_sched
+[10:02:28] ========================================================================
+[10:02:28]   WARNING: S1 has no result — falling back to defaults
+[10:02:28]   Seeding from RANDOM: Q_PITCH=0.34686746,Q_PITCH_RATE=0.0098618292,Q_VEL=0.42732934,R=0.012648067
+[10:02:28]   Deleted S_s02_leg_height_gain_sched.csv (--fresh)
+[10:02:28]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s02_leg_height_gain_sched --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains Q_PITCH=0.34686746,Q_PITCH_RATE=0.0098618292,Q_VEL=0.42732934,R=0.012648067
+[10:02:32]   ERROR: no PASS result after optimization
+[10:02:32]   FAILED: S2
+[10:02:32] ========================================================================
+[10:02:32]   [3/9] S3 — s03_vel_pi_disturbance
+[10:02:32] ========================================================================
+[10:02:32]   Seeding from RANDOM: KP_V=0.37444411,KI_V=0.00010936337
+[10:02:32]   Deleted S_s03_vel_pi_disturbance.csv (--fresh)
+[10:02:32]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s03_vel_pi_disturbance --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains KP_V=0.37444411,KI_V=0.00010936337

@@ -1,0 +1,87 @@
+[11:45:56] ========================================================================
+[11:45:56]   S1->S9 Pipeline  |  8 steps  |  0.33h/step  |  20260324_114556
+[11:45:56] ========================================================================
+[11:45:56]   Log: C:\Users\fmierhic\Desktop\Wheeled leg robot Claude\simulation\mujoco\master_sim\logs\pipeline_20260324_114556.log
+[11:45:56]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']
+[11:45:56] ========================================================================
+[11:45:56]   [1/8] S1 — s01_lqr_pitch_step
+[11:45:56] ========================================================================
+[11:45:56]   Seeding from defaults: Q_PITCH=0.164326,Q_PITCH_RATE=0.150062,Q_VEL=0.0009532,R=16.0213
+[11:45:56]   Deleted S_s01_lqr_pitch_step.csv (--fresh)
+[11:45:56]   CMD: C:\Users\fmierhic\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s01_lqr_pitch_step --hours 0.3333333333333333 --patience 200 --tol 0.0001 --workers 8 --seed-gains Q_PITCH=0.164326,Q_PITCH_RATE=0.150062,Q_VEL=0.0009532,R=16.0213
+[12:04:40]   S1 done in 18.7 min — best: Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[12:04:40] ========================================================================
+[12:04:40]   [2/8] S2 — s02_leg_height_gain_sched
+[12:04:40] ========================================================================
+[12:04:40]   Seeding from S1: Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[12:04:40]   Overlaid 4 keys from earlier steps: Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[12:04:40]   Deleted S_s02_leg_height_gain_sched.csv (--fresh)
+[12:04:40]   CMD: C:\Users\fmierhic\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s02_leg_height_gain_sched --hours 0.3333333333333333 --patience 200 --tol 0.0001 --workers 8 --seed-gains Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[12:24:48]   S2 done in 20.1 min — best: Q_PITCH=0.69238254,Q_PITCH_RATE=0.001,Q_VEL=0.0016152071,R=43.723839
+[12:24:48]   [BASELINE] S2: Q_PITCH=0.69238254,Q_PITCH_RATE=0.001,Q_VEL=0.0016152071,R=43.723839
+[12:24:48]   Wrote baseline gains into params.py
+[12:24:48] ========================================================================
+[12:24:48]   [3/8] S3 — s03_vel_pi_disturbance
+[12:24:48] ========================================================================
+[12:24:48]   Seeding from defaults: KP_V=0.05,KI_V=0.1,KFF_V=0.108498
+[12:24:48]   Deleted S_s03_vel_pi_disturbance.csv (--fresh)
+[12:24:48]   CMD: C:\Users\fmierhic\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s03_vel_pi_disturbance --hours 0.3333333333333333 --patience 200 --tol 0.0001 --workers 8 --seed-gains KP_V=0.05,KI_V=0.1,KFF_V=0.108498
+[12:44:53]   S3 done in 20.1 min — best: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[12:44:53] ========================================================================
+[12:44:53]   [4/8] S4 — s04_vel_pi_staircase
+[12:44:53] ========================================================================
+[12:44:53]   Seeding from S3: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[12:44:53]   Overlaid 3 keys from earlier steps: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[12:44:53]   Deleted S_s04_vel_pi_staircase.csv (--fresh)
+[12:44:53]   CMD: C:\Users\fmierhic\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s04_vel_pi_staircase --hours 0.3333333333333333 --patience 200 --tol 0.0001 --workers 8 --seed-gains KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[12:54:19]   ERROR: no PASS result after optimization
+[12:54:19]   FAILED: S4
+[12:54:19] ========================================================================
+[12:54:19]   [5/8] S5 — s05_vel_pi_leg_cycling
+[12:54:19] ========================================================================
+[12:54:19]   WARNING: S4 has no result — falling back to defaults
+[12:54:19]   Seeding from defaults: KP_V=0.05,KI_V=0.1,KFF_V=0.108498
+[12:54:19]   Overlaid 3 keys from earlier steps: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[12:54:19]   Deleted S_s05_vel_pi_leg_cycling.csv (--fresh)
+[12:54:19]   CMD: C:\Users\fmierhic\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s05_vel_pi_leg_cycling --hours 0.3333333333333333 --patience 200 --tol 0.0001 --workers 8 --seed-gains KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[13:14:25]   S5 done in 20.1 min — best: KP_V=0.24865113,KI_V=0.0011330509,KFF_V=0.33671895
+[13:14:25]   [BASELINE] S5: KP_V=0.24865113,KI_V=0.0011330509,KFF_V=0.33671895
+[13:14:25]   Wrote baseline gains into params.py
+[13:14:25] ========================================================================
+[13:14:25]   [6/8] S6 — s06_yaw_pi_turn
+[13:14:25] ========================================================================
+[13:14:25]   Seeding from defaults: KP_YAW=0.193246,KI_YAW=0.221219
+[13:14:25]   Deleted S_s06_yaw_pi_turn.csv (--fresh)
+[13:14:25]   CMD: C:\Users\fmierhic\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_yaw_pi --scenario s06_yaw_pi_turn --hours 0.3333333333333333 --patience 200 --tol 0.0001 --workers 8 --seed-gains KP_YAW=0.193246,KI_YAW=0.221219
+[13:34:30]   S6 done in 20.1 min — best: KP_YAW=4.0200323,KI_YAW=3.7317219
+[13:34:30] ========================================================================
+[13:34:30]   [7/8] S7 — s07_drive_turn
+[13:34:30] ========================================================================
+[13:34:30]   Seeding from S6: KP_YAW=4.0200323,KI_YAW=3.7317219
+[13:34:30]   Overlaid 2 keys from earlier steps: KP_YAW=4.0200323,KI_YAW=3.7317219
+[13:34:30]   Deleted S_s07_drive_turn.csv (--fresh)
+[13:34:30]   CMD: C:\Users\fmierhic\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_yaw_pi --scenario s07_drive_turn --hours 0.3333333333333333 --patience 200 --tol 0.0001 --workers 8 --seed-gains KP_YAW=4.0200323,KI_YAW=3.7317219
+[13:54:36]   S7 done in 20.1 min — best: KP_YAW=0.31983943,KI_YAW=1.3509374
+[13:54:36]   [BASELINE] S7: KP_YAW=0.31983943,KI_YAW=1.3509374
+[13:54:36]   Wrote baseline gains into params.py
+[13:54:36] ========================================================================
+[13:54:36]   [8/8] S8 — s08_terrain_compliance
+[13:54:36] ========================================================================
+[13:54:36]   Seeding from defaults: LEG_K_S=12.9624,LEG_B_S=0.109151,LEG_K_ROLL=45.2559,LEG_D_ROLL=0.491916
+[13:54:36]   Deleted S_s08_terrain_compliance.csv (--fresh)
+[13:54:36]   CMD: C:\Users\fmierhic\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_suspension --scenario s08_terrain_compliance --hours 0.3333333333333333 --patience 200 --tol 0.0001 --workers 8 --seed-gains LEG_K_S=12.9624,LEG_B_S=0.109151,LEG_K_ROLL=45.2559,LEG_D_ROLL=0.491916
+[14:14:44]   S8 done in 20.1 min — best: LEG_K_S=8.743764,LEG_B_S=0.01254354,LEG_K_ROLL=29.028766,LEG_D_ROLL=0.037248384
+[14:14:44]   [BASELINE] S8: LEG_K_S=8.743764,LEG_B_S=0.01254354,LEG_K_ROLL=29.028766,LEG_D_ROLL=0.037248384
+[14:14:44]   Wrote baseline gains into params.py
+[14:14:44] ========================================================================
+[14:14:44]   Pipeline complete — 149 min total
+[14:14:44] ========================================================================
+[14:14:44]   S1: Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[14:14:44]   S2 [BASELINE]: Q_PITCH=0.69238254,Q_PITCH_RATE=0.001,Q_VEL=0.0016152071,R=43.723839
+[14:14:44]   S3: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[14:14:44]   S5 [BASELINE]: KP_V=0.24865113,KI_V=0.0011330509,KFF_V=0.33671895
+[14:14:44]   S6: KP_YAW=4.0200323,KI_YAW=3.7317219
+[14:14:44]   S7 [BASELINE]: KP_YAW=0.31983943,KI_YAW=1.3509374
+[14:14:44]   S8 [BASELINE]: LEG_K_S=8.743764,LEG_B_S=0.01254354,LEG_K_ROLL=29.028766,LEG_D_ROLL=0.037248384
+[14:14:44] 
+  FAILED: ['S4']

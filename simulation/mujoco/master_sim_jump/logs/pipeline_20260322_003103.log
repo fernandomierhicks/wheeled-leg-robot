@@ -1,0 +1,18 @@
+[00:31:03] ========================================================================
+[00:31:03]   S1->S9 Pipeline  |  9 steps  |  2.00h/step  |  20260322_003103
+[00:31:03] ========================================================================
+[00:31:03]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260322_003103.log
+[00:31:03]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9']
+[00:31:03] ========================================================================
+[00:31:03]   [1/9] S1 — s01_lqr_pitch_step
+[00:31:03] ========================================================================
+[00:31:03]   Seeding from RANDOM: Q_PITCH=0.047137812,Q_PITCH_RATE=0.002470184,Q_VEL=0.0010736329,R=0.95025836
+[00:31:03]   Deleted S_s01_lqr_pitch_step.csv (--fresh)
+[00:31:03]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s01_lqr_pitch_step --hours 2.0 --patience 500 --tol 0.0001 --seed-gains Q_PITCH=0.047137812,Q_PITCH_RATE=0.002470184,Q_VEL=0.0010736329,R=0.95025836
+[09:55:23]   S1 done in 564.3 min — best: Q_PITCH=0.047137812,Q_PITCH_RATE=0.002470184,Q_VEL=0.0010736329,R=0.95025836
+[09:55:23] ========================================================================
+[09:55:23]   [2/9] S2 — s02_leg_height_gain_sched
+[09:55:23] ========================================================================
+[09:55:23]   Seeding from S1: Q_PITCH=0.047137812,Q_PITCH_RATE=0.002470184,Q_VEL=0.0010736329,R=0.95025836
+[09:55:23]   Deleted S_s02_leg_height_gain_sched.csv (--fresh)
+[09:55:23]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s02_leg_height_gain_sched --hours 2.0 --patience 500 --tol 0.0001 --seed-gains Q_PITCH=0.047137812,Q_PITCH_RATE=0.002470184,Q_VEL=0.0010736329,R=0.95025836

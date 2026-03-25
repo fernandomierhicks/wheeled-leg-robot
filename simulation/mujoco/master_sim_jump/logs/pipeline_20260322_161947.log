@@ -1,0 +1,27 @@
+[16:19:47] ========================================================================
+[16:19:47]   S1->S9 Pipeline  |  2 steps  |  0.05h/step  |  20260322_161947
+[16:19:47] ========================================================================
+[16:19:47]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260322_161947.log
+[16:19:47]   Steps: ['S3', 'S4']
+[16:19:47] ========================================================================
+[16:19:47]   [1/2] S3 — s03_vel_pi_disturbance
+[16:19:47] ========================================================================
+[16:19:47]   Seeding from defaults: KP_V=0.166596,KI_V=0.0787837,KFF_V=6.35971
+[16:19:47]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s03_vel_pi_disturbance --hours 0.05 --patience 50 --tol 0.0001 --workers 8 --seed-gains KP_V=0.166596,KI_V=0.0787837,KFF_V=6.35971
+[16:22:53]   ERROR: no PASS result after optimization
+[16:22:53]   FAILED: S3
+[16:22:53] ========================================================================
+[16:22:53]   [2/2] S4 — s04_vel_pi_staircase
+[16:22:53] ========================================================================
+[16:22:53]   WARNING: S3 has no result — falling back to defaults
+[16:22:53]   Seeding from defaults: KP_V=0.166596,KI_V=0.0787837,KFF_V=6.35971
+[16:22:53]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s04_vel_pi_staircase --hours 0.05 --patience 50 --tol 0.0001 --workers 8 --seed-gains KP_V=0.166596,KI_V=0.0787837,KFF_V=6.35971
+[16:25:59]   ERROR: no PASS result after optimization
+[16:25:59]   FAILED: S4
+[16:25:59] ========================================================================
+[16:25:59]   Pipeline complete — 6 min total
+[16:25:59] ========================================================================
+[16:25:59]   S1: Q_PITCH=0.31824234,Q_PITCH_RATE=8.6741191,Q_VEL=1.0272054e-07,R=7.0212944
+[16:25:59]   S2 [BASELINE]: Q_PITCH=5.4025381,Q_PITCH_RATE=0.033407993,Q_VEL=0.0016521331,R=39.646999
+[16:25:59] 
+  FAILED: ['S3', 'S4']

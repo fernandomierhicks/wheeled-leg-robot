@@ -1,0 +1,97 @@
+[10:04:34] ========================================================================
+[10:04:34]   S1->S9 Pipeline  |  9 steps  |  0.00h/step  |  20260322_100434
+[10:04:34] ========================================================================
+[10:04:34]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260322_100434.log
+[10:04:34]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9']
+[10:04:34] ========================================================================
+[10:04:34]   [1/9] S1 — s01_lqr_pitch_step
+[10:04:34] ========================================================================
+[10:04:35]   Seeding from RANDOM: Q_PITCH=0.13795533,Q_PITCH_RATE=0.0060014146,Q_VEL=0.00099585269,R=18.448549
+[10:04:35]   Deleted S_s01_lqr_pitch_step.csv (--fresh)
+[10:04:35]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s01_lqr_pitch_step --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains Q_PITCH=0.13795533,Q_PITCH_RATE=0.0060014146,Q_VEL=0.00099585269,R=18.448549
+[10:04:39]   S1 done in 0.1 min — best: Q_PITCH=0.26546646,Q_PITCH_RATE=0.0039810395,Q_VEL=0.0012810115,R=2.6533661
+[10:04:39] ========================================================================
+[10:04:39]   [2/9] S2 — s02_leg_height_gain_sched
+[10:04:39] ========================================================================
+[10:04:39]   Seeding from S1: Q_PITCH=0.26546646,Q_PITCH_RATE=0.0039810395,Q_VEL=0.0012810115,R=2.6533661
+[10:04:39]   Overlaid 4 keys from earlier steps: Q_PITCH=0.26546646,Q_PITCH_RATE=0.0039810395,Q_VEL=0.0012810115,R=2.6533661
+[10:04:39]   Deleted S_s02_leg_height_gain_sched.csv (--fresh)
+[10:04:39]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_lqr --scenario s02_leg_height_gain_sched --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains Q_PITCH=0.26546646,Q_PITCH_RATE=0.0039810395,Q_VEL=0.0012810115,R=2.6533661
+[10:04:45]   S2 done in 0.1 min — best: Q_PITCH=0.01,Q_PITCH_RATE=0.0023935836,Q_VEL=4.5632537e-05,R=0.48881854
+[10:04:45]   [BASELINE] S2: Q_PITCH=0.01,Q_PITCH_RATE=0.0023935836,Q_VEL=4.5632537e-05,R=0.48881854
+[10:04:45]   Wrote baseline gains into params.py
+[10:04:45] ========================================================================
+[10:04:45]   [3/9] S3 — s03_vel_pi_disturbance
+[10:04:45] ========================================================================
+[10:04:45]   Seeding from RANDOM: KP_V=0.0033995163,KI_V=0.23627459
+[10:04:45]   Deleted S_s03_vel_pi_disturbance.csv (--fresh)
+[10:04:45]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s03_vel_pi_disturbance --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains KP_V=0.0033995163,KI_V=0.23627459
+[10:04:51]   S3 done in 0.1 min — best: KP_V=0.0034708454,KI_V=0.16454112
+[10:04:51] ========================================================================
+[10:04:51]   [4/9] S4 — s04_vel_pi_staircase
+[10:04:51] ========================================================================
+[10:04:51]   Seeding from S3: KP_V=0.0034708454,KI_V=0.16454112
+[10:04:51]   Overlaid 2 keys from earlier steps: KP_V=0.0034708454,KI_V=0.16454112
+[10:04:51]   Deleted S_s04_vel_pi_staircase.csv (--fresh)
+[10:04:51]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s04_vel_pi_staircase --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains KP_V=0.0034708454,KI_V=0.16454112
+[10:04:57]   S4 done in 0.1 min — best: KP_V=0.0034708454,KI_V=0.16454112
+[10:04:57] ========================================================================
+[10:04:57]   [5/9] S5 — s05_vel_pi_leg_cycling
+[10:04:57] ========================================================================
+[10:04:57]   Seeding from S4: KP_V=0.0034708454,KI_V=0.16454112
+[10:04:57]   Overlaid 4 keys from earlier steps: KP_V=0.0034708454,KI_V=0.16454112
+[10:04:57]   Deleted S_s05_vel_pi_leg_cycling.csv (--fresh)
+[10:04:57]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s05_vel_pi_leg_cycling --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains KP_V=0.0034708454,KI_V=0.16454112
+[10:05:03]   S5 done in 0.1 min — best: KP_V=0.0075909411,KI_V=0.10269552
+[10:05:03]   [BASELINE] S5: KP_V=0.0075909411,KI_V=0.10269552
+[10:05:03]   Wrote baseline gains into params.py
+[10:05:03] ========================================================================
+[10:05:03]   [6/9] S6 — s06_yaw_pi_turn
+[10:05:03] ========================================================================
+[10:05:03]   Seeding from RANDOM: KP_YAW=0.034392839,KI_YAW=25.467678
+[10:05:03]   Deleted S_s06_yaw_pi_turn.csv (--fresh)
+[10:05:03]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_yaw_pi --scenario s06_yaw_pi_turn --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains KP_YAW=0.034392839,KI_YAW=25.467678
+[10:05:09]   S6 done in 0.1 min — best: KP_YAW=0.36910691,KI_YAW=100
+[10:05:09] ========================================================================
+[10:05:09]   [7/9] S7 — s07_drive_turn
+[10:05:09] ========================================================================
+[10:05:09]   Seeding from S6: KP_YAW=0.36910691,KI_YAW=100
+[10:05:09]   Overlaid 2 keys from earlier steps: KP_YAW=0.36910691,KI_YAW=100
+[10:05:09]   Deleted S_s07_drive_turn.csv (--fresh)
+[10:05:09]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_yaw_pi --scenario s07_drive_turn --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains KP_YAW=0.36910691,KI_YAW=100
+[10:05:14]   S7 done in 0.1 min — best: KP_YAW=28.199352,KI_YAW=36.673417
+[10:05:14]   [BASELINE] S7: KP_YAW=28.199352,KI_YAW=36.673417
+[10:05:14]   Wrote baseline gains into params.py
+[10:05:14] ========================================================================
+[10:05:14]   [8/9] S8 — s08_terrain_compliance
+[10:05:14] ========================================================================
+[10:05:14]   Seeding from RANDOM: LEG_K_S=3.8035162,LEG_B_S=0.7968307,LEG_K_ROLL=0.0013680212,LEG_D_ROLL=3.3368793
+[10:05:14]   Deleted S_s08_terrain_compliance.csv (--fresh)
+[10:05:14]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_suspension --scenario s08_terrain_compliance --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains LEG_K_S=3.8035162,LEG_B_S=0.7968307,LEG_K_ROLL=0.0013680212,LEG_D_ROLL=3.3368793
+[10:05:20]   S8 done in 0.1 min — best: LEG_K_S=57.847233,LEG_B_S=0.13753742,LEG_K_ROLL=0.0011159778,LEG_D_ROLL=0.66326378
+[10:05:20]   [BASELINE] S8: LEG_K_S=57.847233,LEG_B_S=0.13753742,LEG_K_ROLL=0.0011159778,LEG_D_ROLL=0.66326378
+[10:05:20]   Wrote baseline gains into params.py
+[10:05:20] ========================================================================
+[10:05:20]   [9/9] S9 — s09_integrated
+[10:05:20] ========================================================================
+[10:05:20]   Seeding from RANDOM: Q_PITCH=0.31697083,Q_PITCH_RATE=0.0037081885,Q_VEL=0.36963556,R=0.010474093,KP_V=3.9847135,KI_V=0.12540004,KP_YAW=39.763342,KI_YAW=0.0013194155,LEG_K_S=30.045778,LEG_B_S=0.55652527,LEG_K_ROLL=33.953867,LEG_D_ROLL=0.4536789
+[10:05:20]   Overlaid 22 keys from earlier steps: Q_PITCH=0.01,Q_PITCH_RATE=0.0023935836,Q_VEL=4.5632537e-05,R=0.48881854,KP_V=0.0075909411,KI_V=0.10269552,KP_YAW=28.199352,KI_YAW=36.673417,LEG_K_S=57.847233,LEG_B_S=0.13753742,LEG_K_ROLL=0.0011159778,LEG_D_ROLL=0.66326378
+[10:05:20]   Deleted S_s09_integrated.csv (--fresh)
+[10:05:20]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_integrated --scenario s09_integrated --hours 0.0001 --patience 500 --tol 0.0001 --seed-gains Q_PITCH=0.01,Q_PITCH_RATE=0.0023935836,Q_VEL=4.5632537e-05,R=0.48881854,KP_V=0.0075909411,KI_V=0.10269552,KP_YAW=28.199352,KI_YAW=36.673417,LEG_K_S=57.847233,LEG_B_S=0.13753742,LEG_K_ROLL=0.0011159778,LEG_D_ROLL=0.66326378
+[10:05:27]   S9 done in 0.1 min — best: Q_PITCH=0.01,Q_PITCH_RATE=0.0023935836,Q_VEL=4.5632537e-05,R=0.48881854,KP_V=0.0075909411,KI_V=0.10269552,KP_YAW=28.199352,KI_YAW=36.673417,LEG_K_S=57.847233,LEG_B_S=0.13753742,LEG_K_ROLL=0.0011159778,LEG_D_ROLL=0.66326378
+[10:05:27]   [BASELINE] S9: Q_PITCH=0.01,Q_PITCH_RATE=0.0023935836,Q_VEL=4.5632537e-05,R=0.48881854,KP_V=0.0075909411,KI_V=0.10269552,KP_YAW=28.199352,KI_YAW=36.673417,LEG_K_S=57.847233,LEG_B_S=0.13753742,LEG_K_ROLL=0.0011159778,LEG_D_ROLL=0.66326378
+[10:05:27]   Wrote baseline gains into params.py
+[10:05:27] ========================================================================
+[10:05:27]   Pipeline complete — 1 min total
+[10:05:27] ========================================================================
+[10:05:27]   S1: Q_PITCH=0.26546646,Q_PITCH_RATE=0.0039810395,Q_VEL=0.0012810115,R=2.6533661
+[10:05:27]   S2 [BASELINE]: Q_PITCH=0.01,Q_PITCH_RATE=0.0023935836,Q_VEL=4.5632537e-05,R=0.48881854
+[10:05:27]   S3: KP_V=0.0034708454,KI_V=0.16454112
+[10:05:27]   S4: KP_V=0.0034708454,KI_V=0.16454112
+[10:05:27]   S5 [BASELINE]: KP_V=0.0075909411,KI_V=0.10269552
+[10:05:27]   S6: KP_YAW=0.36910691,KI_YAW=100
+[10:05:27]   S7 [BASELINE]: KP_YAW=28.199352,KI_YAW=36.673417
+[10:05:27]   S8 [BASELINE]: LEG_K_S=57.847233,LEG_B_S=0.13753742,LEG_K_ROLL=0.0011159778,LEG_D_ROLL=0.66326378
+[10:05:27]   S9 [BASELINE]: Q_PITCH=0.01,Q_PITCH_RATE=0.0023935836,Q_VEL=4.5632537e-05,R=0.48881854,KP_V=0.0075909411,KI_V=0.10269552,KP_YAW=28.199352,KI_YAW=36.673417,LEG_K_S=57.847233,LEG_B_S=0.13753742,LEG_K_ROLL=0.0011159778,LEG_D_ROLL=0.66326378
+[10:05:27] 
+  All steps completed successfully.

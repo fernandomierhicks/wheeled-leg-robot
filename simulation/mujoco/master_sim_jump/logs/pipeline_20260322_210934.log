@@ -1,0 +1,12 @@
+[21:09:34] ========================================================================
+[21:09:34]   S1->S9 Pipeline  |  1 steps  |  0.08h/step  |  20260322_210934
+[21:09:34] ========================================================================
+[21:09:34]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260322_210934.log
+[21:09:34]   Steps: ['S8']
+[21:09:34] ========================================================================
+[21:09:34]   [1/1] S8 — s08_terrain_compliance
+[21:09:34] ========================================================================
+[21:09:34]   Seeding from RANDOM: LEG_K_S=0.17441719,LEG_B_S=7.4539382,LEG_K_ROLL=0.034828128,LEG_D_ROLL=0.00099105158
+[21:09:34]   Deleted S_s08_terrain_compliance.csv (--fresh)
+[21:09:34]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_suspension --scenario s08_terrain_compliance --hours 0.08333333333333333 --patience 50 --tol 0.0001 --workers 8 --seed-gains LEG_K_S=0.17441719,LEG_B_S=7.4539382,LEG_K_ROLL=0.034828128,LEG_D_ROLL=0.00099105158
+[21:09:37]   ERROR: optimizer exited with code 3221225786

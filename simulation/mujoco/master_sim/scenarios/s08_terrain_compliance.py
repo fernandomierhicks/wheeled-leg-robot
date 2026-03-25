@@ -75,7 +75,7 @@ W_ROLL      = 0.40   # primary objective — minimise peak roll from force pulse
 W_VEL       = 0.0    # maintain forward velocity while absorbing terrain
 W_PITCH     = 0.10   # don't trade pitch stability for roll compliance
 W_HIP_TRACK = 0.10   # hip spring must track its setpoint, not bottom out
-W_HIP_RATE  = 0.4   # penalise bang-bang torque — smooth actuator effort
+W_HIP_RATE  = 0.40   # penalise bang-bang torque — smooth actuator effort
 W_FELL      = 200.0  # binary survival penalty (not part of the 1.0 budget)
 
 
@@ -101,7 +101,7 @@ CONFIG = ScenarioConfig(
     name="s08_terrain_compliance",
     display_name="S8 — Terrain Compliance",
     duration=_timings.s8_duration,
-    active_controllers=frozenset({"lqr", "velocity_pi", "yaw_pi"}),
+    active_controllers=frozenset({"lqr", "velocity_pi"}),
     hip_mode="impedance",
     v_profile=constant_velocity(_timings.s8_drive_speed),
     roll_dist_fn=_roll_pulse,

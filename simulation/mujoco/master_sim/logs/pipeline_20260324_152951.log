@@ -1,0 +1,26 @@
+[15:29:51] ========================================================================
+[15:29:51]   S1->S9 Pipeline  |  1 steps  |  0.17h/step  |  20260324_152951
+[15:29:51] ========================================================================
+[15:29:51]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260324_152951.log
+[15:29:51]   Steps: ['S8']
+[15:29:51] ========================================================================
+[15:29:51]   [1/1] S8 — s08_terrain_compliance
+[15:29:51] ========================================================================
+[15:29:51]   Seeding from defaults: LEG_K_S=8.74376,LEG_B_S=0.0125435,LEG_K_ROLL=29.0288,LEG_D_ROLL=0.0372484
+[15:29:51]   Deleted S_s08_terrain_compliance.csv (--fresh)
+[15:29:51]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_suspension --scenario s08_terrain_compliance --hours 0.16666666666666666 --patience 200 --tol 0.0001 --workers 8 --seed-gains LEG_K_S=8.74376,LEG_B_S=0.0125435,LEG_K_ROLL=29.0288,LEG_D_ROLL=0.0372484
+[15:39:56]   S8 done in 10.1 min — best: LEG_K_S=10.036633,LEG_B_S=0.010234861,LEG_K_ROLL=39.73772,LEG_D_ROLL=1.209559
+[15:39:56]   [BASELINE] S8: LEG_K_S=10.036633,LEG_B_S=0.010234861,LEG_K_ROLL=39.73772,LEG_D_ROLL=1.209559
+[15:39:56]   Wrote baseline gains into params.py
+[15:39:56] ========================================================================
+[15:39:56]   Pipeline complete — 10 min total
+[15:39:56] ========================================================================
+[15:39:56]   S1: Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[15:39:56]   S2 [BASELINE]: Q_PITCH=0.69238254,Q_PITCH_RATE=0.001,Q_VEL=0.0016152071,R=43.723839
+[15:39:56]   S3: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[15:39:56]   S5 [BASELINE]: KP_V=0.24865113,KI_V=0.0011330509,KFF_V=0.33671895
+[15:39:56]   S6: KP_YAW=4.0200323,KI_YAW=3.7317219
+[15:39:56]   S7 [BASELINE]: KP_YAW=0.31983943,KI_YAW=1.3509374
+[15:39:56]   S8 [BASELINE]: LEG_K_S=10.036633,LEG_B_S=0.010234861,LEG_K_ROLL=39.73772,LEG_D_ROLL=1.209559
+[15:39:56] 
+  All steps completed successfully.

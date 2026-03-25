@@ -1,0 +1,25 @@
+[21:33:12] ========================================================================
+[21:33:12]   S1->S9 Pipeline  |  1 steps  |  0.08h/step  |  20260322_213312
+[21:33:12] ========================================================================
+[21:33:12]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260322_213312.log
+[21:33:12]   Steps: ['S9']
+[21:33:12] ========================================================================
+[21:33:12]   [1/1] S9 — s09_integrated
+[21:33:12] ========================================================================
+[21:33:12]   Seeding from defaults: Q_PITCH=0.0679322,Q_PITCH_RATE=1.88554,Q_VEL=0.00053895,R=269.789,KP_V=0.2,KI_V=0.1,KFF_V=0.108498,KP_YAW=0.272058,KI_YAW=0.00133677,LEG_K_S=12.9624,LEG_B_S=0.109151,LEG_K_ROLL=45.2559,LEG_D_ROLL=0.491916
+[21:33:12]   Overlaid 19 keys from earlier steps: Q_PITCH=5.4025381,Q_PITCH_RATE=0.033407993,Q_VEL=0.0016521331,R=39.646999,KP_V=0.011156208,KI_V=0.30819708,KFF_V=0.10849846,KP_YAW=0.19324586,KI_YAW=0.22121895,LEG_K_S=12.962437,LEG_B_S=0.10915113,LEG_K_ROLL=45.255859,LEG_D_ROLL=0.49191579
+[21:33:12]   Deleted S_s09_integrated.csv (--fresh)
+[21:33:12]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_integrated --scenario s09_integrated --hours 0.08333333333333333 --patience 50 --tol 0.0001 --workers 8 --seed-gains Q_PITCH=5.4025381,Q_PITCH_RATE=0.033407993,Q_VEL=0.0016521331,R=39.646999,KP_V=0.011156208,KI_V=0.30819708,KFF_V=0.10849846,KP_YAW=0.19324586,KI_YAW=0.22121895,LEG_K_S=12.962437,LEG_B_S=0.10915113,LEG_K_ROLL=45.255859,LEG_D_ROLL=0.49191579
+[21:33:54]   ERROR: no PASS result after optimization
+[21:33:54]   FAILED: S9
+[21:33:54] ========================================================================
+[21:33:54]   Pipeline complete — 1 min total
+[21:33:54] ========================================================================
+[21:33:54]   S1: Q_PITCH=0.31824234,Q_PITCH_RATE=8.6741191,Q_VEL=1.0272054e-07,R=7.0212944
+[21:33:54]   S2 [BASELINE]: Q_PITCH=5.4025381,Q_PITCH_RATE=0.033407993,Q_VEL=0.0016521331,R=39.646999
+[21:33:54]   S3: KP_V=0.011156208,KI_V=0.30819708,KFF_V=0.10849846
+[21:33:54]   S6: KP_YAW=3.9993228,KI_YAW=1.5492402
+[21:33:54]   S7 [BASELINE]: KP_YAW=0.19324586,KI_YAW=0.22121895
+[21:33:54]   S8 [BASELINE]: LEG_K_S=12.962437,LEG_B_S=0.10915113,LEG_K_ROLL=45.255859,LEG_D_ROLL=0.49191579
+[21:33:54] 
+  FAILED: ['S9']

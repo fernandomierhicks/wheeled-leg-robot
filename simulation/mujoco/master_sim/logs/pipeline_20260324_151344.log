@@ -1,0 +1,64 @@
+[15:13:44] ========================================================================
+[15:13:44]   S1->S9 Pipeline  |  6 steps  |  0.33h/step  |  20260324_151344
+[15:13:44] ========================================================================
+[15:13:44]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim\logs\pipeline_20260324_151344.log
+[15:13:44]   Steps: ['S3', 'S4', 'S5', 'S6', 'S7', 'S8']
+[15:13:44] ========================================================================
+[15:13:44]   [1/6] S3 — s03_vel_pi_disturbance
+[15:13:44] ========================================================================
+[15:13:44]   Seeding from defaults: KP_V=0.248651,KI_V=0.00113305,KFF_V=0.336719
+[15:13:44]   Skipping S3: existing PASS in S_s03_vel_pi_disturbance.csv
+[15:13:44]   Best: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[15:13:44] ========================================================================
+[15:13:44]   [2/6] S4 — s04_vel_pi_staircase
+[15:13:44] ========================================================================
+[15:13:44]   Seeding from S3: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[15:13:44]   Overlaid 3 keys from earlier steps: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[15:13:44]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim.optimizer.optimize_vel_pi --scenario s04_vel_pi_staircase --hours 0.3333333333333333 --patience 200 --tol 0.0001 --workers 8 --seed-gains KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[15:26:21]   ERROR: no PASS result after optimization
+[15:26:21]   FAILED: S4
+[15:26:21] ========================================================================
+[15:26:21]   [3/6] S5 — s05_vel_pi_leg_cycling
+[15:26:21] ========================================================================
+[15:26:21]   WARNING: S4 has no result — falling back to defaults
+[15:26:21]   Seeding from defaults: KP_V=0.248651,KI_V=0.00113305,KFF_V=0.336719
+[15:26:21]   Overlaid 3 keys from earlier steps: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[15:26:21]   Skipping S5: existing PASS in S_s05_vel_pi_leg_cycling.csv
+[15:26:21]   Best: KP_V=0.24865113,KI_V=0.0011330509,KFF_V=0.33671895
+[15:26:21]   [BASELINE] S5: KP_V=0.24865113,KI_V=0.0011330509,KFF_V=0.33671895
+[15:26:21]   Wrote baseline gains into params.py
+[15:26:21] ========================================================================
+[15:26:21]   [4/6] S6 — s06_yaw_pi_turn
+[15:26:21] ========================================================================
+[15:26:21]   Seeding from defaults: KP_YAW=0.319839,KI_YAW=1.35094
+[15:26:21]   Skipping S6: existing PASS in S_s06_yaw_pi_turn.csv
+[15:26:21]   Best: KP_YAW=4.0200323,KI_YAW=3.7317219
+[15:26:21] ========================================================================
+[15:26:21]   [5/6] S7 — s07_drive_turn
+[15:26:21] ========================================================================
+[15:26:21]   Seeding from S6: KP_YAW=4.0200323,KI_YAW=3.7317219
+[15:26:21]   Overlaid 2 keys from earlier steps: KP_YAW=4.0200323,KI_YAW=3.7317219
+[15:26:21]   Skipping S7: existing PASS in S_s07_drive_turn.csv
+[15:26:21]   Best: KP_YAW=0.31983943,KI_YAW=1.3509374
+[15:26:21]   [BASELINE] S7: KP_YAW=0.31983943,KI_YAW=1.3509374
+[15:26:21]   Wrote baseline gains into params.py
+[15:26:21] ========================================================================
+[15:26:21]   [6/6] S8 — s08_terrain_compliance
+[15:26:21] ========================================================================
+[15:26:21]   Seeding from defaults: LEG_K_S=8.74376,LEG_B_S=0.0125435,LEG_K_ROLL=29.0288,LEG_D_ROLL=0.0372484
+[15:26:21]   Skipping S8: existing PASS in S_s08_terrain_compliance.csv
+[15:26:21]   Best: LEG_K_S=8.743764,LEG_B_S=0.01254354,LEG_K_ROLL=29.028766,LEG_D_ROLL=0.037248384
+[15:26:21]   [BASELINE] S8: LEG_K_S=8.743764,LEG_B_S=0.01254354,LEG_K_ROLL=29.028766,LEG_D_ROLL=0.037248384
+[15:26:21]   Wrote baseline gains into params.py
+[15:26:21] ========================================================================
+[15:26:21]   Pipeline complete — 13 min total
+[15:26:21] ========================================================================
+[15:26:21]   S1: Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[15:26:21]   S2 [BASELINE]: Q_PITCH=0.69238254,Q_PITCH_RATE=0.001,Q_VEL=0.0016152071,R=43.723839
+[15:26:21]   S3: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[15:26:21]   S5 [BASELINE]: KP_V=0.24865113,KI_V=0.0011330509,KFF_V=0.33671895
+[15:26:21]   S6: KP_YAW=4.0200323,KI_YAW=3.7317219
+[15:26:21]   S7 [BASELINE]: KP_YAW=0.31983943,KI_YAW=1.3509374
+[15:26:21]   S8 [BASELINE]: LEG_K_S=8.743764,LEG_B_S=0.01254354,LEG_K_ROLL=29.028766,LEG_D_ROLL=0.037248384
+[15:26:21] 
+  FAILED: ['S4']

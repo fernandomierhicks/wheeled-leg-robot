@@ -1,10 +1,6 @@
 
 ---Fernandos note dont change below
 
--How does sim get pitch and pitch rate? is pitch rate from muujoco or manually derivated?
-Does S8 need yaw controller active? maybe shut it off?
-Reoptimize PI velocity controller. 
--Implemetn Jump controller per JumpController.MD
 
 
 
@@ -19,8 +15,8 @@ Reoptimize PI velocity controller.
 
 -AI usage 
 
-fernandomierhicks	41%	    Sunday 5PM
-fernandomierhicks2	61%	    Friday 4PM
+fernandomierhicks	44%	    Sunday 5PM
+fernandomierhicks2	67%	    Friday 4PM
 fernandomierhicks1	100%	Wednesday 12pm
 
 One long OPUS task, 7minutes consumes 25% 5-hour limit and 3% weekly limit. 
