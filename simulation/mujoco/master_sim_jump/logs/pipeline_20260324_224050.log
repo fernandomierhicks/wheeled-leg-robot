@@ -1,0 +1,32 @@
+[22:40:50] ========================================================================
+[22:40:50]   S1->S9 Pipeline  |  9 steps  |  0.75h/step  |  20260324_224050
+[22:40:50] ========================================================================
+[22:40:50]   Log: C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\simulation\mujoco\master_sim_jump\logs\pipeline_20260324_224050.log
+[22:40:50]   Steps: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9']
+[22:40:50] ========================================================================
+[22:40:50]   [1/9] S1 — s01_lqr_pitch_step
+[22:40:50] ========================================================================
+[22:40:50]   Seeding from defaults: Q_PITCH=0.692383,Q_PITCH_RATE=0.001,Q_VEL=0.00161521,R=43.7238
+[22:40:50]   Skipping S1: existing PASS in S_s01_lqr_pitch_step.csv
+[22:40:50]   Best: Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[22:40:50] ========================================================================
+[22:40:50]   [2/9] S2 — s02_leg_height_gain_sched
+[22:40:50] ========================================================================
+[22:40:50]   Seeding from S1: Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[22:40:50]   Overlaid 4 keys from earlier steps: Q_PITCH=0.096017194,Q_PITCH_RATE=0.021127727,Q_VEL=2.3406758e-06,R=98.982255
+[22:40:50]   Skipping S2: existing PASS in S_s02_leg_height_gain_sched.csv
+[22:40:50]   Best: Q_PITCH=0.69238254,Q_PITCH_RATE=0.001,Q_VEL=0.0016152071,R=43.723839
+[22:40:50]   [BASELINE] S2: Q_PITCH=0.69238254,Q_PITCH_RATE=0.001,Q_VEL=0.0016152071,R=43.723839
+[22:40:50]   Wrote baseline gains into params.py
+[22:40:50] ========================================================================
+[22:40:50]   [3/9] S3 — s03_vel_pi_disturbance
+[22:40:50] ========================================================================
+[22:40:50]   Seeding from defaults: KP_V=0.248651,KI_V=0.00113305,KFF_V=0.336719
+[22:40:50]   Skipping S3: existing PASS in S_s03_vel_pi_disturbance.csv
+[22:40:50]   Best: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[22:40:50] ========================================================================
+[22:40:50]   [4/9] S4 — s04_vel_pi_staircase
+[22:40:50] ========================================================================
+[22:40:50]   Seeding from S3: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[22:40:50]   Overlaid 3 keys from earlier steps: KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2
+[22:40:50]   CMD: C:\Users\ferna\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe -m master_sim_jump.optimizer.optimize_vel_pi --scenario s04_vel_pi_staircase --hours 0.75 --patience 200 --tol 0.0001 --workers 8 --seed-gains KP_V=0.0012179142,KI_V=0.27618081,KFF_V=1.2

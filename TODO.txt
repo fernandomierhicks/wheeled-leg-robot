@@ -6,7 +6,7 @@
 
 -Spring for higher jumps. 
 
-
+-Tweak optimization metrics to not punish velocity during fast speed changes. Robot needs to slow down before it can go faster....
 
 -Flip?
 Want me to build this as a new scenario (S11)? The sequence would be:
