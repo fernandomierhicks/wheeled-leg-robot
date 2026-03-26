@@ -1,117 +1,157 @@
-# Hybrid IMU Sensor Model for master_sim
+# HANDOFF — Feedforward & State Estimation Improvements
 
-## Context
-
-The BNO086 IMU provides two data paths with different latency characteristics:
-- **Raw gyro**: ~1.05ms delay, ~1000Hz, but drifts when integrated
-- **Game Rotation Vector (GRV)**: ~3.5ms delay, ~354Hz, drift-free fused pitch
-
-Currently the simulation uses a single delay path (2ms) for all sensor readings. The real firmware can do better: use the fast gyro for low-latency pitch estimation, and periodically correct drift using the slower GRV. This reduces effective sensor delay from ~3.5ms to ~1ms — a significant win for the ZOH predictor.
-
-## Approach: Complementary Filter with Dual Delay Buffers
-
-### New file: `models/hybrid_imu.py`
-
-`HybridIMUSensor` class with:
-- **Gyro path** (every tick): `LatencyBuffer(1 tick)` → integrate pitch_rate for pitch angle, add simulated bias drift (random walk, default 0)
-- **GRV path** (~every 3 ticks): `LatencyBuffer(~4 ticks)` → drift-free fused pitch, delivered at ~354Hz using a fractional accumulator (reproduces real 2ms/3ms alternating delivery)
-- **Complementary filter**: On each GRV arrival: `pitch = alpha * pitch_gyro + (1-alpha) * pitch_grv` then reset integrator. Alpha ~0.98 (high-pass gyro, low-pass GRV).
-- Single `update()` method returns `(pitch_fused, pitch_rate_delayed)` per tick
-
-### New dataclass in `params.py`: `HybridIMUParams`
-
-| Field | Default | Description |
-|---|---|---|
-| `enabled` | `False` | `False` = legacy single-delay mode (backward compat) |
-| `gyro_delay_s` | `0.00105` | Raw gyro total delay |
-| `grv_delay_s` | `0.0035` | GRV total delay |
-| `grv_rate_hz` | `354.0` | GRV delivery rate |
-| `alpha` | `0.98` | Complementary filter coeff (1.0=pure gyro) |
-| `gyro_drift_rate` | `0.0` | Gyro bias random walk sigma [rad/s/sqrt(s)], opt-in |
-
-Add `hybrid_imu: HybridIMUParams` field to `SimParams` (after `noise`).
-
-### Changes to `sim_loop.py`
-
-**`_init_controllers()`** (~line 284):
-- If `hybrid_imu.enabled`: create `HybridIMUSensor`, set `n_sens` from `gyro_delay_s` (1 tick), set `sens_buf` to pass-through (0 steps) since hybrid sensor handles its own delays
-- If not enabled: unchanged legacy path
-
-**`tick()`** (~line 366):
-- If `self.hybrid_sensor`: call `hybrid_sensor.update(pitch_true, pitch_rate_true, ...)` which returns fused pitch + delayed pitch_rate. Skip manual noise addition (hybrid sensor does it internally). Push result through pass-through `sens_buf` into predictor.
-- If not: unchanged legacy path
-
-Everything downstream (predictor, LQR, telemetry) stays the same — it just sees lower effective delay.
-
-### Data flow
-
-```
-Legacy:  truth → +noise(GRV) → delay(2 ticks) → predictor(2 steps) → LQR
-
-Hybrid:
-         ┌─ gyro: +noise +drift → delay(1 tick) → integrate ──┐
-truth ───┤                                                      ├─ comp.filter → predictor(1 step) → LQR
-         └─ GRV:  +noise        → delay(4 ticks) → @354Hz ────┘
-```
-
-## Files to modify
-
-1. **`simulation/mujoco/master_sim/params.py`** — Add `HybridIMUParams` dataclass + field on `SimParams`
-2. **`simulation/mujoco/master_sim/models/hybrid_imu.py`** — New file: `HybridIMUSensor` class
-3. **`simulation/mujoco/master_sim/sim_loop.py`** — Branch in `_init_controllers()` and `tick()`
-
-Reuse: `models/latency.py` `LatencyBuffer` (no changes needed, just import).
-
-## Verification
-
-1. Run `python -m master_sim.sim_loop` with default params (hybrid disabled) — must match current behavior exactly
-2. Enable hybrid (`HybridIMUParams(enabled=True)`) and run S01/S09 — should balance with similar or better performance
-3. Test drift rejection: set `gyro_drift_rate=0.01`, verify complementary filter keeps pitch stable
-4. Run `diag_delay.py` in both modes to compare prediction MAE
+Status: **Planning** — options documented, not yet implemented.
 
 ---
 
-## HANDOFF.md Content (to be written to `\HANDOFF.md`)
+## Current Baseline
 
-# Handoff: Hybrid IMU Sensor Model
+### Existing feedforward elements
 
-## What
-Add a dual-path IMU sensor model to `simulation/mujoco/master_sim/` that mimics real BNO086 firmware behavior: fast raw gyro (~1ms delay, 1kHz) for low-latency pitch estimation, with periodic Game Rotation Vector (~3.5ms delay, 354Hz) corrections via complementary filter.
+| # | Name | Where | What it does |
+|---|------|-------|-------------|
+| 1 | Pitch equilibrium FF | `controllers/lqr.py` — `get_equilibrium_pitch(hip_q_avg)` | Shifts LQR linearization point as leg angle changes so the controller always balances around the correct tilt |
+| 2 | Lean acceleration FF | `controllers/velocity_pi.py` — `Kff * dv_cmd/dt` | Applies `theta_ref ≈ a/g` immediately on velocity command steps instead of waiting for PI to integrate |
+| 3 | Roll leveling FF | `controllers/hip.py` — `K_roll * roll + D_roll * roll_rate` | Differential hip offsets to keep the body level on uneven terrain |
 
-## Why
-The BNO086 characterization (see `components/characterization/IMU/IMU_characterization_plan.MD`) measured:
-- **Raw gyro total delay**: ~1.05ms (SPI 0.05ms + ISR 1.0ms)
-- **GRV total delay**: ~3.5ms (fusion 2.5ms + ISR 1.0ms + SPI 0.05ms)
-- **GRV rate**: ~354Hz (alternating 2ms/3ms delivery)
-- **Gyro noise**: 0.121 deg/s RMS; **GRV pitch noise**: 0.0101 deg RMS
-- **GRV drift**: negligible (0.2 deg/hr)
+### State estimation
 
-Using gyro for the fast path reduces effective sensor delay from ~3.5ms to ~1ms, improving ZOH predictor accuracy and LQR stability margin.
+- **No EKF.** State estimation is a deterministic matrix predictor that forward-propagates delayed sensor readings through the discretized linear model using stored torque history. It compensates for sensor + actuator latency but has no noise model, no measurement fusion, and no disturbance estimation.
+- **No live CoM calculation.** Mass distribution is baked into the LQR gain table at build time. The controller has no runtime knowledge of where CoM actually is.
 
-## Current state of simulation sensor model
-- Single delay path: `ground_truth → +noise → LatencyBuffer(2ms) → ZOH predictor → LQR`
-- Noise params from real BNO086 measurements (Test 5)
-- Matrix ZOH predictor compensates for delay using discretized plant dynamics + torque history
-- Code: `sim_loop.py` lines 284-313 (init), 366-401 (tick sensor section)
-- Params: `params.py` `LatencyParams` (line 222), `NoiseParams` (line 236)
+---
 
-## Implementation plan
-See `C:\Users\ferna\.claude\plans\mossy-jumping-reddy.md` for full details. Summary:
+## Proposed Improvements
 
-1. **`params.py`**: Add `HybridIMUParams` dataclass (`enabled`, `gyro_delay_s`, `grv_delay_s`, `grv_rate_hz`, `alpha`, `gyro_drift_rate`) + field on `SimParams`
-2. **`models/hybrid_imu.py`** (new): `HybridIMUSensor` class with dual `LatencyBuffer`s, gyro integration, fractional GRV delivery accumulator, complementary filter
-3. **`sim_loop.py`**: Branch in `_init_controllers()` and `tick()` — when hybrid enabled, sensor reads go through `HybridIMUSensor.update()` instead of the single-delay path; predictor uses gyro delay (1 tick) instead of sensor_delay_s
+### FF1 — Hip Reaction Torque Cancellation
 
-Backward compatible: `HybridIMUParams(enabled=False)` is default, legacy path unchanged.
+**Priority: HIGH** — biggest bang-for-buck
 
-## Key design decisions
-- Complementary filter (not Kalman) — simpler, matches what UNO R4 WiFi can realistically run
-- Alpha=0.98: high-pass gyro + low-pass GRV, -3dB crossover ~1.1Hz (well below balance bandwidth)
-- Gyro drift modeled as Wiener process (random walk bias), default 0 (opt-in)
-- GRV delivery uses fractional accumulator to reproduce real 2ms/3ms alternating pattern
+**Problem:** Every hip torque command creates an equal-and-opposite reaction torque on the body. The LQR sees this as a pitch disturbance and corrects it, but only after the disturbance has already occurred (one control loop late at minimum). During jump crouch, suspension response, and roll leveling, this reaction torque is the dominant disturbance source.
 
-## Verification
-1. Default params (hybrid off) → identical to current behavior
-2. Hybrid on, drift=0 → equal or better balance performance
-3. Hybrid on, drift>0 → complementary filter rejects drift
-4. `diag_delay.py` comparison of prediction MAE in both modes
+**Approach:**
+- Read the hip torque command `tau_hip` (already computed each tick)
+- Feed a cancellation torque into the wheel motors: `tau_wheel_ff = -tau_hip * (r_wheel / l_eff)` scaled by the geometric ratio
+- Apply it in the same control tick, before the LQR output is summed
+
+**Where to implement:** `sim_loop.py`, between hip torque computation and wheel torque summation.
+
+**Risks:**
+- Geometric ratio `l_eff` changes with leg angle — must use current `l_eff` from IK, not a constant
+- Sign convention must be verified carefully (hip extension vs. retraction)
+- May need a tunable gain `0 < alpha <= 1` rather than full cancellation if model mismatch causes overcorrection
+
+---
+
+### FF2 — Gravity Compensation Torque on Wheels
+
+**Priority: HIGH**
+
+**Problem:** When the robot leans (pitch != 0), gravity exerts a torque on the pendulum. The LQR handles this through feedback, but during large lean angles (velocity tracking, jump recovery) the feedback is always chasing the gravitational load.
+
+**Approach:**
+- Compute `tau_gravity_ff = m_body * g * l_eff(q_hip) * sin(pitch)`
+- Add to wheel torque command as feedforward, reducing the error signal the LQR must correct
+- `l_eff` comes from the existing IK/gain-scheduling infrastructure
+
+**Where to implement:** `sim_loop.py`, added to wheel torque after LQR output.
+
+**Risks:**
+- The LQR already has an implicit gravity term in its linearized model (the `alpha` coefficient). Adding explicit gravity FF on top may cause double-counting. May need to reduce LQR Q-weight on pitch proportionally, or scale this FF term with a tunable gain.
+- Only beneficial at larger lean angles where `sin(pitch) ≈ pitch` breaks down
+
+---
+
+### FF3 — CoM Shift Compensation
+
+**Priority: MEDIUM**
+
+**Problem:** As hip angle changes, the leg mass moves and the whole-body CoM shifts along X. The LQR linearization assumes a fixed pivot geometry for each gain-table entry, but between table entries the CoM shift is uncompensated. This causes a transient pitch disturbance during leg transitions (visible as a "lurch" when entering/exiting crouch).
+
+**Approach:**
+- Compute CoM_x as a function of hip angle using the known link masses and geometry (forward kinematics already available in `physics.py`)
+- Convert CoM_x shift into a pitch reference offset: `delta_theta = arctan(delta_CoM_x / l_eff)`
+- Add this offset to `pitch_ff` in the LQR state vector
+
+**Where to implement:** New function in `physics.py`, called from `lqr.py` or `sim_loop.py`.
+
+**Risks:**
+- Requires accurate mass properties for each link (currently only total `m_body` is used)
+- Small effect when leg motion is slow; most valuable during fast leg transitions (jump)
+- Could be approximated as a lookup table rather than computed every tick
+
+---
+
+### FF4 — Centripetal Coupling During Turns
+
+**Priority: MEDIUM**
+
+**Problem:** At forward speed, yaw rotation creates a centripetal acceleration that tilts the robot. The yaw PI and roll leveling operate independently of the balance controller, so this cross-coupling is uncompensated.
+
+**Approach:**
+- Compute centripetal lean: `theta_centripetal = v * omega_yaw / g`
+- Subtract from LQR pitch reference so the robot leans into turns
+- Optionally add a roll-rate feedforward term from yaw command
+
+**Where to implement:** `sim_loop.py`, modifying `theta_ref` before passing to LQR.
+
+**Risks:**
+- Only matters at meaningful speed + yaw rate combinations. At low speeds this is negligible.
+- Sign must match coordinate convention (lean into the turn = negative roll on right turn)
+
+---
+
+### SE1 — Extended Kalman Filter
+
+**Priority: LOW** (current predictor works; EKF is a larger architectural change)
+
+**Problem:** The matrix predictor assumes the linear model is perfect. Any model mismatch (unmodeled friction, mass errors, leg flexibility) accumulates as prediction error. There is no mechanism to detect or correct this drift.
+
+**Approach:**
+- Replace the matrix predictor with an EKF that fuses:
+  - IMU: pitch, pitch_rate (delayed, noisy)
+  - Wheel encoders: wheel_vel (delayed)
+  - Hip encoders: hip_q (undelayed, low noise)
+- State vector: `[pitch, pitch_rate, wheel_vel, disturbance_torque]` — the disturbance state gives free disturbance estimation
+- Process model: same linearized pendulum dynamics already in `lqr.py`
+- Measurement model: identity on measured states with appropriate delays
+
+**Where to implement:** New file `controllers/ekf.py`, replacing the predictor block in `sim_loop.py`.
+
+**Benefits beyond current predictor:**
+- Graceful degradation under model mismatch
+- Disturbance torque estimate (could feed into FF1 as a learned correction)
+- Noise-optimal state estimates (currently just raw delayed+predicted values)
+
+**Risks:**
+- Tuning Q and R covariance matrices adds complexity
+- Must handle the variable-delay nature of the sensor pipeline
+- Computational cost higher than current predictor (matrix multiplies per tick)
+- Overkill if the current predictor + feedforward terms are sufficient
+
+---
+
+## Implementation Order
+
+Recommended sequence based on impact and independence:
+
+```
+1. FF1  Hip reaction torque cancellation     (high impact, simple, independent)
+2. FF2  Gravity compensation on wheels       (high impact, needs careful gain tuning)
+3. FF3  CoM shift compensation               (medium, most valuable once FF1+FF2 are in)
+4. FF4  Centripetal turn coupling             (medium, independent, only matters at speed)
+5. SE1  EKF                                  (low priority, large scope, do last if needed)
+```
+
+Each can be implemented and tested independently. FF1 and FF2 can be done in parallel.
+
+---
+
+## Validation Plan
+
+For each feedforward term:
+1. Add the FF term with a tunable gain (default 0, so it's a no-op)
+2. Run the relevant scenario (S08 for suspension, S09 for disturbance, S10 for jump)
+3. Compare pitch tracking error RMS with FF gain = 0 vs. FF gain = 1
+4. Sweep gain 0 to 1 to find optimal value (may not be 1.0 due to model mismatch)
+5. Check that no scenario regresses

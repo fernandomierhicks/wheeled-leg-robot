@@ -48,12 +48,12 @@
 #define CAN_BAUD            1000000   // 1 Mbps
 #endif
 
-// CAN node IDs
-#define CAN_ID_HIP_L        1         // AK45-10 left hip (MIT CAN)
-#define CAN_ID_HIP_R        2         // AK45-10 right hip (MIT CAN)
-#define CAN_ID_ODESC         3         // ODESC dual-axis (ODrive CAN)
-#define ODESC_AXIS_L        0         // left wheel
-#define ODESC_AXIS_R        1         // right wheel
+// CAN node IDs — each axis is a separate CAN node.
+// Set on ODESC via odrivetool: odrv0.axisN.config.can.node_id = <value>
+#define CAN_ID_HIP_L        2         // AK45-10 left hip (MIT CAN)
+#define CAN_ID_HIP_R        3         // AK45-10 right hip (MIT CAN)
+#define ODESC_NODE_L        0         // ODESC axis 0 — left wheel
+#define ODESC_NODE_R        1         // ODESC axis 1 — right wheel
 
 // ── IMU ─────────────────────────────────────────────────────────────────────
 #ifndef IMU_RATE_HZ

@@ -24,6 +24,7 @@
 #include "wifi_fast.h"
 #include "telemetry.h"
 #include "commands.h"
+#include "odesc_can.h"
 
 // ── 500 Hz hardware timer ───────────────────────────────────────────────────
 static volatile bool tick_flag = false;
@@ -87,6 +88,12 @@ void setup() {
         while (1) { delay(1000); }
     }
 
+    // CAN bus + ODESC wheels
+    if (!odesc_can_init()) {
+        Serial.println("FATAL: CAN init failed");
+        while (1) { delay(1000); }
+    }
+
     // Controllers
     lqr.init();
     vel_pi.init();
@@ -128,6 +135,9 @@ void loop() {
     // ── IMU ──
     imu_poll(&state);
 
+    // ── CAN RX: parse encoder feedback + heartbeats ──
+    odesc_can_poll(state);
+
     // ── Controllers (only in BALANCE or DRIVE mode) ──
     if (state.mode == Mode::BALANCE || state.mode == Mode::DRIVE) {
         // Safety: check fall angle
@@ -141,6 +151,7 @@ void loop() {
             state.tau_wheel_R = 0.0f;
             state.tau_hip_L = 0.0f;
             state.tau_hip_R = 0.0f;
+            odesc_can_disable();
         } else {
             // Convert wheel_vel from rad/s to m/s for velocity PI
             float v_measured = state.wheel_vel_avg * WHEEL_RADIUS;
@@ -183,9 +194,9 @@ void loop() {
         state.tau_hip_R = 0.0f;
     }
 
-    // ── TODO: CAN output to motors ──
-    // can_send_wheel(state.tau_wheel_L, state.tau_wheel_R);
-    // can_send_hip(state.tau_hip_L, state.tau_hip_R);
+    // ── CAN TX: motor commands ──
+    odesc_can_send_torque(state.tau_wheel_L, state.tau_wheel_R);
+    // TODO: can_send_hip(state.tau_hip_L, state.tau_hip_R);
 
     state.tick++;
 

@@ -6,7 +6,9 @@
 
 -Spring for higher jumps. 
 
--Tweak optimization metrics to not punish velocity during fast speed changes. Robot needs to slow down before it can go faster....
+-Feed forward terms in HANDOFF.md
+
+-IMU detected flight and landng phase. 
 
 -Flip?
 Want me to build this as a new scenario (S11)? The sequence would be:
@@ -21,7 +23,7 @@ Land (somehow...)
 
 -AI usage 
 
-fernandomierhicks	44%	    Sunday 5PM
+fernandomierhicks	58%	    Sunday 5PM
 fernandomierhicks2	67%	    Friday 4PM
 fernandomierhicks1	100%	Wednesday 12pm
 

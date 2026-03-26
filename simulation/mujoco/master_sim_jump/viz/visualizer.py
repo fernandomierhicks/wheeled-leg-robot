@@ -771,6 +771,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
     hip_limit   = params.motors.hip.impedance_torque_limit
     _vp_init = _vel_pi_gains_dict(params)
     _lqr_init = _lqr_gains_dict(params)
+    _yaw_init = _yaw_pi_gains_dict(params)
+    _susp_init = _suspension_gains_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -779,7 +781,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
         args=(data_q, cmd_q, WINDOW_S,
               f"Replay — {cfg.display_name}",
               wheel_limit, hip_limit, False, _vp_init, _lqr_init,
-              _ctrl_defaults_from_cfg(cfg)),
+              _ctrl_defaults_from_cfg(cfg), _yaw_init, _susp_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -854,6 +856,15 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     cmd = cmd_q.get_nowait()
                     if cmd == "RESTART":
                         _reset_replay()
+                    elif isinstance(cmd, tuple):
+                        if cmd[0] == "GAIN_VP":
+                            ctrl.update_velocity_pi_gain(cmd[1], cmd[2])
+                        elif cmd[0] == "GAIN_LQR":
+                            ctrl.update_lqr_gain(cmd[1], cmd[2])
+                        elif cmd[0] == "GAIN_YAW":
+                            ctrl.update_yaw_pi_gain(cmd[1], cmd[2])
+                        elif cmd[0] == "GAIN_SUSP":
+                            ctrl.update_suspension_gain(cmd[1], cmd[2])
             except Exception:
                 pass
 
@@ -1026,7 +1037,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                   has_gamepad: bool = False,
                   vel_pi_gains: dict = None,
                   lqr_gains: dict = None,
-                  ctrl_defaults: dict = None) -> None:
+                  ctrl_defaults: dict = None,
+                  yaw_pi_gains: dict = None,
+                  suspension_gains: dict = None) -> None:
     """Child process — independent Qt app with 10-panel pyqtgraph telemetry.
 
     Communication:
@@ -1222,6 +1235,13 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
     vbox.addWidget(ctrl_row)
 
+    # ── Spinbox tracking dicts (for Save button) ────────────────────────────
+    # Maps field_name → (QDoubleSpinBox, to_rad_factor_or_None)
+    _vp_spinboxes = {}
+    _lqr_spinboxes = {}
+    _yaw_spinboxes = {}
+    _susp_spinboxes = {}
+
     # ── VelocityPI gain spinboxes ─────────────────────────────────────────────
     _vp = vel_pi_gains or {}
     gain_row = QtWidgets.QWidget()
@@ -1245,14 +1265,17 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _SPIN_LBL = ("color:#e8e8e8;font-family:Consolas,monospace;"
                  "font-size:11px;font-weight:bold;")
 
+    import math as _math
     _gain_defs = [
-        ("Kp",             "Kp",                     0.0, 1.0,   0.005, 4, _vp.get("Kp", 0.0103)),
-        ("Ki",             "Ki",                     0.0, 2.0,   0.01,  4, _vp.get("Ki", 0.0554)),
-        ("Kff",            "Kff",                    0.0, 1.0,   0.005, 4, _vp.get("Kff", 0.102)),
-        ("θ_max",          "theta_max",              0.1, 1.5,   0.1,   2, _vp.get("theta_max", 0.8)),
-        ("rate_lim",       "theta_ref_rate_limit",   1.0, 200.0, 5.0,   1, _vp.get("theta_ref_rate_limit", 50.0)),
+        # (display, field, lo, hi, step, dec, default, to_rad_factor)
+        # to_rad_factor: if not None, display is in deg, send rad = val * factor
+        ("Kp",             "Kp",                     0.0, 1.0,    0.005, 4, _vp.get("Kp", 0.0103),                            None),
+        ("Ki",             "Ki",                     0.0, 2.0,    0.01,  4, _vp.get("Ki", 0.0554),                             None),
+        ("Kff",            "Kff",                    0.0, 1.0,    0.005, 4, _vp.get("Kff", 0.102),                             None),
+        ("θ_max°",         "theta_max",              5.0, 90.0,   1.0,   1, _math.degrees(_vp.get("theta_max", 0.8)),          _math.pi/180),
+        ("rate_lim°/s",    "theta_ref_rate_limit",   50.0, 12000.0, 50.0, 0, _math.degrees(_vp.get("theta_ref_rate_limit", 50.0)), _math.pi/180),
     ]
-    for disp, field, lo, hi, step, dec, default in _gain_defs:
+    for disp, field, lo, hi, step, dec, default, to_rad in _gain_defs:
         lbl = QtWidgets.QLabel(disp)
         lbl.setStyleSheet(_SPIN_LBL)
         hbox_gain.addWidget(lbl)
@@ -1263,9 +1286,14 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         sb.setDecimals(dec)
         sb.setValue(default)
         sb.setStyleSheet(_SPIN_STYLE)
-        sb.valueChanged.connect(
-            lambda val, f=field: _safe_cmd(("GAIN_VP", f, val)))
+        if to_rad is not None:
+            sb.valueChanged.connect(
+                lambda val, f=field, fac=to_rad: _safe_cmd(("GAIN_VP", f, val * fac)))
+        else:
+            sb.valueChanged.connect(
+                lambda val, f=field: _safe_cmd(("GAIN_VP", f, val)))
         hbox_gain.addWidget(sb)
+        _vp_spinboxes[field] = (sb, to_rad)
 
     hbox_gain.addStretch()
     vbox.addWidget(gain_row)
@@ -1301,9 +1329,199 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         sb.valueChanged.connect(
             lambda val, f=fld: _safe_cmd(("GAIN_LQR", f, val)))
         hbox_lqr.addWidget(sb)
+        _lqr_spinboxes[fld] = (sb, None)
 
     hbox_lqr.addStretch()
     vbox.addWidget(lqr_row)
+
+    # ── YawPI gain spinboxes ──────────────────────────────────────────────────
+    _yp = yaw_pi_gains or {}
+    yaw_row = QtWidgets.QWidget()
+    yaw_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
+    hbox_yaw = QtWidgets.QHBoxLayout(yaw_row)
+    hbox_yaw.setContentsMargins(6, 3, 6, 3)
+    hbox_yaw.setSpacing(12)
+
+    lbl_yaw_g = QtWidgets.QLabel("YawPI:")
+    lbl_yaw_g.setStyleSheet(_SL)
+    hbox_yaw.addWidget(lbl_yaw_g)
+
+    _yaw_defs = [
+        ("Kp",         "Kp",         0.0,  2.0,  0.01,  4, _yp.get("Kp", 0.3)),
+        ("Ki",         "Ki",         0.0,  5.0,  0.05,  4, _yp.get("Ki", 1.2)),
+        ("τ_max",      "torque_max", 0.05, 3.0,  0.05,  2, _yp.get("torque_max", 0.5)),
+        ("int_max",    "int_max",    0.05, 3.0,  0.05,  2, _yp.get("int_max", 0.5)),
+    ]
+    for disp, fld, lo, hi, step, dec, default in _yaw_defs:
+        lbl = QtWidgets.QLabel(disp)
+        lbl.setStyleSheet(_SPIN_LBL)
+        hbox_yaw.addWidget(lbl)
+
+        sb = QtWidgets.QDoubleSpinBox()
+        sb.setRange(lo, hi)
+        sb.setSingleStep(step)
+        sb.setDecimals(dec)
+        sb.setValue(default)
+        sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(
+            lambda val, f=fld: _safe_cmd(("GAIN_YAW", f, val)))
+        hbox_yaw.addWidget(sb)
+        _yaw_spinboxes[fld] = (sb, None)
+
+    hbox_yaw.addStretch()
+    vbox.addWidget(yaw_row)
+
+    # ── Suspension + Roll gain spinboxes ──────────────────────────────────────
+    _sg = suspension_gains or {}
+    susp_row = QtWidgets.QWidget()
+    susp_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
+    hbox_susp = QtWidgets.QHBoxLayout(susp_row)
+    hbox_susp.setContentsMargins(6, 3, 6, 3)
+    hbox_susp.setSpacing(12)
+
+    lbl_susp_g = QtWidgets.QLabel("Suspension:")
+    lbl_susp_g.setStyleSheet(_SL)
+    hbox_susp.addWidget(lbl_susp_g)
+
+    _susp_defs = [
+        ("K_s",    "K_s",    0.0,  100.0,  0.5,  2, _sg.get("K_s", 20.0)),
+        ("B_s",    "B_s",    0.0,  5.0,    0.05, 3, _sg.get("B_s", 0.65)),
+        ("K_roll", "K_roll", 0.0,  500.0,  1.0,  1, _sg.get("K_roll", 120.0)),
+        ("D_roll", "D_roll", 0.0,  5.0,    0.05, 2, _sg.get("D_roll", 0.15)),
+    ]
+    for disp, fld, lo, hi, step, dec, default in _susp_defs:
+        lbl = QtWidgets.QLabel(disp)
+        lbl.setStyleSheet(_SPIN_LBL)
+        hbox_susp.addWidget(lbl)
+
+        sb = QtWidgets.QDoubleSpinBox()
+        sb.setRange(lo, hi)
+        sb.setSingleStep(step)
+        sb.setDecimals(dec)
+        sb.setValue(default)
+        sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(
+            lambda val, f=fld: _safe_cmd(("GAIN_SUSP", f, val)))
+        hbox_susp.addWidget(sb)
+        _susp_spinboxes[fld] = (sb, None)
+
+    hbox_susp.addStretch()
+    vbox.addWidget(susp_row)
+
+    # ── Save Gains → params.py button ─────────────────────────────────────────
+    def _save_gains_to_params():
+        """Read current spinbox values and write them as baseline into params.py."""
+        import re as _re
+        import os as _os
+
+        params_path = _os.path.join(
+            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+            "params.py")
+
+        try:
+            with open(params_path, "r", encoding="utf-8") as f:
+                src = f.read()
+        except Exception as exc:
+            print(f"  [Save] ERROR reading params.py: {exc}")
+            return
+
+        original = src
+
+        def _replace_field_in_class(text, class_name, field_name, new_val):
+            """Replace a field default within a specific dataclass in params.py.
+
+            Finds 'class <class_name>' then the first occurrence of
+            '<field_name>: float = <value>' within that class body.
+            """
+            # Find the class definition
+            cls_pattern = _re.compile(
+                r'^class\s+' + _re.escape(class_name) + r'\b',
+                _re.MULTILINE)
+            cls_match = cls_pattern.search(text)
+            if not cls_match:
+                print(f"  [Save] WARNING: class {class_name} not found")
+                return text
+
+            # Search for the field within the class body (from class start onward)
+            cls_start = cls_match.start()
+            field_pattern = _re.compile(
+                r'^(\s+' + _re.escape(field_name) + r'\s*:\s*float\s*=\s*)'
+                r'([^\s#]+)'
+                r'(.*)',
+                _re.MULTILINE)
+            field_match = field_pattern.search(text, cls_start)
+            if not field_match:
+                print(f"  [Save] WARNING: {class_name}.{field_name} not found")
+                return text
+
+            return (text[:field_match.start()]
+                    + field_match.group(1) + str(new_val) + field_match.group(3)
+                    + text[field_match.end():])
+
+        # VelocityPI gains
+        for field_name in ("Kp", "Ki", "Kff", "theta_max", "theta_ref_rate_limit"):
+            sb, to_rad = _vp_spinboxes[field_name]
+            val = sb.value()
+            if to_rad is not None:
+                val = val * to_rad  # convert deg display back to rad
+            val = round(val, 6)
+            src = _replace_field_in_class(src, "VelocityPIGains", field_name, val)
+
+        # LQR gains
+        for field_name, (sb, _) in _lqr_spinboxes.items():
+            val = round(sb.value(), 6)
+            src = _replace_field_in_class(src, "LQRGains", field_name, val)
+
+        # YawPI gains
+        for field_name, (sb, _) in _yaw_spinboxes.items():
+            val = round(sb.value(), 6)
+            src = _replace_field_in_class(src, "YawPIGains", field_name, val)
+
+        # Suspension gains
+        for field_name, (sb, _) in _susp_spinboxes.items():
+            val = round(sb.value(), 6)
+            src = _replace_field_in_class(src, "SuspensionGains", field_name, val)
+
+        if src == original:
+            print("  [Save] No changes detected — params.py unchanged.")
+            return
+
+        try:
+            with open(params_path, "w", encoding="utf-8") as f:
+                f.write(src)
+            print(f"  [Save] Gains written to {params_path}")
+            _btn_save.setText("✓ Saved!")
+            _btn_save.setStyleSheet(
+                "QPushButton{background:#1e5a3a;color:#80ff80;font-family:Consolas,monospace;"
+                "font-size:11px;font-weight:bold;border-radius:4px;padding:0 14px}"
+                "QPushButton:hover{background:#2e7a5a}")
+            QtCore.QTimer.singleShot(2000, lambda: (
+                _btn_save.setText("Save Gains → params.py"),
+                _btn_save.setStyleSheet(
+                    "QPushButton{background:#3a5a1e;color:#c0ff60;font-family:Consolas,monospace;"
+                    "font-size:11px;font-weight:bold;border-radius:4px;padding:0 14px}"
+                    "QPushButton:hover{background:#5a7a2e}")))
+        except Exception as exc:
+            print(f"  [Save] ERROR writing params.py: {exc}")
+            _btn_save.setText(f"Error: {exc}")
+
+    save_row = QtWidgets.QWidget()
+    save_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
+    hbox_save = QtWidgets.QHBoxLayout(save_row)
+    hbox_save.setContentsMargins(6, 3, 6, 3)
+    hbox_save.setSpacing(12)
+    hbox_save.addStretch()
+
+    _btn_save = QtWidgets.QPushButton("Save Gains → params.py")
+    _btn_save.setFixedHeight(26)
+    _btn_save.setStyleSheet(
+        "QPushButton{background:#3a5a1e;color:#c0ff60;font-family:Consolas,monospace;"
+        "font-size:11px;font-weight:bold;border-radius:4px;padding:0 14px}"
+        "QPushButton:hover{background:#5a7a2e}")
+    _btn_save.clicked.connect(_save_gains_to_params)
+    hbox_save.addWidget(_btn_save)
+    hbox_save.addStretch()
+    vbox.addWidget(save_row)
 
     # ── Fallback sliders (shown when no gamepad detected) ─────────────────────
     if not has_gamepad:
@@ -1743,6 +1961,18 @@ def _lqr_gains_dict(params) -> dict:
     return dict(Q_pitch=g.Q_pitch, Q_pitch_rate=g.Q_pitch_rate, R=g.R)
 
 
+def _yaw_pi_gains_dict(params) -> dict:
+    """Extract YawPI gains as a plain dict for passing to plot process."""
+    g = params.gains.yaw_pi
+    return dict(Kp=g.Kp, Ki=g.Ki, torque_max=g.torque_max, int_max=g.int_max)
+
+
+def _suspension_gains_dict(params) -> dict:
+    """Extract Suspension + Roll gains as a plain dict for passing to plot process."""
+    g = params.gains.suspension
+    return dict(K_s=g.K_s, B_s=g.B_s, K_roll=g.K_roll, D_roll=g.D_roll)
+
+
 def _ctrl_defaults_from_cfg(cfg) -> dict:
     """Build checkbox default states from a ScenarioConfig (or None for sandbox)."""
     if cfg is None:
@@ -1774,6 +2004,7 @@ def sandbox(rng_seed: int = 0):
         get_pitch_and_rate,
     )
     from master_sim_jump.physics import get_equilibrium_pitch
+    from master_sim_jump.controllers.jump import RobotMode
 
     params = DEFAULT_PARAMS
     robot = params.robot
@@ -1852,6 +2083,8 @@ def sandbox(rng_seed: int = 0):
     hip_limit   = params.motors.hip.impedance_torque_limit
     _vp_init = _vel_pi_gains_dict(params)
     _lqr_init = _lqr_gains_dict(params)
+    _yaw_init = _yaw_pi_gains_dict(params)
+    _susp_init = _suspension_gains_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -1859,7 +2092,7 @@ def sandbox(rng_seed: int = 0):
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, "Sandbox — free drive",
               wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
-              None),
+              None, _yaw_init, _susp_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -1948,6 +2181,10 @@ def sandbox(rng_seed: int = 0):
                         ctrl.update_velocity_pi_gain(cmd[1], cmd[2])
                     elif cmd[0] == "GAIN_LQR":
                         ctrl.update_lqr_gain(cmd[1], cmd[2])
+                    elif cmd[0] == "GAIN_YAW":
+                        ctrl.update_yaw_pi_gain(cmd[1], cmd[2])
+                    elif cmd[0] == "GAIN_SUSP":
+                        ctrl.update_suspension_gain(cmd[1], cmd[2])
                     elif cmd[0] == "JUMP":
                         _jump_active[0] = True
                         ctrl.jump_ctrl.trigger()
@@ -1971,7 +2208,7 @@ def sandbox(rng_seed: int = 0):
                 _omega_desired[0] = (-raw_w * 5.0) if abs(raw_w) > JOY_DEADZONE else 0.0
                 if abs(raw_h) > JOY_DEADZONE:
                     clamped_h = max(-JOY_HIP_SATURATION, min(JOY_HIP_SATURATION, raw_h))
-                    _hip_pct[0] = (JOY_HIP_SATURATION - clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0
+                    _hip_pct[0] = (JOY_HIP_SATURATION + clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0
 
             for _ in range(steps_per_frame):
                 if step % ctrl_steps == 0:
@@ -1988,6 +2225,10 @@ def sandbox(rng_seed: int = 0):
                         use_roll_leveling=_en_roll_lev[0],
                         use_suspension=_en_suspension[0],
                         jump_active=_jump_active[0])
+
+                    # Auto-clear jump flag when jump controller returns to BALANCE
+                    if _jump_active[0] and ctrl.jump_ctrl.mode == RobotMode.BALANCE:
+                        _jump_active[0] = False
 
                     _last_tick = tick
 
@@ -2081,6 +2322,7 @@ def run_unified(initial_scenario: str = "sandbox",
         build_model_and_data, init_sim, SimController, get_pitch_and_rate,
         apply_disturbance,
     )
+    from master_sim_jump.controllers.jump import RobotMode
 
     params = DEFAULT_PARAMS
     robot  = params.robot
@@ -2131,6 +2373,8 @@ def run_unified(initial_scenario: str = "sandbox",
     hip_limit   = params.motors.hip.impedance_torque_limit
     _vp_init = _vel_pi_gains_dict(params)
     _lqr_init = _lqr_gains_dict(params)
+    _yaw_init = _yaw_pi_gains_dict(params)
+    _susp_init = _suspension_gains_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -2141,7 +2385,7 @@ def run_unified(initial_scenario: str = "sandbox",
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, init_title,
               wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
-              _ctrl_init),
+              _ctrl_init, _yaw_init, _susp_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -2194,7 +2438,9 @@ def run_unified(initial_scenario: str = "sandbox",
 
         RENDER_HZ    = 60
         PHYSICS_HZ   = round(1.0 / model.opt.timestep)
-        steps_per_frame = max(1, PHYSICS_HZ // RENDER_HZ)
+        steps_per_frame_normal = max(1, PHYSICS_HZ // RENDER_HZ)
+        steps_per_frame_slow   = max(1, steps_per_frame_normal // 8)
+        steps_per_frame = steps_per_frame_normal
         ctrl_steps   = params.timing.ctrl_steps
 
         ctrl = SimController(model, data, params, rng_seed=rng_seed)
@@ -2357,6 +2603,10 @@ def run_unified(initial_scenario: str = "sandbox",
                                 ctrl.update_velocity_pi_gain(cmd[1], cmd[2])
                             elif cmd[0] == "GAIN_LQR":
                                 ctrl.update_lqr_gain(cmd[1], cmd[2])
+                            elif cmd[0] == "GAIN_YAW":
+                                ctrl.update_yaw_pi_gain(cmd[1], cmd[2])
+                            elif cmd[0] == "GAIN_SUSP":
+                                ctrl.update_suspension_gain(cmd[1], cmd[2])
                             elif cmd[0] == "JUMP":
                                 _jump_active[0] = True
                                 ctrl.jump_ctrl.trigger()
@@ -2379,7 +2629,13 @@ def run_unified(initial_scenario: str = "sandbox",
                     _omega_desired[0] = (-raw_w * 5.0) if abs(raw_w) > JOY_DEADZONE else 0.0
                     if abs(raw_h) > JOY_DEADZONE:
                         clamped_h = max(-JOY_HIP_SATURATION, min(JOY_HIP_SATURATION, raw_h))
-                        _hip_pct[0] = (JOY_HIP_SATURATION - clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0
+                        _hip_pct[0] = (JOY_HIP_SATURATION + clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0
+
+                # ── Slow-mo when jump is active ──
+                if ctrl.jump_ctrl.mode != RobotMode.BALANCE:
+                    steps_per_frame = steps_per_frame_slow
+                else:
+                    steps_per_frame = steps_per_frame_normal
 
                 # ── Physics stepping ──
                 for _ in range(steps_per_frame):
@@ -2447,6 +2703,10 @@ def run_unified(initial_scenario: str = "sandbox",
                                 use_roll_leveling=_en_roll_lev[0],
                                 use_suspension=_en_suspension[0],
                                 jump_active=_jump_active[0])
+
+                            # Auto-clear jump flag when jump controller returns to BALANCE
+                            if _jump_active[0] and ctrl.jump_ctrl.mode == RobotMode.BALANCE:
+                                _jump_active[0] = False
 
                             _last_tick = tick
                             if tick['fell']:

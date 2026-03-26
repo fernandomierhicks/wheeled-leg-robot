@@ -153,31 +153,31 @@ class LQRGains:
     From 'params good gains 3_22_26.py': 500 Hz, 0 ms delay, no forecaster.
     """
     Q_pitch: float = 0.01
-    Q_pitch_rate: float = 0.188352
+    Q_pitch_rate: float = 0.1884
     Q_vel: float = 0.00508442
-    R: float = 100
+    R: float = 100.0
 
 @dataclass(frozen=True)
 class VelocityPIGains:
     """Velocity PI outer loop — velocity error → lean angle."""
-    Kp: float = 0.272168
-    Ki: float = 0.001
-    Kff: float = 0.104919             # [s²·rad/m] ≈ 1/g — feed-forward: lean per unit dv_target/dt
+    Kp: float = 0.2
+    Ki: float = 0.1
+    Kff: float = 0.1049             # [s²·rad/m] ≈ 1/g — feed-forward: lean per unit dv_target/dt
 
     #to mcuh and robot linkages touch ground. 
-    theta_max: float = 0.5        # [rad] ±46° clamp  Max commandable lean angle.
+    theta_max: float = 0.523599        # [rad] ±46° clamp  Max commandable lean angle.
     
     int_max: float = 1.0           # [rad·s] anti-windup ( theta_max / Ki)
 
     #Allows for more aggresiv egains without making LQR unstable
-    theta_ref_rate_limit: float = 5.0  # [rad/s]  How fast can commanded lean angle change every tick (larger number = more aggresive)
+    theta_ref_rate_limit: float = 1.745329  # [rad/s]  How fast can commanded lean angle change every tick (larger number = more aggresive)
 
 
 @dataclass(frozen=True)
 class YawPIGains:
     """Yaw PI — differential torque for yaw rate tracking."""
-    Kp: float = 0.307258
-    Ki: float = 1.2004
+    Kp: float = 0.05
+    Ki: float = 0.1
     torque_max: float = 0.5        # [N·m] differential clamp
     int_max: float = 0.5           # [N·m·s] anti-windup
 
@@ -185,9 +185,9 @@ class YawPIGains:
 @dataclass(frozen=True)
 class SuspensionGains:
     """Leg impedance + roll leveling (Phase 4)."""
-    K_s: float = 20.9307               # [N·m/rad] spring stiffness
-    B_s: float = 0.647422              # [N·m·s/rad] damping
-    K_roll: float = 120.496            # [rad/rad] roll proportional
+    K_s: float = 10.0               # [N·m/rad] spring stiffness
+    B_s: float = 0.2              # [N·m·s/rad] damping
+    K_roll: float = 50.0            # [rad/rad] roll proportional
     D_roll: float = 0.15           # [rad·s/rad] roll rate damping
 
     @staticmethod
@@ -202,14 +202,16 @@ class SuspensionGains:
 @dataclass(frozen=True)
 class JumpGains:
     """Jump state-machine parameters (Phase 1 — constant gains)."""
-    crouch_time: float = 2.0          # [s] PD trajectory duration to Q_RET
+    crouch_time: float = 0.2          # [s] PD trajectory duration to Q_RET
     max_torque: float = 7.0           # [N·m] peak hip torque during extension
     omega_max: float = 18.85          # [rad/s] no-load speed (AK45-10 KV75@24V, 10:1)
     ramp_up_s: float = 0.010          # [s] torque ramp-up to avoid shock
     ramp_down_rad: float = 0.15       # [rad] taper zone before Q_EXT
     liftoff_debounce_s: float = 0.05  # [s] wheels-off-ground window for FLYING
+    extend_timeout_s: float = 1.0     # [s] max time in EXTEND before aborting jump
     settle_pitch_deg: float = 2.0     # [deg] pitch threshold for SETTLED
     settle_time_s: float = 0.5        # [s] stable window for SETTLED
+    landing_timeout_s: float = 2.0    # [s] max time in LANDING before forcing SETTLED
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@ All balance controllers (LQR, VelocityPI, YawPI) run unchanged throughout.
 Hip mode per phase:
   BALANCE / CROUCH / LANDING / SETTLED → "impedance"  (soft suspension + roll leveling)
   EXTEND                               → "torque_override" (explosive extension)
-  FLYING                               → "position"   (stiff hold at liftoff angle)
+  FLYING                               → "impedance"  (retract to Q_NOM — tuck + cushion landing)
 """
 import math
 from dataclasses import dataclass
@@ -65,6 +65,7 @@ class JumpController:
 
         # LANDING → SETTLED pitch settle timer
         self._settle_timer: float = 0.0
+        self._landing_start: float = 0.0
 
         # Hold angle for FLYING/LANDING
         self._hold_angle: float = robot.Q_NOM
@@ -109,6 +110,9 @@ class JumpController:
                     self._hold_angle = hip_q_avg
             else:
                 self._liftoff_timer = 0.0
+            # Timeout: abort jump if no liftoff detected
+            if t - self._extend_start >= gains.extend_timeout_s:
+                self._mode = RobotMode.SETTLED
 
         elif self._mode == RobotMode.FLYING:
             # Either wheel touches down
@@ -117,6 +121,7 @@ class JumpController:
                 self._mode = RobotMode.LANDING
                 self._hold_angle = hip_q_avg
                 self._settle_timer = 0.0
+                self._landing_start = t
 
         elif self._mode == RobotMode.LANDING:
             if abs(math.degrees(pitch)) < gains.settle_pitch_deg:
@@ -125,6 +130,9 @@ class JumpController:
                     self._mode = RobotMode.SETTLED
             else:
                 self._settle_timer = 0.0
+            # Timeout: force settle if pitch won't stabilise
+            if t - self._landing_start >= gains.landing_timeout_s:
+                self._mode = RobotMode.SETTLED
 
         elif self._mode == RobotMode.SETTLED:
             # Immediate transition back to BALANCE
@@ -164,11 +172,13 @@ class JumpController:
             )
 
         elif self._mode == RobotMode.FLYING:
+            # Retract legs to Q_NOM so wheels tuck up — looks like higher jump
+            # Impedance mode so legs cushion the landing on touchdown
             return ModeOutput(
                 mode=RobotMode.FLYING,
-                hip_mode="position",
+                hip_mode="impedance",
                 hip_torque_override=None,
-                q_hip_target=self._hold_angle,
+                q_hip_target=robot.Q_NOM,
                 dq_hip_target=0.0,
             )
 

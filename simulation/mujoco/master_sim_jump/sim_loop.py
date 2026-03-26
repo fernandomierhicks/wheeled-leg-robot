@@ -340,6 +340,21 @@ class SimController:
         self.params = replace(self.params, gains=new_gains)
         self.K_table = compute_gain_table(self.params.robot, new_lqr)
 
+    def update_yaw_pi_gain(self, field: str, value: float):
+        """Hot-swap a single YawPI gain field (preserves integrator + survives reset)."""
+        from dataclasses import replace
+        new_yaw = replace(self.yaw_pi_ctrl.gains, **{field: value})
+        self.yaw_pi_ctrl.gains = new_yaw
+        new_gains = replace(self.params.gains, yaw_pi=new_yaw)
+        self.params = replace(self.params, gains=new_gains)
+
+    def update_suspension_gain(self, field: str, value: float):
+        """Hot-swap a single Suspension gain field (survives reset)."""
+        from dataclasses import replace
+        new_susp = replace(self.params.gains.suspension, **{field: value})
+        new_gains = replace(self.params.gains, suspension=new_susp)
+        self.params = replace(self.params, gains=new_gains)
+
     # ── THE control tick — called by run() and sandbox() ─────────────────────
 
     def tick(self, model, data, *,
