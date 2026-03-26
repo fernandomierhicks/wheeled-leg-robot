@@ -1,6 +1,6 @@
 # HANDOFF — Feedforward & State Estimation Improvements
 
-Status: **Planning** — options documented, not yet implemented.
+Status: **In Progress** — FF1 implemented, FF2–FF4 and SE1 pending.
 
 ---
 
@@ -23,7 +23,7 @@ Status: **Planning** — options documented, not yet implemented.
 
 ## Proposed Improvements
 
-### FF1 — Hip Reaction Torque Cancellation
+### FF1 — Hip Reaction Torque Cancellation ✅ DONE
 
 **Priority: HIGH** — biggest bang-for-buck
 
@@ -136,7 +136,7 @@ Status: **Planning** — options documented, not yet implemented.
 Recommended sequence based on impact and independence:
 
 ```
-1. FF1  Hip reaction torque cancellation     (high impact, simple, independent)
+1. FF1  Hip reaction torque cancellation     ✅ DONE (params.py, sim_loop.py, visualizer.py)
 2. FF2  Gravity compensation on wheels       (high impact, needs careful gain tuning)
 3. FF3  CoM shift compensation               (medium, most valuable once FF1+FF2 are in)
 4. FF4  Centripetal turn coupling             (medium, independent, only matters at speed)

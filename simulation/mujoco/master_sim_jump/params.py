@@ -215,6 +215,12 @@ class JumpGains:
 
 
 @dataclass(frozen=True)
+class FeedforwardGains:
+    """Feedforward terms (FF1–FF4).  alpha=0 disables; alpha=1 full cancellation."""
+    ff1_alpha: float = 0.0   # Hip reaction torque cancellation gain
+
+
+@dataclass(frozen=True)
 class LegacyPDGains:
     """Balance PD controller (pre-LQR, kept for reference)."""
     pitch_Kp: float = 10.1
@@ -233,6 +239,7 @@ class GainSet:
     yaw_pi: YawPIGains = field(default_factory=YawPIGains)
     suspension: SuspensionGains = field(default_factory=SuspensionGains)
     jump: JumpGains = field(default_factory=JumpGains)
+    feedforward: FeedforwardGains = field(default_factory=FeedforwardGains)
     legacy_pd: LegacyPDGains = field(default_factory=LegacyPDGains)
 
 

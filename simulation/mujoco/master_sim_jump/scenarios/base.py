@@ -101,5 +101,6 @@ class ScenarioConfig:
             use_impedance=use_impedance,
             use_roll_leveling=use_impedance,
             use_suspension=self.hip_mode in ("position", "impedance", "jump"),
+            use_ff1=True,
             jump_active=jump_active,
         )

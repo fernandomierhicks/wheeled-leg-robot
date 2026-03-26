@@ -369,6 +369,7 @@ class SimController:
              use_impedance: bool = True,
              use_roll_leveling: bool = True,
              use_suspension: bool = True,
+             use_ff1: bool = True,
              jump_active: bool = False) -> dict:
         """Execute one control tick.  Writes actuator commands to ``data.ctrl``.
 
@@ -533,6 +534,19 @@ class SimController:
                     q_hip_target, params.motors.hip,
                     dq_target=dq_hip_target)
 
+        # ── FF1: Hip reaction torque cancellation ─────────────────────────────
+        tau_ff1 = 0.0
+        ff1_alpha = params.gains.feedforward.ff1_alpha
+        if use_ff1 and ff1_alpha > 0.0:
+            tau_hip_total = (float(data.ctrl[self.act_hip_L])
+                            + float(data.ctrl[self.act_hip_R]))
+            ik_now = solve_ik(hip_q_avg, robot.as_dict())
+            l_eff = abs(ik_now['W_z']) if ik_now else self._l_eff_nom
+            if l_eff > 0.01:
+                tau_ff1 = -ff1_alpha * tau_hip_total * (robot.wheel_r / l_eff)
+                data.ctrl[self.act_wheel_L] += tau_ff1 / 2.0
+                data.ctrl[self.act_wheel_R] += tau_ff1 / 2.0
+
         # ── Battery step ─────────────────────────────────────────────────────
         self.v_batt = self.battery.step(self.dt_ctrl, motor_currents(
             float(data.ctrl[self.act_wheel_L]),
@@ -552,7 +566,7 @@ class SimController:
             wheel_vel=wheel_vel,
             v_target=v_target_ms, v_measured=v_measured_ms,
             theta_ref=theta_ref,
-            tau_sym=tau_sym, tau_yaw=tau_yaw,
+            tau_sym=tau_sym, tau_yaw=tau_yaw, tau_ff1=tau_ff1,
             tau_whl_L=float(data.ctrl[self.act_wheel_L]),
             tau_whl_R=float(data.ctrl[self.act_wheel_R]),
             tau_hip_L=float(data.ctrl[self.act_hip_L]),

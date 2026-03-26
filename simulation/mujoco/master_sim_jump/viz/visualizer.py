@@ -1191,6 +1191,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ("YawPI",      "Yaw PI"),
         ("Suspension", "Suspension"),
         ("RollLev",    "Roll Leveling"),
+        ("HipFF",      "Hip FF"),
     ]
     _ctrl_widgets = {}   # key → QCheckBox, for CONFIG_UPDATE
     for key, label in _ctrl_defs:
@@ -1978,7 +1979,7 @@ def _ctrl_defaults_from_cfg(cfg) -> dict:
     if cfg is None:
         # Sandbox: everything enabled
         return {"LQR": True, "VelPI": True, "YawPI": True,
-                "Suspension": True, "RollLev": True}
+                "Suspension": True, "RollLev": True, "HipFF": True}
     ac = cfg.active_controllers
     imp = cfg.hip_mode in ("impedance", "jump")
     return {
@@ -1987,6 +1988,7 @@ def _ctrl_defaults_from_cfg(cfg) -> dict:
         "YawPI":      "yaw_pi" in ac,
         "Suspension": imp,
         "RollLev":    imp,
+        "HipFF":      True,
     }
 
 
@@ -2034,6 +2036,7 @@ def sandbox(rng_seed: int = 0):
     _en_yaw_pi     = [True]
     _en_suspension = [True]
     _en_roll_lev   = [True]
+    _en_ff1        = [True]
     _hip_mode      = ["impedance"]
 
     # Command targets (v, omega, hip %)
@@ -2175,6 +2178,7 @@ def sandbox(rng_seed: int = 0):
                         elif key == "YawPI":      _en_yaw_pi[0]     = val
                         elif key == "Suspension": _en_suspension[0] = val
                         elif key == "RollLev":    _en_roll_lev[0]   = val
+                        elif key == "HipFF":      _en_ff1[0]        = val
                     elif cmd[0] == "HIP_MODE":
                         _hip_mode[0] = cmd[1]
                     elif cmd[0] == "GAIN_VP":
@@ -2224,6 +2228,7 @@ def sandbox(rng_seed: int = 0):
                         use_impedance=(_hip_mode[0] != "position_pd"),
                         use_roll_leveling=_en_roll_lev[0],
                         use_suspension=_en_suspension[0],
+                        use_ff1=_en_ff1[0],
                         jump_active=_jump_active[0])
 
                     # Auto-clear jump flag when jump controller returns to BALANCE
@@ -2399,6 +2404,7 @@ def run_unified(initial_scenario: str = "sandbox",
     _en_yaw_pi     = [_ctrl_init.get("YawPI", True)]
     _en_suspension = [_ctrl_init.get("Suspension", True)]
     _en_roll_lev   = [_ctrl_init.get("RollLev", True)]
+    _en_ff1        = [_ctrl_init.get("HipFF", True)]
     _hip_mode      = ["position_pd" if not _ctrl_init.get("Suspension", True) else "impedance"]
     _v_desired     = [0.0]
     _omega_desired = [0.0]
@@ -2552,6 +2558,7 @@ def run_unified(initial_scenario: str = "sandbox",
                                         _en_yaw_pi[0]     = new_cd["YawPI"]
                                         _en_suspension[0] = new_cd["Suspension"]
                                         _en_roll_lev[0]   = new_cd["RollLev"]
+                                        _en_ff1[0]        = new_cd["HipFF"]
                                     title = new_title
                                     _reset_sim()
                                     if cfg and cfg.init_fn:
@@ -2597,6 +2604,7 @@ def run_unified(initial_scenario: str = "sandbox",
                                 elif key == "YawPI":      _en_yaw_pi[0]     = val
                                 elif key == "Suspension": _en_suspension[0] = val
                                 elif key == "RollLev":    _en_roll_lev[0]   = val
+                                elif key == "HipFF":      _en_ff1[0]        = val
                             elif cmd[0] == "HIP_MODE":
                                 _hip_mode[0] = cmd[1]
                             elif cmd[0] == "GAIN_VP":
@@ -2702,6 +2710,7 @@ def run_unified(initial_scenario: str = "sandbox",
                                 use_impedance=(_hip_mode[0] != "position_pd"),
                                 use_roll_leveling=_en_roll_lev[0],
                                 use_suspension=_en_suspension[0],
+                                use_ff1=_en_ff1[0],
                                 jump_active=_jump_active[0])
 
                             # Auto-clear jump flag when jump controller returns to BALANCE
