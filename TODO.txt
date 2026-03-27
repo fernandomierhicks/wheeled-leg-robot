@@ -6,9 +6,9 @@
 
 -Spring for higher jumps. 
 
--Feed forward terms in HANDOFF.md
+-Feed forward for leg height. When rboot moves up and down COM changes and velocity PI has to integrate before catchingup. Able to move legs up and down and stay in place. 
 
--IMU detected flight and landng phase. 
+-IMU detected flight = super soft suspension and landng phase= gradual stiffening up. 
 
 -Flip?
 Want me to build this as a new scenario (S11)? The sequence would be:

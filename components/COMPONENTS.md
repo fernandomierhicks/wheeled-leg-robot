@@ -26,9 +26,9 @@ Structural sizing source: `simulation/mujoco/archive/baseline1_leg_analysis/size
 | ID | Part | Qty | Mass ea (g) | Total (g) | Cost ea ($) | Total ($) | Status | Notes |
 |---|---|---|---|---|---|---|---|---|
 | HIP_MOTOR | CubeMars AK45-10 KV75 | 2 | 260 | 520 | 149 | 298 | designed | Φ53×43 mm, 10:1, 7 N·m peak, MIT CAN, CAN id L=1 R=2 |
-| WHEEL_MOTOR | Maytech MTO5065-70-HA-C | 2 | 200 | 400 | 90 | 180 | purchased | KV70, direct drive, Hall sensors req. for ODESC; Kt=0.1364 Nm/A, T_peak=6.82 Nm @ 50A, ω_noload=175.9 rad/s @ 24V; https://michobby.com/products/maytech-5065-220kv-brushless-outrunner-motor-for-electric-skateboards-e-bike (70KV variant) |
+| WHEEL_MOTOR | Maytech MTO5065-70-HA-C | 2 | 450 | 900 | 90 | 180 | purchased | KV70, direct drive, Hall sensors req. for ODESC; Kt=0.1364 Nm/A, T_peak=6.82 Nm @ 50A, ω_noload=175.9 rad/s @ 24V; https://michobby.com/products/maytech-5065-220kv-brushless-outrunner-motor-for-electric-skateboards-e-bike (70KV variant) |
 
-**Subtotal motors:** 920 g / $478
+**Subtotal motors:** 1420 g / $478
 
 ---
 
@@ -83,9 +83,9 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 | ID | Part | Qty | Mass ea (g) | Total (g) | Cost ea ($) | Total ($) | Status | Notes |
 |---|---|---|---|---|---|---|---|---|
 | BATTERY | 24V battery (TBD) | 1 | 720 | 720 | 35 | 35 | designed | TBD model; 24V nominal, all motors rated ≥ 24V |
-| BATT_ADAPTER | Power Wheels → XT60 | 1 | 45 | 45 | 12 | 12 | designed | |
+| BATT_ADAPTER | XT60 connector + pigtail | 1 | 10 | 10 | 5 | 5 | designed | |
 
-**Subtotal power:** 765 g / $47
+**Subtotal power:** 730 g / $40
 
 ---
 
@@ -103,17 +103,48 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 
 ## Mass & Cost Summary
 
+### Detailed component breakdown
+
+| # | Component | Qty | Each (g) | Total (g) | Category |
+|---|---|---|---|---|---|
+| 1 | Battery (24V) | 1 | 720 | 720 | Power |
+| 2 | AK45-10 hip motor | 2 | 260 | 520 | Motors |
+| 3 | Maytech MTO5065 wheel motor | 2 | 450 | 900 | Motors |
+| 4 | Body box + electronics tray (PLA) | 1 | 210 | 210 | Printed |
+| 5 | ODESC 3.6 Dual Drive | 1 | 160 | 160 | Electronics |
+| 6 | Wheel (PLA hub + TPU tread) | 2 | 70 | 140 | Printed |
+| 7 | Wiring harness | 1 | 100 | 100 | Wiring |
+| 8 | Motor mounts (PLA) | 2 | 45 | 90 | Printed |
+| 9 | Fasteners (M3/M4 hardware) | 1 | 50 | 50 | Wiring |
+| 10 | Arduino UNO R4 WiFi | 1 | 45 | 45 | Electronics |
+| 11 | XT60 connector + pigtail | 1 | 10 | 10 | Power |
+| 12 | Femur tube (14×1.0 mm Al) | 2 | 19.2 | 38.4 | Links |
+| 13 | Tibia tube (16×1.0 mm Al) | 2 | 18.3 | 36.6 | Links |
+| 14 | 6001 bearing (E + F pivots) | 4 | 17 | 68 | Bearings |
+| 15 | 608 bearing (A, C, W pivots) | 6 | 12 | 72 | Bearings |
+| 16 | DC-DC buck 24V→5V | 1 | 20 | 20 | Electronics |
+| 17 | Coupler tube (10×0.8 mm Al) | 2 | 9.4 | 18.8 | Links |
+| 18 | FlySky FS-iA6B receiver | 1 | 15 | 15 | Electronics |
+| 19 | Motor connectors (MR30) | 2 | 3 | 6 | Wiring |
+| 20 | BNO086 IMU | 1 | 3 | 3 | Electronics |
+| 21 | SN65HVD230 CAN transceiver | 1 | 1 | 1 | Electronics |
+| | | | | | |
+| | **TOTAL** | | | **3224** | |
+| | **+10% contingency** | | | **~3546 g = 3.5 kg** | |
+
+### By category
+
 | Category | Mass (g) | Cost ($) |
 |---|---|---|
+| Power | 730 | 40 |
+| Motors | 1420 | 478 |
+| Printed parts | 440 | ~35 |
 | Electronics & Controls | 244 | 111 |
-| Motors | 920 | 478 |
-| Links (Al tube) | 94 | 28 |
-| Bearings | 140 | 18 |
-| Printed parts | 440 | ~35 (filament) |
-| Power | 765 | 47 |
 | Wiring & Fasteners | 156 | 32 |
-| **TOTAL** | **2759** | **749** |
-| **+10% contingency** | **~3035 g = 3.0 kg** | **~$824** |
+| Bearings | 140 | 18 |
+| Links (Al tube) | 94 | 28 |
+| **TOTAL** | **3224** | **742** |
+| **+10% contingency** | **~3546 g = 3.5 kg** | **~$816** |
 
 ---
 

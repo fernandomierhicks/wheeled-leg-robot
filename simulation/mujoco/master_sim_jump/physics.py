@@ -102,8 +102,13 @@ def solve_ik(q_hip: float, p: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 # Equilibrium pitch
 # ---------------------------------------------------------------------------
-def get_equilibrium_pitch(robot: RobotGeometry, q_hip: float) -> float:
-    """Body pitch [rad] that places system CoM directly over wheel centre W."""
+def get_equilibrium_pitch(robot: RobotGeometry, q_hip: float,
+                          m_spring: float = 0.0) -> float:
+    """Body pitch [rad] that places system CoM directly over wheel centre W.
+
+    Args:
+        m_spring: mass of one knee spring [kg] (located at knee pivot C, ×2 legs)
+    """
     p = robot.as_dict()
     ik = solve_ik(q_hip, p)
     if ik is None: return 0.0
@@ -141,6 +146,12 @@ def get_equilibrium_pitch(robot: RobotGeometry, q_hip: float) -> float:
     mx    += n * p['m_bearing'] * (F_X + 2.0 * E_x + C_x)
     mz    += n * p['m_bearing'] * (F_Z + 2.0 * E_z + C_z)
 
+    # Knee springs (at knee pivot C)
+    if m_spring > 0.0:
+        m_sys += n * m_spring
+        mx    += n * m_spring * C_x
+        mz    += n * m_spring * C_z
+
     # Wheels
     W_x, W_z = ik['W']
     m_sys += n * p['m_wheel']
@@ -153,6 +164,64 @@ def get_equilibrium_pitch(robot: RobotGeometry, q_hip: float) -> float:
     dz = com_z - W_z
     if abs(dz) < 1e-4: return 0.0
     return -math.atan2(dx, dz)
+
+
+def compute_com_x_from_wheel(robot: RobotGeometry, q_hip: float,
+                              m_spring: float = 0.0) -> float | None:
+    """Return X-offset [m] of whole-body CoM from wheel centre at given hip angle.
+
+    Positive = CoM is forward of wheel.  Returns None at IK singularity.
+    Uses the same mass model as get_equilibrium_pitch().
+
+    Args:
+        m_spring: mass of one knee spring [kg] (located at knee pivot C, ×2 legs)
+    """
+    p = robot.as_dict()
+    ik = solve_ik(q_hip, p)
+    if ik is None:
+        return None
+
+    n = 2  # two legs
+    m_sys = p['m_box']
+    mx = 0.0
+
+    # Hip motors (at body origin X=0)
+    m_sys += n * robot.motor_mass
+
+    # Femur midpoint
+    C_x, _ = ik['C']
+    m_sys += n * p['m_femur']
+    mx    += n * p['m_femur'] * C_x / 2.0
+
+    # Coupler midpoint
+    E_x, _ = ik['E']
+    F_X, _ = ik['F']
+    m_sys += n * p['m_coupler']
+    mx    += n * p['m_coupler'] * (F_X + E_x) / 2.0
+
+    # Tibia CoM
+    L_s, L_t = p['L_stub'], p['L_tibia']
+    alpha = ik['alpha']
+    off = (L_s - L_t) / 2.0
+    m_sys += n * p['m_tibia']
+    mx    += n * p['m_tibia'] * (C_x + off * math.sin(alpha))
+
+    # Bearings (4 per leg)
+    m_sys += n * p['m_bearing'] * 4
+    mx    += n * p['m_bearing'] * (F_X + 2.0 * E_x + C_x)
+
+    # Knee springs (at knee pivot C)
+    if m_spring > 0.0:
+        m_sys += n * m_spring
+        mx    += n * m_spring * C_x
+
+    # Wheels
+    W_x, _ = ik['W']
+    m_sys += n * p['m_wheel']
+    mx    += n * p['m_wheel'] * W_x
+
+    com_x = mx / m_sys
+    return com_x - W_x
 
 
 # ---------------------------------------------------------------------------

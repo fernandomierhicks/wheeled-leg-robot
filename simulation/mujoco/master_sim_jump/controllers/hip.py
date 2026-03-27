@@ -12,7 +12,8 @@ Sign convention for roll leveling:
 import math
 import numpy as np
 
-from master_sim_jump.params import RobotGeometry, HipMotorParams, SuspensionGains
+from master_sim_jump.params import (RobotGeometry, HipMotorParams,
+                                    SuspensionGains, KneeSpringParams)
 
 
 def hip_position_torque(q_hip: float, dq_hip: float, q_target: float,
@@ -77,6 +78,29 @@ def roll_leveling_offsets(roll: float, roll_rate: float,
     q_nom_L = float(np.clip(q_hip_sym + delta_q, robot.Q_EXT, robot.Q_RET))
     q_nom_R = float(np.clip(q_hip_sym - delta_q, robot.Q_EXT, robot.Q_RET))
     return q_nom_L, q_nom_R
+
+
+def knee_spring_torque(q_hip: float, dq_hip: float,
+                       q_engage: float,
+                       spring: KneeSpringParams) -> float:
+    """Conditional torsional spring at knee joint.
+
+    Engages only when q_hip > q_engage (crouching past engagement point).
+    Returns a torque that opposes compression and assists extension.
+
+    Args:
+        q_hip: current hip angle [rad]
+        dq_hip: current hip velocity [rad/s]
+        q_engage: engagement angle [rad] (= Q_NOM + engage_offset)
+        spring: KneeSpringParams (K_spring, B_spring)
+
+    Returns:
+        Spring torque [Nm] — negative when compressed (pushes toward extension)
+    """
+    if q_hip <= q_engage:
+        return 0.0
+    deflection = q_hip - q_engage
+    return -spring.K_spring * deflection - spring.B_spring * dq_hip
 
 
 # ── Self-test ────────────────────────────────────────────────────────────────

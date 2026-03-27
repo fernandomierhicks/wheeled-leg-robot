@@ -73,7 +73,8 @@ def _build_continuous_matrices(l_eff: float, m_b: float, m_w: float,
 # ── Gain computation ─────────────────────────────────────────────────────────
 
 def compute_lqr_gain(q_hip: float, robot: RobotGeometry,
-                     Q_diag: list, R_val: float) -> np.ndarray:
+                     Q_diag: list, R_val: float,
+                     m_spring: float = 0.0) -> np.ndarray:
     """Compute LQR gain K at a given hip angle.
 
     Args:
@@ -95,7 +96,8 @@ def compute_lqr_gain(q_hip: float, robot: RobotGeometry,
     # Body mass (excluding wheels)
     m_b = (robot.m_box
            + 2 * (robot.m_femur + robot.m_tibia + robot.m_coupler + robot.m_bearing)
-           + 2 * robot.motor_mass)
+           + 2 * robot.motor_mass
+           + 2 * m_spring)
     m_w = 2 * robot.m_wheel
 
     A, B = _build_continuous_matrices(l_eff, m_b, m_w, robot.wheel_r)
@@ -110,7 +112,8 @@ def compute_lqr_gain(q_hip: float, robot: RobotGeometry,
 
 
 def compute_gain_table(robot: RobotGeometry,
-                       lqr_gains: LQRGains) -> dict:
+                       lqr_gains: LQRGains,
+                       m_spring: float = 0.0) -> dict:
     """Precompute LQR gains at 3 leg positions (retracted, nominal, extended).
 
     Returns:
@@ -119,9 +122,9 @@ def compute_gain_table(robot: RobotGeometry,
     Q_diag = [lqr_gains.Q_pitch, lqr_gains.Q_pitch_rate, lqr_gains.Q_vel]
     R_val = lqr_gains.R
 
-    K_ret = compute_lqr_gain(robot.Q_RET, robot, Q_diag, R_val)
-    K_nom = compute_lqr_gain(robot.Q_NOM, robot, Q_diag, R_val)
-    K_ext = compute_lqr_gain(robot.Q_EXT, robot, Q_diag, R_val)
+    K_ret = compute_lqr_gain(robot.Q_RET, robot, Q_diag, R_val, m_spring)
+    K_nom = compute_lqr_gain(robot.Q_NOM, robot, Q_diag, R_val, m_spring)
+    K_ext = compute_lqr_gain(robot.Q_EXT, robot, Q_diag, R_val, m_spring)
 
     return {
         'retracted': K_ret,
@@ -151,14 +154,16 @@ def interpolate_gains(K_table: dict, q_hip: float,
     return (1 - alpha) * K_ret + alpha * K_ext
 
 
-def compute_AB_table(robot: RobotGeometry) -> dict:
+def compute_AB_table(robot: RobotGeometry,
+                     m_spring: float = 0.0) -> dict:
     """Precompute continuous A, B matrices at 3 leg positions for state prediction.
 
     Returns dict with 'retracted', 'nominal', 'extended' keys mapping to (A, B) tuples.
     """
     m_b = (robot.m_box
            + 2 * (robot.m_femur + robot.m_tibia + robot.m_coupler + robot.m_bearing)
-           + 2 * robot.motor_mass)
+           + 2 * robot.motor_mass
+           + 2 * m_spring)
     m_w = 2 * robot.m_wheel
 
     def _ab_at(q_hip):

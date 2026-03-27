@@ -21,7 +21,8 @@ import mujoco
 
 from master_sim_jump.params import SimParams
 from master_sim_jump.scenarios.base import ScenarioConfig, WorldConfig
-from master_sim_jump.physics import build_xml, build_assets, solve_ik, get_equilibrium_pitch
+from master_sim_jump.physics import (build_xml, build_assets, solve_ik,
+                                     get_equilibrium_pitch, compute_com_x_from_wheel)
 from master_sim_jump.models.battery import BatteryModel
 from master_sim_jump.models.motor import motor_taper, motor_currents
 from master_sim_jump.models.latency import LatencyBuffer
@@ -33,6 +34,7 @@ from master_sim_jump.controllers.velocity_pi import VelocityPI
 from master_sim_jump.controllers.yaw_pi import YawPI
 from master_sim_jump.controllers.hip import (
     hip_position_torque, hip_impedance_torque, roll_leveling_offsets,
+    knee_spring_torque,
 )
 from master_sim_jump.controllers.jump import JumpController
 
@@ -105,7 +107,8 @@ def init_sim(model, data, params: SimParams,
     wz = (data.xpos[wheel_bid_L][2] + data.xpos[wheel_bid_R][2]) / 2.0
     data.qpos[s_root + 2] += robot.wheel_r - wz
 
-    theta = get_equilibrium_pitch(robot, q_hip_init)
+    theta = get_equilibrium_pitch(robot, q_hip_init,
+                                   m_spring=params.gains.knee_spring.m_spring)
     data.qpos[s_root + 3] = math.cos(theta / 2.0)
     data.qpos[s_root + 4] = 0.0
     data.qpos[s_root + 5] = math.sin(theta / 2.0)
@@ -268,6 +271,8 @@ class SimController:
         self.box_bid     = _bid("box")
         self.wheel_bid_L = _bid("wheel_asm_L")
         self.wheel_bid_R = _bid("wheel_asm_R")
+        self.tibia_bid_L = _bid("tibia_L")
+        self.tibia_bid_R = _bid("tibia_R")
 
     # ── Controller objects (re-created on reset) ─────────────────────────────
 
@@ -276,7 +281,8 @@ class SimController:
         ctrl_steps = params.timing.ctrl_steps
         self.dt_ctrl = model.opt.timestep * ctrl_steps
 
-        self.K_table = compute_gain_table(robot, params.gains.lqr)
+        self.K_table = compute_gain_table(robot, params.gains.lqr,
+                                          m_spring=params.gains.knee_spring.m_spring)
         self.vel_pi = VelocityPI(params.gains.velocity_pi, self.dt_ctrl)
         self.yaw_pi_ctrl = YawPI(params.gains.yaw_pi, self.dt_ctrl)
         self.prev_theta_ref = 0.0
@@ -288,18 +294,32 @@ class SimController:
             if params.latency.actuator_delay_s > 0 else 0
         self.n_sens = n_sens
         self.n_act = n_act
-        pitch0 = get_equilibrium_pitch(robot, robot.Q_NOM)
+        pitch0 = get_equilibrium_pitch(robot, robot.Q_NOM,
+                                       m_spring=params.gains.knee_spring.m_spring)
         self.sens_buf = LatencyBuffer(n_sens, (pitch0, 0.0, 0.0))
         self.ctrl_buf = LatencyBuffer(n_act, (0.0, 0.0))
 
         ik0 = solve_ik(robot.Q_NOM, robot.as_dict())
         self._l_eff_nom = abs(ik0['W_z']) if ik0 else 0.2
 
+        # FF3: CoM X offset at nominal hip angle (reference for delta computation)
+        _com_x_nom = compute_com_x_from_wheel(robot, robot.Q_NOM,
+                                              m_spring=params.gains.knee_spring.m_spring)
+        self._com_x_nom = _com_x_nom if _com_x_nom is not None else 0.0
+
+        # Body mass (excluding wheels) — same as lqr.py for consistency
+        self._m_b = (robot.m_box
+                     + 2 * (robot.m_femur + robot.m_tibia + robot.m_coupler
+                            + robot.m_bearing)
+                     + 2 * robot.motor_mass
+                     + 2 * params.gains.knee_spring.m_spring)
+
         # Matrix predictor: discretise A, B at nominal leg position and
         # pre-compute the n_sens-step prediction coefficients.
         #   x̂(t) = A_d^n * x(t-n) + sum_{k=0}^{n-1} A_d^{n-1-k} * B_d * u(t-n+k)
         # where tau_hist[k] = u(t-n+k) (oldest → newest).
-        AB_table = compute_AB_table(robot)
+        AB_table = compute_AB_table(robot,
+                                    m_spring=params.gains.knee_spring.m_spring)
         A_nom, B_nom = interpolate_AB(AB_table, robot.Q_NOM, robot)
         self._B1_nom = float(B_nom[1, 0])          # kept for legacy reference
         if n_sens > 0:
@@ -338,7 +358,8 @@ class SimController:
         new_lqr = replace(self.params.gains.lqr, **{field: value})
         new_gains = replace(self.params.gains, lqr=new_lqr)
         self.params = replace(self.params, gains=new_gains)
-        self.K_table = compute_gain_table(self.params.robot, new_lqr)
+        self.K_table = compute_gain_table(self.params.robot, new_lqr,
+                                          m_spring=self.params.gains.knee_spring.m_spring)
 
     def update_yaw_pi_gain(self, field: str, value: float):
         """Hot-swap a single YawPI gain field (preserves integrator + survives reset)."""
@@ -355,6 +376,14 @@ class SimController:
         new_gains = replace(self.params.gains, suspension=new_susp)
         self.params = replace(self.params, gains=new_gains)
 
+    def update_robot_geom(self, field: str, value: float):
+        """Hot-swap Q_EXT or Q_RET and recompute LQR gain table."""
+        from dataclasses import replace
+        new_robot = replace(self.params.robot, **{field: value})
+        self.params = replace(self.params, robot=new_robot)
+        self.K_table = compute_gain_table(new_robot, self.params.gains.lqr,
+                                          m_spring=self.params.gains.knee_spring.m_spring)
+
     # ── THE control tick — called by run() and sandbox() ─────────────────────
 
     def tick(self, model, data, *,
@@ -370,6 +399,9 @@ class SimController:
              use_roll_leveling: bool = True,
              use_suspension: bool = True,
              use_ff1: bool = True,
+             use_ff2: bool = True,
+             use_ff3: bool = True,
+             use_ff4: bool = True,
              jump_active: bool = False) -> dict:
         """Execute one control tick.  Writes actuator commands to ``data.ctrl``.
 
@@ -391,7 +423,8 @@ class SimController:
         pitch_rate = pitch_rate_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
         wheel_vel  = (data.qvel[self.d_whl_L] + data.qvel[self.d_whl_R]) / 2.0
         hip_q_avg  = (data.qpos[self.s_hip_L] + data.qpos[self.s_hip_R]) / 2.0
-        pitch_ff   = get_equilibrium_pitch(robot, hip_q_avg)
+        pitch_ff   = get_equilibrium_pitch(robot, hip_q_avg,
+                                           m_spring=params.gains.knee_spring.m_spring)
 
         # ── Jump controller ────────────────────────────────────────────────
         if jump_active:
@@ -449,17 +482,40 @@ class SimController:
             # v_ref_rads passes through to LQR even without VelocityPI
         self.prev_theta_ref = theta_ref
 
+        # ── FF3: CoM shift compensation (pitch offset) ───────────────────────
+        theta_ff3 = 0.0
+        ff3_alpha = params.gains.feedforward.ff3_alpha
+        if use_ff3 and ff3_alpha > 0.0:
+            _com_x = compute_com_x_from_wheel(robot, hip_q_avg,
+                                              m_spring=params.gains.knee_spring.m_spring)
+            if _com_x is not None:
+                _delta_com_x = _com_x - self._com_x_nom
+                _ik_ff3 = solve_ik(hip_q_avg, robot.as_dict())
+                _l_eff_ff3 = abs(_ik_ff3['W_z']) if _ik_ff3 else self._l_eff_nom
+                if _l_eff_ff3 > 0.01:
+                    theta_ff3 = ff3_alpha * math.atan2(_delta_com_x, _l_eff_ff3)
+
+        # ── FF4: Centripetal turn coupling (pitch offset) ──────────────────
+        theta_ff4 = 0.0
+        ff4_alpha = params.gains.feedforward.ff4_alpha
+        if use_ff4 and ff4_alpha > 0.0:
+            _yaw_rate = data.qvel[self.d_yaw]
+            _v_fwd = wheel_vel * robot.wheel_r
+            theta_ff4 = -ff4_alpha * _v_fwd * _yaw_rate / 9.81
+
         # ── LQR controller (symmetric torque) ────────────────────────────────
         if use_lqr:
             tau_sym = lqr_torque(
                 _pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
                 self.K_table, robot, params.motors.wheel,
-                v_ref=v_ref_rads, theta_ref=theta_ref)
+                v_ref=v_ref_rads, theta_ref=theta_ref + theta_ff3 + theta_ff4)
         else:
             tau_sym = 0.0
 
         # ── Yaw PI (differential torque) ─────────────────────────────────────
         yaw_rate = data.qvel[self.d_yaw]
+        omega_cmd_max = self.yaw_pi_ctrl.gains.omega_cmd_max
+        omega_target = max(-omega_cmd_max, min(omega_cmd_max, omega_target))
         if use_yaw_pi:
             tau_yaw = self.yaw_pi_ctrl.update(omega_target, yaw_rate)
         else:
@@ -534,18 +590,45 @@ class SimController:
                     q_hip_target, params.motors.hip,
                     dq_target=dq_hip_target)
 
+        # ── Knee spring (conditional torsional spring) ─────────────────────
+        spring = params.gains.knee_spring
+        q_engage = robot.Q_NOM + spring.engage_offset
+        tau_spring_L = knee_spring_torque(
+            float(data.qpos[self.s_hip_L]), float(data.qvel[self.d_hip_L]),
+            q_engage, spring)
+        tau_spring_R = knee_spring_torque(
+            float(data.qpos[self.s_hip_R]), float(data.qvel[self.d_hip_R]),
+            q_engage, spring)
+        data.qfrc_applied[self.d_hip_L] = tau_spring_L
+        data.qfrc_applied[self.d_hip_R] = tau_spring_R
+
+        # ── Feedforward: shared IK for current leg geometry ─────────────────
+        _need_ff_ik = ((use_ff1 and params.gains.feedforward.ff1_alpha > 0.0)
+                       or (use_ff2 and params.gains.feedforward.ff2_alpha > 0.0))
+        if _need_ff_ik:
+            _ik_ff = solve_ik(hip_q_avg, robot.as_dict())
+            _l_eff_ff = abs(_ik_ff['W_z']) if _ik_ff else self._l_eff_nom
+        else:
+            _l_eff_ff = self._l_eff_nom
+
         # ── FF1: Hip reaction torque cancellation ─────────────────────────────
         tau_ff1 = 0.0
         ff1_alpha = params.gains.feedforward.ff1_alpha
-        if use_ff1 and ff1_alpha > 0.0:
+        if use_ff1 and ff1_alpha > 0.0 and _l_eff_ff > 0.01:
             tau_hip_total = (float(data.ctrl[self.act_hip_L])
                             + float(data.ctrl[self.act_hip_R]))
-            ik_now = solve_ik(hip_q_avg, robot.as_dict())
-            l_eff = abs(ik_now['W_z']) if ik_now else self._l_eff_nom
-            if l_eff > 0.01:
-                tau_ff1 = -ff1_alpha * tau_hip_total * (robot.wheel_r / l_eff)
-                data.ctrl[self.act_wheel_L] += tau_ff1 / 2.0
-                data.ctrl[self.act_wheel_R] += tau_ff1 / 2.0
+            tau_ff1 = -ff1_alpha * tau_hip_total * (robot.wheel_r / _l_eff_ff)
+            data.ctrl[self.act_wheel_L] += tau_ff1 / 2.0
+            data.ctrl[self.act_wheel_R] += tau_ff1 / 2.0
+
+        # ── FF2: Gravity compensation torque on wheels ────────────────────────
+        # Pendulum gravity torque = m_b * g * l_eff * sin(pitch)
+        tau_ff2 = 0.0
+        ff2_alpha = params.gains.feedforward.ff2_alpha
+        if use_ff2 and ff2_alpha > 0.0 and _l_eff_ff > 0.01:
+            tau_ff2 = ff2_alpha * self._m_b * 9.81 * _l_eff_ff * math.sin(pitch_true)
+            data.ctrl[self.act_wheel_L] += tau_ff2 / 2.0
+            data.ctrl[self.act_wheel_R] += tau_ff2 / 2.0
 
         # ── Battery step ─────────────────────────────────────────────────────
         self.v_batt = self.battery.step(self.dt_ctrl, motor_currents(
@@ -566,11 +649,13 @@ class SimController:
             wheel_vel=wheel_vel,
             v_target=v_target_ms, v_measured=v_measured_ms,
             theta_ref=theta_ref,
-            tau_sym=tau_sym, tau_yaw=tau_yaw, tau_ff1=tau_ff1,
+            tau_sym=tau_sym, tau_yaw=tau_yaw, tau_ff1=tau_ff1, tau_ff2=tau_ff2, theta_ff3=theta_ff3, theta_ff4=theta_ff4,
             tau_whl_L=float(data.ctrl[self.act_wheel_L]),
             tau_whl_R=float(data.ctrl[self.act_wheel_R]),
             tau_hip_L=float(data.ctrl[self.act_hip_L]),
             tau_hip_R=float(data.ctrl[self.act_hip_R]),
+            tau_spring_L=tau_spring_L,
+            tau_spring_R=tau_spring_R,
             hip_q_L=float(data.qpos[self.s_hip_L]),
             hip_q_R=float(data.qpos[self.s_hip_R]),
             hip_q_avg=hip_q_avg,
@@ -733,8 +818,10 @@ def run(params: SimParams, scenario: ScenarioConfig,
 
             # ── Metrics ──────────────────────────────────────────────────────
             theta_ref_corr = tick['theta_ref'] if use_theta_ref_correction else 0.0
-            pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff - theta_ref_corr))
-            pitch_err_rad = pitch_true - pitch_ff - theta_ref_corr
+            theta_ff3_corr = tick.get('theta_ff3', 0.0)
+            theta_ff4_corr = tick.get('theta_ff4', 0.0)
+            pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff - theta_ref_corr - theta_ff3_corr - theta_ff4_corr))
+            pitch_err_rad = pitch_true - pitch_ff - theta_ref_corr - theta_ff3_corr - theta_ff4_corr
             pitch_sq_sum     += pitch_err_deg ** 2
             ise_pitch        += pitch_err_rad ** 2 * dt
             ise_pitch_rate   += pitch_rate_true ** 2 * dt

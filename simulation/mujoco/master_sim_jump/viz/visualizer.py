@@ -145,6 +145,30 @@ def _add_force_arrow(viewer, data, body_id, force_z, scale=0.04, radius=0.012):
     scn.ngeom += 1
 
 
+def _add_knee_spring_sphere(viewer, data, body_id, active=False, radius=0.01):
+    """Draw a 2 cm sphere at *body_id* for the knee spring.
+
+    Always visible as grey; turns purple when spring torque is active.
+    """
+    scn = viewer.user_scn
+    if scn.ngeom >= scn.maxgeom:
+        return
+    pos = data.xpos[body_id].copy()
+    if active:
+        rgba = np.array([0.6, 0.0, 0.8, 0.9], dtype=np.float32)   # purple
+    else:
+        rgba = np.array([0.5, 0.5, 0.5, 0.7], dtype=np.float32)   # grey
+    mujoco.mjv_initGeom(
+        scn.geoms[scn.ngeom],
+        type=mujoco.mjtGeom.mjGEOM_SPHERE,
+        size=[radius, 0, 0],
+        pos=pos,
+        mat=np.eye(3).flatten(),
+        rgba=rgba,
+    )
+    scn.ngeom += 1
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SANDBOX ARENA — 28 static obstacles + 6 movable props
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -630,6 +654,9 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
     pl_yaw.plot(t, yaw_rate,  pen=pg.mkPen(PALETTE[3], width=LINE_WIDTH), name="yaw w")
     pl_yaw.plot(t, omega_tgt, pen=pg.mkPen(PALETTE[3], width=1.0, style=DASH), name="cmd w")
     pl_yaw.addLine(y=0, pen=pg.mkPen("#666688", width=0.7, style=DASH))
+    _yaw_cmd_peak = float(np.max(np.abs(omega_tgt))) if len(omega_tgt) else 1.0
+    _yaw_margin = math.radians(10.0)
+    pl_yaw.setYRange(-_yaw_cmd_peak - _yaw_margin, _yaw_cmd_peak + _yaw_margin, padding=0)
 
     # [1,1] Hip Angle
     pl_hip = ChartPanel.create(glw, 1, 1, "Hip Angle", "deg", xr)
@@ -653,10 +680,14 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
     # [3,0] Hip Torques
     tau_hip_L = telemetry.get('tau_hip_L', np.zeros_like(t))
     tau_hip_R = telemetry.get('tau_hip_R', np.zeros_like(t))
+    tau_spring_L = telemetry.get('tau_spring_L', np.zeros_like(t))
+    tau_spring_R = telemetry.get('tau_spring_R', np.zeros_like(t))
     pl_htau = ChartPanel.create(glw, 3, 0, "Hip Torques", "N-m", xr)
     ChartPanel.add_legend(pl_htau)
     pl_htau.plot(t, tau_hip_L, pen=pg.mkPen(PALETTE[5], width=LINE_WIDTH), name="hip_L")
     pl_htau.plot(t, tau_hip_R, pen=pg.mkPen(PALETTE[8], width=1.2, style=DASH), name="hip_R")
+    pl_htau.plot(t, tau_spring_L, pen=pg.mkPen('#ff60ff', width=1.2), name="spring_L")
+    pl_htau.plot(t, tau_spring_R, pen=pg.mkPen('#ffaa44', width=1.2, style=DASH), name="spring_R")
 
     # [3,1] Wheel Torques
     pl_tau = ChartPanel.create(glw, 3, 1, "Wheel Torques", "N-m", xr)
@@ -773,6 +804,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
     _lqr_init = _lqr_gains_dict(params)
     _yaw_init = _yaw_pi_gains_dict(params)
     _susp_init = _suspension_gains_dict(params)
+    _hl_init = _hip_limits_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -781,7 +813,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
         args=(data_q, cmd_q, WINDOW_S,
               f"Replay — {cfg.display_name}",
               wheel_limit, hip_limit, False, _vp_init, _lqr_init,
-              _ctrl_defaults_from_cfg(cfg), _yaw_init, _susp_init),
+              _ctrl_defaults_from_cfg(cfg), _yaw_init, _susp_init,
+              _hl_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -865,6 +898,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
                             ctrl.update_yaw_pi_gain(cmd[1], cmd[2])
                         elif cmd[0] == "GAIN_SUSP":
                             ctrl.update_suspension_gain(cmd[1], cmd[2])
+                        elif cmd[0] == "ROBOT_GEOM":
+                            ctrl.update_robot_geom(cmd[1], cmd[2])
             except Exception:
                 pass
 
@@ -920,9 +955,14 @@ def replay(scenario_name: str, with_viewer: bool = False,
             viewer.cam.lookat[1] = data.xpos[ctrl.box_bid][1]
             if _vis_bid is not None:
                 _add_force_arrow(viewer, data, _vis_bid, _vis_fz)
+            # Always-visible knee spring spheres (grey idle, purple when active)
+            _add_knee_spring_sphere(viewer, data, ctrl.tibia_bid_L,
+                active=abs(_last_tick.get('tau_spring_L', 0.0)) > 1e-6 if _last_tick else False)
+            _add_knee_spring_sphere(viewer, data, ctrl.tibia_bid_R,
+                active=abs(_last_tick.get('tau_spring_R', 0.0)) > 1e-6 if _last_tick else False)
             viewer.sync()
 
-            # Push 25-value telemetry tuple at ~60 Hz
+            # Push 27-value telemetry tuple at ~60 Hz
             wall_now = time.perf_counter()
             if (wall_now - last_push >= 1.0 / TELEMETRY_HZ
                     and not data_q.full() and _last_tick):
@@ -931,8 +971,10 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     data, ctrl.box_bid, ctrl.d_pitch)
                 pitch_ref_display = tk['pitch_ff'] + tk['theta_ref']
                 v_cmd = v_profile_fn(float(data.time))
-                omega_cmd = (omega_profile_fn(float(data.time))
-                             if omega_profile_fn else 0.0)
+                _ocm = ctrl.yaw_pi_ctrl.gains.omega_cmd_max
+                omega_cmd = max(-_ocm, min(_ocm,
+                    omega_profile_fn(float(data.time))
+                    if omega_profile_fn else 0.0))
                 data_q.put_nowait((
                     float(data.time),
                     math.degrees(pitch_true_now),
@@ -959,6 +1001,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     tk['i_total'],
                     tk['tau_hip_L'],
                     tk['tau_hip_R'],
+                    tk['tau_spring_L'],
+                    tk['tau_spring_R'],
                 ))
                 last_push = wall_now
 
@@ -1039,11 +1083,12 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                   lqr_gains: dict = None,
                   ctrl_defaults: dict = None,
                   yaw_pi_gains: dict = None,
-                  suspension_gains: dict = None) -> None:
+                  suspension_gains: dict = None,
+                  hip_limits: dict = None) -> None:
     """Child process — independent Qt app with 10-panel pyqtgraph telemetry.
 
     Communication:
-        data_q (main→plot): 25-value telemetry tuples at ~60 Hz
+        data_q (main→plot): 27-value telemetry tuples at ~60 Hz
         cmd_q  (plot→main): UI commands (RESTART, CTRL_EN, HIP_MODE)
     """
     import sys as _sys
@@ -1192,6 +1237,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ("Suspension", "Suspension"),
         ("RollLev",    "Roll Leveling"),
         ("HipFF",      "Hip FF"),
+        ("GravFF",     "Grav FF"),
+        ("CoMFF",      "CoM FF"),
+        ("TurnFF",     "Turn FF"),
     ]
     _ctrl_widgets = {}   # key → QCheckBox, for CONFIG_UPDATE
     for key, label in _ctrl_defs:
@@ -1352,6 +1400,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ("Ki",         "Ki",         0.0,  5.0,  0.05,  4, _yp.get("Ki", 1.2)),
         ("τ_max",      "torque_max", 0.05, 3.0,  0.05,  2, _yp.get("torque_max", 0.5)),
         ("int_max",    "int_max",    0.05, 3.0,  0.05,  2, _yp.get("int_max", 0.5)),
+        ("ω_max",      "omega_cmd_max", 0.1, 6.28, 0.05, 2, _yp.get("omega_cmd_max", 1.05)),
     ]
     for disp, fld, lo, hi, step, dec, default in _yaw_defs:
         lbl = QtWidgets.QLabel(disp)
@@ -1408,6 +1457,46 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
     hbox_susp.addStretch()
     vbox.addWidget(susp_row)
+
+    # ── Hip Limits (Q_EXT / Q_RET) — live via ROBOT_GEOM command ───────────
+    _hip_lim_spinboxes = {}
+    _hl = hip_limits or {}
+
+    hip_lim_row = QtWidgets.QWidget()
+    hip_lim_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
+    hbox_hl = QtWidgets.QHBoxLayout(hip_lim_row)
+    hbox_hl.setContentsMargins(6, 3, 6, 3)
+    hbox_hl.setSpacing(12)
+
+    lbl_hl_g = QtWidgets.QLabel("Hip Limits (°):")
+    lbl_hl_g.setStyleSheet(_SL)
+    hbox_hl.addWidget(lbl_hl_g)
+
+    _DEG2RAD = math.pi / 180.0
+    _hip_lim_defs = [
+        ("Q_ext", "Q_EXT", -120.0, -30.0, 0.5, 2,
+         math.degrees(_hl.get("Q_EXT", -1.43161))),
+        ("Q_ret", "Q_RET", -120.0, -30.0, 0.5, 2,
+         math.degrees(_hl.get("Q_RET", -0.78705))),
+    ]
+    for disp, fld, lo, hi, step, dec, default in _hip_lim_defs:
+        lbl = QtWidgets.QLabel(disp)
+        lbl.setStyleSheet(_SPIN_LBL)
+        hbox_hl.addWidget(lbl)
+
+        sb = QtWidgets.QDoubleSpinBox()
+        sb.setRange(lo, hi)
+        sb.setSingleStep(step)
+        sb.setDecimals(dec)
+        sb.setValue(default)
+        sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(
+            lambda val, f=fld: _safe_cmd(("ROBOT_GEOM", f, math.radians(val))))
+        hbox_hl.addWidget(sb)
+        _hip_lim_spinboxes[fld] = sb
+
+    hbox_hl.addStretch()
+    vbox.addWidget(hip_lim_row)
 
     # ── Save Gains → params.py button ─────────────────────────────────────────
     def _save_gains_to_params():
@@ -1482,6 +1571,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         for field_name, (sb, _) in _susp_spinboxes.items():
             val = round(sb.value(), 6)
             src = _replace_field_in_class(src, "SuspensionGains", field_name, val)
+
+        # Hip limits (displayed in degrees, saved in radians)
+        for field_name, sb in _hip_lim_spinboxes.items():
+            val = round(math.radians(sb.value()), 6)
+            src = _replace_field_in_class(src, "RobotGeometry", field_name, val)
 
         if src == original:
             print("  [Save] No changes detected — params.py unchanged.")
@@ -1665,6 +1759,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
     p_yaw = _p(1, 1, "Yaw Rate", "deg/s")
     _leg(p_yaw)
+    from master_sim_jump.defaults import DEFAULT_PARAMS as _dp
+    _yaw_cmd_peak_dps = math.degrees(_dp.gains.yaw_pi.omega_cmd_max)
+    p_yaw.setYRange(-_yaw_cmd_peak_dps - 10.0, _yaw_cmd_peak_dps + 10.0, padding=0)
     ln_yaw  = p_yaw.plot(pen=pg.mkPen('#60d0ff', width=W), name="ω")
     ln_ocmd = p_yaw.plot(pen=pg.mkPen('#ff6060', width=W, style=_DASH), name="cmd")
 
@@ -1696,6 +1793,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     p_htau.setYRange(-hip_limit * 1.1, hip_limit * 1.1, padding=0)
     ln_htau_L = p_htau.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
     ln_htau_R = p_htau.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+    ln_htau_spr_L = p_htau.plot(pen=pg.mkPen('#ff60ff', width=W), name="spr L")
+    ln_htau_spr_R = p_htau.plot(pen=pg.mkPen('#ffaa44', width=W), name="spr R")
 
     p_tau = _p(3, 1, "Wheel Torque", "N·m")
     _leg(p_tau)
@@ -1762,7 +1861,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _proxy = pg.SignalProxy(
         glw.scene().sigMouseMoved, rateLimit=60, slot=_on_mouse)
 
-    # ── Ring buffers — 25 channels ────────────────────────────────────────────
+    # ── Ring buffers — 27 channels ────────────────────────────────────────────
     MAXLEN = int(window_s * TELEMETRY_HZ) + 200
     (t_buf,
      pitch_buf, pitch_ref_buf, pitch_rate_buf,
@@ -1774,7 +1873,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
      v_batt_buf, batt_temp_buf, soc_buf,
      I_whl_L_buf, I_whl_R_buf, I_hip_L_buf, I_hip_R_buf, I_total_buf,
      tau_hip_L_buf, tau_hip_R_buf,
-     ) = (deque(maxlen=MAXLEN) for _ in range(25))
+     tau_spring_L_buf, tau_spring_R_buf,
+     ) = (deque(maxlen=MAXLEN) for _ in range(27))
 
     all_bufs = [
         t_buf, pitch_buf, pitch_ref_buf, pitch_rate_buf,
@@ -1784,6 +1884,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         v_batt_buf, batt_temp_buf, soc_buf,
         I_whl_L_buf, I_whl_R_buf, I_hip_L_buf, I_hip_R_buf, I_total_buf,
         tau_hip_L_buf, tau_hip_R_buf,
+        tau_spring_L_buf, tau_spring_R_buf,
     ]
 
     all_lines = [
@@ -1793,6 +1894,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_tau_L, ln_tau_R, ln_vbatt, ln_ibat_batt,
         ln_iwhl_L, ln_iwhl_R, ln_ihip_L, ln_ihip_R, ln_itotal,
         ln_htau_L, ln_htau_R,
+        ln_htau_spr_L, ln_htau_spr_R,
     ]
 
     i_bat_max      = [0.0]
@@ -1849,7 +1951,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
              tau_whl_L, tau_whl_R,
              v_batt, batt_temp, soc,
              I_whl_L, I_whl_R, I_hip_L, I_hip_R, I_total,
-             tau_hip_L, tau_hip_R) = item
+             tau_hip_L, tau_hip_R,
+             tau_spring_L, tau_spring_R) = item
 
             t_buf.append(t)
             pitch_buf.append(pitch);          pitch_ref_buf.append(pitch_ref)
@@ -1867,6 +1970,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             I_total_buf.append(I_total)
             i_bat_max[0] = max(i_bat_max[0], I_total)
             tau_hip_L_buf.append(tau_hip_L);  tau_hip_R_buf.append(tau_hip_R)
+            tau_spring_L_buf.append(tau_spring_L);  tau_spring_R_buf.append(tau_spring_R)
 
         if len(t_buf) < 2:
             return
@@ -1913,6 +2017,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_itotal.setData(xw, _a(I_total_buf))
         ln_htau_L.setData(xw, _a(tau_hip_L_buf))
         ln_htau_R.setData(xw, _a(tau_hip_R_buf))
+        ln_htau_spr_L.setData(xw, _a(tau_spring_L_buf))
+        ln_htau_spr_R.setData(xw, _a(tau_spring_R_buf))
 
         _sync_batt()
 
@@ -1920,7 +2026,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         # Compute data range from all curves in each plot, then expand
         # symmetrically around the midpoint if the span is too small.
         _MIN_Y_SPAN = 2.0
-        _fixed_range_plots = {id(p_tau), id(p_htau), id(p_hip)}
+        _fixed_range_plots = {id(p_tau), id(p_htau), id(p_hip), id(p_yaw)}
         for _, pl in named_plots:
             if id(pl) in _fixed_range_plots:
                 continue
@@ -1965,7 +2071,8 @@ def _lqr_gains_dict(params) -> dict:
 def _yaw_pi_gains_dict(params) -> dict:
     """Extract YawPI gains as a plain dict for passing to plot process."""
     g = params.gains.yaw_pi
-    return dict(Kp=g.Kp, Ki=g.Ki, torque_max=g.torque_max, int_max=g.int_max)
+    return dict(Kp=g.Kp, Ki=g.Ki, torque_max=g.torque_max, int_max=g.int_max,
+                omega_cmd_max=g.omega_cmd_max)
 
 
 def _suspension_gains_dict(params) -> dict:
@@ -1974,12 +2081,19 @@ def _suspension_gains_dict(params) -> dict:
     return dict(K_s=g.K_s, B_s=g.B_s, K_roll=g.K_roll, D_roll=g.D_roll)
 
 
+def _hip_limits_dict(params) -> dict:
+    """Extract Q_EXT / Q_RET as a plain dict for passing to plot process."""
+    r = params.robot
+    return dict(Q_EXT=r.Q_EXT, Q_RET=r.Q_RET)
+
+
 def _ctrl_defaults_from_cfg(cfg) -> dict:
     """Build checkbox default states from a ScenarioConfig (or None for sandbox)."""
     if cfg is None:
         # Sandbox: everything enabled
         return {"LQR": True, "VelPI": True, "YawPI": True,
-                "Suspension": True, "RollLev": True, "HipFF": True}
+                "Suspension": True, "RollLev": True, "HipFF": True,
+                "GravFF": True, "CoMFF": True, "TurnFF": True}
     ac = cfg.active_controllers
     imp = cfg.hip_mode in ("impedance", "jump")
     return {
@@ -1989,6 +2103,9 @@ def _ctrl_defaults_from_cfg(cfg) -> dict:
         "Suspension": imp,
         "RollLev":    imp,
         "HipFF":      True,
+        "GravFF":     True,
+        "CoMFF":      True,
+        "TurnFF":     True,
     }
 
 
@@ -2037,6 +2154,9 @@ def sandbox(rng_seed: int = 0):
     _en_suspension = [True]
     _en_roll_lev   = [True]
     _en_ff1        = [True]
+    _en_ff2        = [True]
+    _en_ff3        = [True]
+    _en_ff4        = [True]
     _hip_mode      = ["impedance"]
 
     # Command targets (v, omega, hip %)
@@ -2088,6 +2208,7 @@ def sandbox(rng_seed: int = 0):
     _lqr_init = _lqr_gains_dict(params)
     _yaw_init = _yaw_pi_gains_dict(params)
     _susp_init = _suspension_gains_dict(params)
+    _hl_init = _hip_limits_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -2095,7 +2216,7 @@ def sandbox(rng_seed: int = 0):
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, "Sandbox — free drive",
               wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
-              None, _yaw_init, _susp_init),
+              None, _yaw_init, _susp_init, _hl_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -2179,6 +2300,9 @@ def sandbox(rng_seed: int = 0):
                         elif key == "Suspension": _en_suspension[0] = val
                         elif key == "RollLev":    _en_roll_lev[0]   = val
                         elif key == "HipFF":      _en_ff1[0]        = val
+                        elif key == "GravFF":     _en_ff2[0]        = val
+                        elif key == "CoMFF":      _en_ff3[0]        = val
+                        elif key == "TurnFF":     _en_ff4[0]        = val
                     elif cmd[0] == "HIP_MODE":
                         _hip_mode[0] = cmd[1]
                     elif cmd[0] == "GAIN_VP":
@@ -2189,6 +2313,8 @@ def sandbox(rng_seed: int = 0):
                         ctrl.update_yaw_pi_gain(cmd[1], cmd[2])
                     elif cmd[0] == "GAIN_SUSP":
                         ctrl.update_suspension_gain(cmd[1], cmd[2])
+                    elif cmd[0] == "ROBOT_GEOM":
+                        ctrl.update_robot_geom(cmd[1], cmd[2])
                     elif cmd[0] == "JUMP":
                         _jump_active[0] = True
                         ctrl.jump_ctrl.trigger()
@@ -2229,6 +2355,9 @@ def sandbox(rng_seed: int = 0):
                         use_roll_leveling=_en_roll_lev[0],
                         use_suspension=_en_suspension[0],
                         use_ff1=_en_ff1[0],
+                        use_ff2=_en_ff2[0],
+                        use_ff3=_en_ff3[0],
+                        use_ff4=_en_ff4[0],
                         jump_active=_jump_active[0])
 
                     # Auto-clear jump flag when jump controller returns to BALANCE
@@ -2248,9 +2377,14 @@ def sandbox(rng_seed: int = 0):
             # Camera follow
             viewer.cam.lookat[0] = data.xpos[ctrl.box_bid][0]
             viewer.cam.lookat[1] = data.xpos[ctrl.box_bid][1]
+            # Always-visible knee spring spheres (grey idle, purple when active)
+            _add_knee_spring_sphere(viewer, data, ctrl.tibia_bid_L,
+                active=abs(_last_tick.get('tau_spring_L', 0.0)) > 1e-6 if _last_tick else False)
+            _add_knee_spring_sphere(viewer, data, ctrl.tibia_bid_R,
+                active=abs(_last_tick.get('tau_spring_R', 0.0)) > 1e-6 if _last_tick else False)
             viewer.sync()
 
-            # ── Push 25-value telemetry tuple at ~60 Hz ──
+            # ── Push 27-value telemetry tuple at ~60 Hz ──
             wall_now = time.perf_counter()
             if (wall_now - last_push >= 1.0 / TELEMETRY_HZ
                     and not data_q.full() and _last_tick):
@@ -2285,6 +2419,8 @@ def sandbox(rng_seed: int = 0):
                     tk['i_total'],
                     tk['tau_hip_L'],
                     tk['tau_hip_R'],
+                    tk['tau_spring_L'],
+                    tk['tau_spring_R'],
                 ))
                 last_push = wall_now
 
@@ -2380,6 +2516,7 @@ def run_unified(initial_scenario: str = "sandbox",
     _lqr_init = _lqr_gains_dict(params)
     _yaw_init = _yaw_pi_gains_dict(params)
     _susp_init = _suspension_gains_dict(params)
+    _hl_init = _hip_limits_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -2390,7 +2527,7 @@ def run_unified(initial_scenario: str = "sandbox",
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, init_title,
               wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
-              _ctrl_init, _yaw_init, _susp_init),
+              _ctrl_init, _yaw_init, _susp_init, _hl_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -2405,6 +2542,9 @@ def run_unified(initial_scenario: str = "sandbox",
     _en_suspension = [_ctrl_init.get("Suspension", True)]
     _en_roll_lev   = [_ctrl_init.get("RollLev", True)]
     _en_ff1        = [_ctrl_init.get("HipFF", True)]
+    _en_ff2        = [_ctrl_init.get("GravFF", True)]
+    _en_ff3        = [_ctrl_init.get("CoMFF", True)]
+    _en_ff4        = [_ctrl_init.get("TurnFF", True)]
     _hip_mode      = ["position_pd" if not _ctrl_init.get("Suspension", True) else "impedance"]
     _v_desired     = [0.0]
     _omega_desired = [0.0]
@@ -2466,6 +2606,7 @@ def run_unified(initial_scenario: str = "sandbox",
         scenario_logged = False
         sim_fell     = False
         world_switch = False     # set True to break inner loop for new world
+        _slowmo_liftoff_t = [None]   # sim-time when FLYING started (mutable container)
 
         def _reset_sim():
             nonlocal step, _last_tick, last_push, scenario_logged, sim_fell
@@ -2479,6 +2620,7 @@ def run_unified(initial_scenario: str = "sandbox",
             last_push = -1.0
             scenario_logged = False
             sim_fell = False
+            _slowmo_liftoff_t[0] = None
             _reset_sandbox_targets()
             if not data_q.full():
                 data_q.put_nowait("RESET")
@@ -2559,6 +2701,9 @@ def run_unified(initial_scenario: str = "sandbox",
                                         _en_suspension[0] = new_cd["Suspension"]
                                         _en_roll_lev[0]   = new_cd["RollLev"]
                                         _en_ff1[0]        = new_cd["HipFF"]
+                                        _en_ff2[0]        = new_cd["GravFF"]
+                                        _en_ff3[0]        = new_cd["CoMFF"]
+                                        _en_ff4[0]        = new_cd["TurnFF"]
                                     title = new_title
                                     _reset_sim()
                                     if cfg and cfg.init_fn:
@@ -2605,6 +2750,8 @@ def run_unified(initial_scenario: str = "sandbox",
                                 elif key == "Suspension": _en_suspension[0] = val
                                 elif key == "RollLev":    _en_roll_lev[0]   = val
                                 elif key == "HipFF":      _en_ff1[0]        = val
+                                elif key == "GravFF":     _en_ff2[0]        = val
+                                elif key == "CoMFF":      _en_ff3[0]        = val
                             elif cmd[0] == "HIP_MODE":
                                 _hip_mode[0] = cmd[1]
                             elif cmd[0] == "GAIN_VP":
@@ -2615,6 +2762,8 @@ def run_unified(initial_scenario: str = "sandbox",
                                 ctrl.update_yaw_pi_gain(cmd[1], cmd[2])
                             elif cmd[0] == "GAIN_SUSP":
                                 ctrl.update_suspension_gain(cmd[1], cmd[2])
+                            elif cmd[0] == "ROBOT_GEOM":
+                                ctrl.update_robot_geom(cmd[1], cmd[2])
                             elif cmd[0] == "JUMP":
                                 _jump_active[0] = True
                                 ctrl.jump_ctrl.trigger()
@@ -2640,8 +2789,20 @@ def run_unified(initial_scenario: str = "sandbox",
                         _hip_pct[0] = (JOY_HIP_SATURATION + clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0
 
                 # ── Slow-mo when jump is active ──
-                if ctrl.jump_ctrl.mode != RobotMode.BALANCE:
-                    steps_per_frame = steps_per_frame_slow
+                # Only slow-mo for 0.25s sim-time after liftoff (FLYING),
+                # which is ~1s wall-clock at 1/8 speed.
+                jmode = ctrl.jump_ctrl.mode
+                if jmode == RobotMode.FLYING and _slowmo_liftoff_t[0] is None:
+                    _slowmo_liftoff_t[0] = float(data.time)
+                elif jmode == RobotMode.BALANCE:
+                    _slowmo_liftoff_t[0] = None
+
+                if jmode != RobotMode.BALANCE:
+                    liftoff_t = _slowmo_liftoff_t[0]
+                    if liftoff_t is not None and (float(data.time) - liftoff_t) > 0.25:
+                        steps_per_frame = steps_per_frame_normal
+                    else:
+                        steps_per_frame = steps_per_frame_slow
                 else:
                     steps_per_frame = steps_per_frame_normal
 
@@ -2711,6 +2872,9 @@ def run_unified(initial_scenario: str = "sandbox",
                                 use_roll_leveling=_en_roll_lev[0],
                                 use_suspension=_en_suspension[0],
                                 use_ff1=_en_ff1[0],
+                                use_ff2=_en_ff2[0],
+                                use_ff3=_en_ff3[0],
+                        use_ff4=_en_ff4[0],
                                 jump_active=_jump_active[0])
 
                             # Auto-clear jump flag when jump controller returns to BALANCE
@@ -2739,7 +2903,7 @@ def run_unified(initial_scenario: str = "sandbox",
                     _add_force_arrow(viewer, data, _vis_bid2, _vis_fz2)
                 viewer.sync()
 
-                # ── Push 25-value telemetry tuple at ~60 Hz ──
+                # ── Push 27-value telemetry tuple at ~60 Hz ──
                 wall_now = time.perf_counter()
                 if (wall_now - last_push >= 1.0 / TELEMETRY_HZ
                         and not data_q.full() and _last_tick):
@@ -2748,13 +2912,15 @@ def run_unified(initial_scenario: str = "sandbox",
                         data, ctrl.box_bid, ctrl.d_pitch)
                     pitch_ref_display = tk['pitch_ff'] + tk['theta_ref']
 
+                    _ocm = ctrl.yaw_pi_ctrl.gains.omega_cmd_max
                     if cfg is not None:
                         v_cmd_display = v_profile_fn(float(data.time))
-                        omega_cmd_display = (omega_profile_fn(float(data.time))
-                                             if omega_profile_fn else 0.0)
+                        omega_cmd_display = max(-_ocm, min(_ocm,
+                            omega_profile_fn(float(data.time))
+                            if omega_profile_fn else 0.0))
                     else:
                         v_cmd_display = _v_desired[0]
-                        omega_cmd_display = _omega_desired[0]
+                        omega_cmd_display = max(-_ocm, min(_ocm, _omega_desired[0]))
 
                     data_q.put_nowait((
                         float(data.time),
@@ -2782,6 +2948,8 @@ def run_unified(initial_scenario: str = "sandbox",
                         tk['i_total'],
                         tk['tau_hip_L'],
                         tk['tau_hip_R'],
+                        tk['tau_spring_L'],
+                        tk['tau_spring_R'],
                     ))
                     last_push = wall_now
 

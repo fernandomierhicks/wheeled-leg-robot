@@ -11,14 +11,19 @@
 ```
 Outer loops (500 Hz, same rate as inner)    Inner loop (500 Hz)          Actuators
 ────────────────────────────────────────    ───────────────────          ─────────
-[Velocity PI] ──θ_ref──▶                   [Balance LQR] ──τ_sym─▶     τ_L = τ_sym + τ_yaw
-[Yaw PI]      ──τ_yaw──▶────────────────────────────────────────────▶   τ_R = τ_sym − τ_yaw
+[Velocity PI] ──θ_ref──▶                   [Balance LQR] ──τ_sym─▶     τ_L = τ_sym + τ_yaw + τ_ff
+[Yaw PI]      ──τ_yaw──▶────────────────────────────────────────────▶   τ_R = τ_sym − τ_yaw + τ_ff
                                             State: [φ−θ_ref, φ̇, v−v_ref]
 
 Independent (500 Hz)
 ──────────────────────
 [Hip Position Servo]  ──────────────────────────────────────────────▶  τ_hip (S1–S7: stiff PD)
 [Hip Impedance + Roll]──────────────────────────────────────────────▶  τ_hip (S8: terrain compliance)
+
+Feedforward (500 Hz, applied after LQR + hip outputs)
+──────────────────────
+[FF1 Hip reaction]    ── τ_hip_total, l_eff ───▶  τ_ff1 = −α₁·τ_hip·(r/l_eff)  ──▶  added to τ_L, τ_R
+[FF2 Gravity comp]    ── pitch, m_b, l_eff ────▶  τ_ff2 = α₂·m·g·l·sin(φ)      ──▶  added to τ_L, τ_R
 ```
 
 | # | Controller | Type | State / Input | Output | Rate |
@@ -28,6 +33,8 @@ Independent (500 Hz)
 | 2 | Hip control (S8) | Impedance + Roll PD | q_hip − q_nom ± δq_roll, dq_hip | τ_hip | 500 Hz |
 | 3 | Velocity PI | PI | v_desired − v_measured | θ_ref (lean cmd) | 500 Hz |
 | 4 | Yaw PI | PI | ω_yaw_desired − ω_yaw_measured | τ_yaw | 500 Hz |
+| 5 | FF1 Hip reaction cancel | Feedforward | τ_hip_total, l_eff | τ_wheel additive | 500 Hz |
+| 5 | FF2 Gravity compensation | Feedforward | pitch, m_b, l_eff | τ_wheel additive | 500 Hz |
 
 ---
 
@@ -220,6 +227,63 @@ q_nom_R = clamp(q_tgt − δq, HIP_SAFE_MIN, HIP_SAFE_MAX)
 Roll leveling is **orthogonal** to pitch/yaw — δq has zero effect on average hip height.
 Robot drives at Q_NOM (30% of stroke) to maximise suspension travel in both directions.
 `HIP_SAFE_MIN = Q_EXT + 10° = −1.257 rad`, `HIP_SAFE_MAX = Q_RET − 10° = −0.526 rad`.
+
+---
+
+### 5. Feedforward Terms (500 Hz)
+
+Feedforward terms run every control tick in `sim_loop.py`, after the LQR + hip torque outputs are written to `data.ctrl` but before the battery model step. Both share a single IK call to avoid redundant computation. Each has a tunable alpha gain (0 = disabled, 1 = full) and a live UI toggle checkbox.
+
+#### FF1 — Hip Reaction Torque Cancellation
+
+Every hip torque command creates an equal-and-opposite reaction torque on the body. The LQR sees this as a pitch disturbance and corrects it, but only after the disturbance has already occurred (one control loop late at minimum). FF1 cancels this in the same tick.
+
+```python
+tau_hip_total = ctrl[hip_L] + ctrl[hip_R]        # total hip torque this tick
+l_eff         = abs(IK(hip_q_avg)['W_z'])         # current pendulum length
+tau_ff1       = -ff1_alpha * tau_hip_total * (r_wheel / l_eff)
+ctrl[wheel_L] += tau_ff1 / 2
+ctrl[wheel_R] += tau_ff1 / 2
+```
+
+| Param | Location | Default | Notes |
+|-------|----------|---------|-------|
+| `ff1_alpha` | `params.gains.feedforward.ff1_alpha` | 0.0 | 0 = disabled, 1 = full cancellation |
+| UI toggle | "Hip FF" checkbox | ON | Live enable/disable in visualizer |
+
+#### FF2 — Gravity Compensation Torque on Wheels
+
+When the robot leans, gravity exerts a pendulum torque `m_b·g·l_eff·sin(pitch)`. The LQR handles this through feedback, but during large lean angles (velocity tracking, jump recovery) the feedback is always chasing the gravitational load. FF2 adds this torque directly to the wheels.
+
+```python
+l_eff   = abs(IK(hip_q_avg)['W_z'])               # shared with FF1
+tau_ff2 = ff2_alpha * m_b * g * l_eff * sin(pitch)
+ctrl[wheel_L] += tau_ff2 / 2
+ctrl[wheel_R] += tau_ff2 / 2
+```
+
+Where `m_b` is body mass excluding wheels (same definition as the LQR linearized model in `lqr.py`).
+
+| Param | Location | Default | Notes |
+|-------|----------|---------|-------|
+| `ff2_alpha` | `params.gains.feedforward.ff2_alpha` | 0.0 | 0 = disabled, 1 = full gravity comp |
+| UI toggle | "Grav FF" checkbox | ON | Live enable/disable in visualizer |
+
+**Caution:** The LQR already has an implicit gravity term in its linearized `alpha` coefficient (`m_b·g·l_eff / denom`). Setting `ff2_alpha = 1.0` may double-count gravity at small angles where the LQR linearization is accurate. The term is most beneficial at large lean angles where `sin(pitch) ≈ pitch` breaks down. Sweep `ff2_alpha` from 0 to 1 to find the optimal value.
+
+#### Execution order in `sim_loop.py`
+
+```
+LQR τ_sym  ──▶  Yaw τ_yaw  ──▶  Actuator delay buf  ──▶  motor_taper → ctrl[wheel]
+                                                              │
+Hip control ──────────────────────────────────────────────▶  ctrl[hip]
+                                                              │
+Shared IK(hip_q_avg) ──────────────────────────────────────  l_eff
+    ├── FF1: ctrl[wheel] += -α₁·τ_hip_total·(r/l_eff) / 2
+    └── FF2: ctrl[wheel] += α₂·m_b·g·l_eff·sin(pitch) / 2
+                                                              │
+Battery step ◀─────────────────────────────────────────────  final ctrl[]
+```
 
 ---
 
