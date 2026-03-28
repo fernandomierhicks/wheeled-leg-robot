@@ -79,6 +79,9 @@ TELEMETRY_HZ = 60
 WINDOW_S     = 15.0
 
 
+_N_STATIC_GEOMS = 3   # world-axes geoms (X, Y, Z arrows) — preserved across frames
+
+
 def _add_world_axes(viewer, length=0.3, radius=0.006):
     """Draw RGB XYZ axis arrows at the world origin in the MuJoCo viewer."""
     z_up = np.array([0.0, 0.0, 1.0])
@@ -145,8 +148,8 @@ def _add_force_arrow(viewer, data, body_id, force_z, scale=0.04, radius=0.012):
     scn.ngeom += 1
 
 
-def _add_knee_spring_sphere(viewer, data, body_id, active=False, radius=0.01):
-    """Draw a 2 cm sphere at *body_id* for the knee spring.
+def _add_knee_spring_sphere(viewer, data, body_id, active=False, radius=0.015):
+    """Draw a 3 cm sphere at *body_id* for the knee spring.
 
     Always visible as grey; turns purple when spring torque is active.
     """
@@ -708,6 +711,29 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
     pl_pos = ChartPanel.create(glw, 4, 1, "Position X", "m", xr)
     pl_pos.plot(t, pos_x, pen=pg.mkPen(PALETTE[7], width=LINE_WIDTH))
 
+    # [5, span 2] Wheel Jump Height (Z above resting ground contact)
+    wheel_z_L_raw = telemetry.get('wheel_z_L', np.full_like(t, robot.wheel_r))
+    wheel_z_R_raw = telemetry.get('wheel_z_R', np.full_like(t, robot.wheel_r))
+    wheel_h_L   = np.maximum(wheel_z_L_raw - robot.wheel_r, 0.0) * 1000.0  # mm
+    wheel_h_R   = np.maximum(wheel_z_R_raw - robot.wheel_r, 0.0) * 1000.0  # mm
+    wheel_h_avg = (wheel_h_L + wheel_h_R) * 0.5
+    ChartPanel._ensure_font()
+    pl_wh = glw.addPlot(row=5, col=0, colspan=2)
+    pl_wh.setTitle('<span style="color:#e0e0e0;font-size:9pt;font-weight:600">Wheel Jump Height</span>')
+    pl_wh.setLabel("left", '<span style="color:#c8c8c8;font-size:9pt">mm</span>')
+    pl_wh.showGrid(x=True, y=True, alpha=GRID_ALPHA)
+    for _ax in ("left", "bottom"):
+        _a = pl_wh.getAxis(_ax)
+        _a.setTextPen(pg.mkColor(TICK_COLOR))
+        _a.setPen(pg.mkPen("#555"))
+        _a.setStyle(tickFont=ChartPanel.TICK_FONT)
+    pl_wh.setXRange(*xr, padding=0.02)
+    ChartPanel.add_legend(pl_wh)
+    pl_wh.plot(t, wheel_h_L,   pen=pg.mkPen(PALETTE[0], width=LINE_WIDTH),       name="L")
+    pl_wh.plot(t, wheel_h_R,   pen=pg.mkPen(PALETTE[1], width=1.2, style=DASH),  name="R")
+    pl_wh.plot(t, wheel_h_avg, pen=pg.mkPen(PALETTE[9], width=1.5),              name="avg")
+    pl_wh.addLine(y=0, pen=pg.mkPen("#666688", width=0.7, style=DASH))
+
     # ── Mouse hover ───────────────────────────────────────────────────────
     all_plots = [
         ("Pitch", pl_pitch), ("Velocity", pl_vel),
@@ -715,6 +741,7 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
         ("Roll", pl_roll), ("Pitch Rate", pl_prate),
         ("Hip Torques", pl_htau), ("Wheel Torques", pl_tau),
         ("Battery V", pl_batt), ("Position X", pl_pos),
+        ("Wheel Jump Height", pl_wh),
     ]
 
     def _on_mouse(evt):
@@ -953,6 +980,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
             # Camera follow
             viewer.cam.lookat[0] = data.xpos[ctrl.box_bid][0]
             viewer.cam.lookat[1] = data.xpos[ctrl.box_bid][1]
+            # Reset dynamic geoms (keep static world-axes)
+            viewer.user_scn.ngeom = _N_STATIC_GEOMS
             if _vis_bid is not None:
                 _add_force_arrow(viewer, data, _vis_bid, _vis_fz)
             # Always-visible knee spring spheres (grey idle, purple when active)
@@ -1003,6 +1032,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     tk['tau_hip_R'],
                     tk['tau_spring_L'],
                     tk['tau_spring_R'],
+                    max(tk['wheel_z_L'] - params.robot.wheel_r, 0.0) * 1000.0,
+                    max(tk['wheel_z_R'] - params.robot.wheel_r, 0.0) * 1000.0,
                 ))
                 last_push = wall_now
 
@@ -1085,10 +1116,10 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                   yaw_pi_gains: dict = None,
                   suspension_gains: dict = None,
                   hip_limits: dict = None) -> None:
-    """Child process — independent Qt app with 10-panel pyqtgraph telemetry.
+    """Child process — independent Qt app with 11-panel pyqtgraph telemetry.
 
     Communication:
-        data_q (main→plot): 27-value telemetry tuples at ~60 Hz
+        data_q (main→plot): 29-value telemetry tuples at ~60 Hz
         cmd_q  (plot→main): UI commands (RESTART, CTRL_EN, HIP_MODE)
     """
     import sys as _sys
@@ -1240,6 +1271,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ("GravFF",     "Grav FF"),
         ("CoMFF",      "CoM FF"),
         ("TurnFF",     "Turn FF"),
+        ("KneeSpr",    "Knee Spring"),
     ]
     _ctrl_widgets = {}   # key → QCheckBox, for CONFIG_UPDATE
     for key, label in _ctrl_defs:
@@ -1290,18 +1322,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _lqr_spinboxes = {}
     _yaw_spinboxes = {}
     _susp_spinboxes = {}
-
-    # ── VelocityPI gain spinboxes ─────────────────────────────────────────────
-    _vp = vel_pi_gains or {}
-    gain_row = QtWidgets.QWidget()
-    gain_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
-    hbox_gain = QtWidgets.QHBoxLayout(gain_row)
-    hbox_gain.setContentsMargins(6, 3, 6, 3)
-    hbox_gain.setSpacing(12)
-
-    lbl_gain = QtWidgets.QLabel("VelPI Gains:")
-    lbl_gain.setStyleSheet(_SL)
-    hbox_gain.addWidget(lbl_gain)
+    _hip_lim_spinboxes = {}
 
     _SPIN_STYLE = (
         "QDoubleSpinBox{background:#2a2a4e;color:#80ffb0;border:1px solid #444;"
@@ -1315,188 +1336,165 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                  "font-size:11px;font-weight:bold;")
 
     import math as _math
+
+    # ── Gain group panel: combobox + stacked pages ───────────────────────────
+    gains_outer = QtWidgets.QWidget()
+    gains_outer.setStyleSheet("background:#1a1a2e; border-radius:4px;")
+    hbox_gains_outer = QtWidgets.QHBoxLayout(gains_outer)
+    hbox_gains_outer.setContentsMargins(6, 3, 6, 3)
+    hbox_gains_outer.setSpacing(10)
+
+    _gain_combo = QtWidgets.QComboBox()
+    _gain_combo.addItems(["VelPI", "LQR", "YawPI", "Suspension", "Hip Limits"])
+    _gain_combo.setFixedWidth(100)
+    _gain_combo.setStyleSheet(
+        "QComboBox{background:#2a2a4e;color:#ffd080;border:1px solid #555;"
+        "border-radius:3px;font-family:Consolas,monospace;font-size:11px;"
+        "font-weight:bold;padding:1px 6px}"
+        "QComboBox::drop-down{border:0;width:18px}"
+        "QComboBox QAbstractItemView{background:#2a2a4e;color:#ffd080;"
+        "selection-background-color:#3a3a6e}")
+    hbox_gains_outer.addWidget(_gain_combo)
+
+    _gain_stack = QtWidgets.QStackedWidget()
+    _gain_stack.setStyleSheet("background:transparent")
+    hbox_gains_outer.addWidget(_gain_stack, stretch=1)
+    _gain_combo.currentIndexChanged.connect(_gain_stack.setCurrentIndex)
+
+    # ── Page 0: VelocityPI ───────────────────────────────────────────────────
+    _vp = vel_pi_gains or {}
+    _page_vp = QtWidgets.QWidget()
+    _page_vp.setStyleSheet("background:transparent")
+    _hb_vp = QtWidgets.QHBoxLayout(_page_vp)
+    _hb_vp.setContentsMargins(0, 0, 0, 0)
+    _hb_vp.setSpacing(12)
+
     _gain_defs = [
-        # (display, field, lo, hi, step, dec, default, to_rad_factor)
-        # to_rad_factor: if not None, display is in deg, send rad = val * factor
-        ("Kp",             "Kp",                     0.0, 1.0,    0.005, 4, _vp.get("Kp", 0.0103),                            None),
-        ("Ki",             "Ki",                     0.0, 2.0,    0.01,  4, _vp.get("Ki", 0.0554),                             None),
-        ("Kff",            "Kff",                    0.0, 1.0,    0.005, 4, _vp.get("Kff", 0.102),                             None),
-        ("θ_max°",         "theta_max",              5.0, 90.0,   1.0,   1, _math.degrees(_vp.get("theta_max", 0.8)),          _math.pi/180),
-        ("rate_lim°/s",    "theta_ref_rate_limit",   50.0, 12000.0, 50.0, 0, _math.degrees(_vp.get("theta_ref_rate_limit", 50.0)), _math.pi/180),
+        ("Kp",          "Kp",                   0.0,   1.0,    0.005, 4, _vp.get("Kp", 0.0103),                               None),
+        ("Ki",          "Ki",                   0.0,   2.0,    0.01,  4, _vp.get("Ki", 0.0554),                                None),
+        ("Kff",         "Kff",                  0.0,   1.0,    0.005, 4, _vp.get("Kff", 0.102),                                None),
+        ("θ_max°",      "theta_max",            5.0,   90.0,   1.0,   1, _math.degrees(_vp.get("theta_max", 0.8)),             _math.pi/180),
+        ("rate_lim°/s", "theta_ref_rate_limit", 50.0, 12000.0, 50.0, 0, _math.degrees(_vp.get("theta_ref_rate_limit", 50.0)), _math.pi/180),
     ]
     for disp, field, lo, hi, step, dec, default, to_rad in _gain_defs:
-        lbl = QtWidgets.QLabel(disp)
-        lbl.setStyleSheet(_SPIN_LBL)
-        hbox_gain.addWidget(lbl)
-
+        lbl = QtWidgets.QLabel(disp); lbl.setStyleSheet(_SPIN_LBL)
+        _hb_vp.addWidget(lbl)
         sb = QtWidgets.QDoubleSpinBox()
-        sb.setRange(lo, hi)
-        sb.setSingleStep(step)
-        sb.setDecimals(dec)
-        sb.setValue(default)
-        sb.setStyleSheet(_SPIN_STYLE)
+        sb.setRange(lo, hi); sb.setSingleStep(step); sb.setDecimals(dec)
+        sb.setValue(default); sb.setStyleSheet(_SPIN_STYLE)
         if to_rad is not None:
-            sb.valueChanged.connect(
-                lambda val, f=field, fac=to_rad: _safe_cmd(("GAIN_VP", f, val * fac)))
+            sb.valueChanged.connect(lambda val, f=field, fac=to_rad: _safe_cmd(("GAIN_VP", f, val * fac)))
         else:
-            sb.valueChanged.connect(
-                lambda val, f=field: _safe_cmd(("GAIN_VP", f, val)))
-        hbox_gain.addWidget(sb)
+            sb.valueChanged.connect(lambda val, f=field: _safe_cmd(("GAIN_VP", f, val)))
+        _hb_vp.addWidget(sb)
         _vp_spinboxes[field] = (sb, to_rad)
+    _hb_vp.addStretch()
+    _gain_stack.addWidget(_page_vp)
 
-    hbox_gain.addStretch()
-    vbox.addWidget(gain_row)
-
-    # ── LQR cost-weight spinboxes ──────────────────────────────────────────────
+    # ── Page 1: LQR ─────────────────────────────────────────────────────────
     _lq = lqr_gains or {}
-    lqr_row = QtWidgets.QWidget()
-    lqr_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
-    hbox_lqr = QtWidgets.QHBoxLayout(lqr_row)
-    hbox_lqr.setContentsMargins(6, 3, 6, 3)
-    hbox_lqr.setSpacing(12)
-
-    lbl_lqr = QtWidgets.QLabel("LQR Weights:")
-    lbl_lqr.setStyleSheet(_SL)
-    hbox_lqr.addWidget(lbl_lqr)
+    _page_lqr = QtWidgets.QWidget()
+    _page_lqr.setStyleSheet("background:transparent")
+    _hb_lqr = QtWidgets.QHBoxLayout(_page_lqr)
+    _hb_lqr.setContentsMargins(0, 0, 0, 0)
+    _hb_lqr.setSpacing(12)
 
     _lqr_defs = [
-        ("Q_pitch",      "Q_pitch",      0.01, 50.0,  0.01, 3, _lq.get("Q_pitch", 1.0)),
+        ("Q_pitch",      "Q_pitch",      0.01,  50.0,  0.01, 3, _lq.get("Q_pitch", 1.0)),
         ("Q_pitch_rate", "Q_pitch_rate", 0.001, 10.0,  0.01, 4, _lq.get("Q_pitch_rate", 1.0)),
         ("R",            "R",            0.0,  100.0,  0.1,  4, _lq.get("R", 1e-5)),
     ]
     for disp, fld, lo, hi, step, dec, default in _lqr_defs:
-        lbl = QtWidgets.QLabel(disp)
-        lbl.setStyleSheet(_SPIN_LBL)
-        hbox_lqr.addWidget(lbl)
-
+        lbl = QtWidgets.QLabel(disp); lbl.setStyleSheet(_SPIN_LBL)
+        _hb_lqr.addWidget(lbl)
         sb = QtWidgets.QDoubleSpinBox()
-        sb.setRange(lo, hi)
-        sb.setSingleStep(step)
-        sb.setDecimals(dec)
-        sb.setValue(default)
-        sb.setStyleSheet(_SPIN_STYLE)
-        sb.valueChanged.connect(
-            lambda val, f=fld: _safe_cmd(("GAIN_LQR", f, val)))
-        hbox_lqr.addWidget(sb)
+        sb.setRange(lo, hi); sb.setSingleStep(step); sb.setDecimals(dec)
+        sb.setValue(default); sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(lambda val, f=fld: _safe_cmd(("GAIN_LQR", f, val)))
+        _hb_lqr.addWidget(sb)
         _lqr_spinboxes[fld] = (sb, None)
+    _hb_lqr.addStretch()
+    _gain_stack.addWidget(_page_lqr)
 
-    hbox_lqr.addStretch()
-    vbox.addWidget(lqr_row)
-
-    # ── YawPI gain spinboxes ──────────────────────────────────────────────────
+    # ── Page 2: YawPI ───────────────────────────────────────────────────────
     _yp = yaw_pi_gains or {}
-    yaw_row = QtWidgets.QWidget()
-    yaw_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
-    hbox_yaw = QtWidgets.QHBoxLayout(yaw_row)
-    hbox_yaw.setContentsMargins(6, 3, 6, 3)
-    hbox_yaw.setSpacing(12)
-
-    lbl_yaw_g = QtWidgets.QLabel("YawPI:")
-    lbl_yaw_g.setStyleSheet(_SL)
-    hbox_yaw.addWidget(lbl_yaw_g)
+    _page_yaw = QtWidgets.QWidget()
+    _page_yaw.setStyleSheet("background:transparent")
+    _hb_yaw = QtWidgets.QHBoxLayout(_page_yaw)
+    _hb_yaw.setContentsMargins(0, 0, 0, 0)
+    _hb_yaw.setSpacing(12)
 
     _yaw_defs = [
-        ("Kp",         "Kp",         0.0,  2.0,  0.01,  4, _yp.get("Kp", 0.3)),
-        ("Ki",         "Ki",         0.0,  5.0,  0.05,  4, _yp.get("Ki", 1.2)),
-        ("τ_max",      "torque_max", 0.05, 3.0,  0.05,  2, _yp.get("torque_max", 0.5)),
-        ("int_max",    "int_max",    0.05, 3.0,  0.05,  2, _yp.get("int_max", 0.5)),
-        ("ω_max",      "omega_cmd_max", 0.1, 6.28, 0.05, 2, _yp.get("omega_cmd_max", 1.05)),
+        ("Kp",      "Kp",           0.0,  2.0,  0.01, 4, _yp.get("Kp", 0.3)),
+        ("Ki",      "Ki",           0.0,  5.0,  0.05, 4, _yp.get("Ki", 1.2)),
+        ("τ_max",   "torque_max",   0.05, 3.0,  0.05, 2, _yp.get("torque_max", 0.5)),
+        ("int_max", "int_max",      0.05, 3.0,  0.05, 2, _yp.get("int_max", 0.5)),
+        ("ω_max",   "omega_cmd_max", 0.1, 6.28, 0.05, 2, _yp.get("omega_cmd_max", 1.05)),
     ]
     for disp, fld, lo, hi, step, dec, default in _yaw_defs:
-        lbl = QtWidgets.QLabel(disp)
-        lbl.setStyleSheet(_SPIN_LBL)
-        hbox_yaw.addWidget(lbl)
-
+        lbl = QtWidgets.QLabel(disp); lbl.setStyleSheet(_SPIN_LBL)
+        _hb_yaw.addWidget(lbl)
         sb = QtWidgets.QDoubleSpinBox()
-        sb.setRange(lo, hi)
-        sb.setSingleStep(step)
-        sb.setDecimals(dec)
-        sb.setValue(default)
-        sb.setStyleSheet(_SPIN_STYLE)
-        sb.valueChanged.connect(
-            lambda val, f=fld: _safe_cmd(("GAIN_YAW", f, val)))
-        hbox_yaw.addWidget(sb)
+        sb.setRange(lo, hi); sb.setSingleStep(step); sb.setDecimals(dec)
+        sb.setValue(default); sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(lambda val, f=fld: _safe_cmd(("GAIN_YAW", f, val)))
+        _hb_yaw.addWidget(sb)
         _yaw_spinboxes[fld] = (sb, None)
+    _hb_yaw.addStretch()
+    _gain_stack.addWidget(_page_yaw)
 
-    hbox_yaw.addStretch()
-    vbox.addWidget(yaw_row)
-
-    # ── Suspension + Roll gain spinboxes ──────────────────────────────────────
+    # ── Page 3: Suspension ──────────────────────────────────────────────────
     _sg = suspension_gains or {}
-    susp_row = QtWidgets.QWidget()
-    susp_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
-    hbox_susp = QtWidgets.QHBoxLayout(susp_row)
-    hbox_susp.setContentsMargins(6, 3, 6, 3)
-    hbox_susp.setSpacing(12)
-
-    lbl_susp_g = QtWidgets.QLabel("Suspension:")
-    lbl_susp_g.setStyleSheet(_SL)
-    hbox_susp.addWidget(lbl_susp_g)
+    _page_susp = QtWidgets.QWidget()
+    _page_susp.setStyleSheet("background:transparent")
+    _hb_susp = QtWidgets.QHBoxLayout(_page_susp)
+    _hb_susp.setContentsMargins(0, 0, 0, 0)
+    _hb_susp.setSpacing(12)
 
     _susp_defs = [
-        ("K_s",    "K_s",    0.0,  100.0,  0.5,  2, _sg.get("K_s", 20.0)),
-        ("B_s",    "B_s",    0.0,  5.0,    0.05, 3, _sg.get("B_s", 0.65)),
-        ("K_roll", "K_roll", 0.0,  500.0,  1.0,  1, _sg.get("K_roll", 120.0)),
-        ("D_roll", "D_roll", 0.0,  5.0,    0.05, 2, _sg.get("D_roll", 0.15)),
+        ("K_s",    "K_s",    0.0,  100.0, 0.5,  2, _sg.get("K_s", 20.0)),
+        ("B_s",    "B_s",    0.0,    5.0, 0.05, 3, _sg.get("B_s", 0.65)),
+        ("K_roll", "K_roll", 0.0,  500.0, 1.0,  1, _sg.get("K_roll", 120.0)),
+        ("D_roll", "D_roll", 0.0,    5.0, 0.05, 2, _sg.get("D_roll", 0.15)),
     ]
     for disp, fld, lo, hi, step, dec, default in _susp_defs:
-        lbl = QtWidgets.QLabel(disp)
-        lbl.setStyleSheet(_SPIN_LBL)
-        hbox_susp.addWidget(lbl)
-
+        lbl = QtWidgets.QLabel(disp); lbl.setStyleSheet(_SPIN_LBL)
+        _hb_susp.addWidget(lbl)
         sb = QtWidgets.QDoubleSpinBox()
-        sb.setRange(lo, hi)
-        sb.setSingleStep(step)
-        sb.setDecimals(dec)
-        sb.setValue(default)
-        sb.setStyleSheet(_SPIN_STYLE)
-        sb.valueChanged.connect(
-            lambda val, f=fld: _safe_cmd(("GAIN_SUSP", f, val)))
-        hbox_susp.addWidget(sb)
+        sb.setRange(lo, hi); sb.setSingleStep(step); sb.setDecimals(dec)
+        sb.setValue(default); sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(lambda val, f=fld: _safe_cmd(("GAIN_SUSP", f, val)))
+        _hb_susp.addWidget(sb)
         _susp_spinboxes[fld] = (sb, None)
+    _hb_susp.addStretch()
+    _gain_stack.addWidget(_page_susp)
 
-    hbox_susp.addStretch()
-    vbox.addWidget(susp_row)
-
-    # ── Hip Limits (Q_EXT / Q_RET) — live via ROBOT_GEOM command ───────────
-    _hip_lim_spinboxes = {}
+    # ── Page 4: Hip Limits ──────────────────────────────────────────────────
     _hl = hip_limits or {}
-
-    hip_lim_row = QtWidgets.QWidget()
-    hip_lim_row.setStyleSheet("background:#1a1a2e; border-radius:4px;")
-    hbox_hl = QtWidgets.QHBoxLayout(hip_lim_row)
-    hbox_hl.setContentsMargins(6, 3, 6, 3)
-    hbox_hl.setSpacing(12)
-
-    lbl_hl_g = QtWidgets.QLabel("Hip Limits (°):")
-    lbl_hl_g.setStyleSheet(_SL)
-    hbox_hl.addWidget(lbl_hl_g)
+    _page_hl = QtWidgets.QWidget()
+    _page_hl.setStyleSheet("background:transparent")
+    _hb_hl = QtWidgets.QHBoxLayout(_page_hl)
+    _hb_hl.setContentsMargins(0, 0, 0, 0)
+    _hb_hl.setSpacing(12)
 
     _DEG2RAD = math.pi / 180.0
     _hip_lim_defs = [
-        ("Q_ext", "Q_EXT", -120.0, -30.0, 0.5, 2,
-         math.degrees(_hl.get("Q_EXT", -1.43161))),
-        ("Q_ret", "Q_RET", -120.0, -30.0, 0.5, 2,
-         math.degrees(_hl.get("Q_RET", -0.78705))),
+        ("Q_ext", "Q_EXT", -120.0, -30.0, 0.5, 2, math.degrees(_hl.get("Q_EXT", -1.43161))),
+        ("Q_ret", "Q_RET", -120.0, -30.0, 0.5, 2, math.degrees(_hl.get("Q_RET", -0.78705))),
     ]
     for disp, fld, lo, hi, step, dec, default in _hip_lim_defs:
-        lbl = QtWidgets.QLabel(disp)
-        lbl.setStyleSheet(_SPIN_LBL)
-        hbox_hl.addWidget(lbl)
-
+        lbl = QtWidgets.QLabel(disp); lbl.setStyleSheet(_SPIN_LBL)
+        _hb_hl.addWidget(lbl)
         sb = QtWidgets.QDoubleSpinBox()
-        sb.setRange(lo, hi)
-        sb.setSingleStep(step)
-        sb.setDecimals(dec)
-        sb.setValue(default)
-        sb.setStyleSheet(_SPIN_STYLE)
-        sb.valueChanged.connect(
-            lambda val, f=fld: _safe_cmd(("ROBOT_GEOM", f, math.radians(val))))
-        hbox_hl.addWidget(sb)
+        sb.setRange(lo, hi); sb.setSingleStep(step); sb.setDecimals(dec)
+        sb.setValue(default); sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(lambda val, f=fld: _safe_cmd(("ROBOT_GEOM", f, math.radians(val))))
+        _hb_hl.addWidget(sb)
         _hip_lim_spinboxes[fld] = sb
+    _hb_hl.addStretch()
+    _gain_stack.addWidget(_page_hl)
 
-    hbox_hl.addStretch()
-    vbox.addWidget(hip_lim_row)
+    vbox.addWidget(gains_outer)
 
     # ── Save Gains → params.py button ─────────────────────────────────────────
     def _save_gains_to_params():
@@ -1840,6 +1838,24 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ln_itotal = p_cur.plot(
         pen=pg.mkPen('#e0e0e0', width=W, style=_DASH), name="total")
 
+    # ── Row 5 (full-width): Wheel Jump Height ─────────────────────────────────
+    p_wh = glw.addPlot(row=5, col=0, colspan=2)
+    p_wh.setTitle('<span style="color:#e0e0e0;font-size:9pt;font-weight:600">Wheel Jump Height</span>')
+    p_wh.setLabel("left", '<span style="color:#c8c8c8;font-size:9pt">mm</span>')
+    p_wh.showGrid(x=True, y=True, alpha=0.20)
+    for _ax_name in ("left", "bottom"):
+        _ax = p_wh.getAxis(_ax_name)
+        _ax.setTextPen(TICK_PEN)
+        _ax.setPen(pg.mkPen('#555'))
+        _ax.setStyle(tickFont=TICK_FONT)
+    p_wh.setXRange(-window_s, 0, padding=0.02)
+    p_wh.disableAutoRange(axis='y')
+    p_wh.addLine(y=0, pen=pg.mkPen("#666688", width=0.7, style=_DASH))
+    _leg(p_wh)
+    ln_wh_L   = p_wh.plot(pen=pg.mkPen('#60d0ff', width=W),              name="L")
+    ln_wh_R   = p_wh.plot(pen=pg.mkPen('#ff6060', width=W, style=_DASH), name="R")
+    ln_wh_avg = p_wh.plot(pen=pg.mkPen('#e0e0e0', width=1.5),            name="avg")
+
     # ── Mouse hover Y label ───────────────────────────────────────────────────
     named_plots = [
         ("Pitch",         p_pitch), ("Pitch Rate",     p_prate),
@@ -1847,6 +1863,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ("Hip Joints",    p_hip),   ("Roll",           p_roll),
         ("Hip Torque",    p_htau),  ("Wheel Torque",   p_tau),
         ("Battery",       p_batt),  ("Motor Currents", p_cur),
+        ("Wheel Height",  p_wh),
     ]
 
     def _on_mouse(evt):
@@ -1861,7 +1878,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _proxy = pg.SignalProxy(
         glw.scene().sigMouseMoved, rateLimit=60, slot=_on_mouse)
 
-    # ── Ring buffers — 27 channels ────────────────────────────────────────────
+    # ── Ring buffers — 29 channels ────────────────────────────────────────────
     MAXLEN = int(window_s * TELEMETRY_HZ) + 200
     (t_buf,
      pitch_buf, pitch_ref_buf, pitch_rate_buf,
@@ -1874,7 +1891,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
      I_whl_L_buf, I_whl_R_buf, I_hip_L_buf, I_hip_R_buf, I_total_buf,
      tau_hip_L_buf, tau_hip_R_buf,
      tau_spring_L_buf, tau_spring_R_buf,
-     ) = (deque(maxlen=MAXLEN) for _ in range(27))
+     wheel_h_L_buf, wheel_h_R_buf,
+     ) = (deque(maxlen=MAXLEN) for _ in range(29))
 
     all_bufs = [
         t_buf, pitch_buf, pitch_ref_buf, pitch_rate_buf,
@@ -1885,6 +1903,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         I_whl_L_buf, I_whl_R_buf, I_hip_L_buf, I_hip_R_buf, I_total_buf,
         tau_hip_L_buf, tau_hip_R_buf,
         tau_spring_L_buf, tau_spring_R_buf,
+        wheel_h_L_buf, wheel_h_R_buf,
     ]
 
     all_lines = [
@@ -1895,6 +1914,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_iwhl_L, ln_iwhl_R, ln_ihip_L, ln_ihip_R, ln_itotal,
         ln_htau_L, ln_htau_R,
         ln_htau_spr_L, ln_htau_spr_R,
+        ln_wh_L, ln_wh_R, ln_wh_avg,
     ]
 
     i_bat_max      = [0.0]
@@ -1952,7 +1972,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
              v_batt, batt_temp, soc,
              I_whl_L, I_whl_R, I_hip_L, I_hip_R, I_total,
              tau_hip_L, tau_hip_R,
-             tau_spring_L, tau_spring_R) = item
+             tau_spring_L, tau_spring_R,
+             wh_L_mm, wh_R_mm) = item
 
             t_buf.append(t)
             pitch_buf.append(pitch);          pitch_ref_buf.append(pitch_ref)
@@ -1971,6 +1992,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             i_bat_max[0] = max(i_bat_max[0], I_total)
             tau_hip_L_buf.append(tau_hip_L);  tau_hip_R_buf.append(tau_hip_R)
             tau_spring_L_buf.append(tau_spring_L);  tau_spring_R_buf.append(tau_spring_R)
+            wheel_h_L_buf.append(wh_L_mm);          wheel_h_R_buf.append(wh_R_mm)
 
         if len(t_buf) < 2:
             return
@@ -2020,13 +2042,23 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_htau_spr_L.setData(xw, _a(tau_spring_L_buf))
         ln_htau_spr_R.setData(xw, _a(tau_spring_R_buf))
 
+        wh_L_arr = _a(wheel_h_L_buf)
+        wh_R_arr = _a(wheel_h_R_buf)
+        wh_avg   = (wh_L_arr + wh_R_arr) * 0.5
+        ln_wh_L.setData(xw, wh_L_arr)
+        ln_wh_R.setData(xw, wh_R_arr)
+        ln_wh_avg.setData(xw, wh_avg)
+        _wh_hi = max(float(wh_L_arr.max()) if len(wh_L_arr) else 0.0,
+                     float(wh_R_arr.max()) if len(wh_R_arr) else 0.0, 10.0)
+        p_wh.setYRange(0.0, _wh_hi * 1.1, padding=0)
+
         _sync_batt()
 
         # Auto-fit Y to data, but enforce minimum span of 2 units.
         # Compute data range from all curves in each plot, then expand
         # symmetrically around the midpoint if the span is too small.
         _MIN_Y_SPAN = 2.0
-        _fixed_range_plots = {id(p_tau), id(p_htau), id(p_hip), id(p_yaw)}
+        _fixed_range_plots = {id(p_tau), id(p_htau), id(p_hip), id(p_yaw), id(p_wh)}
         for _, pl in named_plots:
             if id(pl) in _fixed_range_plots:
                 continue
@@ -2093,7 +2125,8 @@ def _ctrl_defaults_from_cfg(cfg) -> dict:
         # Sandbox: everything enabled
         return {"LQR": True, "VelPI": True, "YawPI": True,
                 "Suspension": True, "RollLev": True, "HipFF": True,
-                "GravFF": True, "CoMFF": True, "TurnFF": True}
+                "GravFF": True, "CoMFF": True, "TurnFF": True,
+                "KneeSpr": False}
     ac = cfg.active_controllers
     imp = cfg.hip_mode in ("impedance", "jump")
     return {
@@ -2106,6 +2139,7 @@ def _ctrl_defaults_from_cfg(cfg) -> dict:
         "GravFF":     True,
         "CoMFF":      True,
         "TurnFF":     True,
+        "KneeSpr":    cfg.hip_mode == "jump",
     }
 
 
@@ -2157,6 +2191,7 @@ def sandbox(rng_seed: int = 0):
     _en_ff2        = [True]
     _en_ff3        = [True]
     _en_ff4        = [True]
+    _en_knee_spr   = [False]
     _hip_mode      = ["impedance"]
 
     # Command targets (v, omega, hip %)
@@ -2212,11 +2247,12 @@ def sandbox(rng_seed: int = 0):
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
+    _ctrl_init_sb = _ctrl_defaults_from_cfg(None)
     plot_proc = mp.Process(
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, "Sandbox — free drive",
               wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
-              None, _yaw_init, _susp_init, _hl_init),
+              _ctrl_init_sb, _yaw_init, _susp_init, _hl_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -2303,6 +2339,7 @@ def sandbox(rng_seed: int = 0):
                         elif key == "GravFF":     _en_ff2[0]        = val
                         elif key == "CoMFF":      _en_ff3[0]        = val
                         elif key == "TurnFF":     _en_ff4[0]        = val
+                        elif key == "KneeSpr":    _en_knee_spr[0]   = val
                     elif cmd[0] == "HIP_MODE":
                         _hip_mode[0] = cmd[1]
                     elif cmd[0] == "GAIN_VP":
@@ -2358,6 +2395,7 @@ def sandbox(rng_seed: int = 0):
                         use_ff2=_en_ff2[0],
                         use_ff3=_en_ff3[0],
                         use_ff4=_en_ff4[0],
+                        use_knee_spring=_en_knee_spr[0],
                         jump_active=_jump_active[0])
 
                     # Auto-clear jump flag when jump controller returns to BALANCE
@@ -2377,6 +2415,8 @@ def sandbox(rng_seed: int = 0):
             # Camera follow
             viewer.cam.lookat[0] = data.xpos[ctrl.box_bid][0]
             viewer.cam.lookat[1] = data.xpos[ctrl.box_bid][1]
+            # Reset dynamic geoms (keep static world-axes)
+            viewer.user_scn.ngeom = _N_STATIC_GEOMS
             # Always-visible knee spring spheres (grey idle, purple when active)
             _add_knee_spring_sphere(viewer, data, ctrl.tibia_bid_L,
                 active=abs(_last_tick.get('tau_spring_L', 0.0)) > 1e-6 if _last_tick else False)
@@ -2421,6 +2461,8 @@ def sandbox(rng_seed: int = 0):
                     tk['tau_hip_R'],
                     tk['tau_spring_L'],
                     tk['tau_spring_R'],
+                    max(tk['wheel_z_L'] - params.robot.wheel_r, 0.0) * 1000.0,
+                    max(tk['wheel_z_R'] - params.robot.wheel_r, 0.0) * 1000.0,
                 ))
                 last_push = wall_now
 
@@ -2545,6 +2587,7 @@ def run_unified(initial_scenario: str = "sandbox",
     _en_ff2        = [_ctrl_init.get("GravFF", True)]
     _en_ff3        = [_ctrl_init.get("CoMFF", True)]
     _en_ff4        = [_ctrl_init.get("TurnFF", True)]
+    _en_knee_spr   = [_ctrl_init.get("KneeSpr", False)]
     _hip_mode      = ["position_pd" if not _ctrl_init.get("Suspension", True) else "impedance"]
     _v_desired     = [0.0]
     _omega_desired = [0.0]
@@ -2752,6 +2795,7 @@ def run_unified(initial_scenario: str = "sandbox",
                                 elif key == "HipFF":      _en_ff1[0]        = val
                                 elif key == "GravFF":     _en_ff2[0]        = val
                                 elif key == "CoMFF":      _en_ff3[0]        = val
+                                elif key == "KneeSpr":    _en_knee_spr[0]   = val
                             elif cmd[0] == "HIP_MODE":
                                 _hip_mode[0] = cmd[1]
                             elif cmd[0] == "GAIN_VP":
@@ -2875,6 +2919,7 @@ def run_unified(initial_scenario: str = "sandbox",
                                 use_ff2=_en_ff2[0],
                                 use_ff3=_en_ff3[0],
                         use_ff4=_en_ff4[0],
+                                use_knee_spring=_en_knee_spr[0],
                                 jump_active=_jump_active[0])
 
                             # Auto-clear jump flag when jump controller returns to BALANCE
@@ -2899,8 +2944,15 @@ def run_unified(initial_scenario: str = "sandbox",
                 # Camera follow
                 viewer.cam.lookat[0] = data.xpos[ctrl.box_bid][0]
                 viewer.cam.lookat[1] = data.xpos[ctrl.box_bid][1]
+                # Reset dynamic geoms (keep static world-axes)
+                viewer.user_scn.ngeom = _N_STATIC_GEOMS
                 if _vis_bid2 is not None:
                     _add_force_arrow(viewer, data, _vis_bid2, _vis_fz2)
+                # Always-visible knee spring spheres (grey idle, purple when active)
+                _add_knee_spring_sphere(viewer, data, ctrl.tibia_bid_L,
+                    active=abs(_last_tick.get('tau_spring_L', 0.0)) > 1e-6 if _last_tick else False)
+                _add_knee_spring_sphere(viewer, data, ctrl.tibia_bid_R,
+                    active=abs(_last_tick.get('tau_spring_R', 0.0)) > 1e-6 if _last_tick else False)
                 viewer.sync()
 
                 # ── Push 27-value telemetry tuple at ~60 Hz ──
@@ -2950,6 +3002,8 @@ def run_unified(initial_scenario: str = "sandbox",
                         tk['tau_hip_R'],
                         tk['tau_spring_L'],
                         tk['tau_spring_R'],
+                        max(tk['wheel_z_L'] - params.robot.wheel_r, 0.0) * 1000.0,
+                        max(tk['wheel_z_R'] - params.robot.wheel_r, 0.0) * 1000.0,
                     ))
                     last_push = wall_now
 

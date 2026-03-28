@@ -79,12 +79,19 @@ class KneeSpringParams:
     storing energy during CROUCH and releasing it during EXTEND to boost jump height.
 
     Real spring: steel music wire torsion spring (e.g. McMaster 9271K / Lee Spring).
-    Spec: ~20 mm OD, 1.5 mm wire dia, 4 active coils, spring steel (ASTM A228).
-    Max deflection ~20° (~0.35 rad) at knee.  Mass per spring ~25 g.
+    Spec: ~20 mm OD, 1.8 mm wire dia, 4 active coils, spring steel (ASTM A228).
+    Max deflection ~17° (~0.29 rad) at knee.  Mass per spring ~40 g.
+
+    Engagement moved between Q_NOM and Q_EXT (offset=-0.10) so spring stores energy
+    over a larger deflection range during crouch→extend.  Peak spring torque at Q_RET
+    kept under 5.5 N·m (AK45 impedance limit 5.0 + margin for momentum).
+    Deflection Q_engage → Q_RET = 0.449 rad → K = 5.5/0.449 ≈ 12.0 N·m/rad.
+    Energy/spring = 1.21 J (vs 0.74 J at K=12/offset=+0.06).  Standing torque at
+    Q_NOM ≈ 1.2 N·m — easily handled by suspension K_s=20.
     """
     K_spring: float = 12.0            # [N·m/rad] torsional stiffness
-    engage_offset: float = 0.06       # [rad] offset from Q_NOM toward Q_RET (positive)
-    B_spring: float = 0.12            # [N·m·s/rad] damping to avoid oscillation
+    engage_offset: float = -0.10      # [rad] offset from Q_NOM toward Q_EXT (negative)
+    B_spring: float = 0.002           # [N·m·s/rad] physical steel damping (η≈0.002, K=12, ωn≈20 rad/s)
     m_spring: float = 0.025           # [kg] mass of one spring (×2 legs → 50 g total)
 
     # Physical spring properties (for mass/inertia in MJCF)
@@ -92,7 +99,7 @@ class KneeSpringParams:
     wire_dia_m: float = 0.0015        # [m] wire diameter
     body_length_m: float = 0.012      # [m] coil stack height (4 coils × ~3 mm pitch)
     material: str = "spring_steel"    # ASTM A228 music wire
-    max_deflection_rad: float = 0.35  # [rad] ~20° max safe torsional deflection
+    max_deflection_rad: float = 0.45  # [rad] ~26° max safe torsional deflection
 
     @property
     def max_torque(self) -> float:
@@ -114,7 +121,7 @@ class KneeSpringParams:
 @dataclass(frozen=True)
 class JumpGains:
     """Jump state-machine parameters (Phase 1 — constant gains)."""
-    crouch_time: float = 0.10          # [s] PD trajectory duration to Q_RET (optimizer confirmed 0.10 optimal)
+    crouch_time: float = 0.20          # [s] PD trajectory duration to Q_RET (increased for spring compression)
     max_torque: float = 7.0           # [N·m] peak hip torque during extension
     omega_max: float = 18.85          # [rad/s] no-load speed (AK45-10 KV75@24V, 10:1)
     ramp_up_s: float = 0.010          # [s] torque ramp-up to avoid shock

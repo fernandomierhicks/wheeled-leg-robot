@@ -402,6 +402,7 @@ class SimController:
              use_ff2: bool = True,
              use_ff3: bool = True,
              use_ff4: bool = True,
+             use_knee_spring: bool = False,
              jump_active: bool = False) -> dict:
         """Execute one control tick.  Writes actuator commands to ``data.ctrl``.
 
@@ -591,14 +592,18 @@ class SimController:
                     dq_target=dq_hip_target)
 
         # ── Knee spring (conditional torsional spring) ─────────────────────
-        spring = params.gains.knee_spring
-        q_engage = robot.Q_NOM + spring.engage_offset
-        tau_spring_L = knee_spring_torque(
-            float(data.qpos[self.s_hip_L]), float(data.qvel[self.d_hip_L]),
-            q_engage, spring)
-        tau_spring_R = knee_spring_torque(
-            float(data.qpos[self.s_hip_R]), float(data.qvel[self.d_hip_R]),
-            q_engage, spring)
+        if use_knee_spring:
+            spring = params.gains.knee_spring
+            q_engage = robot.Q_NOM + spring.engage_offset
+            tau_spring_L = knee_spring_torque(
+                float(data.qpos[self.s_hip_L]), float(data.qvel[self.d_hip_L]),
+                q_engage, spring)
+            tau_spring_R = knee_spring_torque(
+                float(data.qpos[self.s_hip_R]), float(data.qvel[self.d_hip_R]),
+                q_engage, spring)
+        else:
+            tau_spring_L = 0.0
+            tau_spring_R = 0.0
         data.qfrc_applied[self.d_hip_L] = tau_spring_L
         data.qfrc_applied[self.d_hip_R] = tau_spring_R
 
@@ -667,6 +672,8 @@ class SimController:
             yaw_rate=yaw_rate,
             omega_tgt=omega_target,
             pos_x=float(data.qpos[self.s_root]),
+            wheel_z_L=float(data.xpos[self.wheel_bid_L][2]),
+            wheel_z_R=float(data.xpos[self.wheel_bid_R][2]),
             fell=fell,
             # ── Diagnostic: delay / predictor intermediates ─────────────
             pitch_noisy=pitch,

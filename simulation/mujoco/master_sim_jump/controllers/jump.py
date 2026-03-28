@@ -5,9 +5,10 @@ Only the EXTEND phase overrides hip torque; other phases use impedance or positi
 All balance controllers (LQR, VelocityPI, YawPI) run unchanged throughout.
 
 Hip mode per phase:
-  BALANCE / CROUCH / LANDING / SETTLED → "impedance"  (soft suspension + roll leveling)
-  EXTEND                               → "torque_override" (explosive extension)
-  FLYING                               → "impedance"  (retract to Q_NOM — tuck + cushion landing)
+  BALANCE / LANDING / SETTLED → "impedance"  (soft suspension + roll leveling)
+  CROUCH                      → "position"   (stiff PD servo to compress knee spring)
+  EXTEND                      → "torque_override" (explosive extension)
+  FLYING                      → "impedance"  (retract to Q_NOM — tuck + cushion landing)
 """
 import math
 from dataclasses import dataclass
@@ -146,7 +147,7 @@ class JumpController:
             dq_target = (robot.Q_RET - self._q_crouch_start) / gains.crouch_time
             return ModeOutput(
                 mode=RobotMode.CROUCH,
-                hip_mode="impedance",
+                hip_mode="position",
                 hip_torque_override=None,
                 q_hip_target=q_target,
                 dq_hip_target=dq_target,

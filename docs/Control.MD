@@ -840,3 +840,51 @@ Gains written to `latency_sensitivity/sim_config.py`.
 | Yaw PI | (1+8)-ES on S6 | Kp_yaw, Ki_yaw | ✅ Kp=2.272, Ki=1.125 | ✅ Kp=2.192, Ki=0.427 |
 | Hip Impedance + Roll (S8) | (1+8)-ES on S8 | K_s, B_s, K_ROLL, D_ROLL | ✅ K_s=16.0, B_s=0.799, K_ROLL=4.0, D_ROLL=1.0 | ✅ K_s=2.040, B_s=4.179, K_ROLL=3.912, D_ROLL=0.916 |
 | Jump recovery | — | — | Not started | — |
+
+---
+
+## Knee Spring Analysis — Why It Does Not Help Jump Height
+
+**Date:** 2026-03-27
+**Conclusion:** Knee spring disabled (`use_knee_spring=False` default). Logic retained in code for future reference.
+
+### What was tried
+
+A torsional spring at the knee joint (`KneeSpringParams`, K=12 N·m/rad) was simulated to store energy during CROUCH and release it during EXTEND, aiming to increase jump height above the motor-only baseline (~283 mm).
+
+### Why it fails — motor speed limit interaction
+
+The AK45-10 hip motor's torque is speed-limited:
+```
+speed_limit = 1 − |ω_hip| / omega_max        (omega_max = 18.85 rad/s)
+torque = max_torque × speed_limit
+```
+
+Without the spring, the motor runs at near-full torque throughout the 40° extension stroke and the hip arrives at Q_EXT at **17.8 rad/s** — just under `omega_max`. The motor is nearly optimal on its own.
+
+The spring adds up to **10.8 N·m** (both legs) at the start of EXTEND on top of the motor's 14 N·m. This roughly doubles the initial torque, causing `omega_max` to be hit after only **25° of the 40° stroke**. Motor torque then drops to zero. The spring is also exhausted by that point (deflection → 0). For the remaining **15° of stroke**, neither motor nor spring provides meaningful force.
+
+Energy comparison (per-leg estimates, I_leg ≈ 0.031 kg·m²):
+
+| | KE at Q_EXT | Source |
+|---|---|---|
+| Without spring | 4.9 J/leg | Motor full torque, full stroke |
+| Spring energy stored | +1.2 J/leg | Released in first 25° |
+| Motor work lost (last 15°) | −1.8 J/leg | Motor at zero after omega_max hit |
+| **Net with spring** | **~4.3 J/leg** | Slightly worse |
+
+### B_spring (damping) was also wrong
+
+The original `B_spring = 0.12 N·m·s/rad` was artificial numerical stabilisation, not physical. Real music wire (ASTM A228) has loss factor η ≈ 0.002:
+```
+B_real = η × K / ω_n = 0.002 × 12 / 20 ≈ 0.002 N·m·s/rad
+```
+This was corrected. Even with realistic damping the spring still slightly reduces jump height due to the speed-limit interaction above.
+
+### When a spring could help
+
+A knee spring would benefit jump height only if:
+1. **Motor already hits `omega_max` well before Q_EXT without the spring** — so the spring fills a gap the motor cannot. This would require a lower `omega_max` (higher gear ratio) or longer stroke.
+2. **Latch-and-release (catapult)**: spring pre-loaded slowly at motor stall torque, released by a mechanical latch. Decouples storage speed from release speed entirely.
+3. **Series Elastic Actuator**: spring in series with the hip motor shaft; motor pre-winds spring at low speed, spring releases at whatever rate the mechanism demands.
+4. **Lower K_spring (~6 N·m/rad)**: halving stiffness halves the initial over-torque, allowing the motor to stay in its efficient range longer. Small net gain (~1.2 J) is possible but not compelling.

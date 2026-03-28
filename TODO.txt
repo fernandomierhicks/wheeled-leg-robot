@@ -23,8 +23,8 @@ Land (somehow...)
 
 -AI usage 
 
-fernandomierhicks	58%	    Sunday 5PM
-fernandomierhicks2	67%	    Friday 4PM
+fernandomierhicks	65%	    Sunday 3PM
+fernandomierhicks2	0%	    Friday 4PM
 fernandomierhicks1	100%	Wednesday 12pm
 
 One long OPUS task, 7minutes consumes 25% 5-hour limit and 3% weekly limit. 
