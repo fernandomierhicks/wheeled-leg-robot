@@ -360,11 +360,12 @@ def _render_sandbox_obstacles(obstacles: list) -> str:
         x, y = _get(o, "x"), _get(o, "y")
         if s == "box":
             h = _get(o, "h")
+            _rgba = _get(o, "rgba") or f"{_obstacle_rgba(h)} 1.0"
             parts.append(
                 f'<geom name="sbox_{i}" type="box" '
                 f'pos="{x:.3f} {y:.3f} {h/2:.5f}" '
                 f'size="{_get(o, "rx"):.4f} {_get(o, "ry"):.4f} {h/2:.5f}" '
-                f'rgba="{_obstacle_rgba(h)} 1.0" {_OBS_ATTR}/>')
+                f'rgba="{_rgba}" {_OBS_ATTR}/>')
         elif s == "cyl":
             h = _get(o, "h")
             parts.append(

@@ -1079,6 +1079,10 @@ SANDBOX_OBSTACLES = [
     dict(shape="cyl", x= 4.5, y= 3.0, r=0.10,           h=0.05),
     dict(shape="box", x= 7.0, y=-1.5, rx=0.20, ry=0.25, h=0.07),
     dict(shape="box", x=-6.0, y= 2.0, rx=0.20, ry=0.20, h=0.06),
+    # Staircase — 3 steps, real-world dims (0.18 m rise, 0.28 m run, 1.0 m wide), purple
+    dict(shape="box", x= 8.14, y= 0.0, rx=0.14, ry=0.50, h=0.18, rgba="0.55 0.10 0.80 1.0"),
+    dict(shape="box", x= 8.42, y= 0.0, rx=0.14, ry=0.50, h=0.36, rgba="0.55 0.10 0.80 1.0"),
+    dict(shape="box", x= 8.70, y= 0.0, rx=0.14, ry=0.50, h=0.54, rgba="0.55 0.10 0.80 1.0"),
 ]
 
 # 6 movable prop bodies — scale-reference objects
