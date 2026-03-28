@@ -13,11 +13,10 @@
 static Adafruit_BNO08x sensor(PIN_IMU_RST);
 static sh2_SensorValue_t sensorValue;
 
-// Direct register read for INT pin (D2 = P104 on RA4M1).
-// Avoids ~3 µs digitalRead() overhead — matches characterization code.
-#define PORT1_PIDR  (*(volatile const uint16_t *)0x40040026)
+// INT pin check via digitalRead — safe on all register layouts.
+// The ~3 µs overhead is negligible vs. SPI transaction time.
 static inline bool imu_int_asserted() {
-    return (PORT1_PIDR & (1U << 4)) == 0;  // INT is active-low
+    return digitalRead(PIN_IMU_INT) == LOW;  // INT is active-low
 }
 
 // ── Quaternion → pitch/roll ─────────────────────────────────────────────────
@@ -107,11 +106,8 @@ void imu_poll(RobotState *state) {
         enable_reports();
     }
 
-    // Drain all queued events (GRV + Gyro each generate their own events).
-    // Without draining, the BNO086 buffer backs up and INT stays asserted,
-    // causing getSensorEvent() to read stale data on every tick.
-    // Cap iterations to avoid stalling the loop if sensor misbehaves.
-    for (int i = 0; i < 10; i++) {
+    // Drain queued events (GRV + Gyro = 2 events per cycle, cap at 4).
+    for (int i = 0; i < 4; i++) {
         if (!imu_int_asserted()) break;       // no more data waiting
         if (!sensor.getSensorEvent(&sensorValue)) break;   // SPI read failed
 

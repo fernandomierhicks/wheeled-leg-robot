@@ -11,6 +11,8 @@
 //
 // Timing: hard 500 Hz from hardware timer ISR.
 // If any tick overruns 2000 µs, the FAULT LED bar flashes but we continue.
+//
+// IMU_ONLY build: define IMU_ONLY to strip CAN + controllers for bench testing.
 
 #ifndef DEBUG_BUILD   // debug_main.cpp provides setup()/loop() in debug builds
 
@@ -18,13 +20,15 @@
 #include "FspTimer.h"
 #include "config.h"
 #include "robot_state.h"
-#include "controllers.h"
 #include "led_matrix.h"
 #include "imu.h"
-#include "wifi_fast.h"
 #include "telemetry.h"
+#ifndef IMU_ONLY
+#include "controllers.h"
+#include "wifi_fast.h"
 #include "commands.h"
 #include "odesc_can.h"
+#endif
 
 // ── 500 Hz hardware timer ───────────────────────────────────────────────────
 static volatile bool tick_flag = false;
@@ -54,10 +58,12 @@ static bool timer_init_500hz() {
 
 // ── Global state + controllers ──────────────────────────────────────────────
 static RobotState state = {};
+#ifndef IMU_ONLY
 static LQRController         lqr;
 static VelocityPI            vel_pi;
 static YawPI                 yaw_pi;
 static SuspensionController  suspension;
+#endif
 
 static uint32_t loop_overruns = 0;
 static uint32_t s_tick_start_us = 0;  // micros() at start of current tick
@@ -67,7 +73,9 @@ void setup() {
     Serial.begin(1000000);
     delay(500);
     Serial.println("=== Wheeled-Leg Robot ===");
-#if USE_WIFI
+#ifdef IMU_ONLY
+    Serial.println("[Main] IMU_ONLY mode — CAN + controllers disabled");
+#elif USE_WIFI
     Serial.println("[Main] Comms: WiFi UDP (slack-time)");
 #else
     Serial.println("[Main] Comms: USB-UART Serial");
@@ -75,8 +83,7 @@ void setup() {
 
     pinMode(PIN_STATUS_LED, OUTPUT);
 
-    // WiFi + UDP sockets (blocking connect, ~3-10s)
-#if USE_WIFI
+#if USE_WIFI && !defined(IMU_ONLY)
     wifi_fast_init();
 #endif
 
@@ -88,6 +95,7 @@ void setup() {
         while (1) { delay(1000); }
     }
 
+#ifndef IMU_ONLY
     // CAN bus + ODESC wheels
     if (!odesc_can_init()) {
         Serial.println("FATAL: CAN init failed");
@@ -100,6 +108,7 @@ void setup() {
     yaw_pi.init();
     suspension.init();
     Serial.println("[Ctrl] Controllers initialised");
+#endif
 
     // 500 Hz hardware timer (start last)
     if (!timer_init_500hz()) {
@@ -115,15 +124,16 @@ void setup() {
 
 // ── Main loop ───────────────────────────────────────────────────────────────
 void loop() {
-    // ── Idle spin: slack-time WiFi I/O (only when USE_WIFI=1) ──
+#if USE_WIFI && !defined(IMU_ONLY)
     if (!tick_flag) {
-#if USE_WIFI
         wifi_try_send(s_tick_start_us);
         wifi_try_receive(state, state.tick, s_tick_start_us);
         wifi_fast_ota_poll();
-#endif
         return;
     }
+#else
+    if (!tick_flag) return;
+#endif
     tick_flag = false;
 
     s_tick_start_us = micros();
@@ -135,6 +145,7 @@ void loop() {
     // ── IMU ──
     imu_poll(&state);
 
+#ifndef IMU_ONLY
     // ── CAN RX: parse encoder feedback + heartbeats ──
     odesc_can_poll(state);
 
@@ -153,39 +164,25 @@ void loop() {
             state.tau_hip_R = 0.0f;
             odesc_can_disable();
         } else {
-            // Convert wheel_vel from rad/s to m/s for velocity PI
             float v_measured = state.wheel_vel_avg * WHEEL_RADIUS;
-            float v_ref_rad  = state.v_cmd / WHEEL_RADIUS;  // back to rad/s for LQR
+            float v_ref_rad  = state.v_cmd / WHEEL_RADIUS;
 
-            // 1. Velocity PI → lean angle reference
             state.theta_ref = vel_pi.update(state.v_cmd, v_measured, dt);
-
-            // 2. LQR balance → symmetric wheel torque
             state.tau_sym = lqr.update(state.pitch, state.pitch_rate,
                                        state.wheel_vel_avg,
                                        state.theta_ref, v_ref_rad);
-
-            // 3. Yaw PI → differential torque
-            // NOTE: yaw_rate not yet available from IMU (BNO086 Game Rotation
-            // Vector doesn't provide yaw).  Using 0 until CAN gyro or
-            // wheel-differential yaw is implemented.
             float yaw_rate = 0.0f;
             state.tau_yaw = yaw_pi.update(state.omega_cmd, yaw_rate, dt);
-
-            // 4. Wheel torque split
             state.tau_wheel_L = constrain(state.tau_sym - state.tau_yaw,
                                           -WHEEL_TORQUE_MAX, WHEEL_TORQUE_MAX);
             state.tau_wheel_R = constrain(state.tau_sym + state.tau_yaw,
                                           -WHEEL_TORQUE_MAX, WHEEL_TORQUE_MAX);
-
-            // 5. Suspension (impedance + roll leveling)
             suspension.update(state.roll, state.roll_rate,
                               state.hip_q_L, state.hip_dq_L,
                               state.hip_q_R, state.hip_dq_R,
                               state.tau_hip_L, state.tau_hip_R);
         }
     } else {
-        // IDLE / FAULT / etc — zero all outputs
         state.tau_sym = 0.0f;
         state.tau_yaw = 0.0f;
         state.tau_wheel_L = 0.0f;
@@ -196,21 +193,21 @@ void loop() {
 
     // ── CAN TX: motor commands ──
     odesc_can_send_torque(state.tau_wheel_L, state.tau_wheel_R);
-    // TODO: can_send_hip(state.tau_hip_L, state.tau_hip_R);
+#endif // !IMU_ONLY
 
     state.tick++;
 
+    // ── Debug sine (1 Hz, for telemetry pipeline verification) ──
+    state.debug_sine = sinf(state.tick * (2.0f * 3.14159265f / LOOP_RATE_HZ));
+
     // ── Telemetry (50 Hz = every TELEMETRY_SEND_DIV ticks) ──
     if (state.tick % TELEMETRY_SEND_DIV == 0) {
-#if USE_WIFI
-        // Fill back-buffer for slack-time UDP send (no WiFi I/O here)
+#if USE_WIFI && !defined(IMU_ONLY)
         wifi_fast_fill_telemetry(state);
-        // Update profiling fields for heartbeat
         state.wifi_send_us = wifi_last_send_us();
         state.wifi_recv_us = wifi_last_recv_us();
         state.wifi_skips   = wifi_send_skips();
 #else
-        // USB-UART: send immediately via Serial (framed binary)
         telemetry_send(state);
 #endif
     }
@@ -227,7 +224,6 @@ void loop() {
     state.dt_us = micros() - s_tick_start_us;
     if (state.dt_us > LOOP_PERIOD_US) {
         loop_overruns++;
-        // Flash fault bar for ~6 LED updates (~1 second)
         if (state.overrun_flash < 12) {
             state.overrun_flash = 12;
         }
@@ -250,16 +246,10 @@ void loop() {
         Serial.print(loop_overruns);
         Serial.print("  pitch=");
         Serial.print(state.pitch * 57.2958f, 1);
+        Serial.print("  imu_ok=");
+        Serial.print(state.imu_ok ? "Y" : "N");
         Serial.print("  mode=");
         Serial.print((uint8_t)state.mode);
-        Serial.print("  tau_sym=");
-        Serial.print(state.tau_sym, 3);
-#if USE_WIFI
-        Serial.print("  wifi_tx=");
-        Serial.print(state.wifi_send_us);
-        Serial.print("us  wifi_skip=");
-        Serial.print(state.wifi_skips);
-#endif
         Serial.println();
         sum_dt = 0;
         max_dt = 0;

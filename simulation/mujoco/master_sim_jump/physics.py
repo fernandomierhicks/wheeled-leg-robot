@@ -99,6 +99,49 @@ def solve_ik(q_hip: float, p: dict) -> dict | None:
     )
 
 
+def auto_stroke_angles(robot) -> tuple[float, float] | None:
+    """Find valid hip stroke range for an arbitrary 4-bar geometry.
+
+    Sweeps q_hip from -0.05 to -2.5 rad and calls solve_ik() at each step.
+    Returns (q_ret, q_ext) — crouch and full-extension angles — or None if
+    the geometry is infeasible (too singular, too short a stroke, etc.).
+    """
+    import dataclasses
+    p = dataclasses.asdict(robot)
+
+    KNEE_LIMIT = math.pi / 3          # ±60° physical joint limit
+    N          = 500
+    q_sweep    = [(-0.05 - 2.45 * i / (N - 1)) for i in range(N)]
+
+    valid = []   # list of (q_hip, W_z)
+    for q in q_sweep:
+        r = solve_ik(q, p)
+        if r is None:
+            continue
+        if abs(r['q_knee']) > KNEE_LIMIT:
+            continue
+        valid.append((q, r['W_z']))
+
+    if len(valid) < 50:
+        return None   # not enough valid range
+
+    # Trim 5% at each end to stay away from singularities
+    margin = max(1, len(valid) // 20)
+    valid  = valid[margin:-margin]
+    if len(valid) < 20:
+        return None
+
+    # Q_RET = where wheel is highest (most retracted)
+    # Q_EXT = where wheel is lowest  (most extended)
+    q_ret = max(valid, key=lambda x: x[1])[0]
+    q_ext = min(valid, key=lambda x: x[1])[0]
+
+    if abs(q_ext - q_ret) < 0.30:    # need at least ~17° usable stroke
+        return None
+
+    return (q_ret, q_ext)
+
+
 # ---------------------------------------------------------------------------
 # Equilibrium pitch
 # ---------------------------------------------------------------------------

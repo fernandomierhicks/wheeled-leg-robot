@@ -632,6 +632,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     _pkt_count = [0]
     _last_stat = [0.0]
     _start_time = [None]  # first packet monotonic time
+    _last_mode = [0]
 
     # ── 60 Hz update ─────────────────────────────────────────────────────────
     _MIN_Y_SPAN = 2.0
@@ -676,6 +677,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             dt_buf.append(dt_us)
             sine_buf.append(debug_sine)
 
+            _last_mode[0] = mode
             _pkt_count[0] += 1
 
         if len(t_buf) < 2:
@@ -697,10 +699,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
                 lbl_conn.setText("Connection: LOST" if receiver.last_rx_time else "Connection: Waiting…")
                 lbl_conn.setStyleSheet(_SL + "color:#ff6060;")
 
-            # Mode from last packet
-            if len(t_buf) > 0:
-                # we need mode from raw data - store it
-                pass
+            lbl_mode.setText(f"Mode: {MODE_NAMES.get(_last_mode[0], str(_last_mode[0]))}")
 
             lbl_dt.setText(f"dt: {dt_buf[-1]:.0f} µs")
             lbl_rate.setText(f"Pkts: {_pkt_count[0]}")

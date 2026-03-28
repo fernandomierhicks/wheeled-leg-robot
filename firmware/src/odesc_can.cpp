@@ -3,10 +3,23 @@
 // Protocol reference: ODrive CAN protocol v0.5
 //   arb_id = (node_id << 5) | cmd_id
 //   All payloads little-endian.
+//
+// Build with -DNO_CAN to compile no-op stubs (bench testing without hardware).
 
 #include "odesc_can.h"
 #include "config.h"
 #include <Arduino.h>
+
+#ifdef NO_CAN
+// ── No-op stubs (no CAN hardware) ─────────────────────────────────────────
+bool odesc_can_init()                              { Serial.println("[ODESC] NO_CAN — skipped"); return true; }
+void odesc_can_poll(RobotState& state)             { state.wheel_vel_avg = 0.0f; state.wheel_ok = false; }
+void odesc_can_send_torque(float tau_L, float tau_R) { (void)tau_L; (void)tau_R; }
+void odesc_can_enable()                            {}
+void odesc_can_disable()                           {}
+void odesc_can_estop()                             {}
+
+#else
 #include <Arduino_CAN.h>
 
 // ── ODrive CAN command IDs (5-bit) ─────────────────────────────────────────
@@ -175,3 +188,5 @@ void odesc_can_estop() {
     can_send(arb_id(ODESC_NODE_R, CMD_ESTOP), empty, 0);
     Serial.println("[ODESC] ESTOP sent");
 }
+
+#endif // !NO_CAN
