@@ -133,3 +133,140 @@ Run the diagnostic to verify: `python -m master_sim.diag_delay`
 | `evaluate()` wrapper | `master_sim/scenarios/__init__.py` — calls `sim_loop.run` + `fitness_fn` |
 | Optimizer scripts | `master_sim/optimizer/` |
 | Visualizer / replay | `master_sim/viz/visualizer.py` → `run_unified()` |
+
+---
+
+## 4-Bar Geometry Optimizer (`master_sim_jump` only)
+
+Optimises 4-bar link lengths to maximise jump height. Separate from the gain
+optimizers above — it modifies **geometry**, not controller gains.
+
+**Working directory:** `simulation/mujoco/`
+
+### Quick start
+
+```bash
+# 4-hour run with progress GUI (recommended)
+python -m master_sim_jump.optimizer.optimize_geometry --hours 4
+
+# Overnight run
+python -m master_sim_jump.optimizer.optimize_geometry --hours 8 --patience 500
+
+# Dry run — 20 iterations, no output file written
+python -m master_sim_jump.optimizer.optimize_geometry --iters 20 --workers 4 --no-save
+```
+
+### Arguments
+
+| Flag | Default | Description |
+|---|---|---|
+| `--hours H` | 4.0 | Wall-clock time limit (ignored if `--iters` set) |
+| `--iters N` | — | Fixed generation count (overrides `--hours`) |
+| `--workers N` | auto | Parallel eval workers (defaults to min(8, cpu_count)) |
+| `--patience N` | 300 | Early-stop after N generations without improvement |
+| `--tol F` | 1e-4 | Relative improvement threshold for patience counter |
+| `--no-save` | off | Skip writing `optimizer/best_jump_params.py` |
+
+### What is optimised — 5D search space
+
+| Parameter | Baseline | Range | What it controls |
+|---|---|---|---|
+| `L_FEMUR` | 173.8 mm | 140–280 mm | Femur length A→C (hip to knee pivot) |
+| `L_TIBIA` | 129.4 mm | 100–220 mm | Tibia length C→W (knee pivot to wheel) |
+| `LC` | 150.8 mm | 120–240 mm | Coupler link F→E |
+| `L_STUB` | 35.1 mm | 25–50 mm | Tibia stub C→E (above knee to coupler) |
+| `CROUCH_TIME` | 0.20 s | 0.05–1.00 s | Duration of pre-jump crouch |
+
+`max_torque` is **not** optimised — it is fixed at 7.0 N·m (motor limit). More
+torque always increases jump energy so there is no benefit in searching over it.
+
+### Fitness function
+
+```
+fitness = 200 × fell  +  (1 − peak_body_z_m / 0.30)
+```
+
+- **Minimised** (lower = better).
+- `fell` — True if the robot crashes during or after the jump (+200 penalty, eliminates unstable geometries).
+- `peak_body_z_m` — peak body CoM height above ground during the jump. Goes negative (i.e. fitness < 0) when the robot exceeds 300 mm, which is already better than baseline. The dry-run target fitness of ~−1.0 corresponds to ~600 mm peak body Z.
+- Settle time is **not** included — pure jump height only.
+- `wheel_liftoff_s` (airtime) is **not** used — it is biased by leg length (longer legs have higher baseline body Z regardless of jump quality).
+
+### How stroke angles are handled — `auto_stroke_angles()`
+
+Each candidate geometry has a different valid hip angle range. Rather than using
+the hardcoded `Q_RET`/`Q_EXT` from `params.py` (which are only correct for the
+baseline geometry), every evaluation calls `physics.auto_stroke_angles()`:
+
+1. Sweeps `q_hip` from −0.05 to −2.5 rad in 500 steps, calling `solve_ik()` at each step.
+2. Rejects positions where the knee exceeds ±60° (physical joint limit).
+3. Trims the top/bottom 5% to avoid singularities.
+4. Returns `(Q_RET, Q_EXT)` — the angles where the wheel is highest (crouch) and lowest (full extension).
+5. Returns `None` (infeasible) if: fewer than 50 valid IK solutions, stroke < ~17°, or no closure found. Infeasible candidates score fitness = 500 and are eliminated.
+
+### LQR stability with new geometry
+
+The LQR gains are **not** re-tuned per candidate. The existing gains from
+`params.py` are used as-is. Geometries that destabilise the LQR controller will
+cause the robot to fall, scoring `fell=True` (+200 penalty) and being eliminated.
+This is a known limitation: a geometry that is genuinely better but requires
+slightly different LQR gains may be incorrectly rejected. If the optimizer
+converges to a geometry significantly different from baseline that keeps falling,
+re-run the LQR optimizer (`optimize_integrated`) on that geometry before judging it.
+
+### Output — `optimizer/best_jump_params.py`
+
+On completion, the best geometry is written to
+`master_sim_jump/optimizer/best_jump_params.py`. This file is **never**
+auto-applied to `params.py` — copy the values manually when satisfied.
+
+Example output file:
+
+```python
+# RobotGeometry fields:
+L_femur    = 0.220000   # [m]
+L_tibia    = 0.170000   # [m]
+Lc         = 0.188200   # [m]
+L_stub     = 0.025000   # [m]
+Q_RET      = -0.412345  # [rad]  auto-computed by auto_stroke_angles()
+Q_EXT      = -1.451234  # [rad]  auto-computed by auto_stroke_angles()
+
+# JumpGains fields:
+crouch_time = 0.132400  # [s]
+max_torque  = 7.0       # [N·m]  fixed at motor limit
+```
+
+To apply: copy these values into the corresponding fields in
+`master_sim_jump/params.py` (`RobotGeometry` and `JumpGains` dataclasses).
+A backup of `params.py` is created automatically at
+`logs/params_backups/params_<timestamp>.py` before any write.
+
+### Progress GUI
+
+A `ProgressUI` window opens automatically showing:
+- Progress bar, elapsed/remaining time, eval count, generation number
+- Best fitness (large green) and best params string
+- **Geometry panel** — live Best / Trying columns for all 5 parameters
+- Play / Pause button
+
+### Verifying the infrastructure
+
+```bash
+# Step 1 — confirm auto_stroke_angles() reproduces baseline stroke
+python -c "
+from master_sim_jump.params import RobotGeometry
+from master_sim_jump.physics import auto_stroke_angles
+print(auto_stroke_angles(RobotGeometry()))
+# Expected: Q_RET ~ -0.40, Q_EXT ~ -1.43 (mechanical limits; Q_RET in params.py
+# is set 25 deg inside this range for spring engagement — that is intentional)
+"
+
+# Step 2 — confirm peak_body_z_m is returned by s10_jump
+python -c "
+from master_sim_jump.defaults import DEFAULT_PARAMS
+from master_sim_jump.scenarios import evaluate
+m = evaluate(DEFAULT_PARAMS, 's10_jump')
+print('peak_body_z_m =', m.get('peak_body_z_m'))
+# Expected: ~0.47 m for baseline geometry
+"
+```
