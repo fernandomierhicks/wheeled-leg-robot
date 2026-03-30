@@ -832,6 +832,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
     _yaw_init = _yaw_pi_gains_dict(params)
     _susp_init = _suspension_gains_dict(params)
     _hl_init = _hip_limits_dict(params)
+    _rg_init = _robot_geom_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -841,7 +842,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
               f"Replay — {cfg.display_name}",
               wheel_limit, hip_limit, False, _vp_init, _lqr_init,
               _ctrl_defaults_from_cfg(cfg), _yaw_init, _susp_init,
-              _hl_init),
+              _hl_init, _rg_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -949,6 +950,11 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     omega_target = (omega_profile_fn(t_now) if omega_profile_fn and not past_duration else 0.0)
                     q_hip_target = hip_profile_fn(t_now) if hip_profile_fn else robot.Q_NOM
                     dq_hip_tgt   = hip_vel_fn(t_now) if hip_vel_fn else 0.0
+
+                    # Jump trigger (mirrors sim_loop.run)
+                    if (cfg.jump_time is not None and
+                            t_now >= cfg.jump_time):
+                        ctrl.jump_ctrl.trigger()
 
                     tick = ctrl.tick(
                         model, data,
@@ -1119,7 +1125,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                   ctrl_defaults: dict = None,
                   yaw_pi_gains: dict = None,
                   suspension_gains: dict = None,
-                  hip_limits: dict = None) -> None:
+                  hip_limits: dict = None,
+                  robot_geom: dict = None) -> None:
     """Child process — independent Qt app with 11-panel pyqtgraph telemetry.
 
     Communication:
@@ -1144,9 +1151,20 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     vbox.setContentsMargins(4, 4, 4, 2)
     vbox.setSpacing(2)
 
+    # ── Tab widget: Main (telemetry) + Mechanical (structural loads) ────────
+    tab_widget = QtWidgets.QTabWidget()
+    tab_widget.setStyleSheet(
+        "QTabWidget::pane{border:0;background:#12121e}"
+        "QTabBar::tab{background:#1a1a2e;color:#aaa;padding:4px 14px;"
+        "font-family:Consolas,monospace;font-size:11px;border:1px solid #333;"
+        "border-bottom:0;border-top-left-radius:4px;border-top-right-radius:4px}"
+        "QTabBar::tab:selected{background:#12121e;color:#e0e0e0;font-weight:bold}"
+        "QTabBar::tab:hover{color:#60d0ff}")
+    vbox.addWidget(tab_widget, stretch=1)
+
     glw = pg.GraphicsLayoutWidget()
     glw.setBackground("#12121e")
-    vbox.addWidget(glw, stretch=1)
+    tab_widget.addTab(glw, "Main")
 
     # ── Fitness breakdown overlay (hidden until scenario completes) ─────────
     _fitness_overlay = QtWidgets.QLabel(glw)
@@ -1882,6 +1900,137 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _proxy = pg.SignalProxy(
         glw.scene().sigMouseMoved, rateLimit=60, slot=_on_mouse)
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # MECHANICAL TAB — bearing forces, link loads, motor currents vs limits
+    # ══════════════════════════════════════════════════════════════════════════
+    glw_mech = pg.GraphicsLayoutWidget()
+    glw_mech.setBackground("#12121e")
+    tab_widget.addTab(glw_mech, "Mechanical")
+
+    _rg = robot_geom or {}
+    _has_mech = bool(_rg)
+
+    def _mp(row, col, ttl, ylabel):
+        """Add a plot to the Mechanical tab grid."""
+        pl = glw_mech.addPlot(row=row, col=col)
+        pl.setTitle(
+            f'<span style="color:#e0e0e0;font-size:9pt;font-weight:600">{ttl}</span>')
+        pl.setLabel(
+            "left",
+            f'<span style="color:#c8c8c8;font-size:9pt">{ylabel}</span>')
+        pl.showGrid(x=True, y=True, alpha=0.20)
+        for ax_name in ("left", "bottom"):
+            ax = pl.getAxis(ax_name)
+            ax.setTextPen(TICK_PEN)
+            ax.setPen(pg.mkPen('#555'))
+            ax.setStyle(tickFont=TICK_FONT)
+        pl.setXRange(-window_s, 0, padding=0.02)
+        pl.disableAutoRange(axis='y')
+        return pl
+
+    def _mlimits(pl, val, label_text=None, color='#ff4444'):
+        """Add ±limit red dashed lines to a mechanical plot."""
+        for sign in (+1, -1):
+            anchor = (0.05, 1.1) if sign > 0 else (0.05, -0.1)
+            txt = label_text or f'{val:.0f}'
+            il = pg.InfiniteLine(
+                pos=sign * val, angle=0,
+                pen=pg.mkPen(color, width=1.2, style=_DASH),
+                label=f'{"+" if sign > 0 else "−"}{txt}',
+                labelOpts={"color": color, "anchors": [anchor, anchor]})
+            pl.addItem(il)
+
+    def _mlimit_pos(pl, val, label_text=None, color='#ff4444'):
+        """Add a single positive limit red dashed line."""
+        txt = label_text or f'{val:.0f}'
+        il = pg.InfiniteLine(
+            pos=val, angle=0,
+            pen=pg.mkPen(color, width=1.2, style=_DASH),
+            label=txt,
+            labelOpts={"color": color, "anchors": [(0.05, 1.1), (0.05, 1.1)]})
+        pl.addItem(il)
+
+    # ── Row 0: Bearing A (hip, 608) | Bearing C (knee, 608) ─────────────────
+    _C0_608  = _rg.get('C0_608', 1370.0)
+    _C0_6001 = _rg.get('C0_6001', 2850.0)
+
+    pm_brg_a = _mp(0, 0, "Bearing A — Hip (608)", "N")
+    _mlimit_pos(pm_brg_a, _C0_608, f'C₀={_C0_608:.0f}N')
+    pm_brg_a.setYRange(0, _C0_608 * 1.2, padding=0)
+    _leg(pm_brg_a)
+    ln_brg_a_L = pm_brg_a.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_brg_a_R = pm_brg_a.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
+    pm_brg_c = _mp(0, 1, "Bearing C — Knee (608)", "N")
+    _mlimit_pos(pm_brg_c, _C0_608, f'C₀={_C0_608:.0f}N')
+    pm_brg_c.setYRange(0, _C0_608 * 1.2, padding=0)
+    _leg(pm_brg_c)
+    ln_brg_c_L = pm_brg_c.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_brg_c_R = pm_brg_c.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
+    # ── Row 1: Bearing E (stub, 6001) | Bearing W (wheel, 608) ──────────────
+    pm_brg_e = _mp(1, 0, "Bearing E — Stub (6001)", "N")
+    _mlimit_pos(pm_brg_e, _C0_6001, f'C₀={_C0_6001:.0f}N')
+    pm_brg_e.setYRange(0, _C0_6001 * 1.2, padding=0)
+    _leg(pm_brg_e)
+    ln_brg_e_L = pm_brg_e.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_brg_e_R = pm_brg_e.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
+    pm_brg_w = _mp(1, 1, "Bearing W — Wheel (608)", "N")
+    _mlimit_pos(pm_brg_w, _C0_608, f'C₀={_C0_608:.0f}N')
+    pm_brg_w.setYRange(0, _C0_608 * 1.2, padding=0)
+    _leg(pm_brg_w)
+    ln_brg_w_L = pm_brg_w.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_brg_w_R = pm_brg_w.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
+    # ── Row 2: Femur axial | Tibia axial ────────────────────────────────────
+    _Fy_fem = _rg.get('F_yield_femur', 2107.0)
+    _Fy_tib = _rg.get('F_yield_tibia', 2912.0)
+
+    pm_fem = _mp(2, 0, "Femur Axial Load", "N")
+    _mlimit_pos(pm_fem, _Fy_fem, f'yield={_Fy_fem:.0f}N')
+    pm_fem.setYRange(0, _Fy_fem * 1.2, padding=0)
+    _leg(pm_fem)
+    ln_fem_L = pm_fem.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_fem_R = pm_fem.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
+    pm_tib = _mp(2, 1, "Tibia Axial Load", "N")
+    _mlimit_pos(pm_tib, _Fy_tib, f'yield={_Fy_tib:.0f}N')
+    pm_tib.setYRange(0, _Fy_tib * 1.2, padding=0)
+    _leg(pm_tib)
+    ln_tib_L = pm_tib.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_tib_R = pm_tib.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
+    # ── Row 3: Coupler axial | Hip motor current ─────────────────────────────
+    _Fy_coup = _rg.get('F_yield_coupler', 6381.0)
+    _I_max_hip = _rg.get('I_max_hip', 20.0)
+    _I_max_wheel = _rg.get('I_max_wheel', 50.0)
+
+    pm_coup = _mp(3, 0, "Coupler Axial Load", "N")
+    _mlimit_pos(pm_coup, _Fy_coup, f'yield={_Fy_coup:.0f}N')
+    pm_coup.setYRange(0, _Fy_coup * 1.2, padding=0)
+    _leg(pm_coup)
+    ln_coup_L = pm_coup.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_coup_R = pm_coup.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
+    pm_icur = _mp(3, 1, "Motor Currents vs Limits", "A")
+    _mlimits(pm_icur, _I_max_hip, f'{_I_max_hip:.0f}A hip', '#ff8844')
+    _mlimits(pm_icur, _I_max_wheel, f'{_I_max_wheel:.0f}A whl', '#ff4444')
+    pm_icur.setYRange(-_I_max_wheel * 1.15, _I_max_wheel * 1.15, padding=0)
+    _leg(pm_icur, ncols=2)
+    ln_mi_hip_L  = pm_icur.plot(pen=pg.mkPen('#ffa040', width=W), name="hip L")
+    ln_mi_hip_R  = pm_icur.plot(pen=pg.mkPen('#ffe060', width=W), name="hip R")
+    ln_mi_whl_L  = pm_icur.plot(pen=pg.mkPen('#60d0ff', width=W), name="whl L")
+    ln_mi_whl_R  = pm_icur.plot(pen=pg.mkPen('#80ff80', width=W), name="whl R")
+
+    mech_lines = [
+        ln_brg_a_L, ln_brg_a_R, ln_brg_c_L, ln_brg_c_R,
+        ln_brg_e_L, ln_brg_e_R, ln_brg_w_L, ln_brg_w_R,
+        ln_fem_L, ln_fem_R, ln_tib_L, ln_tib_R,
+        ln_coup_L, ln_coup_R,
+        ln_mi_hip_L, ln_mi_hip_R, ln_mi_whl_L, ln_mi_whl_R,
+    ]
+
     # ── Ring buffers — 29 channels ────────────────────────────────────────────
     MAXLEN = int(window_s * TELEMETRY_HZ) + 200
     (t_buf,
@@ -1921,6 +2070,96 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_wh_L, ln_wh_R, ln_wh_avg,
     ]
 
+    # ── Mechanical tab ring buffers (18 channels) ─────────────────────────────
+    (mech_brg_a_L_buf, mech_brg_a_R_buf,
+     mech_brg_c_L_buf, mech_brg_c_R_buf,
+     mech_brg_e_L_buf, mech_brg_e_R_buf,
+     mech_brg_w_L_buf, mech_brg_w_R_buf,
+     mech_fem_L_buf, mech_fem_R_buf,
+     mech_tib_L_buf, mech_tib_R_buf,
+     mech_coup_L_buf, mech_coup_R_buf,
+     mech_ihip_L_buf, mech_ihip_R_buf,
+     mech_iwhl_L_buf, mech_iwhl_R_buf,
+     ) = (deque(maxlen=MAXLEN) for _ in range(18))
+
+    mech_bufs = [
+        mech_brg_a_L_buf, mech_brg_a_R_buf,
+        mech_brg_c_L_buf, mech_brg_c_R_buf,
+        mech_brg_e_L_buf, mech_brg_e_R_buf,
+        mech_brg_w_L_buf, mech_brg_w_R_buf,
+        mech_fem_L_buf, mech_fem_R_buf,
+        mech_tib_L_buf, mech_tib_R_buf,
+        mech_coup_L_buf, mech_coup_R_buf,
+        mech_ihip_L_buf, mech_ihip_R_buf,
+        mech_iwhl_L_buf, mech_iwhl_R_buf,
+    ]
+
+    # ── 4-bar force estimation from hip torque + kinematics ──────────────────
+    def _estimate_forces(q_hip_deg, tau_hip, tau_whl):
+        """Estimate bearing reaction forces and link axial loads [N].
+
+        Uses static torque equilibrium at the hip pivot:
+          F_femur ≈ |tau_hip| / L_femur  (axial load in femur)
+        and propagates through the 4-bar to estimate loads at each pivot.
+
+        Returns dict with keys: brg_a, brg_c, brg_e, brg_w, fem, tib, coup
+        All values are |force| in Newtons.
+        """
+        if not _has_mech:
+            return dict(brg_a=0, brg_c=0, brg_e=0, brg_w=0,
+                        fem=0, tib=0, coup=0)
+
+        import math as _m
+        q_hip_rad = _m.radians(q_hip_deg)
+        L_f = _rg['L_femur']
+        L_s = _rg['L_stub']
+        L_t = _rg['L_tibia']
+        Lc  = _rg['Lc']
+        F_X = _rg['F_X']
+        F_Z = _rg['F_Z']
+        A_Z = _rg['A_Z']
+        wheel_r = _rg['wheel_r']
+
+        # Half of body weight on one leg (gravity load)
+        g = 9.81
+        m_total = (_rg['m_box'] + 2 * _rg['m_femur'] + 2 * _rg['m_tibia']
+                   + 2 * _rg['m_coupler'] + 2 * _rg['m_wheel'])
+        W_leg = m_total * g / 2.0  # weight per leg
+
+        # IK to get pivot positions
+        C_x = -L_f * _m.cos(q_hip_rad)
+        C_z = A_Z + L_f * _m.sin(q_hip_rad)
+        dx, dz = C_x - F_X, C_z - F_Z
+        R = _m.sqrt(dx*dx + dz*dz)
+        if R < 1e-9:
+            return dict(brg_a=0, brg_c=0, brg_e=0, brg_w=0,
+                        fem=0, tib=0, coup=0)
+
+        # Femur: hip torque → axial force along femur
+        F_femur = abs(tau_hip) / max(L_f, 0.01) + W_leg * abs(_m.cos(q_hip_rad))
+
+        # Bearing A (hip pivot): sees femur force + half body weight
+        F_brg_a = _m.sqrt(F_femur**2 + W_leg**2)
+
+        # Bearing C (knee pivot): femur and tibia meet — vector sum
+        # Tibia carries weight + wheel torque reaction
+        F_tibia = W_leg + abs(tau_whl) / max(wheel_r, 0.01)
+        F_brg_c = _m.sqrt(F_femur**2 + F_tibia**2)
+
+        # Coupler: tension/compression from 4-bar constraint
+        # Approximate: torque about C from stub creates coupler force
+        F_coupler = F_femur * L_s / max(Lc, 0.01) + W_leg * 0.3
+
+        # Bearing E (stub-coupler joint): sees coupler + stub forces
+        F_brg_e = _m.sqrt(F_coupler**2 + (F_tibia * L_s / max(L_t, 0.01))**2)
+
+        # Bearing W (wheel axle): weight + ground reaction + wheel torque
+        F_brg_w = W_leg + abs(tau_whl) / max(wheel_r, 0.01)
+
+        return dict(
+            brg_a=F_brg_a, brg_c=F_brg_c, brg_e=F_brg_e, brg_w=F_brg_w,
+            fem=F_femur, tib=F_tibia, coup=F_coupler)
+
     i_bat_max      = [0.0]
     _last_stat_t   = [0.0]
     _stat_interval = 1.0 / 3.0   # status labels update at 3 Hz
@@ -1928,7 +2167,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     def _reset_bufs():
         for b in all_bufs:
             b.clear()
+        for b in mech_bufs:
+            b.clear()
         for ln in all_lines:
+            ln.setData([], [])
+        for ln in mech_lines:
             ln.setData([], [])
         i_bat_max[0] = 0.0
         for lbl in (lbl_soc, lbl_temp, lbl_ibat, lbl_ibat_max):
@@ -1998,6 +2241,20 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             tau_spring_L_buf.append(tau_spring_L);  tau_spring_R_buf.append(tau_spring_R)
             wheel_h_L_buf.append(wh_L_mm);          wheel_h_R_buf.append(wh_R_mm)
 
+            # ── Mechanical force estimation ──────────────────────────────
+            if _has_mech:
+                fl = _estimate_forces(hip_L, tau_hip_L, tau_whl_L)
+                fr = _estimate_forces(hip_R, tau_hip_R, tau_whl_R)
+                mech_brg_a_L_buf.append(fl['brg_a']); mech_brg_a_R_buf.append(fr['brg_a'])
+                mech_brg_c_L_buf.append(fl['brg_c']); mech_brg_c_R_buf.append(fr['brg_c'])
+                mech_brg_e_L_buf.append(fl['brg_e']); mech_brg_e_R_buf.append(fr['brg_e'])
+                mech_brg_w_L_buf.append(fl['brg_w']); mech_brg_w_R_buf.append(fr['brg_w'])
+                mech_fem_L_buf.append(fl['fem']);   mech_fem_R_buf.append(fr['fem'])
+                mech_tib_L_buf.append(fl['tib']);   mech_tib_R_buf.append(fr['tib'])
+                mech_coup_L_buf.append(fl['coup']); mech_coup_R_buf.append(fr['coup'])
+                mech_ihip_L_buf.append(I_hip_L);   mech_ihip_R_buf.append(I_hip_R)
+                mech_iwhl_L_buf.append(I_whl_L);   mech_iwhl_R_buf.append(I_whl_R)
+
         if len(t_buf) < 2:
             return
 
@@ -2057,6 +2314,27 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         p_wh.setYRange(0.0, _wh_hi * 1.1, padding=0)
 
         _sync_batt()
+
+        # ── Update Mechanical tab charts ─────────────────────────────────────
+        if _has_mech and len(mech_brg_a_L_buf) > 1:
+            ln_brg_a_L.setData(xw, _a(mech_brg_a_L_buf))
+            ln_brg_a_R.setData(xw, _a(mech_brg_a_R_buf))
+            ln_brg_c_L.setData(xw, _a(mech_brg_c_L_buf))
+            ln_brg_c_R.setData(xw, _a(mech_brg_c_R_buf))
+            ln_brg_e_L.setData(xw, _a(mech_brg_e_L_buf))
+            ln_brg_e_R.setData(xw, _a(mech_brg_e_R_buf))
+            ln_brg_w_L.setData(xw, _a(mech_brg_w_L_buf))
+            ln_brg_w_R.setData(xw, _a(mech_brg_w_R_buf))
+            ln_fem_L.setData(xw, _a(mech_fem_L_buf))
+            ln_fem_R.setData(xw, _a(mech_fem_R_buf))
+            ln_tib_L.setData(xw, _a(mech_tib_L_buf))
+            ln_tib_R.setData(xw, _a(mech_tib_R_buf))
+            ln_coup_L.setData(xw, _a(mech_coup_L_buf))
+            ln_coup_R.setData(xw, _a(mech_coup_R_buf))
+            ln_mi_hip_L.setData(xw, _a(mech_ihip_L_buf))
+            ln_mi_hip_R.setData(xw, _a(mech_ihip_R_buf))
+            ln_mi_whl_L.setData(xw, _a(mech_iwhl_L_buf))
+            ln_mi_whl_R.setData(xw, _a(mech_iwhl_R_buf))
 
         # Auto-fit Y to data, but enforce minimum span of 2 units.
         # Compute data range from all curves in each plot, then expand
@@ -2121,6 +2399,29 @@ def _hip_limits_dict(params) -> dict:
     """Extract Q_EXT / Q_RET as a plain dict for passing to plot process."""
     r = params.robot
     return dict(Q_EXT=r.Q_EXT, Q_RET=r.Q_RET)
+
+
+def _robot_geom_dict(params) -> dict:
+    """Extract robot geometry + motor params as a plain dict for the plot process."""
+    r = params.robot
+    m = params.motors
+    return dict(
+        L_femur=r.L_femur, L_stub=r.L_stub, L_tibia=r.L_tibia,
+        Lc=r.Lc, F_X=r.F_X, F_Z=r.F_Z, A_Z=r.A_Z,
+        wheel_r=r.wheel_r, leg_y=r.leg_y,
+        m_box=r.m_box, m_femur=r.m_femur, m_tibia=r.m_tibia,
+        m_coupler=r.m_coupler, m_wheel=r.m_wheel,
+        Kt_hip=m.hip.Kt_output, Kt_wheel=m.wheel.Kt,
+        I_max_hip=params.limits.max_motor_current_hip,
+        I_max_wheel=params.limits.max_motor_current_wheel,
+        # Bearing static ratings [N] from COMPONENTS.md
+        C0_608=1370.0, C0_6001=2850.0,
+        # Tube yield force [N] — 6061-T6, SF=1.0 at these peak loads
+        # (from COMPONENTS.md: femur 920N × SF2.29, tibia 1234N × SF2.36, coupler 1102N × SF5.79)
+        F_yield_femur=920.0 * 2.29,    # ~2107 N
+        F_yield_tibia=1234.0 * 2.36,   # ~2912 N
+        F_yield_coupler=1102.0 * 5.79, # ~6381 N
+    )
 
 
 def _ctrl_defaults_from_cfg(cfg) -> dict:
@@ -2248,6 +2549,7 @@ def sandbox(rng_seed: int = 0):
     _yaw_init = _yaw_pi_gains_dict(params)
     _susp_init = _suspension_gains_dict(params)
     _hl_init = _hip_limits_dict(params)
+    _rg_init = _robot_geom_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -2256,7 +2558,7 @@ def sandbox(rng_seed: int = 0):
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, "Sandbox — free drive",
               wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
-              _ctrl_init_sb, _yaw_init, _susp_init, _hl_init),
+              _ctrl_init_sb, _yaw_init, _susp_init, _hl_init, _rg_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -2563,6 +2865,7 @@ def run_unified(initial_scenario: str = "sandbox",
     _yaw_init = _yaw_pi_gains_dict(params)
     _susp_init = _suspension_gains_dict(params)
     _hl_init = _hip_limits_dict(params)
+    _rg_init = _robot_geom_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -2573,7 +2876,7 @@ def run_unified(initial_scenario: str = "sandbox",
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, init_title,
               wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
-              _ctrl_init, _yaw_init, _susp_init, _hl_init),
+              _ctrl_init, _yaw_init, _susp_init, _hl_init, _rg_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")

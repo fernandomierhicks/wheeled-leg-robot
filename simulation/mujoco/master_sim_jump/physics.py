@@ -99,6 +99,167 @@ def solve_ik(q_hip: float, p: dict) -> dict | None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Mechanical constraint checks (analytical, no sim needed)
+# ---------------------------------------------------------------------------
+
+# Bearing outer radii [m] — from COMPONENTS.md
+_BEARING_R_608  = 0.011   # 608: OD 22 mm → radius 11 mm
+_BEARING_R_6001 = 0.014   # 6001: OD 28 mm → radius 14 mm
+
+# Pivot bearing assignments: A=608, C=608, E=6001, F=6001, W=608
+_PIVOT_R = {'A': _BEARING_R_608, 'C': _BEARING_R_608,
+            'E': _BEARING_R_6001, 'F': _BEARING_R_6001,
+            'W': _BEARING_R_608}
+
+# Minimum gap between bearing housings [m]
+_MIN_BEARING_GAP = 0.002  # 2 mm wall between housings
+
+# Minimum link-to-body clearance [m]
+_MIN_BODY_CLEARANCE = 0.003  # 3 mm
+
+# Minimum link-to-link clearance [m] (tube OD / 2 each side)
+_TUBE_RADIUS_FEMUR   = 0.007  # 14 mm OD tube
+_TUBE_RADIUS_COUPLER = 0.005  # 10 mm OD tube
+_TUBE_RADIUS_TIBIA   = 0.008  # 16 mm OD tube
+_MIN_LINK_GAP = 0.002         # 2 mm gap between tube surfaces
+
+
+def _seg_min_dist(p1, p2, p3, p4):
+    """Minimum distance between line segments p1-p2 and p3-p4 (2D)."""
+    # Parametric: S1 = p1 + t*(p2-p1), S2 = p3 + s*(p4-p3), t,s in [0,1]
+    d1 = (p2[0] - p1[0], p2[1] - p1[1])
+    d2 = (p4[0] - p3[0], p4[1] - p3[1])
+    cross = d1[0] * d2[1] - d1[1] * d2[0]
+
+    def _pt_seg_dist(px, py, ax, ay, bx, by):
+        dx, dy = bx - ax, by - ay
+        len2 = dx * dx + dy * dy
+        if len2 < 1e-18:
+            return math.sqrt((px - ax) ** 2 + (py - ay) ** 2)
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / len2))
+        return math.sqrt((px - ax - t * dx) ** 2 + (py - ay - t * dy) ** 2)
+
+    # Check all four point-to-segment distances + segment intersection
+    dists = [
+        _pt_seg_dist(p1[0], p1[1], p3[0], p3[1], p4[0], p4[1]),
+        _pt_seg_dist(p2[0], p2[1], p3[0], p3[1], p4[0], p4[1]),
+        _pt_seg_dist(p3[0], p3[1], p1[0], p1[1], p2[0], p2[1]),
+        _pt_seg_dist(p4[0], p4[1], p1[0], p1[1], p2[0], p2[1]),
+    ]
+    return min(dists)
+
+
+def _check_mechanical_at_q(q: float, ik: dict, p: dict, A, F,
+                           bx_min, bx_max, bz_min, bz_max,
+                           wheel_r: float) -> str | None:
+    """Per-position mechanical constraint check. Returns failure reason or None."""
+    C = ik['C']
+    E = ik['E']
+    W = ik['W']
+
+    # ── 1. Bearing-to-bearing interference ──────────────────────────
+    pairs = [
+        ('A', A, 'F', F),
+        ('A', A, 'C', C),
+        ('A', A, 'E', E),
+        ('C', C, 'E', E),
+        ('C', C, 'F', F),
+        ('E', E, 'F', F),
+    ]
+    for n1, pos1, n2, pos2 in pairs:
+        dist = math.sqrt((pos1[0] - pos2[0]) ** 2 + (pos1[1] - pos2[1]) ** 2)
+        min_dist = _PIVOT_R[n1] + _PIVOT_R[n2] + _MIN_BEARING_GAP
+        if dist < min_dist:
+            return (f"bearing_interference:{n1}-{n2} "
+                    f"dist={dist*1000:.1f}mm < min={min_dist*1000:.1f}mm "
+                    f"at q_hip={math.degrees(q):.1f}deg")
+
+    # ── 2. Link-to-link: femur (A→C) vs coupler (F→E) ──────────────
+    fem_coup_dist = _seg_min_dist(A, C, F, E)
+    min_link_dist = _TUBE_RADIUS_FEMUR + _TUBE_RADIUS_COUPLER + _MIN_LINK_GAP
+    if fem_coup_dist < min_link_dist:
+        return (f"link_collision:femur-coupler "
+                f"dist={fem_coup_dist*1000:.1f}mm < min={min_link_dist*1000:.1f}mm "
+                f"at q_hip={math.degrees(q):.1f}deg")
+
+    # Femur (A→C) vs tibia (C→W) — share pivot C (knee bearing).
+    # NOT checked: tubes are in offset Y-planes (opposite sides of the
+    # 608 bearing) and the 4-bar passes through near-straight configs
+    # mid-stroke.  auto_stroke_angles rejects true singularities.
+
+    # ── 3. Link/wheel vs body box ──────────────────────────────────
+    # Femur and coupler start at body-mounted pivots (A, F) and exit
+    # through slots — only check the outer half away from the body.
+    link_segments = [
+        ("femur",   A, C,  0.5),
+        ("coupler", F, E,  0.5),
+        ("tibia",   C, W,  0.0),
+    ]
+    for name, seg_a, seg_b, t_start in link_segments:
+        for t in (0.1, 0.3, 0.5, 0.7, 0.9):
+            if t < t_start:
+                continue
+            px = seg_a[0] + t * (seg_b[0] - seg_a[0])
+            pz = seg_a[1] + t * (seg_b[1] - seg_a[1])
+            if bx_min < px < bx_max and bz_min < pz < bz_max:
+                return (f"body_collision:{name} "
+                        f"point=({px*1000:.1f},{pz*1000:.1f})mm inside body box "
+                        f"at q_hip={math.degrees(q):.1f}deg")
+
+    # Wheel centre vs body box (with wheel radius margin)
+    wx, wz = W
+    if (bx_min - wheel_r < wx < bx_max + wheel_r and
+            bz_min - wheel_r < wz < bz_max + wheel_r):
+        cx = max(bx_min, min(wx, bx_max))
+        cz = max(bz_min, min(wz, bz_max))
+        if math.sqrt((wx - cx) ** 2 + (wz - cz) ** 2) < wheel_r:
+            return (f"wheel_body_collision: "
+                    f"W=({wx*1000:.1f},{wz*1000:.1f})mm r={wheel_r*1000:.0f}mm "
+                    f"inside body box at q_hip={math.degrees(q):.1f}deg")
+
+    return None
+
+
+def _mech_check_context(robot):
+    """Build reusable context for mechanical checks from a RobotGeometry."""
+    import dataclasses
+    p = dataclasses.asdict(robot) if not isinstance(robot, dict) else robot
+    A = (0.0, p['A_Z'])
+    F = (p['F_X'], p['F_Z'])
+    box_hx, box_hz = 0.070, 0.052
+    bx_min = -box_hx - _MIN_BODY_CLEARANCE
+    bx_max =  box_hx + _MIN_BODY_CLEARANCE
+    bz_min = -box_hz - _MIN_BODY_CLEARANCE
+    bz_max =  box_hz + _MIN_BODY_CLEARANCE
+    wr = robot.wheel_r if hasattr(robot, 'wheel_r') else p.get('wheel_r', 0.075)
+    return p, A, F, bx_min, bx_max, bz_min, bz_max, wr
+
+
+def check_mechanical_constraints(robot, q_ret: float, q_ext: float,
+                                 n_samples: int = 50) -> str | None:
+    """Check for bearing interference, link collisions, and body clearance.
+
+    Sweeps q_hip from q_ret to q_ext and checks at each sample.
+    Returns None if all checks pass, or a failure reason string.
+    """
+    p, A, F, bx_min, bx_max, bz_min, bz_max, wr = _mech_check_context(robot)
+
+    q_lo = min(q_ret, q_ext)
+    q_hi = max(q_ret, q_ext)
+    for i in range(n_samples):
+        q = q_lo + (q_hi - q_lo) * i / (n_samples - 1)
+        ik = solve_ik(q, p)
+        if ik is None:
+            continue
+        fail = _check_mechanical_at_q(q, ik, p, A, F,
+                                      bx_min, bx_max, bz_min, bz_max, wr)
+        if fail is not None:
+            return fail
+
+    return None
+
+
 def auto_stroke_angles(robot) -> tuple[float, float] | None:
     """Find valid hip stroke range for an arbitrary 4-bar geometry.
 
@@ -107,18 +268,26 @@ def auto_stroke_angles(robot) -> tuple[float, float] | None:
     the geometry is infeasible (too singular, too short a stroke, etc.).
     """
     import dataclasses
-    p = dataclasses.asdict(robot)
+    p_dict = dataclasses.asdict(robot)
 
     KNEE_LIMIT = math.pi / 3          # ±60° physical joint limit
     N          = 500
     q_sweep    = [(-0.05 - 2.45 * i / (N - 1)) for i in range(N)]
 
+    # Build mechanical check context
+    ctx = _mech_check_context(robot)
+    _, A, F, bx_min, bx_max, bz_min, bz_max, wr = ctx
+
     valid = []   # list of (q_hip, W_z)
     for q in q_sweep:
-        r = solve_ik(q, p)
+        r = solve_ik(q, p_dict)
         if r is None:
             continue
         if abs(r['q_knee']) > KNEE_LIMIT:
+            continue
+        # Reject positions that violate mechanical constraints
+        if _check_mechanical_at_q(q, r, p_dict, A, F,
+                                  bx_min, bx_max, bz_min, bz_max, wr) is not None:
             continue
         valid.append((q, r['W_z']))
 
@@ -487,6 +656,16 @@ def build_xml(robot: RobotGeometry = None,
     maytech = min(MOTOR_MASS, p['m_wheel'])
     tyre = max(0.005, p['m_wheel'] - maytech)
 
+    # ── Corrected inertial masses ────────────────────────────────────────
+    # MuJoCo ignores geom mass= when an explicit <inertial> tag exists,
+    # so we fold motor and bearing masses into the <inertial> mass and
+    # set those geoms to mass="0".
+    m_brg = p['m_bearing']
+    box_inertial_mass = p['m_box'] + 2 * MOTOR_MASS        # 2 hip motors on box
+    coupler_inertial_mass = p['m_coupler'] + 2 * m_brg      # bearings at F and E
+    femur_inertial_mass = p['m_femur'] + m_brg               # bearing at knee C
+    tibia_inertial_mass = p['m_tibia'] + m_brg               # bearing at stub E
+
     # Body frame geometry
     ch_hx, ch_hy, ch_hz = 0.070, 0.050, 0.052
     arm_x_lo = F_X - 0.010; arm_x_hi = 0.015
@@ -514,20 +693,20 @@ def build_xml(robot: RobotGeometry = None,
         return f"""\
       <!-- == {side} LEG ====================================================== -->
       <body name="coupler_{side}" pos="{F_X:.5f} {sy:.5f} {F_Z:.5f}">
-        <inertial pos="0 0 0" mass="{p['m_coupler']:.4f}" diaginertia="1.8e-5 1.8e-5 2.0e-7"/>
+        <inertial pos="0 0 0" mass="{coupler_inertial_mass:.4f}" diaginertia="1.8e-5 1.8e-5 2.0e-7"/>
         <joint name="hinge_F_{side}" type="hinge" axis="0 1 0" damping="0.001"/>
         <geom type="cylinder" pos="0 0 0" euler="90 0 0"
               size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
-              contype="0" conaffinity="0" mass="{p['m_bearing']:.4f}"/>
+              contype="0" conaffinity="0" mass="0"/>
         <geom name="coupler_geom_{side}" type="cylinder" fromto="0 0 0 {-Lc:.5f} 0 0"
               size="0.005" rgba="0.30 0.90 0.90 0.55"
               solref="0.02 1" contype="1" conaffinity="1"/>
         <geom type="cylinder" pos="{-Lc:.5f} 0 0" euler="90 0 0"
               size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
-              contype="0" conaffinity="0" mass="{p['m_bearing']:.4f}"/>
+              contype="0" conaffinity="0" mass="0"/>
       </body>
       <body name="femur_{side}" pos="0 {sy:.5f} {A_Z:.5f}">
-        <inertial pos="0 0 0" mass="{p['m_femur']:.4f}" diaginertia="4.9e-5 4.9e-5 8.2e-7"/>
+        <inertial pos="0 0 0" mass="{femur_inertial_mass:.4f}" diaginertia="4.9e-5 4.9e-5 8.2e-7"/>
         <joint name="hip_{side}" type="hinge" axis="0 1 0"
                range="-180 180" armature="0.01" damping="0.05"/>
         <geom name="femur_geom_{side}" type="cylinder" fromto="0 0 0 {-L_f:.5f} 0 0"
@@ -535,9 +714,9 @@ def build_xml(robot: RobotGeometry = None,
               solref="0.02 1" contype="1" conaffinity="1"/>
         <geom name="knee_geom_{side}" type="cylinder" pos="{-L_f:.5f} 0 0"
               euler="90 0 0" size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
-              contype="0" conaffinity="0" mass="{p['m_bearing']:.4f}" solref="0.02 1"/>
+              contype="0" conaffinity="0" mass="0" solref="0.02 1"/>
         <body name="tibia_{side}" pos="{-L_f:.5f} 0 0">
-          <inertial pos="0 0 {tib_cz:.5f}" mass="{p['m_tibia']:.4f}" diaginertia="4.2e-5 4.2e-5 1.0e-6"/>
+          <inertial pos="0 0 {tib_cz:.5f}" mass="{tibia_inertial_mass:.4f}" diaginertia="4.2e-5 4.2e-5 1.0e-6"/>
           <joint name="knee_joint_{side}" type="hinge" axis="0 1 0"
                  range="-60 60" damping="0.001"/>
           <geom name="tibia_geom_{side}" type="cylinder"
@@ -546,7 +725,7 @@ def build_xml(robot: RobotGeometry = None,
                 solref="0.02 1" contype="1" conaffinity="1"/>
           <geom name="stub_geom_{side}" type="cylinder" pos="0 0 {L_s:.5f}"
                 euler="90 0 0" size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
-                contype="0" conaffinity="0" mass="{p['m_bearing']:.4f}" solref="0.02 1"/>
+                contype="0" conaffinity="0" mass="0" solref="0.02 1"/>
           <body name="wheel_asm_{side}" pos="0 0 {-L_t:.5f}">
             <joint name="wheel_spin_{side}" type="hinge" axis="0 1 0" damping="0.001"/>
             <geom name="motor_body_geom_{side}" type="cylinder"
@@ -611,7 +790,7 @@ def build_xml(robot: RobotGeometry = None,
     <!-- == Body =========================================================== -->
     <body name="box" pos="0 0 0.45">
       {body_joint}
-      <inertial pos="0 0 0" mass="{p['m_box']:.4f}"
+      <inertial pos="0 0 0" mass="{box_inertial_mass:.4f}"
                 diaginertia="8.0e-4 1.2e-3 1.2e-3"/>
       <geom name="chassis" type="box"
             size="{ch_hx:.4f} {ch_hy:.4f} {ch_hz:.4f}"
@@ -628,11 +807,11 @@ def build_xml(robot: RobotGeometry = None,
       <geom name="motor_L" type="cylinder"
             pos="0 {motor_y_L:.5f} {A_Z:.5f}" euler="90 0 0"
             size="0.0265 0.0215" rgba="0.15 0.15 0.15 0.90"
-            mass="{MOTOR_MASS:.4f}" contype="0" conaffinity="0"/>
+            mass="0" contype="0" conaffinity="0"/>
       <geom name="motor_R" type="cylinder"
             pos="0 {motor_y_R:.5f} {A_Z:.5f}" euler="90 0 0"
             size="0.0265 0.0215" rgba="0.15 0.15 0.15 0.90"
-            mass="{MOTOR_MASS:.4f}" contype="0" conaffinity="0"/>
+            mass="0" contype="0" conaffinity="0"/>
       <!-- Electronics (massless, visual only) -->
       <geom type="box" pos="0 0 {bat_z:.5f}" size="0.060 0.038 0.018"
             rgba="0.20 0.20 0.80 0.70" mass="0" contype="0" conaffinity="0"/>

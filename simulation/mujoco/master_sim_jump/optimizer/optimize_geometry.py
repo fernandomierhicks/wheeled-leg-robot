@@ -4,8 +4,13 @@ Searches over 5 parameters: L_femur, L_tibia, Lc, L_stub, crouch_time.
 max_torque is fixed at the motor limit (7.0 N·m) — more torque always helps,
 so there is no benefit in optimizing it.
 
-Fitness = peak body CoM height only (no settle-time term). The fell penalty
-eliminates geometries that destabilize the existing LQR controller.
+Fitness (minimise) = weighted sum of:
+  - Jump height reward:  (1 - peak_wheel_z / 0.30)  — goes negative above 300 mm
+  - Fell penalty:        200 * fell
+  - Pitch stability:     W_PITCH_DELTA * |eq_pitch(Q_RET) - eq_pitch(Q_EXT)| / REF
+                         Penalises geometries where leg cycling tilts the body.
+  - Leg length:          W_LEG_LENGTH * (L_femur + L_tibia) / REF
+                         Prefers compact robots that jump high.
 
 On completion, best geometry is saved to optimizer/best_jump_params.py
 (NOT auto-written into params.py — copy manually when satisfied).
@@ -16,9 +21,18 @@ Usage:
     python -m master_sim_jump.optimizer.optimize_geometry --iters 20 --no-save   # dry run
 """
 import argparse
+import math
 import multiprocessing
 
 from master_sim_jump.optimizer.search_space import SearchSpace, ParamSpec
+
+
+# ── Fitness weights for new penalty terms ─────────────────────────────────────
+W_PITCH_DELTA = 0.3     # pitch stability: how much eq. pitch changes across stroke
+REF_PITCH_DELTA = math.radians(15.0)  # [rad] reference: 15° variation = 1× penalty
+
+W_LEG_LENGTH = 0.2      # compactness: penalise long legs
+REF_LEG_LENGTH = 0.40   # [m] reference: 400 mm total = 1× penalty
 
 
 # ── 5-dimensional search space ───────────────────────────────────────────────
@@ -44,7 +58,9 @@ class EvalWithGeometry:
         from dataclasses import replace
         from master_sim_jump.defaults import DEFAULT_PARAMS
         from master_sim_jump.scenarios import evaluate
-        from master_sim_jump.physics import auto_stroke_angles
+        from master_sim_jump.physics import (auto_stroke_angles,
+                                              get_equilibrium_pitch,
+                                              check_mechanical_constraints)
 
         p = DEFAULT_PARAMS
 
@@ -60,11 +76,31 @@ class EvalWithGeometry:
         if stroke is None:
             return {
                 "fitness": 500.0, "fell": True,
-                "peak_body_z_m": 0.0, "status": "FAIL",
-                "fail_reason": "infeasible_geometry",
+                "peak_body_z_m": 0.0, "peak_wheel_z_m": 0.0,
+                "delta_pitch_eq_deg": 0.0, "leg_length_m": 0.0,
+                "status": "FAIL", "fail_reason": "infeasible_geometry",
             }
         q_ret, q_ext = stroke
         new_geom = replace(new_geom, Q_RET=q_ret, Q_EXT=q_ext)
+
+        # ── Mechanical constraint check (analytical, no sim) ─────────────
+        mech_fail = check_mechanical_constraints(new_geom, q_ret, q_ext)
+        if mech_fail is not None:
+            return {
+                "fitness": 500.0, "fell": True,
+                "peak_body_z_m": 0.0, "peak_wheel_z_m": 0.0,
+                "delta_pitch_eq_deg": 0.0, "leg_length_m": 0.0,
+                "status": "FAIL", "fail_reason": mech_fail,
+            }
+
+        # ── Geometry-only penalties (zero sim cost) ───────────────────────
+        # Pitch stability: how much equilibrium pitch changes across stroke
+        pitch_ret = get_equilibrium_pitch(new_geom, q_ret)
+        pitch_ext = get_equilibrium_pitch(new_geom, q_ext)
+        delta_pitch_eq = abs(pitch_ret - pitch_ext)
+
+        # Leg length: prefer compact robots
+        leg_length = candidate["L_FEMUR"] + candidate["L_TIBIA"]
 
         # Fix max_torque at motor limit; use candidate crouch_time
         new_jump  = replace(p.gains.jump,
@@ -76,11 +112,20 @@ class EvalWithGeometry:
         metrics = evaluate(params, "s10_jump")
 
         # Fitness (minimise):
-        #   200 * fell         — heavy penalty for crashing
-        #   (1 - z / 0.30)     — reward jump height (goes negative above 300 mm)
+        #   200 * fell                    — heavy penalty for crashing
+        #   (1 - z / 0.30)               — reward wheel height (negative above 300 mm)
+        #   W_PITCH_DELTA * delta/REF     — penalise body tilt from leg cycling
+        #   W_LEG_LENGTH  * length/REF    — penalise long legs
         fell = metrics.get("fell", True)
-        z    = metrics.get("peak_body_z_m", 0.0)
-        metrics["fitness"] = 200.0 * fell + (1.0 - z / 0.30)
+        z    = metrics.get("peak_wheel_z_m", 0.0)
+
+        fit  = 200.0 * fell + (1.0 - z / 0.30)
+        fit += W_PITCH_DELTA * delta_pitch_eq / REF_PITCH_DELTA
+        fit += W_LEG_LENGTH  * leg_length / REF_LEG_LENGTH
+
+        metrics["fitness"] = fit
+        metrics["delta_pitch_eq_deg"] = math.degrees(delta_pitch_eq)
+        metrics["leg_length_m"] = leg_length
         return metrics
 
 
@@ -100,8 +145,8 @@ def save_best_geometry(best_params: dict, stroke: tuple, best_fitness: float) ->
         f'"""best_jump_params.py — best geometry found by optimize_geometry.py',
         f"",
         f"Generated: {ts}",
-        f"Fitness:   {best_fitness:.6f}  (lower is better; negative = peak_z > 300 mm)",
-        f"Peak body Z: {(1.0 - best_fitness) * 0.30 * 1000:.1f} mm  (approx, assumes fell=False)",
+        f"Fitness:   {best_fitness:.6f}  (lower is better)",
+        f"Weights:   W_PITCH_DELTA={W_PITCH_DELTA}, W_LEG_LENGTH={W_LEG_LENGTH}",
         f'"""',
         f"",
         f"# Copy these values into params.py when satisfied.",

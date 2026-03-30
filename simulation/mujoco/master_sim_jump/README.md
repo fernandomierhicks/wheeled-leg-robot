@@ -183,14 +183,13 @@ torque always increases jump energy so there is no benefit in searching over it.
 ### Fitness function
 
 ```
-fitness = 200 × fell  +  (1 − peak_body_z_m / 0.30)
+fitness = 200 × fell  +  (1 − peak_wheel_z_m / 0.30)
 ```
 
 - **Minimised** (lower = better).
 - `fell` — True if the robot crashes during or after the jump (+200 penalty, eliminates unstable geometries).
-- `peak_body_z_m` — peak body CoM height above ground during the jump. Goes negative (i.e. fitness < 0) when the robot exceeds 300 mm, which is already better than baseline. The dry-run target fitness of ~−1.0 corresponds to ~600 mm peak body Z.
+- `peak_wheel_z_m` — peak average wheel height above ground during the jump. Uses wheel height (not body height) so that longer legs don't automatically score better — only actual jump displacement matters. Goes negative (i.e. fitness < 0) when wheels exceed 300 mm.
 - Settle time is **not** included — pure jump height only.
-- `wheel_liftoff_s` (airtime) is **not** used — it is biased by leg length (longer legs have higher baseline body Z regardless of jump quality).
 
 ### How stroke angles are handled — `auto_stroke_angles()`
 
@@ -261,12 +260,13 @@ print(auto_stroke_angles(RobotGeometry()))
 # is set 25 deg inside this range for spring engagement — that is intentional)
 "
 
-# Step 2 — confirm peak_body_z_m is returned by s10_jump
+# Step 2 — confirm peak heights are returned by s10_jump
 python -c "
 from master_sim_jump.defaults import DEFAULT_PARAMS
 from master_sim_jump.scenarios import evaluate
 m = evaluate(DEFAULT_PARAMS, 's10_jump')
-print('peak_body_z_m =', m.get('peak_body_z_m'))
-# Expected: ~0.47 m for baseline geometry
+print('peak_body_z_m  =', m.get('peak_body_z_m'))
+print('peak_wheel_z_m =', m.get('peak_wheel_z_m'))
+# peak_wheel_z_m is the metric used by the geometry optimizer
 "
 ```

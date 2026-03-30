@@ -73,33 +73,20 @@ class SuspensionGains:
 ################################## KNEE SPRING
 @dataclass(frozen=True)
 class KneeSpringParams:
-    """Conditional torsional spring at femur-tibia (knee) joint.
-
-    Engages only when hip angle exceeds Q_NOM + engage_offset (toward Q_RET),
-    storing energy during CROUCH and releasing it during EXTEND to boost jump height.
-
-    Real spring: steel music wire torsion spring (e.g. McMaster 9271K / Lee Spring).
-    Spec: ~20 mm OD, 1.8 mm wire dia, 4 active coils, spring steel (ASTM A228).
-    Max deflection ~17° (~0.29 rad) at knee.  Mass per spring ~40 g.
-
-    Engagement moved between Q_NOM and Q_EXT (offset=-0.10) so spring stores energy
-    over a larger deflection range during crouch→extend.  Peak spring torque at Q_RET
-    kept under 5.5 N·m (AK45 impedance limit 5.0 + margin for momentum).
-    Deflection Q_engage → Q_RET = 0.449 rad → K = 5.5/0.449 ≈ 12.0 N·m/rad.
-    Energy/spring = 1.21 J (vs 0.74 J at K=12/offset=+0.06).  Standing torque at
-    Q_NOM ≈ 1.2 N·m — easily handled by suspension K_s=20.
+    """Knee spring — disabled (found not useful for jump performance).
+    All values zeroed so springs contribute no mass, torque, or inertia.
     """
-    K_spring: float = 12.0            # [N·m/rad] torsional stiffness
-    engage_offset: float = -0.10      # [rad] offset from Q_NOM toward Q_EXT (negative)
-    B_spring: float = 0.002           # [N·m·s/rad] physical steel damping (η≈0.002, K=12, ωn≈20 rad/s)
-    m_spring: float = 0.025           # [kg] mass of one spring (×2 legs → 50 g total)
+    K_spring: float = 0.0             # [N·m/rad] torsional stiffness
+    engage_offset: float = -0.10      # [rad] offset from Q_NOM toward Q_EXT (unused at K=0)
+    B_spring: float = 0.0             # [N·m·s/rad] damping
+    m_spring: float = 0.0             # [kg] mass of one spring
 
-    # Physical spring properties (for mass/inertia in MJCF)
-    OD_m: float = 0.020               # [m] outer diameter
-    wire_dia_m: float = 0.0015        # [m] wire diameter
-    body_length_m: float = 0.012      # [m] coil stack height (4 coils × ~3 mm pitch)
-    material: str = "spring_steel"    # ASTM A228 music wire
-    max_deflection_rad: float = 0.45  # [rad] ~26° max safe torsional deflection
+    # Physical spring properties (zeroed — no spring present)
+    OD_m: float = 0.020               # [m] outer diameter (kept for geometry if re-enabled)
+    wire_dia_m: float = 0.0           # [m] wire diameter
+    body_length_m: float = 0.012      # [m] coil stack height (kept for geometry if re-enabled)
+    material: str = "none"
+    max_deflection_rad: float = 0.0   # [rad]
 
     @property
     def max_torque(self) -> float:
@@ -121,7 +108,7 @@ class KneeSpringParams:
 @dataclass(frozen=True)
 class JumpGains:
     """Jump state-machine parameters (Phase 1 — constant gains)."""
-    crouch_time: float = 0.20          # [s] PD trajectory duration to Q_RET (increased for spring compression)
+    crouch_time: float = 0.2       # [s] PD trajectory duration to Q_RET (prev: 0.20)
     max_torque: float = 7.0           # [N·m] peak hip torque during extension
     omega_max: float = 18.85          # [rad/s] no-load speed (AK45-10 KV75@24V, 10:1)
     ramp_up_s: float = 0.010          # [s] torque ramp-up to avoid shock
@@ -131,6 +118,8 @@ class JumpGains:
     settle_pitch_deg: float = 10.0     # [deg] pitch threshold for SETTLED
     settle_time_s: float = 0.5        # [s] stable window for SETTLED
     landing_timeout_s: float = 0.5    # [s] max time in LANDING before forcing SETTLED
+    wheel_hold_gain: float = 0.15     # [N·m·s/rad] wheel velocity damping during CROUCH+EXTEND
+    wheel_ff_torque: float = -3.0     # [N·m] reverse feedforward torque during EXTEND only
 
 
 ################################## FEED FORWARD
@@ -378,7 +367,9 @@ class MotorParams:
 
 @dataclass(frozen=True)
 class RobotGeometry:
-    """4-bar leg + body dimensions (baseline-1, run_id 51167)."""
+    """4-bar leg + body dimensions.
+    Geometry from baseline1 (run_id 51167, jump = 282.65 mm).
+    """
     L_femur: float = 0.17378        # [m] hip-to-knee (A→C)
     L_stub: float = 0.03513         # [m] tibia stub upward (C→E)
     L_tibia: float = 0.12939        # [m] tibia downward (C→W)
@@ -390,9 +381,9 @@ class RobotGeometry:
     m_box: float = 1.430            # [kg] body box (210) + electronics (244) + battery (720)
                                      #       + motor mounts (90) + wiring (100) + fasteners (50)
                                      #       + XT60 (10) + MR30 (6)  — see COMPONENTS.MD
-    m_femur: float = 0.0192         # [kg] femur Al tube
-    m_tibia: float = 0.0183         # [kg] tibia Al tube
-    m_coupler: float = 0.0094       # [kg] coupler Al tube
+    m_femur: float = 0.0192         # [kg] femur Al tube (14×1.0mm, 174mm — scaled by length)
+    m_tibia: float = 0.0183         # [kg] tibia Al tube (16×1.0mm, 165mm — scaled by length)
+    m_coupler: float = 0.0094       # [kg] coupler Al tube (10×0.8mm, 151mm — scaled by length)
     m_bearing: float = 0.0175       # [kg] avg bearing (608=12g, 6001=17g); ×4/side in physics.py → 140g total
     m_wheel: float = 0.520          # [kg] wheel assembly (motor 450g + hub + tyre 70g)
 
@@ -400,8 +391,8 @@ class RobotGeometry:
     leg_y: float = 0.1430           # [m] Y-offset of leg plane from body centre
     motor_mass: float = 0.260       # [kg] AK45-10 hip motor
 
-    # Hip stroke angles (verified against run_id 51167)
-    Q_RET: float = -0.733038         # [rad] fully retracted (crouch), 25° closer to Q_EXT
+    # Hip stroke angles (auto-computed by auto_stroke_angles for new geometry)
+    Q_RET: float = -0.733038         # [rad] fully retracted (crouch)
     Q_EXT: float = -1.431694         # [rad] fully extended  (jump)
 
     @property

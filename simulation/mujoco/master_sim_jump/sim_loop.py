@@ -36,7 +36,7 @@ from master_sim_jump.controllers.hip import (
     hip_position_torque, hip_impedance_torque, roll_leveling_offsets,
     knee_spring_torque,
 )
-from master_sim_jump.controllers.jump import JumpController
+from master_sim_jump.controllers.jump import JumpController, RobotMode
 
 
 # ── Model construction ───────────────────────────────────────────────────────
@@ -470,13 +470,21 @@ class SimController:
         # ── Velocity PI (uses delayed wheel_vel — matches real CAN telemetry) ─
         v_measured_ms = _wheel_vel_d * robot.wheel_r
 
-        if use_velocity_pi:
+        # Freeze VelocityPI during CROUCH/EXTEND to prevent velocity error
+        # from commanding a lean that fights the jump impulse.
+        _jump_launching = (jump_active and mode_out is not None and
+                           mode_out.mode in (RobotMode.CROUCH, RobotMode.EXTEND))
+
+        if use_velocity_pi and not _jump_launching:
             theta_ref = self.vel_pi.update(v_target_ms, v_measured_ms)
             _d_max = params.gains.velocity_pi.theta_ref_rate_limit * self.dt_ctrl
             theta_ref = float(np.clip(
                 theta_ref,
                 self.prev_theta_ref - _d_max,
                 self.prev_theta_ref + _d_max))
+        elif _jump_launching:
+            # Hold theta_ref at pre-jump value, don't touch integrator
+            theta_ref = self.prev_theta_ref
         else:
             self.vel_pi.reset()
             theta_ref  = theta_ref_cmd
@@ -522,6 +530,17 @@ class SimController:
         else:
             self.yaw_pi_ctrl.reset()
             tau_yaw = 0.0
+
+        # ── Wheel hold: velocity damping during CROUCH+EXTEND ───────────────
+        # Resists wheel rotation so hip extension energy goes into vertical
+        # impulse rather than rolling the robot.  Goes to zero as wheels stop.
+        if _jump_launching:
+            _K_hold = params.gains.jump.wheel_hold_gain
+            tau_sym += -_K_hold * _wheel_vel_d
+            # Reverse feedforward torque during EXTEND only — counteracts
+            # hip reaction that pushes wheels forward during explosive extension.
+            if mode_out.mode == RobotMode.EXTEND:
+                tau_sym += params.gains.jump.wheel_ff_torque
 
         # Store torque in Smith predictor history (symmetric, before yaw split)
         self._tau_hist.append(tau_sym)
@@ -755,6 +774,8 @@ def run(params: SimParams, scenario: ScenarioConfig,
     max_pitch         = 0.0
     wheel_travel_m    = 0.0
     wheel_liftoff_s   = 0.0
+    peak_body_z_m     = 0.0
+    peak_wheel_z_m    = 0.0
     hip_track_sq_sum  = 0.0
     hip_rate_sq_sum   = 0.0
     prev_tau_hip_L    = 0.0
@@ -862,9 +883,17 @@ def run(params: SimParams, scenario: ScenarioConfig,
             if data.time < transient_end:
                 transient_lag_sum += abs(v_target_ms - v_measured_ms) * dt
 
-            if (data.xpos[ctrl.wheel_bid_L][2] > liftoff_threshold or
-                    data.xpos[ctrl.wheel_bid_R][2] > liftoff_threshold):
+            wz_L = data.xpos[ctrl.wheel_bid_L][2]
+            wz_R = data.xpos[ctrl.wheel_bid_R][2]
+
+            if wz_L > liftoff_threshold or wz_R > liftoff_threshold:
                 wheel_liftoff_s += dt
+
+            # ── Peak heights (for jump optimizer) ─────────────────────
+            body_z_now  = float(data.xpos[ctrl.box_bid][2])
+            wheel_z_now = (wz_L + wz_R) / 2.0
+            if body_z_now  > peak_body_z_m:  peak_body_z_m  = body_z_now
+            if wheel_z_now > peak_wheel_z_m: peak_wheel_z_m = wheel_z_now
 
             # ── Liftoff early-termination (skip when jump is active) ──────
             if (scenario.max_liftoff_s is not None and
@@ -932,6 +961,8 @@ def run(params: SimParams, scenario: ScenarioConfig,
         max_pitch_deg           = round(max_pitch,              4),
         wheel_travel_m          = round(wheel_travel_m,         4),
         wheel_liftoff_s         = round(wheel_liftoff_s,        4),
+        peak_body_z_m           = round(peak_body_z_m,          4),
+        peak_wheel_z_m          = round(peak_wheel_z_m,         4),
         hip_track_rms_rad       = round(hip_track_rms_rad,      6),
         hip_rate_rms            = round(hip_rate_rms,            4),
         hip_cmd_rate_rms        = round(hip_cmd_rate_rms,        4),

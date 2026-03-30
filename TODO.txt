@@ -2,11 +2,7 @@
 ---Fernandos note dont change below
 
 
-
-
--Spring for higher jumps. 
-
--Feed forward for leg height. When rboot moves up and down COM changes and velocity PI has to integrate before catchingup. Able to move legs up and down and stay in place. 
+Able to move legs up and down and stay in place. 
 
 -IMU detected flight = super soft suspension and landng phase= gradual stiffening up. 
 
@@ -23,8 +19,8 @@ Land (somehow...)
 
 -AI usage 
 
-fernandomierhicks	65%	    Sunday 3PM
-fernandomierhicks2	0%	    Friday 4PM
-fernandomierhicks1	100%	Wednesday 12pm
+fernandomierhicks	6%	    Sunday 8PM
+fernandomierhicks2	11%	    Monday 12PM
+fernandomierhicks1	0%	    Monday 12pm
 
 One long OPUS task, 7minutes consumes 25% 5-hour limit and 3% weekly limit. 
