@@ -416,7 +416,7 @@ class SimController:
         pitch      = pitch_true      + rng.normal(0, params.noise.pitch_std_rad)
         pitch_rate = pitch_rate_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
         wheel_vel  = (data.qvel[self.d_whl_L] + data.qvel[self.d_whl_R]) / 2.0
-        az_imu     = float(data.cacc[self.box_bid, 5]) + 9.81 + rng.normal(0, params.noise.accel_std)
+        az_imu     = float(data.cacc[self.box_bid, 2]) + 9.81 + rng.normal(0, params.noise.accel_std)
         hip_q_avg  = (data.qpos[self.s_hip_L] + data.qpos[self.s_hip_R]) / 2.0
         pitch_ff   = get_equilibrium_pitch(robot, hip_q_avg,
                                            m_spring=params.gains.knee_spring.m_spring)
