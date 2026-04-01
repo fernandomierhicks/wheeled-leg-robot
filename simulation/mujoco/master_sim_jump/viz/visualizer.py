@@ -733,6 +733,24 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
     pl_wh.plot(t, wheel_h_R,   pen=pg.mkPen(PALETTE[1], width=1.2, style=DASH),  name="R")
     pl_wh.plot(t, wheel_h_avg, pen=pg.mkPen(PALETTE[9], width=1.5),              name="avg")
     pl_wh.addLine(y=0, pen=pg.mkPen("#666688", width=0.7, style=DASH))
+    # Vertical markers: airborne / landed from robot's own mode transitions
+    _modes = telemetry.get('mode', np.full(len(t), 'BALANCE', dtype=object))
+    if len(_modes) > 1:
+        _air_idxs  = np.where((_modes[1:] == 'FLYING')  & (_modes[:-1] != 'FLYING'))[0]
+        _land_idxs = np.where((_modes[1:] == 'LANDING') & (_modes[:-1] == 'FLYING'))[0]
+        if len(_air_idxs):
+            pl_wh.addItem(pg.InfiniteLine(
+                pos=t[_air_idxs[0]], angle=90,
+                pen=pg.mkPen('#ffff44', width=1.5, style=DASH),
+                label='airborne', labelOpts={'color': '#ffff44', 'position': 0.95,
+                                             'fill': pg.mkBrush(0, 0, 0, 120)}))
+            _after_air = _land_idxs[_land_idxs > _air_idxs[0]]
+            if len(_after_air):
+                pl_wh.addItem(pg.InfiniteLine(
+                    pos=t[_after_air[0]], angle=90,
+                    pen=pg.mkPen('#ff8844', width=1.5, style=DASH),
+                    label='landed', labelOpts={'color': '#ff8844', 'position': 0.85,
+                                               'fill': pg.mkBrush(0, 0, 0, 120)}))
 
     # ── Mouse hover ───────────────────────────────────────────────────────
     all_plots = [
@@ -1040,6 +1058,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     tk['tau_spring_R'],
                     max(tk['wheel_z_L'] - params.robot.wheel_r, 0.0) * 1000.0,
                     max(tk['wheel_z_R'] - params.robot.wheel_r, 0.0) * 1000.0,
+                    tk.get('mode', 'BALANCE'),
+                    tk.get('az_imu', 0.0),
                 ))
                 last_push = wall_now
 
@@ -1877,6 +1897,18 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ln_wh_L   = p_wh.plot(pen=pg.mkPen('#60d0ff', width=W),              name="L")
     ln_wh_R   = p_wh.plot(pen=pg.mkPen('#ff6060', width=W, style=_DASH), name="R")
     ln_wh_avg = p_wh.plot(pen=pg.mkPen('#e0e0e0', width=1.5),            name="avg")
+    _ln_air  = pg.InfiniteLine(angle=90, movable=False,
+                               pen=pg.mkPen('#ffff44', width=1.5, style=_DASH),
+                               label='airborne',
+                               labelOpts={'color': '#ffff44', 'position': 0.95,
+                                          'fill': pg.mkBrush(0, 0, 0, 120)})
+    _ln_land = pg.InfiniteLine(angle=90, movable=False,
+                               pen=pg.mkPen('#ff8844', width=1.5, style=_DASH),
+                               label='landed',
+                               labelOpts={'color': '#ff8844', 'position': 0.85,
+                                          'fill': pg.mkBrush(0, 0, 0, 120)})
+    p_wh.addItem(_ln_air);  _ln_air.hide()
+    p_wh.addItem(_ln_land); _ln_land.hide()
 
     # ── Mouse hover Y label ───────────────────────────────────────────────────
     named_plots = [
@@ -2031,6 +2063,60 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_mi_hip_L, ln_mi_hip_R, ln_mi_whl_L, ln_mi_whl_R,
     ]
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # IMU TAB — vertical specific force (az) and jump-phase transition thresholds
+    # ══════════════════════════════════════════════════════════════════════════
+    glw_imu = pg.GraphicsLayoutWidget()
+    glw_imu.setBackground("#12121e")
+    tab_widget.addTab(glw_imu, "IMU")
+
+    _sg = suspension_gains or {}
+    _freefall_az = _sg.get('freefall_az_threshold', 2.0)
+    _landing_az  = _sg.get('landing_az_threshold', 15.0)
+
+    def _ip(ttl, ylabel):
+        pl = glw_imu.addPlot()
+        pl.setTitle(
+            f'<span style="color:#e0e0e0;font-size:9pt;font-weight:600">{ttl}</span>')
+        pl.setLabel(
+            "left",
+            f'<span style="color:#c8c8c8;font-size:9pt">{ylabel}</span>')
+        pl.showGrid(x=True, y=True, alpha=GRID_ALPHA)
+        for ax_name in ("left", "bottom"):
+            ax = pl.getAxis(ax_name)
+            ax.setTextPen(TICK_PEN)
+            ax.setPen(pg.mkPen('#555'))
+            ax.setStyle(tickFont=TICK_FONT)
+        pl.setXRange(-window_s, 0, padding=0.02)
+        return pl
+
+    p_az = _ip("IMU Vertical Specific Force", "m/s²")
+
+    # Nominal on-ground reference (9.81 m/s²)
+    p_az.addItem(pg.InfiniteLine(
+        pos=9.81, angle=0,
+        pen=pg.mkPen('#606060', width=1.0, style=_DASH),
+        label='ground ≈9.81',
+        labelOpts={'color': '#808080', 'anchors': [(0.05, 1.1), (0.05, 1.1)]}))
+
+    # Freefall threshold (EXTEND→FLYING when az drops below this)
+    p_az.addItem(pg.InfiniteLine(
+        pos=_freefall_az, angle=0,
+        pen=pg.mkPen('#ffe060', width=1.5, style=_DASH),
+        label=f'freefall < {_freefall_az:.1f}',
+        labelOpts={'color': '#ffe060', 'anchors': [(0.05, 1.1), (0.05, 1.1)]}))
+
+    # Landing threshold (FLYING→LANDING when az spikes above this)
+    p_az.addItem(pg.InfiniteLine(
+        pos=_landing_az, angle=0,
+        pen=pg.mkPen('#ff8844', width=1.5, style=_DASH),
+        label=f'landing > {_landing_az:.1f}',
+        labelOpts={'color': '#ff8844', 'anchors': [(0.05, -0.1), (0.05, -0.1)]}))
+
+    p_az.setYRange(-2.0, _landing_az * 1.25, padding=0)
+
+    ln_az = p_az.plot(pen=pg.mkPen('#60d0ff', width=LINE_WIDTH), name="az_imu")
+
     # ── Ring buffers — 29 channels ────────────────────────────────────────────
     MAXLEN = int(window_s * TELEMETRY_HZ) + 200
     (t_buf,
@@ -2093,6 +2179,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         mech_ihip_L_buf, mech_ihip_R_buf,
         mech_iwhl_L_buf, mech_iwhl_R_buf,
     ]
+
+    # ── IMU tab ring buffer ───────────────────────────────────────────────────
+    az_imu_buf = deque(maxlen=MAXLEN)
 
     # ── 4-bar force estimation from hip torque + kinematics ──────────────────
     def _estimate_forces(q_hip_deg, tau_hip, tau_whl):
@@ -2163,19 +2252,26 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     i_bat_max      = [0.0]
     _last_stat_t   = [0.0]
     _stat_interval = 1.0 / 3.0   # status labels update at 3 Hz
+    _airborne_t    = [None]       # sim-time of last airborne detection
+    _landing_t     = [None]       # sim-time of last landing detection
+    _prev_mode     = ['BALANCE']  # previous robot_mode for edge detection
 
     def _reset_bufs():
         for b in all_bufs:
             b.clear()
         for b in mech_bufs:
             b.clear()
+        az_imu_buf.clear()
         for ln in all_lines:
             ln.setData([], [])
         for ln in mech_lines:
             ln.setData([], [])
+        ln_az.setData([], [])
         i_bat_max[0] = 0.0
         for lbl in (lbl_soc, lbl_temp, lbl_ibat, lbl_ibat_max):
             lbl.setText(lbl.text().split(":")[0] + ": --")
+        _airborne_t[0] = None; _landing_t[0] = None; _prev_mode[0] = 'BALANCE'
+        _ln_air.hide(); _ln_land.hide()
 
     # ── 60 Hz update callback ─────────────────────────────────────────────────
     def _update():
@@ -2220,7 +2316,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
              I_whl_L, I_whl_R, I_hip_L, I_hip_R, I_total,
              tau_hip_L, tau_hip_R,
              tau_spring_L, tau_spring_R,
-             wh_L_mm, wh_R_mm) = item
+             wh_L_mm, wh_R_mm,
+             robot_mode, az_imu) = item
 
             t_buf.append(t)
             pitch_buf.append(pitch);          pitch_ref_buf.append(pitch_ref)
@@ -2240,6 +2337,15 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             tau_hip_L_buf.append(tau_hip_L);  tau_hip_R_buf.append(tau_hip_R)
             tau_spring_L_buf.append(tau_spring_L);  tau_spring_R_buf.append(tau_spring_R)
             wheel_h_L_buf.append(wh_L_mm);          wheel_h_R_buf.append(wh_R_mm)
+            az_imu_buf.append(az_imu)
+
+            # ── Airborne / landing edge detection from robot's own mode ──
+            if robot_mode == 'FLYING' and _prev_mode[0] != 'FLYING':
+                _airborne_t[0] = t
+                _landing_t[0]  = None
+            elif robot_mode == 'LANDING' and _prev_mode[0] == 'FLYING':
+                _landing_t[0] = t
+            _prev_mode[0] = robot_mode
 
             # ── Mechanical force estimation ──────────────────────────────
             if _has_mech:
@@ -2312,6 +2418,16 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         _wh_hi = max(float(wh_L_arr.max()) if len(wh_L_arr) else 0.0,
                      float(wh_R_arr.max()) if len(wh_R_arr) else 0.0, 10.0)
         p_wh.setYRange(0.0, _wh_hi * 1.1, padding=0)
+        # Move airborne/landing markers with the scrolling window
+        for _ln_marker, _mt in ((_ln_air, _airborne_t[0]), (_ln_land, _landing_t[0])):
+            if _mt is not None:
+                _xm = _mt - sim_t
+                if -window_s <= _xm <= 0:
+                    _ln_marker.setValue(_xm); _ln_marker.show()
+                else:
+                    _ln_marker.hide()
+            else:
+                _ln_marker.hide()
 
         _sync_batt()
 
@@ -2335,6 +2451,10 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             ln_mi_hip_R.setData(xw, _a(mech_ihip_R_buf))
             ln_mi_whl_L.setData(xw, _a(mech_iwhl_L_buf))
             ln_mi_whl_R.setData(xw, _a(mech_iwhl_R_buf))
+
+        # ── Update IMU tab chart ──────────────────────────────────────────────
+        if len(az_imu_buf) > 1:
+            ln_az.setData(xw, _a(az_imu_buf))
 
         # Auto-fit Y to data, but enforce minimum span of 2 units.
         # Compute data range from all curves in each plot, then expand
@@ -2392,7 +2512,9 @@ def _yaw_pi_gains_dict(params) -> dict:
 def _suspension_gains_dict(params) -> dict:
     """Extract Suspension + Roll gains as a plain dict for passing to plot process."""
     g = params.gains.suspension
-    return dict(K_s=g.K_s, B_s=g.B_s, K_roll=g.K_roll, D_roll=g.D_roll)
+    return dict(K_s=g.K_s, B_s=g.B_s, K_roll=g.K_roll, D_roll=g.D_roll,
+                freefall_az_threshold=g.freefall_az_threshold,
+                landing_az_threshold=g.landing_az_threshold)
 
 
 def _hip_limits_dict(params) -> dict:
@@ -2769,6 +2891,8 @@ def sandbox(rng_seed: int = 0):
                     tk['tau_spring_R'],
                     max(tk['wheel_z_L'] - params.robot.wheel_r, 0.0) * 1000.0,
                     max(tk['wheel_z_R'] - params.robot.wheel_r, 0.0) * 1000.0,
+                    tk.get('mode', 'BALANCE'),
+                    tk.get('az_imu', 0.0),
                 ))
                 last_push = wall_now
 
@@ -2957,6 +3081,7 @@ def run_unified(initial_scenario: str = "sandbox",
         sim_fell     = False
         world_switch = False     # set True to break inner loop for new world
         _slowmo_liftoff_t = [None]   # sim-time when FLYING started (mutable container)
+        _slowmo_landing_t = [None]   # sim-time when robot landed after a jump
 
         def _reset_sim():
             nonlocal step, _last_tick, last_push, scenario_logged, sim_fell
@@ -2971,6 +3096,7 @@ def run_unified(initial_scenario: str = "sandbox",
             scenario_logged = False
             sim_fell = False
             _slowmo_liftoff_t[0] = None
+            _slowmo_landing_t[0] = None
             _reset_sandbox_targets()
             if not data_q.full():
                 data_q.put_nowait("RESET")
@@ -3140,22 +3266,27 @@ def run_unified(initial_scenario: str = "sandbox",
                         _hip_pct[0] = (JOY_HIP_SATURATION + clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0
 
                 # ── Slow-mo when jump is active ──
-                # Only slow-mo for 0.25s sim-time after liftoff (FLYING),
-                # which is ~1s wall-clock at 1/8 speed.
+                # Slow-mo for entire flight, then continues 1s past landing.
                 jmode = ctrl.jump_ctrl.mode
                 if jmode == RobotMode.FLYING and _slowmo_liftoff_t[0] is None:
                     _slowmo_liftoff_t[0] = float(data.time)
-                elif jmode == RobotMode.BALANCE:
+                    _slowmo_landing_t[0] = None
+                elif jmode == RobotMode.BALANCE and _slowmo_liftoff_t[0] is not None:
+                    # Just landed — record landing time and clear liftoff tracker
+                    if _slowmo_landing_t[0] is None:
+                        _slowmo_landing_t[0] = float(data.time)
                     _slowmo_liftoff_t[0] = None
 
-                if jmode != RobotMode.BALANCE:
-                    liftoff_t = _slowmo_liftoff_t[0]
-                    if liftoff_t is not None and (float(data.time) - liftoff_t) > 0.25:
-                        steps_per_frame = steps_per_frame_normal
-                    else:
-                        steps_per_frame = steps_per_frame_slow
+                in_flight_slow = (jmode != RobotMode.BALANCE
+                                  and _slowmo_liftoff_t[0] is not None)
+                post_landing_slow = (_slowmo_landing_t[0] is not None
+                                     and (float(data.time) - _slowmo_landing_t[0]) <= 1.0)
+                if in_flight_slow or post_landing_slow:
+                    steps_per_frame = steps_per_frame_slow
                 else:
                     steps_per_frame = steps_per_frame_normal
+                    if _slowmo_landing_t[0] is not None and not post_landing_slow:
+                        _slowmo_landing_t[0] = None  # clean up after slow-mo window
 
                 # ── Physics stepping ──
                 for _ in range(steps_per_frame):
@@ -3311,6 +3442,8 @@ def run_unified(initial_scenario: str = "sandbox",
                         tk['tau_spring_R'],
                         max(tk['wheel_z_L'] - params.robot.wheel_r, 0.0) * 1000.0,
                         max(tk['wheel_z_R'] - params.robot.wheel_r, 0.0) * 1000.0,
+                        tk.get('mode', 'BALANCE'),
+                        tk.get('az_imu', 0.0),
                     ))
                     last_push = wall_now
 

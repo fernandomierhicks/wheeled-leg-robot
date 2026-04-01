@@ -2,9 +2,14 @@
 ---Fernandos note dont change below
 
 
-Able to move legs up and down and stay in place. 
+-Able to move legs up and down and stay in place. 
 
--IMU detected flight = super soft suspension and landng phase= gradual stiffening up. 
+-Add vertical markers to jump or imu plots to show jump phases. 
+-IMU reports bogus values
+-Add slow mo to jump phases
+
+-dont end sim when robot falls. keep it going. let user restart it. -only in sandbox
+
 
 -Flip?
 Want me to build this as a new scenario (S11)? The sequence would be:
@@ -19,8 +24,9 @@ Land (somehow...)
 
 -AI usage 
 
-fernandomierhicks	24%	    Sunday 8PM
+fernandomierhicks	35%	    Sunday 8PM
+fernandomierhicks1	10%	    Monday 12pm
 fernandomierhicks2	11%	    Monday 12PM
-fernandomierhicks1	0%	    Monday 12pm
+
 
 One long OPUS task, 7minutes consumes 25% 5-hour limit and 3% weekly limit. 

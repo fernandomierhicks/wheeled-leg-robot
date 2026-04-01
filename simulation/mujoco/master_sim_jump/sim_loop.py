@@ -16,6 +16,7 @@ Usage:
 """
 import collections
 import math
+from dataclasses import replace as _dc_replace
 import numpy as np
 import mujoco
 
@@ -37,6 +38,12 @@ from master_sim_jump.controllers.hip import (
     knee_spring_torque,
 )
 from master_sim_jump.controllers.jump import JumpController, RobotMode
+
+
+# ── Shared MuJoCo lookup helpers ─────────────────────────────────────────────
+
+def _jnt_qposadr(model, name: str) -> int:
+    return model.jnt_qposadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)]
 
 
 # ── Model construction ───────────────────────────────────────────────────────
@@ -79,14 +86,10 @@ def init_sim(model, data, params: SimParams,
             model.eq_data[eq_id, 0:3] = [-p['Lc'], 0.0, 0.0]
             model.eq_data[eq_id, 3:6] = [0.0, 0.0, p['L_stub']]
 
-    def _jqp(name):
-        return model.jnt_qposadr[mujoco.mj_name2id(
-            model, mujoco.mjtObj.mjOBJ_JOINT, name)]
-
-    s_root   = _jqp("root_free")
-    s_hF_L   = _jqp("hinge_F_L");    s_hF_R   = _jqp("hinge_F_R")
-    s_hip_L  = _jqp("hip_L");        s_hip_R  = _jqp("hip_R")
-    s_knee_L = _jqp("knee_joint_L"); s_knee_R = _jqp("knee_joint_R")
+    s_root   = _jnt_qposadr(model, "root_free")
+    s_hF_L   = _jnt_qposadr(model, "hinge_F_L"); s_hF_R   = _jnt_qposadr(model, "hinge_F_R")
+    s_hip_L  = _jnt_qposadr(model, "hip_L");     s_hip_R  = _jnt_qposadr(model, "hip_R")
+    s_knee_L = _jnt_qposadr(model, "knee_joint_L"); s_knee_R = _jnt_qposadr(model, "knee_joint_R")
 
     ik = solve_ik(q_hip_init, p)
     if ik is None:
@@ -241,9 +244,6 @@ class SimController:
     # ── Address lookups (cached once per model) ──────────────────────────────
 
     def _lookup_addresses(self, model):
-        def _jqp(n):
-            return model.jnt_qposadr[mujoco.mj_name2id(
-                model, mujoco.mjtObj.mjOBJ_JOINT, n)]
         def _jdof(n):
             return model.jnt_dofadr[mujoco.mj_name2id(
                 model, mujoco.mjtObj.mjOBJ_JOINT, n)]
@@ -256,10 +256,10 @@ class SimController:
         self.d_pitch = d_root + 4
         self.d_roll  = d_root + 3
         self.d_yaw   = d_root + 5
-        self.s_root  = _jqp("root_free")
+        self.s_root  = _jnt_qposadr(model, "root_free")
 
-        self.s_hip_L = _jqp("hip_L");   self.s_hip_R = _jqp("hip_R")
-        self.d_hip_L = _jdof("hip_L");  self.d_hip_R = _jdof("hip_R")
+        self.s_hip_L = _jnt_qposadr(model, "hip_L"); self.s_hip_R = _jnt_qposadr(model, "hip_R")
+        self.d_hip_L = _jdof("hip_L");               self.d_hip_R = _jdof("hip_R")
         self.d_whl_L = _jdof("wheel_spin_L")
         self.d_whl_R = _jdof("wheel_spin_R")
 
@@ -296,7 +296,7 @@ class SimController:
         self.n_act = n_act
         pitch0 = get_equilibrium_pitch(robot, robot.Q_NOM,
                                        m_spring=params.gains.knee_spring.m_spring)
-        self.sens_buf = LatencyBuffer(n_sens, (pitch0, 0.0, 0.0))
+        self.sens_buf = LatencyBuffer(n_sens, (pitch0, 0.0, 0.0, 9.81))
         self.ctrl_buf = LatencyBuffer(n_act, (0.0, 0.0))
 
         ik0 = solve_ik(robot.Q_NOM, robot.as_dict())
@@ -339,48 +339,41 @@ class SimController:
         self.battery.reset()
         self.v_batt = params.battery.V_nom
 
+        # Adaptive suspension scale is now owned by JumpController (via mode_out.susp_scale)
+
     def reset(self, model, data):
         """Reset all controller state (e.g. after sandbox auto-restart)."""
         self._init_controllers(self.params, model)
 
+    def _patch_gains_subfield(self, subfield: str, field: str, value: float):
+        """Replace one field on params.gains.<subfield>, persist to params, and return new sub-gains."""
+        new_sub = _dc_replace(getattr(self.params.gains, subfield), **{field: value})
+        self.params = _dc_replace(self.params,
+                                  gains=_dc_replace(self.params.gains, **{subfield: new_sub}))
+        return new_sub
+
     def update_velocity_pi_gain(self, field: str, value: float):
         """Hot-swap a single VelocityPI gain field (preserves integrator + survives reset)."""
-        from dataclasses import replace
-        new_vp = replace(self.vel_pi.gains, **{field: value})
-        self.vel_pi.gains = new_vp
-        # Persist into params so reset() picks up the change
-        new_gains = replace(self.params.gains, velocity_pi=new_vp)
-        self.params = replace(self.params, gains=new_gains)
+        self.vel_pi.gains = self._patch_gains_subfield("velocity_pi", field, value)
 
     def update_lqr_gain(self, field: str, value: float):
         """Hot-swap a single LQR cost weight and recompute the gain table."""
-        from dataclasses import replace
-        new_lqr = replace(self.params.gains.lqr, **{field: value})
-        new_gains = replace(self.params.gains, lqr=new_lqr)
-        self.params = replace(self.params, gains=new_gains)
-        self.K_table = compute_gain_table(self.params.robot, new_lqr,
+        self._patch_gains_subfield("lqr", field, value)
+        self.K_table = compute_gain_table(self.params.robot, self.params.gains.lqr,
                                           m_spring=self.params.gains.knee_spring.m_spring)
 
     def update_yaw_pi_gain(self, field: str, value: float):
         """Hot-swap a single YawPI gain field (preserves integrator + survives reset)."""
-        from dataclasses import replace
-        new_yaw = replace(self.yaw_pi_ctrl.gains, **{field: value})
-        self.yaw_pi_ctrl.gains = new_yaw
-        new_gains = replace(self.params.gains, yaw_pi=new_yaw)
-        self.params = replace(self.params, gains=new_gains)
+        self.yaw_pi_ctrl.gains = self._patch_gains_subfield("yaw_pi", field, value)
 
     def update_suspension_gain(self, field: str, value: float):
         """Hot-swap a single Suspension gain field (survives reset)."""
-        from dataclasses import replace
-        new_susp = replace(self.params.gains.suspension, **{field: value})
-        new_gains = replace(self.params.gains, suspension=new_susp)
-        self.params = replace(self.params, gains=new_gains)
+        self._patch_gains_subfield("suspension", field, value)
 
     def update_robot_geom(self, field: str, value: float):
         """Hot-swap Q_EXT or Q_RET and recompute LQR gain table."""
-        from dataclasses import replace
-        new_robot = replace(self.params.robot, **{field: value})
-        self.params = replace(self.params, robot=new_robot)
+        new_robot = _dc_replace(self.params.robot, **{field: value})
+        self.params = _dc_replace(self.params, robot=new_robot)
         self.K_table = compute_gain_table(new_robot, self.params.gains.lqr,
                                           m_spring=self.params.gains.knee_spring.m_spring)
 
@@ -423,21 +416,10 @@ class SimController:
         pitch      = pitch_true      + rng.normal(0, params.noise.pitch_std_rad)
         pitch_rate = pitch_rate_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
         wheel_vel  = (data.qvel[self.d_whl_L] + data.qvel[self.d_whl_R]) / 2.0
+        az_imu     = float(data.cacc[self.box_bid, 5]) + 9.81 + rng.normal(0, params.noise.accel_std)
         hip_q_avg  = (data.qpos[self.s_hip_L] + data.qpos[self.s_hip_R]) / 2.0
         pitch_ff   = get_equilibrium_pitch(robot, hip_q_avg,
                                            m_spring=params.gains.knee_spring.m_spring)
-
-        # ── Jump controller ────────────────────────────────────────────────
-        if jump_active:
-            hip_dq_avg = (data.qvel[self.d_hip_L] + data.qvel[self.d_hip_R]) / 2.0
-            mode_out = self.jump_ctrl.update(
-                data.time, hip_q_avg, hip_dq_avg,
-                data.xpos[self.wheel_bid_L][2], data.xpos[self.wheel_bid_R][2],
-                robot.wheel_r, pitch_true)
-            q_hip_target = mode_out.q_hip_target
-            dq_hip_target = mode_out.dq_hip_target
-        else:
-            mode_out = None
 
         # ── Velocity reference + direction-reversal guard ────────────────────
         v_ref_rads = v_target_ms / robot.wheel_r
@@ -448,8 +430,19 @@ class SimController:
         self.prev_v_target = v_target_ms
 
         # ── Sensor delay buffer ──────────────────────────────────────────────
-        _pitch_d, _pitch_rate_d, _wheel_vel_d = self.sens_buf.push(
-            (pitch, pitch_rate, wheel_vel))
+        _pitch_d, _pitch_rate_d, _wheel_vel_d, _az_d = self.sens_buf.push(
+            (pitch, pitch_rate, wheel_vel, az_imu))
+
+        # ── Jump controller (uses delayed az — matches real-robot IMU latency) ──
+        if jump_active:
+            hip_dq_avg = (data.qvel[self.d_hip_L] + data.qvel[self.d_hip_R]) / 2.0
+            mode_out = self.jump_ctrl.update(
+                data.time, hip_q_avg, hip_dq_avg,
+                _az_d, params.gains.suspension, _pitch_d)
+            q_hip_target = mode_out.q_hip_target
+            dq_hip_target = mode_out.dq_hip_target
+        else:
+            mode_out = None
 
         # Capture delayed (pre-predictor) values for diagnostics
         _pitch_delayed     = float(_pitch_d)
@@ -556,6 +549,16 @@ class SimController:
             _tau_R_d, data.qvel[self.d_whl_R],
             self.v_batt, params.motors, params.battery)
 
+        # ── Adaptive suspension scale (owned by JumpController) ─────────────
+        # susp_scale is 1.0 normally, freefall_scale in FLYING, ramping in LANDING.
+        _susp_scale = mode_out.susp_scale if mode_out is not None else 1.0
+
+        _eff_suspension = _dc_replace(
+            params.gains.suspension,
+            K_s=params.gains.suspension.K_s * _susp_scale,
+            B_s=params.gains.suspension.B_s * _susp_scale,
+        )
+
         # ── Hip control ──────────────────────────────────────────────────────
         roll_true, roll_rate = get_roll_and_rate(
             data, self.box_bid, self.d_roll)
@@ -580,7 +583,7 @@ class SimController:
             if use_roll_leveling or (jump_active and mode_out is not None):
                 q_nom_L, q_nom_R = roll_leveling_offsets(
                     roll_meas, roll_rate, q_hip_target,
-                    params.gains.suspension, robot)
+                    _eff_suspension, robot)
             else:
                 q_nom_L = q_nom_R = q_hip_target
             for s_hip, d_hip, act_hip, q_nom_leg in [
@@ -592,7 +595,7 @@ class SimController:
                     continue
                 tau_hip = hip_impedance_torque(
                     data.qpos[s_hip], data.qvel[d_hip], q_nom_leg,
-                    params.gains.suspension, params.motors.hip)
+                    _eff_suspension, params.motors.hip)
                 data.ctrl[act_hip] = tau_hip
 
         else:
@@ -650,7 +653,7 @@ class SimController:
         tau_ff2 = 0.0
         ff2_alpha = params.gains.feedforward.ff2_alpha
         if use_ff2 and ff2_alpha > 0.0 and _l_eff_ff > 0.01:
-            tau_ff2 = ff2_alpha * self._m_b * 9.81 * _l_eff_ff * math.sin(pitch_true)
+            tau_ff2 = ff2_alpha * self._m_b * 9.81 * _l_eff_ff * math.sin(pitch)
             data.ctrl[self.act_wheel_L] += tau_ff2 / 2.0
             data.ctrl[self.act_wheel_R] += tau_ff2 / 2.0
 
@@ -708,6 +711,8 @@ class SimController:
             tau_delayed_L=float(_tau_L_d),
             tau_delayed_R=float(_tau_R_d),
             mode=mode_out.mode.name if mode_out else "BALANCE",
+            az_imu=_az_d,
+            susp_scale=_susp_scale,
         )
 
 

@@ -62,6 +62,12 @@ class SuspensionGains:
     K_roll: float = 10.0            # [rad/rad] roll proportional
     D_roll: float = 0.15           # [rad·s/rad] roll rate damping
 
+    # Adaptive suspension: soften during free-fall, ramp back after landing
+    freefall_az_threshold: float = 2.0   # [m/s²] |az_imu| below this → free-fall
+    freefall_scale: float = 0.15         # K_s and B_s multiplier during free-fall
+    landing_az_threshold: float = 15.0  # [m/s²] az_imu spike above this → landing
+    landing_ramp_s: float = 0.75        # [s] ramp duration back to nominal gains
+
     @staticmethod
     def hip_safe_range(robot: RobotGeometry) -> Tuple[float, float]:
         """(hip_safe_min, hip_safe_max) — 10° buffer inside joint limits."""
@@ -114,6 +120,7 @@ class JumpGains:
     ramp_up_s: float = 0.010          # [s] torque ramp-up to avoid shock
     ramp_down_rad: float = 0.05       # [rad] taper zone before Q_EXT
     liftoff_debounce_s: float = 0.05  # [s] wheels-off-ground window for FLYING
+    min_airborne_s: float = 0.10      # [s] minimum time in FLYING before landing can trigger
     extend_timeout_s: float = 1.0     # [s] max time in EXTEND before aborting jump
     settle_pitch_deg: float = 10.0     # [deg] pitch threshold for SETTLED
     settle_time_s: float = 0.5        # [s] stable window for SETTLED
