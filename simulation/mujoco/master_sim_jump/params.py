@@ -114,19 +114,20 @@ class KneeSpringParams:
 @dataclass(frozen=True)
 class JumpGains:
     """Jump state-machine parameters (Phase 1 — constant gains)."""
-    crouch_time: float = 0.2       # [s] PD trajectory duration to Q_RET (prev: 0.20)
+    crouch_time: float = 0.1       # [s] PD trajectory duration to Q_RET
     max_torque: float = 7.0           # [N·m] peak hip torque during extension
     omega_max: float = 18.85          # [rad/s] no-load speed (AK45-10 KV75@24V, 10:1)
-    ramp_up_s: float = 0.010          # [s] torque ramp-up to avoid shock
+    ramp_up_s: float = 0.01          # [s] torque ramp-up to avoid shock
     ramp_down_rad: float = 0.05       # [rad] taper zone before Q_EXT
-    liftoff_debounce_s: float = 0.05  # [s] wheels-off-ground window for FLYING
+    retract_time: float = 0.01         # [s] Q_EXT→Q_NOM PD trajectory duration
+    retract_done_rad: float = 0.05     # [rad] hip within this of Q_NOM → FLYING
     min_airborne_s: float = 0.10      # [s] minimum time in FLYING before landing can trigger
     extend_timeout_s: float = 1.0     # [s] max time in EXTEND before aborting jump
     settle_pitch_deg: float = 10.0     # [deg] pitch threshold for SETTLED
     settle_time_s: float = 0.5        # [s] stable window for SETTLED
     landing_timeout_s: float = 0.5    # [s] max time in LANDING before forcing SETTLED
     wheel_hold_gain: float = 0.15     # [N·m·s/rad] wheel velocity damping during CROUCH+EXTEND
-    wheel_ff_torque: float = -3.0     # [N·m] reverse feedforward torque during EXTEND only
+    wheel_ff_torque: float = 0.0     # [N·m] reverse feedforward torque during EXTEND only
 
 
 ################################## FEED FORWARD

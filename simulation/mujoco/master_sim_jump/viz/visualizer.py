@@ -736,8 +736,10 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
     # Vertical markers: airborne / landed from robot's own mode transitions
     _modes = telemetry.get('mode', np.full(len(t), 'BALANCE', dtype=object))
     if len(_modes) > 1:
-        _air_idxs  = np.where((_modes[1:] == 'FLYING')  & (_modes[:-1] != 'FLYING'))[0]
-        _land_idxs = np.where((_modes[1:] == 'LANDING') & (_modes[:-1] == 'FLYING'))[0]
+        # np.where on _modes[1:] returns index i where _modes[i+1] changed —
+        # add 1 so the marker lands on the first sample in the new mode.
+        _air_idxs  = np.where((_modes[1:] == 'FLYING')  & (_modes[:-1] != 'FLYING'))[0] + 1
+        _land_idxs = np.where((_modes[1:] == 'LANDING') & (_modes[:-1] == 'FLYING'))[0] + 1
         if len(_air_idxs):
             pl_wh.addItem(pg.InfiniteLine(
                 pos=t[_air_idxs[0]], angle=90,
@@ -851,6 +853,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
     _susp_init = _suspension_gains_dict(params)
     _hl_init = _hip_limits_dict(params)
     _rg_init = _robot_geom_dict(params)
+    _jump_init = _jump_gains_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -860,7 +863,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
               f"Replay — {cfg.display_name}",
               wheel_limit, hip_limit, False, _vp_init, _lqr_init,
               _ctrl_defaults_from_cfg(cfg), _yaw_init, _susp_init,
-              _hl_init, _rg_init),
+              _hl_init, _rg_init, _jump_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -876,6 +879,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
 
     scenario_logged = False
     sim_fell = False
+    _sim_paused = [False]
 
     def _reset_replay():
         nonlocal step, _last_tick, last_push, scenario_logged, sim_fell
@@ -889,6 +893,7 @@ def replay(scenario_name: str, with_viewer: bool = False,
         last_push = -1.0
         scenario_logged = False
         sim_fell = False
+        _sim_paused[0] = False
         if not data_q.full():
             data_q.put_nowait("RESET")
         print("  Replay restarted.")
@@ -935,6 +940,10 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     cmd = cmd_q.get_nowait()
                     if cmd == "RESTART":
                         _reset_replay()
+                    elif cmd == "PAUSE":
+                        _sim_paused[0] = True
+                    elif cmd == "RESUME":
+                        _sim_paused[0] = False
                     elif isinstance(cmd, tuple):
                         if cmd[0] == "GAIN_VP":
                             ctrl.update_velocity_pi_gain(cmd[1], cmd[2])
@@ -944,10 +953,20 @@ def replay(scenario_name: str, with_viewer: bool = False,
                             ctrl.update_yaw_pi_gain(cmd[1], cmd[2])
                         elif cmd[0] == "GAIN_SUSP":
                             ctrl.update_suspension_gain(cmd[1], cmd[2])
+                        elif cmd[0] == "GAIN_JUMP":
+                            ctrl.update_jump_gain(cmd[1], cmd[2])
                         elif cmd[0] == "ROBOT_GEOM":
                             ctrl.update_robot_geom(cmd[1], cmd[2])
             except Exception:
                 pass
+
+            if _sim_paused[0]:
+                viewer.sync()
+                elapsed = time.perf_counter() - frame_start
+                sleep_t = 1.0 / RENDER_HZ - elapsed
+                if sleep_t > 0:
+                    time.sleep(sleep_t)
+                continue
 
             for _ in range(steps_per_frame):
                 if sim_fell:
@@ -1060,6 +1079,11 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     max(tk['wheel_z_R'] - params.robot.wheel_r, 0.0) * 1000.0,
                     tk.get('mode', 'BALANCE'),
                     tk.get('az_imu', 0.0),
+                    tk.get('ax_imu', 0.0),
+                    tk.get('ay_imu', 0.0),
+                    tk.get('gx_imu', 0.0),
+                    tk.get('gy_imu', 0.0),
+                    tk.get('gz_imu', 0.0),
                 ))
                 last_push = wall_now
 
@@ -1146,7 +1170,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                   yaw_pi_gains: dict = None,
                   suspension_gains: dict = None,
                   hip_limits: dict = None,
-                  robot_geom: dict = None) -> None:
+                  robot_geom: dict = None,
+                  jump_gains: dict = None) -> None:
     """Child process — independent Qt app with 11-panel pyqtgraph telemetry.
 
     Communication:
@@ -1274,12 +1299,51 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                 cmd_q.get_nowait()
             except Exception:
                 break
+        # Auto-resume if paused
+        if _paused[0]:
+            _paused[0] = False
+            _btn_pause.setText("⏸  Pause")
+            _btn_pause.setStyleSheet(
+                "QPushButton{background:#3a3a5e;color:white;font-size:11px;"
+                "border-radius:4px;padding:0 10px}"
+                "QPushButton:hover{background:#5a5a9e}")
         try:
             cmd_q.put_nowait("RESTART")
         except Exception:
             pass
     btn.clicked.connect(_send_restart)
     hbox.addWidget(btn)
+
+    # ── Pause / Resume button ──────────────────────────────────────────────
+    _paused = [False]
+
+    _btn_pause = QtWidgets.QPushButton("⏸  Pause")
+    _btn_pause.setFixedHeight(26)
+    _btn_pause.setStyleSheet(
+        "QPushButton{background:#3a3a5e;color:white;font-size:11px;"
+        "border-radius:4px;padding:0 10px}"
+        "QPushButton:hover{background:#5a5a9e}")
+
+    def _on_pause_toggle():
+        _paused[0] = not _paused[0]
+        if _paused[0]:
+            _btn_pause.setText("▶  Resume")
+            _btn_pause.setStyleSheet(
+                "QPushButton{background:#1e5a1e;color:#80ff80;font-size:11px;"
+                "font-weight:bold;border-radius:4px;padding:0 10px}"
+                "QPushButton:hover{background:#2e7a2e}")
+            _safe_cmd("PAUSE")
+        else:
+            _btn_pause.setText("⏸  Pause")
+            _btn_pause.setStyleSheet(
+                "QPushButton{background:#3a3a5e;color:white;font-size:11px;"
+                "border-radius:4px;padding:0 10px}"
+                "QPushButton:hover{background:#5a5a9e}")
+            _safe_cmd("RESUME")
+
+    _btn_pause.clicked.connect(_on_pause_toggle)
+    hbox.addWidget(_btn_pause)
+
     vbox.addWidget(status_row)
 
     # ── Controller enable/disable checkboxes ──────────────────────────────────
@@ -1365,6 +1429,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _yaw_spinboxes = {}
     _susp_spinboxes = {}
     _hip_lim_spinboxes = {}
+    _jump_spinboxes = {}
 
     _SPIN_STYLE = (
         "QDoubleSpinBox{background:#2a2a4e;color:#80ffb0;border:1px solid #444;"
@@ -1387,7 +1452,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     hbox_gains_outer.setSpacing(10)
 
     _gain_combo = QtWidgets.QComboBox()
-    _gain_combo.addItems(["VelPI", "LQR", "YawPI", "Suspension", "Hip Limits"])
+    _gain_combo.addItems(["VelPI", "LQR", "YawPI", "Suspension", "Hip Limits", "Jump"])
     _gain_combo.setFixedWidth(100)
     _gain_combo.setStyleSheet(
         "QComboBox{background:#2a2a4e;color:#ffd080;border:1px solid #555;"
@@ -1536,6 +1601,35 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _hb_hl.addStretch()
     _gain_stack.addWidget(_page_hl)
 
+    # ── Page 5: Jump ────────────────────────────────────────────────────────────
+    _jg = jump_gains or {}
+    _page_jump = QtWidgets.QWidget()
+    _page_jump.setStyleSheet("background:transparent")
+    _hb_jump = QtWidgets.QHBoxLayout(_page_jump)
+    _hb_jump.setContentsMargins(0, 0, 0, 0)
+    _hb_jump.setSpacing(12)
+
+    _jump_defs = [
+        ("crouch_s",    "crouch_time",    0.01, 2.0,  0.01, 3, _jg.get("crouch_time",    0.1)),
+        ("max_τ",       "max_torque",     0.0,  30.0, 0.5,  1, _jg.get("max_torque",     7.0)),
+        ("ramp_up_s",   "ramp_up_s",      0.0,  0.5,  0.005,3, _jg.get("ramp_up_s",      0.01)),
+        ("ramp_dn_rad", "ramp_down_rad",  0.0,  0.5,  0.01, 3, _jg.get("ramp_down_rad",  0.05)),
+        ("retract_s",   "retract_time",   0.01, 1.0,  0.01, 3, _jg.get("retract_time",   0.15)),
+        ("whl_hold",    "wheel_hold_gain",0.0,  2.0,  0.01, 3, _jg.get("wheel_hold_gain",0.15)),
+        ("whl_ff_τ",    "wheel_ff_torque",-20.0,0.0,  0.5,  1, _jg.get("wheel_ff_torque",-6.0)),
+    ]
+    for disp, fld, lo, hi, step, dec, default in _jump_defs:
+        lbl = QtWidgets.QLabel(disp); lbl.setStyleSheet(_SPIN_LBL)
+        _hb_jump.addWidget(lbl)
+        sb = QtWidgets.QDoubleSpinBox()
+        sb.setRange(lo, hi); sb.setSingleStep(step); sb.setDecimals(dec)
+        sb.setValue(default); sb.setStyleSheet(_SPIN_STYLE)
+        sb.valueChanged.connect(lambda val, f=fld: _safe_cmd(("GAIN_JUMP", f, val)))
+        _hb_jump.addWidget(sb)
+        _jump_spinboxes[fld] = (sb, None)
+    _hb_jump.addStretch()
+    _gain_stack.addWidget(_page_jump)
+
     vbox.addWidget(gains_outer)
 
     # ── Save Gains → params.py button ─────────────────────────────────────────
@@ -1616,6 +1710,11 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         for field_name, sb in _hip_lim_spinboxes.items():
             val = round(math.radians(sb.value()), 6)
             src = _replace_field_in_class(src, "RobotGeometry", field_name, val)
+
+        # Jump gains
+        for field_name, (sb, _) in _jump_spinboxes.items():
+            val = round(sb.value(), 6)
+            src = _replace_field_in_class(src, "JumpGains", field_name, val)
 
         if src == original:
             print("  [Save] No changes detected — params.py unchanged.")
@@ -2115,7 +2214,52 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
     p_az.setYRange(-2.0, _landing_az * 1.25, padding=0)
 
-    ln_az = p_az.plot(pen=pg.mkPen('#60d0ff', width=LINE_WIDTH), name="az_imu")
+    ln_az = p_az.plot(pen=pg.mkPen('#60d0ff', width=LINE_WIDTH), name="az")
+
+    # Vertical markers: airborne / landed (scrolling, same as wheel-height chart)
+    _ln_az_air  = pg.InfiniteLine(angle=90, movable=False,
+                                  pen=pg.mkPen('#ffff44', width=1.5, style=_DASH),
+                                  label='airborne',
+                                  labelOpts={'color': '#ffff44', 'position': 0.95,
+                                             'fill': pg.mkBrush(0, 0, 0, 120)})
+    _ln_az_land = pg.InfiniteLine(angle=90, movable=False,
+                                  pen=pg.mkPen('#ff8844', width=1.5, style=_DASH),
+                                  label='landed',
+                                  labelOpts={'color': '#ff8844', 'position': 0.85,
+                                             'fill': pg.mkBrush(0, 0, 0, 120)})
+    p_az.addItem(_ln_az_air);  _ln_az_air.hide()
+    p_az.addItem(_ln_az_land); _ln_az_land.hide()
+    _ln_az_crouch = pg.InfiniteLine(angle=90, movable=False,
+                                    pen=pg.mkPen('#44ff88', width=1.5, style=_DASH),
+                                    label='crouch',
+                                    labelOpts={'color': '#44ff88', 'position': 0.75,
+                                               'fill': pg.mkBrush(0, 0, 0, 120)})
+    _ln_az_extend = pg.InfiniteLine(angle=90, movable=False,
+                                    pen=pg.mkPen('#cc88ff', width=1.5, style=_DASH),
+                                    label='extend',
+                                    labelOpts={'color': '#cc88ff', 'position': 0.65,
+                                               'fill': pg.mkBrush(0, 0, 0, 120)})
+    _ln_az_ext_end = pg.InfiniteLine(angle=90, movable=False,
+                                     pen=pg.mkPen('#ff4488', width=1.5, style=_DASH),
+                                     label='ext end',
+                                     labelOpts={'color': '#ff4488', 'position': 0.55,
+                                                'fill': pg.mkBrush(0, 0, 0, 120)})
+    p_az.addItem(_ln_az_crouch);  _ln_az_crouch.hide()
+    p_az.addItem(_ln_az_extend);  _ln_az_extend.hide()
+    p_az.addItem(_ln_az_ext_end); _ln_az_ext_end.hide()
+
+    glw_imu.nextRow()
+    p_axy = _ip("Accelerometer X (fwd) / Y (left)", "m/s²")
+    p_axy.addLegend(offset=(10, 10))
+    ln_ax = p_axy.plot(pen=pg.mkPen('#ff6060', width=LINE_WIDTH), name="ax")
+    ln_ay = p_axy.plot(pen=pg.mkPen('#60ff80', width=LINE_WIDTH), name="ay")
+
+    glw_imu.nextRow()
+    p_gyro = _ip("Gyroscope X/Y/Z", "rad/s")
+    p_gyro.addLegend(offset=(10, 10))
+    ln_gx = p_gyro.plot(pen=pg.mkPen('#ff6060', width=LINE_WIDTH), name="gx")
+    ln_gy = p_gyro.plot(pen=pg.mkPen('#60ff80', width=LINE_WIDTH), name="gy")
+    ln_gz = p_gyro.plot(pen=pg.mkPen('#60d0ff', width=LINE_WIDTH), name="gz")
 
     # ── Ring buffers — 29 channels ────────────────────────────────────────────
     MAXLEN = int(window_s * TELEMETRY_HZ) + 200
@@ -2180,8 +2324,13 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         mech_iwhl_L_buf, mech_iwhl_R_buf,
     ]
 
-    # ── IMU tab ring buffer ───────────────────────────────────────────────────
+    # ── IMU tab ring buffers ──────────────────────────────────────────────────
     az_imu_buf = deque(maxlen=MAXLEN)
+    ax_imu_buf = deque(maxlen=MAXLEN)
+    ay_imu_buf = deque(maxlen=MAXLEN)
+    gx_imu_buf = deque(maxlen=MAXLEN)
+    gy_imu_buf = deque(maxlen=MAXLEN)
+    gz_imu_buf = deque(maxlen=MAXLEN)
 
     # ── 4-bar force estimation from hip torque + kinematics ──────────────────
     def _estimate_forces(q_hip_deg, tau_hip, tau_whl):
@@ -2254,6 +2403,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _stat_interval = 1.0 / 3.0   # status labels update at 3 Hz
     _airborne_t    = [None]       # sim-time of last airborne detection
     _landing_t     = [None]       # sim-time of last landing detection
+    _crouch_t      = [None]       # sim-time of BALANCE→CROUCH transition
+    _extend_t      = [None]       # sim-time of CROUCH→EXTEND transition
+    _extend_end_t  = [None]       # sim-time of EXTEND→* transition
     _prev_mode     = ['BALANCE']  # previous robot_mode for edge detection
 
     def _reset_bufs():
@@ -2262,6 +2414,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         for b in mech_bufs:
             b.clear()
         az_imu_buf.clear()
+        ax_imu_buf.clear(); ay_imu_buf.clear()
+        gx_imu_buf.clear(); gy_imu_buf.clear(); gz_imu_buf.clear()
         for ln in all_lines:
             ln.setData([], [])
         for ln in mech_lines:
@@ -2271,7 +2425,10 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         for lbl in (lbl_soc, lbl_temp, lbl_ibat, lbl_ibat_max):
             lbl.setText(lbl.text().split(":")[0] + ": --")
         _airborne_t[0] = None; _landing_t[0] = None; _prev_mode[0] = 'BALANCE'
+        _crouch_t[0] = None; _extend_t[0] = None; _extend_end_t[0] = None
         _ln_air.hide(); _ln_land.hide()
+        _ln_az_air.hide(); _ln_az_land.hide()
+        _ln_az_crouch.hide(); _ln_az_extend.hide(); _ln_az_ext_end.hide()
 
     # ── 60 Hz update callback ─────────────────────────────────────────────────
     def _update():
@@ -2287,6 +2444,14 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             if item == "RESET":
                 _reset_bufs()
                 _fitness_overlay.hide()
+                # Auto-resume on reset so charts don't stay frozen
+                if _paused[0]:
+                    _paused[0] = False
+                    _btn_pause.setText("⏸  Pause")
+                    _btn_pause.setStyleSheet(
+                        "QPushButton{background:#3a3a5e;color:white;font-size:11px;"
+                        "border-radius:4px;padding:0 10px}"
+                        "QPushButton:hover{background:#5a5a9e}")
                 continue
             if isinstance(item, tuple) and len(item) == 2 and item[0] == "TITLE":
                 main_win.setWindowTitle(item[1])
@@ -2317,7 +2482,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
              tau_hip_L, tau_hip_R,
              tau_spring_L, tau_spring_R,
              wh_L_mm, wh_R_mm,
-             robot_mode, az_imu) = item
+             robot_mode, az_imu,
+             ax_imu, ay_imu, gx_imu, gy_imu, gz_imu) = item
 
             t_buf.append(t)
             pitch_buf.append(pitch);          pitch_ref_buf.append(pitch_ref)
@@ -2338,8 +2504,16 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             tau_spring_L_buf.append(tau_spring_L);  tau_spring_R_buf.append(tau_spring_R)
             wheel_h_L_buf.append(wh_L_mm);          wheel_h_R_buf.append(wh_R_mm)
             az_imu_buf.append(az_imu)
+            ax_imu_buf.append(ax_imu); ay_imu_buf.append(ay_imu)
+            gx_imu_buf.append(gx_imu); gy_imu_buf.append(gy_imu); gz_imu_buf.append(gz_imu)
 
-            # ── Airborne / landing edge detection from robot's own mode ──
+            # ── Jump phase edge detection from robot's own mode ──
+            if robot_mode == 'CROUCH' and _prev_mode[0] != 'CROUCH':
+                _crouch_t[0] = t
+            elif robot_mode == 'EXTEND' and _prev_mode[0] != 'EXTEND':
+                _extend_t[0] = t
+            elif _prev_mode[0] == 'EXTEND' and robot_mode != 'EXTEND':
+                _extend_end_t[0] = t
             if robot_mode == 'FLYING' and _prev_mode[0] != 'FLYING':
                 _airborne_t[0] = t
                 _landing_t[0]  = None
@@ -2360,6 +2534,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                 mech_coup_L_buf.append(fl['coup']); mech_coup_R_buf.append(fr['coup'])
                 mech_ihip_L_buf.append(I_hip_L);   mech_ihip_R_buf.append(I_hip_R)
                 mech_iwhl_L_buf.append(I_whl_L);   mech_iwhl_R_buf.append(I_whl_R)
+
+        if _paused[0]:
+            return  # Charts frozen — sim is paused
 
         if len(t_buf) < 2:
             return
@@ -2452,9 +2629,28 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             ln_mi_whl_L.setData(xw, _a(mech_iwhl_L_buf))
             ln_mi_whl_R.setData(xw, _a(mech_iwhl_R_buf))
 
-        # ── Update IMU tab chart ──────────────────────────────────────────────
+        # ── Update IMU tab charts ─────────────────────────────────────────────
         if len(az_imu_buf) > 1:
             ln_az.setData(xw, _a(az_imu_buf))
+            ln_ax.setData(xw, _a(ax_imu_buf))
+            ln_ay.setData(xw, _a(ay_imu_buf))
+            ln_gx.setData(xw, _a(gx_imu_buf))
+            ln_gy.setData(xw, _a(gy_imu_buf))
+            ln_gz.setData(xw, _a(gz_imu_buf))
+        # Move jump-phase markers on az chart with the scrolling window
+        for _ln_m, _mt in ((_ln_az_crouch,  _crouch_t[0]),
+                            (_ln_az_extend,  _extend_t[0]),
+                            (_ln_az_ext_end, _extend_end_t[0]),
+                            (_ln_az_air,     _airborne_t[0]),
+                            (_ln_az_land,    _landing_t[0])):
+            if _mt is not None:
+                _xm = _mt - sim_t
+                if -window_s <= _xm <= 0:
+                    _ln_m.setValue(_xm); _ln_m.show()
+                else:
+                    _ln_m.hide()
+            else:
+                _ln_m.hide()
 
         # Auto-fit Y to data, but enforce minimum span of 2 units.
         # Compute data range from all curves in each plot, then expand
@@ -2521,6 +2717,15 @@ def _hip_limits_dict(params) -> dict:
     """Extract Q_EXT / Q_RET as a plain dict for passing to plot process."""
     r = params.robot
     return dict(Q_EXT=r.Q_EXT, Q_RET=r.Q_RET)
+
+
+def _jump_gains_dict(params) -> dict:
+    """Extract JumpGains fields as a plain dict for passing to plot process."""
+    g = params.gains.jump
+    return dict(crouch_time=g.crouch_time, max_torque=g.max_torque,
+                ramp_up_s=g.ramp_up_s, ramp_down_rad=g.ramp_down_rad,
+                retract_time=g.retract_time, wheel_hold_gain=g.wheel_hold_gain,
+                wheel_ff_torque=g.wheel_ff_torque)
 
 
 def _robot_geom_dict(params) -> dict:
@@ -2637,6 +2842,7 @@ def sandbox(rng_seed: int = 0):
     # Last tick data (for telemetry push between control steps)
     _last_tick = {}
     last_push  = -1.0
+    _sim_paused = [False]
 
     # ── Gamepad init ─────────────────────────────────────────────────────────
     JOY_DEADZONE = 0.08
@@ -2672,6 +2878,7 @@ def sandbox(rng_seed: int = 0):
     _susp_init = _suspension_gains_dict(params)
     _hl_init = _hip_limits_dict(params)
     _rg_init = _robot_geom_dict(params)
+    _jump_init = _jump_gains_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -2680,7 +2887,7 @@ def sandbox(rng_seed: int = 0):
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, "Sandbox — free drive",
               wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
-              _ctrl_init_sb, _yaw_init, _susp_init, _hl_init, _rg_init),
+              _ctrl_init_sb, _yaw_init, _susp_init, _hl_init, _rg_init, _jump_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -2706,6 +2913,7 @@ def sandbox(rng_seed: int = 0):
         _hip_pct[0] = _HIP_NOM_PCT
         _jump_active[0] = False
         _last_tick = {}; last_push = -1.0
+        _sim_paused[0] = False
         if not data_q.full():
             data_q.put_nowait("RESET")
 
@@ -2746,10 +2954,15 @@ def sandbox(rng_seed: int = 0):
 
             # ── Drain command queue from plot process ──
             try:
-                cmd = cmd_q.get_nowait()
-                if cmd == "RESTART":
+                while True:
+                  cmd = cmd_q.get_nowait()
+                  if cmd == "RESTART":
                     _reset_state()
-                elif isinstance(cmd, tuple):
+                  elif cmd == "PAUSE":
+                    _sim_paused[0] = True
+                  elif cmd == "RESUME":
+                    _sim_paused[0] = False
+                  elif isinstance(cmd, tuple):
                     if cmd[0] == "V_DESIRED":
                         _v_desired[0] = float(cmd[1])
                     elif cmd[0] == "OMEGA_DESIRED":
@@ -2778,6 +2991,8 @@ def sandbox(rng_seed: int = 0):
                         ctrl.update_yaw_pi_gain(cmd[1], cmd[2])
                     elif cmd[0] == "GAIN_SUSP":
                         ctrl.update_suspension_gain(cmd[1], cmd[2])
+                    elif cmd[0] == "GAIN_JUMP":
+                        ctrl.update_jump_gain(cmd[1], cmd[2])
                     elif cmd[0] == "ROBOT_GEOM":
                         ctrl.update_robot_geom(cmd[1], cmd[2])
                     elif cmd[0] == "JUMP":
@@ -2804,6 +3019,14 @@ def sandbox(rng_seed: int = 0):
                 if abs(raw_h) > JOY_DEADZONE:
                     clamped_h = max(-JOY_HIP_SATURATION, min(JOY_HIP_SATURATION, raw_h))
                     _hip_pct[0] = (JOY_HIP_SATURATION + clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0
+
+            if _sim_paused[0]:
+                viewer.sync()
+                elapsed = time.perf_counter() - frame_start
+                sleep_t = 1.0 / RENDER_HZ - elapsed
+                if sleep_t > 0:
+                    time.sleep(sleep_t)
+                continue
 
             for _ in range(steps_per_frame):
                 if step % ctrl_steps == 0:
@@ -2893,6 +3116,11 @@ def sandbox(rng_seed: int = 0):
                     max(tk['wheel_z_R'] - params.robot.wheel_r, 0.0) * 1000.0,
                     tk.get('mode', 'BALANCE'),
                     tk.get('az_imu', 0.0),
+                    tk.get('ax_imu', 0.0),
+                    tk.get('ay_imu', 0.0),
+                    tk.get('gx_imu', 0.0),
+                    tk.get('gy_imu', 0.0),
+                    tk.get('gz_imu', 0.0),
                 ))
                 last_push = wall_now
 
@@ -2990,6 +3218,7 @@ def run_unified(initial_scenario: str = "sandbox",
     _susp_init = _suspension_gains_dict(params)
     _hl_init = _hip_limits_dict(params)
     _rg_init = _robot_geom_dict(params)
+    _jump_init = _jump_gains_dict(params)
 
     data_q = mp.Queue(maxsize=12000)
     cmd_q  = mp.Queue(maxsize=32)
@@ -3000,7 +3229,7 @@ def run_unified(initial_scenario: str = "sandbox",
         target=_plot_process,
         args=(data_q, cmd_q, WINDOW_S, init_title,
               wheel_limit, hip_limit, has_gamepad, _vp_init, _lqr_init,
-              _ctrl_init, _yaw_init, _susp_init, _hl_init, _rg_init),
+              _ctrl_init, _yaw_init, _susp_init, _hl_init, _rg_init, _jump_init),
         daemon=True)
     plot_proc.start()
     print(f"  Plot process started (PID {plot_proc.pid})")
@@ -3080,6 +3309,7 @@ def run_unified(initial_scenario: str = "sandbox",
         scenario_logged = False
         sim_fell     = False
         world_switch = False     # set True to break inner loop for new world
+        _sim_paused  = [False]
         _slowmo_liftoff_t = [None]   # sim-time when FLYING started (mutable container)
         _slowmo_landing_t = [None]   # sim-time when robot landed after a jump
 
@@ -3095,6 +3325,7 @@ def run_unified(initial_scenario: str = "sandbox",
             last_push = -1.0
             scenario_logged = False
             sim_fell = False
+            _sim_paused[0] = False
             _slowmo_liftoff_t[0] = None
             _slowmo_landing_t[0] = None
             _reset_sandbox_targets()
@@ -3211,6 +3442,10 @@ def run_unified(initial_scenario: str = "sandbox",
                             _reset_sim()
                             if cfg and cfg.init_fn:
                                 cfg.init_fn(model, data, params)
+                        elif cmd == "PAUSE":
+                            _sim_paused[0] = True
+                        elif cmd == "RESUME":
+                            _sim_paused[0] = False
                         elif isinstance(cmd, tuple):
                             if cmd[0] == "V_DESIRED":
                                 _v_desired[0] = float(cmd[1])
@@ -3239,6 +3474,8 @@ def run_unified(initial_scenario: str = "sandbox",
                                 ctrl.update_yaw_pi_gain(cmd[1], cmd[2])
                             elif cmd[0] == "GAIN_SUSP":
                                 ctrl.update_suspension_gain(cmd[1], cmd[2])
+                            elif cmd[0] == "GAIN_JUMP":
+                                ctrl.update_jump_gain(cmd[1], cmd[2])
                             elif cmd[0] == "ROBOT_GEOM":
                                 ctrl.update_robot_geom(cmd[1], cmd[2])
                             elif cmd[0] == "JUMP":
@@ -3265,10 +3502,19 @@ def run_unified(initial_scenario: str = "sandbox",
                         clamped_h = max(-JOY_HIP_SATURATION, min(JOY_HIP_SATURATION, raw_h))
                         _hip_pct[0] = (JOY_HIP_SATURATION + clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0
 
+                # ── Pause: freeze sim, keep viewer alive ──
+                if _sim_paused[0]:
+                    viewer.sync()
+                    elapsed = time.perf_counter() - frame_start
+                    sleep_t = 1.0 / RENDER_HZ - elapsed
+                    if sleep_t > 0:
+                        time.sleep(sleep_t)
+                    continue
+
                 # ── Slow-mo when jump is active ──
-                # Slow-mo for entire flight, then continues 1s past landing.
+                # Slow-mo from CROUCH through flight, then continues 1s past landing.
                 jmode = ctrl.jump_ctrl.mode
-                if jmode == RobotMode.FLYING and _slowmo_liftoff_t[0] is None:
+                if jmode == RobotMode.CROUCH and _slowmo_liftoff_t[0] is None:
                     _slowmo_liftoff_t[0] = float(data.time)
                     _slowmo_landing_t[0] = None
                 elif jmode == RobotMode.BALANCE and _slowmo_liftoff_t[0] is not None:
@@ -3366,7 +3612,9 @@ def run_unified(initial_scenario: str = "sandbox",
 
                             _last_tick = tick
                             if tick['fell']:
-                                _reset_sim()
+                                sim_fell = True
+                                print(f"  Robot fell at t={float(data.time):.2f}s. "
+                                      f"Click Restart to recover.")
                                 break
 
                     # Disturbance (replay only, during scenario duration)
@@ -3444,6 +3692,11 @@ def run_unified(initial_scenario: str = "sandbox",
                         max(tk['wheel_z_R'] - params.robot.wheel_r, 0.0) * 1000.0,
                         tk.get('mode', 'BALANCE'),
                         tk.get('az_imu', 0.0),
+                        tk.get('ax_imu', 0.0),
+                        tk.get('ay_imu', 0.0),
+                        tk.get('gx_imu', 0.0),
+                        tk.get('gy_imu', 0.0),
+                        tk.get('gz_imu', 0.0),
                     ))
                     last_push = wall_now
 

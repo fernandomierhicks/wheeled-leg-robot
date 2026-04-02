@@ -370,6 +370,11 @@ class SimController:
         """Hot-swap a single Suspension gain field (survives reset)."""
         self._patch_gains_subfield("suspension", field, value)
 
+    def update_jump_gain(self, field: str, value: float):
+        """Hot-swap a single JumpGains field; also updates jump_ctrl.gains live."""
+        new_gains = self._patch_gains_subfield("jump", field, value)
+        self.jump_ctrl.gains = new_gains
+
     def update_robot_geom(self, field: str, value: float):
         """Hot-swap Q_EXT or Q_RET and recompute LQR gain table."""
         new_robot = _dc_replace(self.params.robot, **{field: value})
@@ -416,7 +421,12 @@ class SimController:
         pitch      = pitch_true      + rng.normal(0, params.noise.pitch_std_rad)
         pitch_rate = pitch_rate_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
         wheel_vel  = (data.qvel[self.d_whl_L] + data.qvel[self.d_whl_R]) / 2.0
-        az_imu     = float(data.cacc[self.box_bid, 2]) + 9.81 + rng.normal(0, params.noise.accel_std)
+        az_imu     = float(data.cacc[self.box_bid, 5])        + rng.normal(0, params.noise.accel_std)
+        ax_imu     = float(data.cacc[self.box_bid, 3])        + rng.normal(0, params.noise.accel_std)
+        ay_imu     = float(data.cacc[self.box_bid, 4])        + rng.normal(0, params.noise.accel_std)
+        gx_imu     = float(data.cvel[self.box_bid, 0])        + rng.normal(0, params.noise.pitch_rate_std_rad_s)
+        gy_imu     = float(data.cvel[self.box_bid, 1])        + rng.normal(0, params.noise.pitch_rate_std_rad_s)
+        gz_imu     = float(data.cvel[self.box_bid, 2])        + rng.normal(0, params.noise.pitch_rate_std_rad_s)
         hip_q_avg  = (data.qpos[self.s_hip_L] + data.qpos[self.s_hip_R]) / 2.0
         pitch_ff   = get_equilibrium_pitch(robot, hip_q_avg,
                                            m_spring=params.gains.knee_spring.m_spring)
@@ -433,12 +443,12 @@ class SimController:
         _pitch_d, _pitch_rate_d, _wheel_vel_d, _az_d = self.sens_buf.push(
             (pitch, pitch_rate, wheel_vel, az_imu))
 
-        # ── Jump controller (uses delayed az — matches real-robot IMU latency) ──
+        # ── Jump controller (az undelayed — raw sample for responsive liftoff detection) ──
         if jump_active:
             hip_dq_avg = (data.qvel[self.d_hip_L] + data.qvel[self.d_hip_R]) / 2.0
             mode_out = self.jump_ctrl.update(
                 data.time, hip_q_avg, hip_dq_avg,
-                _az_d, params.gains.suspension, _pitch_d)
+                az_imu, params.gains.suspension, _pitch_d)
             q_hip_target = mode_out.q_hip_target
             dq_hip_target = mode_out.dq_hip_target
         else:
@@ -711,7 +721,12 @@ class SimController:
             tau_delayed_L=float(_tau_L_d),
             tau_delayed_R=float(_tau_R_d),
             mode=mode_out.mode.name if mode_out else "BALANCE",
-            az_imu=_az_d,
+            az_imu=az_imu,
+            ax_imu=ax_imu,
+            ay_imu=ay_imu,
+            gx_imu=gx_imu,
+            gy_imu=gy_imu,
+            gz_imu=gz_imu,
             susp_scale=_susp_scale,
         )
 
