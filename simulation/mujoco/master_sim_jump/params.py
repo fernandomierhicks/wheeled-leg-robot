@@ -393,7 +393,7 @@ class RobotGeometry:
     m_tibia: float = 0.0183         # [kg] tibia Al tube (16×1.0mm, 165mm — scaled by length)
     m_coupler: float = 0.0094       # [kg] coupler Al tube (10×0.8mm, 151mm — scaled by length)
     m_bearing: float = 0.0175       # [kg] avg bearing (608=12g, 6001=17g); ×4/side in physics.py → 140g total
-    m_wheel: float = 0.520          # [kg] wheel assembly (motor 450g + hub + tyre 70g)
+    m_wheel: float = 0.510          # [kg] wheel assembly (motor 440g + hub + tyre 70g)
 
     wheel_r: float = 0.075          # [m] wheel radius (150 mm OD)
     leg_y: float = 0.1430           # [m] Y-offset of leg plane from body centre

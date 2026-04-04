@@ -4,11 +4,8 @@
 
 -Able to move legs up and down and stay in place. 
 
--Add vertical markers to jump or imu plots to show jump phases. 
--IMU reports bogus values
--Add slow mo to jump phases
+-Connect Encoder to ODRIVE:https://docs.odriverobotics.com/v/0.5.6/encoders.html#spi-encoders
 
--dont end sim when robot falls. keep it going. let user restart it. -only in sandbox
 
 
 -Flip?
