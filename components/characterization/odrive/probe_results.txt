@@ -1,0 +1,711 @@
+======================================================================
+ODrive Firmware Probe — full attribute tree + fingerprints
+======================================================================
+
+Connecting...
+Connected.
+
+── Version Attributes ────────────────────────────────────────────────
+  odrv0.hw_version_major = 3
+  odrv0.hw_version_minor = 6
+  odrv0.hw_version_variant = 56
+  odrv0.fw_version_major = 0
+  odrv0.fw_version_minor = 0
+  odrv0.fw_version_revision = 0
+  odrv0.fw_version_unreleased = 1
+  odrv0.serial_number = 61985812394293
+  odrv0.user_config_loaded = True
+
+── Full attribute tree (depth ≤ 8) ──────────────────────────────────
+
+  odrv0.axis0  [object, 20 attrs]
+    odrv0.axis0.clear_errors()  [callable]
+    odrv0.axis0.config  [object, 20 attrs]
+      odrv0.axis0.config.calibration_lockin  [object, 6 attrs]
+        odrv0.axis0.config.calibration_lockin.accel = 20.0
+        odrv0.axis0.config.calibration_lockin.current = 10.0
+        odrv0.axis0.config.calibration_lockin.from_json()  [callable]
+        odrv0.axis0.config.calibration_lockin.ramp_distance = 3.1415927410125732
+        odrv0.axis0.config.calibration_lockin.ramp_time = 0.4000000059604645
+        odrv0.axis0.config.calibration_lockin.vel = 40.0
+      odrv0.axis0.config.can_heartbeat_rate_ms = 100
+      odrv0.axis0.config.can_node_id = 0
+      odrv0.axis0.config.can_node_id_extended = False
+      odrv0.axis0.config.dir_gpio_pin = 2
+      odrv0.axis0.config.enable_step_dir = False
+      odrv0.axis0.config.enable_watchdog = False
+      odrv0.axis0.config.from_json()  [callable]
+      odrv0.axis0.config.general_lockin  [object, 10 attrs]
+        odrv0.axis0.config.general_lockin.accel = 20.0
+        odrv0.axis0.config.general_lockin.current = 10.0
+        odrv0.axis0.config.general_lockin.finish_distance = 100.0
+        odrv0.axis0.config.general_lockin.finish_on_distance = False
+        odrv0.axis0.config.general_lockin.finish_on_enc_idx = False
+        odrv0.axis0.config.general_lockin.finish_on_vel = False
+        odrv0.axis0.config.general_lockin.from_json()  [callable]
+        odrv0.axis0.config.general_lockin.ramp_distance = 3.1415927410125732
+        odrv0.axis0.config.general_lockin.ramp_time = 0.4000000059604645
+        odrv0.axis0.config.general_lockin.vel = 40.0
+      odrv0.axis0.config.sensorless_ramp  [object, 10 attrs]
+        odrv0.axis0.config.sensorless_ramp.accel = 200.0
+        odrv0.axis0.config.sensorless_ramp.current = 10.0
+        odrv0.axis0.config.sensorless_ramp.finish_distance = 100.0
+        odrv0.axis0.config.sensorless_ramp.finish_on_distance = False
+        odrv0.axis0.config.sensorless_ramp.finish_on_enc_idx = False
+        odrv0.axis0.config.sensorless_ramp.finish_on_vel = True
+        odrv0.axis0.config.sensorless_ramp.from_json()  [callable]
+        odrv0.axis0.config.sensorless_ramp.ramp_distance = 3.1415927410125732
+        odrv0.axis0.config.sensorless_ramp.ramp_time = 0.4000000059604645
+        odrv0.axis0.config.sensorless_ramp.vel = 400.0
+      odrv0.axis0.config.startup_closed_loop_control = False
+      odrv0.axis0.config.startup_encoder_index_search = False
+      odrv0.axis0.config.startup_encoder_offset_calibration = False
+      odrv0.axis0.config.startup_homing = False
+      odrv0.axis0.config.startup_motor_calibration = False
+      odrv0.axis0.config.startup_sensorless_control = False
+      odrv0.axis0.config.step_dir_always_on = False
+      odrv0.axis0.config.step_gpio_pin = 1
+      odrv0.axis0.config.turns_per_step = 0.0009765625
+      odrv0.axis0.config.watchdog_timeout = 0.0
+    odrv0.axis0.controller  [object, 14 attrs]
+      odrv0.axis0.controller.anticogging_valid = False
+      odrv0.axis0.controller.config  [object, 24 attrs]
+        odrv0.axis0.controller.config.anticogging  [object, 8 attrs]
+          odrv0.axis0.controller.config.anticogging.anticogging_enabled = True
+          odrv0.axis0.controller.config.anticogging.calib_anticogging = False
+          odrv0.axis0.controller.config.anticogging.calib_pos_threshold = 1.0
+          odrv0.axis0.controller.config.anticogging.calib_vel_threshold = 1.0
+          odrv0.axis0.controller.config.anticogging.cogging_ratio = 1.0
+          odrv0.axis0.controller.config.anticogging.from_json()  [callable]
+          odrv0.axis0.controller.config.anticogging.index = 0
+          odrv0.axis0.controller.config.anticogging.pre_calibrated = False
+        odrv0.axis0.controller.config.axis_to_mirror = 255
+        odrv0.axis0.controller.config.circular_setpoint_range = 1.0
+        odrv0.axis0.controller.config.circular_setpoints = False
+        odrv0.axis0.controller.config.control_mode = 3
+        odrv0.axis0.controller.config.enable_current_mode_vel_limit = True
+        odrv0.axis0.controller.config.enable_gain_scheduling = False
+        odrv0.axis0.controller.config.enable_overspeed_error = True
+        odrv0.axis0.controller.config.enable_vel_limit = True
+        odrv0.axis0.controller.config.from_json()  [callable]
+        odrv0.axis0.controller.config.gain_scheduling_width = 10.0
+        odrv0.axis0.controller.config.homing_speed = 0.25
+        odrv0.axis0.controller.config.inertia = 0.0
+        odrv0.axis0.controller.config.input_filter_bandwidth = 2.0
+        odrv0.axis0.controller.config.input_mode = 1
+        odrv0.axis0.controller.config.load_encoder_axis = 0
+        odrv0.axis0.controller.config.mirror_ratio = 1.0
+        odrv0.axis0.controller.config.pos_gain = 20.0
+        odrv0.axis0.controller.config.torque_ramp_rate = 0.009999999776482582
+        odrv0.axis0.controller.config.vel_gain = 0.1666666716337204
+        odrv0.axis0.controller.config.vel_integrator_gain = 0.3333333432674408
+        odrv0.axis0.controller.config.vel_limit = 2.0
+        odrv0.axis0.controller.config.vel_limit_tolerance = 1.2000000476837158
+        odrv0.axis0.controller.config.vel_ramp_rate = 1.0
+      odrv0.axis0.controller.error = 0
+      odrv0.axis0.controller.from_json()  [callable]
+      odrv0.axis0.controller.input_pos = 0.0
+      odrv0.axis0.controller.input_torque = 0.0
+      odrv0.axis0.controller.input_vel = 0.0
+      odrv0.axis0.controller.move_incremental()  [callable]
+      odrv0.axis0.controller.pos_setpoint = 0.0
+      odrv0.axis0.controller.start_anticogging_calibration()  [callable]
+      odrv0.axis0.controller.torque_setpoint = 0.0
+      odrv0.axis0.controller.trajectory_done = True
+      odrv0.axis0.controller.vel_integrator_torque = 0.0
+      odrv0.axis0.controller.vel_setpoint = 0.0
+    odrv0.axis0.current_state = 1
+    odrv0.axis0.encoder  [object, 21 attrs]
+      odrv0.axis0.encoder.calib_scan_response = 0.0
+      odrv0.axis0.encoder.config  [object, 19 attrs]
+        odrv0.axis0.encoder.config.abs_spi_cs_gpio_pin = 3
+        odrv0.axis0.encoder.config.bandwidth = 1000.0
+        odrv0.axis0.encoder.config.calib_range = 0.019999999552965164
+        odrv0.axis0.encoder.config.calib_scan_distance = 50.26548385620117
+        odrv0.axis0.encoder.config.calib_scan_omega = 12.566370964050293
+        odrv0.axis0.encoder.config.cpr = 16384
+        odrv0.axis0.encoder.config.enable_phase_interpolation = True
+        odrv0.axis0.encoder.config.find_idx_on_lockin_only = False
+        odrv0.axis0.encoder.config.from_json()  [callable]
+        odrv0.axis0.encoder.config.idx_search_unidirectional = False
+        odrv0.axis0.encoder.config.ignore_illegal_hall_state = False
+        odrv0.axis0.encoder.config.mode = 257
+        odrv0.axis0.encoder.config.offset = 0
+        odrv0.axis0.encoder.config.offset_float = 0.0
+        odrv0.axis0.encoder.config.pre_calibrated = False
+        odrv0.axis0.encoder.config.sincos_gpio_pin_cos = 4
+        odrv0.axis0.encoder.config.sincos_gpio_pin_sin = 3
+        odrv0.axis0.encoder.config.use_index = False
+        odrv0.axis0.encoder.config.zero_count_on_find_idx = True
+      odrv0.axis0.encoder.count_in_cpr = 9515
+      odrv0.axis0.encoder.error = 0
+      odrv0.axis0.encoder.from_json()  [callable]
+      odrv0.axis0.encoder.hall_state = 7
+      odrv0.axis0.encoder.index_found = False
+      odrv0.axis0.encoder.interpolation = 1.0
+      odrv0.axis0.encoder.is_ready = False
+      odrv0.axis0.encoder.phase = 0.4126408100128174
+      odrv0.axis0.encoder.pos_abs = 9517
+      odrv0.axis0.encoder.pos_circular = 0.58087158203125
+      odrv0.axis0.encoder.pos_cpr = 0.5809011459350586
+      odrv0.axis0.encoder.pos_cpr_counts = 9517.828125
+      odrv0.axis0.encoder.pos_estimate = -0.41904354095458984
+      odrv0.axis0.encoder.pos_estimate_counts = -6865.75
+      odrv0.axis0.encoder.set_linear_count()  [callable]
+      odrv0.axis0.encoder.shadow_count = -6866
+      odrv0.axis0.encoder.spi_error_rate = 0.0
+      odrv0.axis0.encoder.vel_estimate = -0.030517578125
+      odrv0.axis0.encoder.vel_estimate_counts = -375.0
+    odrv0.axis0.error = 0
+    odrv0.axis0.fet_thermistor  [object, 4 attrs]
+      odrv0.axis0.fet_thermistor.config  [object, 4 attrs]
+        odrv0.axis0.fet_thermistor.config.enabled = True
+        odrv0.axis0.fet_thermistor.config.from_json()  [callable]
+        odrv0.axis0.fet_thermistor.config.temp_limit_lower = 100.0
+        odrv0.axis0.fet_thermistor.config.temp_limit_upper = 120.0
+      odrv0.axis0.fet_thermistor.error = 0
+      odrv0.axis0.fet_thermistor.from_json()  [callable]
+      odrv0.axis0.fet_thermistor.temperature = 27.839860916137695
+    odrv0.axis0.from_json()  [callable]
+    odrv0.axis0.is_homed = False
+    odrv0.axis0.lockin_state = 0
+    odrv0.axis0.loop_counter = 68899
+    odrv0.axis0.max_endstop  [object, 3 attrs]
+      odrv0.axis0.max_endstop.config  [object, 7 attrs]
+        odrv0.axis0.max_endstop.config.debounce_ms = 50
+        odrv0.axis0.max_endstop.config.enabled = False
+        odrv0.axis0.max_endstop.config.from_json()  [callable]
+        odrv0.axis0.max_endstop.config.gpio_num = 0
+        odrv0.axis0.max_endstop.config.is_active_high = False
+        odrv0.axis0.max_endstop.config.offset = 0.0
+        odrv0.axis0.max_endstop.config.pullup = True
+      odrv0.axis0.max_endstop.endstop_state = False
+      odrv0.axis0.max_endstop.from_json()  [callable]
+    odrv0.axis0.min_endstop  [object, 3 attrs]
+      odrv0.axis0.min_endstop.config  [object, 7 attrs]
+        odrv0.axis0.min_endstop.config.debounce_ms = 50
+        odrv0.axis0.min_endstop.config.enabled = False
+        odrv0.axis0.min_endstop.config.from_json()  [callable]
+        odrv0.axis0.min_endstop.config.gpio_num = 0
+        odrv0.axis0.min_endstop.config.is_active_high = False
+        odrv0.axis0.min_endstop.config.offset = 0.0
+        odrv0.axis0.min_endstop.config.pullup = True
+      odrv0.axis0.min_endstop.endstop_state = False
+      odrv0.axis0.min_endstop.from_json()  [callable]
+    odrv0.axis0.motor  [object, 14 attrs]
+      odrv0.axis0.motor.DC_calib_phB = -1.2252411842346191
+      odrv0.axis0.motor.DC_calib_phC = -2.1643025875091553
+      odrv0.axis0.motor.armed_state = 0
+      odrv0.axis0.motor.config  [object, 23 attrs]
+        odrv0.axis0.motor.config.acim_autoflux_attack_gain = 10.0
+        odrv0.axis0.motor.config.acim_autoflux_decay_gain = 1.0
+        odrv0.axis0.motor.config.acim_autoflux_enable = False
+        odrv0.axis0.motor.config.acim_autoflux_min_Id = 10.0
+        odrv0.axis0.motor.config.acim_gain_min_flux = 10.0
+        odrv0.axis0.motor.config.acim_slip_velocity = 14.706000328063965
+        odrv0.axis0.motor.config.calibration_current = 10.0
+        odrv0.axis0.motor.config.current_control_bandwidth = 1000.0
+        odrv0.axis0.motor.config.current_lim = 10.0
+        odrv0.axis0.motor.config.current_lim_margin = 8.0
+        odrv0.axis0.motor.config.direction = 0
+        odrv0.axis0.motor.config.from_json()  [callable]
+        odrv0.axis0.motor.config.inverter_temp_limit_lower = 100.0
+        odrv0.axis0.motor.config.inverter_temp_limit_upper = 120.0
+        odrv0.axis0.motor.config.motor_type = 0
+        odrv0.axis0.motor.config.phase_inductance = 0.0
+        odrv0.axis0.motor.config.phase_resistance = 0.0
+        odrv0.axis0.motor.config.pole_pairs = 7
+        odrv0.axis0.motor.config.pre_calibrated = False
+        odrv0.axis0.motor.config.requested_current_range = 60.0
+        odrv0.axis0.motor.config.resistance_calib_max_voltage = 2.0
+        odrv0.axis0.motor.config.torque_constant = 0.03999999910593033
+        odrv0.axis0.motor.config.torque_lim = inf
+      odrv0.axis0.motor.current_control  [object, 18 attrs]
+        odrv0.axis0.motor.current_control.I_measured_report_filter_k = 1.0
+        odrv0.axis0.motor.current_control.Ibus = 0.0
+        odrv0.axis0.motor.current_control.Id_measured = 0.0
+        odrv0.axis0.motor.current_control.Id_setpoint = 0.0
+        odrv0.axis0.motor.current_control.Iq_measured = 0.0
+        odrv0.axis0.motor.current_control.Iq_setpoint = 0.0
+        odrv0.axis0.motor.current_control.acim_rotor_flux = 0.0
+        odrv0.axis0.motor.current_control.async_phase_offset = 0.0
+        odrv0.axis0.motor.current_control.async_phase_vel = 0.0
+        odrv0.axis0.motor.current_control.final_v_alpha = 0.0
+        odrv0.axis0.motor.current_control.final_v_beta = 0.0
+        odrv0.axis0.motor.current_control.from_json()  [callable]
+        odrv0.axis0.motor.current_control.i_gain = nan
+        odrv0.axis0.motor.current_control.max_allowed_current = 60.75
+        odrv0.axis0.motor.current_control.overcurrent_trip_level = 67.5
+        odrv0.axis0.motor.current_control.p_gain = 0.0
+        odrv0.axis0.motor.current_control.v_current_control_integral_d = 0.0
+        odrv0.axis0.motor.current_control.v_current_control_integral_q = 0.0
+      odrv0.axis0.motor.current_meas_phB = -0.023488879203796387
+      odrv0.axis0.motor.current_meas_phC = -0.05100560188293457
+      odrv0.axis0.motor.effective_current_lim = 10.0
+      odrv0.axis0.motor.error = 0
+      odrv0.axis0.motor.from_json()  [callable]
+      odrv0.axis0.motor.gate_driver  [object, 2 attrs]
+        odrv0.axis0.motor.gate_driver.drv_fault = 0
+        odrv0.axis0.motor.gate_driver.from_json()  [callable]
+      odrv0.axis0.motor.is_calibrated = False
+      odrv0.axis0.motor.phase_current_rev_gain = 0.02500000037252903
+      odrv0.axis0.motor.timing_log  [object, 13 attrs]
+        odrv0.axis0.motor.timing_log.adc_cb_dc = 13078
+        odrv0.axis0.motor.timing_log.adc_cb_i = 3454
+        odrv0.axis0.motor.timing_log.enc_calib = 48827
+        odrv0.axis0.motor.timing_log.foc_current = 13633
+        odrv0.axis0.motor.timing_log.foc_voltage = 56104
+        odrv0.axis0.motor.timing_log.from_json()  [callable]
+        odrv0.axis0.motor.timing_log.general = 52519
+        odrv0.axis0.motor.timing_log.idx_search = 35064
+        odrv0.axis0.motor.timing_log.meas_l = 28981
+        odrv0.axis0.motor.timing_log.meas_r = 37956
+        odrv0.axis0.motor.timing_log.sample_now = 1778
+        odrv0.axis0.motor.timing_log.spi_end = 5302
+        odrv0.axis0.motor.timing_log.spi_start = 2278
+    odrv0.axis0.motor_thermistor  [object, 4 attrs]
+      odrv0.axis0.motor_thermistor.config  [object, 9 attrs]
+        odrv0.axis0.motor_thermistor.config.enabled = False
+        odrv0.axis0.motor_thermistor.config.from_json()  [callable]
+        odrv0.axis0.motor_thermistor.config.gpio_pin = 4
+        odrv0.axis0.motor_thermistor.config.poly_coefficient_0 = 0.0
+        odrv0.axis0.motor_thermistor.config.poly_coefficient_1 = 0.0
+        odrv0.axis0.motor_thermistor.config.poly_coefficient_2 = 0.0
+        odrv0.axis0.motor_thermistor.config.poly_coefficient_3 = 0.0
+        odrv0.axis0.motor_thermistor.config.temp_limit_lower = 100.0
+        odrv0.axis0.motor_thermistor.config.temp_limit_upper = 120.0
+      odrv0.axis0.motor_thermistor.error = 0
+      odrv0.axis0.motor_thermistor.from_json()  [callable]
+      odrv0.axis0.motor_thermistor.temperature = 0.0
+    odrv0.axis0.requested_state = 0
+    odrv0.axis0.sensorless_estimator  [object, 6 attrs]
+      odrv0.axis0.sensorless_estimator.config  [object, 4 attrs]
+        odrv0.axis0.sensorless_estimator.config.from_json()  [callable]
+        odrv0.axis0.sensorless_estimator.config.observer_gain = 1000.0
+        odrv0.axis0.sensorless_estimator.config.pll_bandwidth = 1000.0
+        odrv0.axis0.sensorless_estimator.config.pm_flux_linkage = 0.0015800000401213765
+      odrv0.axis0.sensorless_estimator.error = 0
+      odrv0.axis0.sensorless_estimator.from_json()  [callable]
+      odrv0.axis0.sensorless_estimator.phase = 0.0
+      odrv0.axis0.sensorless_estimator.pll_pos = 0.0
+      odrv0.axis0.sensorless_estimator.vel_estimate = 0.0
+    odrv0.axis0.step_dir_active = False
+    odrv0.axis0.trap_traj  [object, 2 attrs]
+      odrv0.axis0.trap_traj.config  [object, 4 attrs]
+        odrv0.axis0.trap_traj.config.accel_limit = 0.5
+        odrv0.axis0.trap_traj.config.decel_limit = 0.5
+        odrv0.axis0.trap_traj.config.from_json()  [callable]
+        odrv0.axis0.trap_traj.config.vel_limit = 2.0
+      odrv0.axis0.trap_traj.from_json()  [callable]
+    odrv0.axis0.watchdog_feed()  [callable]
+  odrv0.axis1  [object, 20 attrs]
+    odrv0.axis1.clear_errors()  [callable]
+    odrv0.axis1.config  [object, 20 attrs]
+      odrv0.axis1.config.calibration_lockin  [object, 6 attrs]
+        odrv0.axis1.config.calibration_lockin.accel = 20.0
+        odrv0.axis1.config.calibration_lockin.current = 10.0
+        odrv0.axis1.config.calibration_lockin.from_json()  [callable]
+        odrv0.axis1.config.calibration_lockin.ramp_distance = 3.1415927410125732
+        odrv0.axis1.config.calibration_lockin.ramp_time = 0.4000000059604645
+        odrv0.axis1.config.calibration_lockin.vel = 40.0
+      odrv0.axis1.config.can_heartbeat_rate_ms = 100
+      odrv0.axis1.config.can_node_id = 1
+      odrv0.axis1.config.can_node_id_extended = False
+      odrv0.axis1.config.dir_gpio_pin = 8
+      odrv0.axis1.config.enable_step_dir = False
+      odrv0.axis1.config.enable_watchdog = False
+      odrv0.axis1.config.from_json()  [callable]
+      odrv0.axis1.config.general_lockin  [object, 10 attrs]
+        odrv0.axis1.config.general_lockin.accel = 20.0
+        odrv0.axis1.config.general_lockin.current = 10.0
+        odrv0.axis1.config.general_lockin.finish_distance = 100.0
+        odrv0.axis1.config.general_lockin.finish_on_distance = False
+        odrv0.axis1.config.general_lockin.finish_on_enc_idx = False
+        odrv0.axis1.config.general_lockin.finish_on_vel = False
+        odrv0.axis1.config.general_lockin.from_json()  [callable]
+        odrv0.axis1.config.general_lockin.ramp_distance = 3.1415927410125732
+        odrv0.axis1.config.general_lockin.ramp_time = 0.4000000059604645
+        odrv0.axis1.config.general_lockin.vel = 40.0
+      odrv0.axis1.config.sensorless_ramp  [object, 10 attrs]
+        odrv0.axis1.config.sensorless_ramp.accel = 200.0
+        odrv0.axis1.config.sensorless_ramp.current = 10.0
+        odrv0.axis1.config.sensorless_ramp.finish_distance = 100.0
+        odrv0.axis1.config.sensorless_ramp.finish_on_distance = False
+        odrv0.axis1.config.sensorless_ramp.finish_on_enc_idx = False
+        odrv0.axis1.config.sensorless_ramp.finish_on_vel = True
+        odrv0.axis1.config.sensorless_ramp.from_json()  [callable]
+        odrv0.axis1.config.sensorless_ramp.ramp_distance = 3.1415927410125732
+        odrv0.axis1.config.sensorless_ramp.ramp_time = 0.4000000059604645
+        odrv0.axis1.config.sensorless_ramp.vel = 400.0
+      odrv0.axis1.config.startup_closed_loop_control = False
+      odrv0.axis1.config.startup_encoder_index_search = False
+      odrv0.axis1.config.startup_encoder_offset_calibration = False
+      odrv0.axis1.config.startup_homing = False
+      odrv0.axis1.config.startup_motor_calibration = False
+      odrv0.axis1.config.startup_sensorless_control = False
+      odrv0.axis1.config.step_dir_always_on = False
+      odrv0.axis1.config.step_gpio_pin = 7
+      odrv0.axis1.config.turns_per_step = 0.0009765625
+      odrv0.axis1.config.watchdog_timeout = 0.0
+    odrv0.axis1.controller  [object, 14 attrs]
+      odrv0.axis1.controller.anticogging_valid = False
+      odrv0.axis1.controller.config  [object, 24 attrs]
+        odrv0.axis1.controller.config.anticogging  [object, 8 attrs]
+          odrv0.axis1.controller.config.anticogging.anticogging_enabled = True
+          odrv0.axis1.controller.config.anticogging.calib_anticogging = False
+          odrv0.axis1.controller.config.anticogging.calib_pos_threshold = 1.0
+          odrv0.axis1.controller.config.anticogging.calib_vel_threshold = 1.0
+          odrv0.axis1.controller.config.anticogging.cogging_ratio = 1.0
+          odrv0.axis1.controller.config.anticogging.from_json()  [callable]
+          odrv0.axis1.controller.config.anticogging.index = 0
+          odrv0.axis1.controller.config.anticogging.pre_calibrated = False
+        odrv0.axis1.controller.config.axis_to_mirror = 255
+        odrv0.axis1.controller.config.circular_setpoint_range = 1.0
+        odrv0.axis1.controller.config.circular_setpoints = False
+        odrv0.axis1.controller.config.control_mode = 3
+        odrv0.axis1.controller.config.enable_current_mode_vel_limit = True
+        odrv0.axis1.controller.config.enable_gain_scheduling = False
+        odrv0.axis1.controller.config.enable_overspeed_error = True
+        odrv0.axis1.controller.config.enable_vel_limit = True
+        odrv0.axis1.controller.config.from_json()  [callable]
+        odrv0.axis1.controller.config.gain_scheduling_width = 10.0
+        odrv0.axis1.controller.config.homing_speed = 0.25
+        odrv0.axis1.controller.config.inertia = 0.0
+        odrv0.axis1.controller.config.input_filter_bandwidth = 2.0
+        odrv0.axis1.controller.config.input_mode = 1
+        odrv0.axis1.controller.config.load_encoder_axis = 1
+        odrv0.axis1.controller.config.mirror_ratio = 1.0
+        odrv0.axis1.controller.config.pos_gain = 20.0
+        odrv0.axis1.controller.config.torque_ramp_rate = 0.009999999776482582
+        odrv0.axis1.controller.config.vel_gain = 0.1666666716337204
+        odrv0.axis1.controller.config.vel_integrator_gain = 0.3333333432674408
+        odrv0.axis1.controller.config.vel_limit = 2.0
+        odrv0.axis1.controller.config.vel_limit_tolerance = 1.2000000476837158
+        odrv0.axis1.controller.config.vel_ramp_rate = 1.0
+      odrv0.axis1.controller.error = 0
+      odrv0.axis1.controller.from_json()  [callable]
+      odrv0.axis1.controller.input_pos = 0.0
+      odrv0.axis1.controller.input_torque = 0.0
+      odrv0.axis1.controller.input_vel = 0.0
+      odrv0.axis1.controller.move_incremental()  [callable]
+      odrv0.axis1.controller.pos_setpoint = 0.0
+      odrv0.axis1.controller.start_anticogging_calibration()  [callable]
+      odrv0.axis1.controller.torque_setpoint = 0.0
+      odrv0.axis1.controller.trajectory_done = True
+      odrv0.axis1.controller.vel_integrator_torque = 0.0
+      odrv0.axis1.controller.vel_setpoint = 0.0
+    odrv0.axis1.current_state = 1
+    odrv0.axis1.encoder  [object, 21 attrs]
+      odrv0.axis1.encoder.calib_scan_response = 0.0
+      odrv0.axis1.encoder.config  [object, 19 attrs]
+        odrv0.axis1.encoder.config.abs_spi_cs_gpio_pin = 1
+        odrv0.axis1.encoder.config.bandwidth = 1000.0
+        odrv0.axis1.encoder.config.calib_range = 0.019999999552965164
+        odrv0.axis1.encoder.config.calib_scan_distance = 50.26548385620117
+        odrv0.axis1.encoder.config.calib_scan_omega = 12.566370964050293
+        odrv0.axis1.encoder.config.cpr = 8192
+        odrv0.axis1.encoder.config.enable_phase_interpolation = True
+        odrv0.axis1.encoder.config.find_idx_on_lockin_only = False
+        odrv0.axis1.encoder.config.from_json()  [callable]
+        odrv0.axis1.encoder.config.idx_search_unidirectional = False
+        odrv0.axis1.encoder.config.ignore_illegal_hall_state = False
+        odrv0.axis1.encoder.config.mode = 0
+        odrv0.axis1.encoder.config.offset = 0
+        odrv0.axis1.encoder.config.offset_float = 0.0
+        odrv0.axis1.encoder.config.pre_calibrated = False
+        odrv0.axis1.encoder.config.sincos_gpio_pin_cos = 4
+        odrv0.axis1.encoder.config.sincos_gpio_pin_sin = 3
+        odrv0.axis1.encoder.config.use_index = False
+        odrv0.axis1.encoder.config.zero_count_on_find_idx = True
+      odrv0.axis1.encoder.count_in_cpr = 0
+      odrv0.axis1.encoder.error = 0
+      odrv0.axis1.encoder.from_json()  [callable]
+      odrv0.axis1.encoder.hall_state = 7
+      odrv0.axis1.encoder.index_found = False
+      odrv0.axis1.encoder.interpolation = 0.5
+      odrv0.axis1.encoder.is_ready = False
+      odrv0.axis1.encoder.phase = 0.002684354782104492
+      odrv0.axis1.encoder.pos_abs = 0
+      odrv0.axis1.encoder.pos_circular = 0.0
+      odrv0.axis1.encoder.pos_cpr = 0.0
+      odrv0.axis1.encoder.pos_cpr_counts = 0.0
+      odrv0.axis1.encoder.pos_estimate = 0.0
+      odrv0.axis1.encoder.pos_estimate_counts = 0.0
+      odrv0.axis1.encoder.set_linear_count()  [callable]
+      odrv0.axis1.encoder.shadow_count = 0
+      odrv0.axis1.encoder.spi_error_rate = 0.0
+      odrv0.axis1.encoder.vel_estimate = 0.0
+      odrv0.axis1.encoder.vel_estimate_counts = 0.0
+    odrv0.axis1.error = 0
+    odrv0.axis1.fet_thermistor  [object, 4 attrs]
+      odrv0.axis1.fet_thermistor.config  [object, 4 attrs]
+        odrv0.axis1.fet_thermistor.config.enabled = True
+        odrv0.axis1.fet_thermistor.config.from_json()  [callable]
+        odrv0.axis1.fet_thermistor.config.temp_limit_lower = 100.0
+        odrv0.axis1.fet_thermistor.config.temp_limit_upper = 120.0
+      odrv0.axis1.fet_thermistor.error = 0
+      odrv0.axis1.fet_thermistor.from_json()  [callable]
+      odrv0.axis1.fet_thermistor.temperature = 25.82257080078125
+    odrv0.axis1.from_json()  [callable]
+    odrv0.axis1.is_homed = False
+    odrv0.axis1.lockin_state = 0
+    odrv0.axis1.loop_counter = 69420
+    odrv0.axis1.max_endstop  [object, 3 attrs]
+      odrv0.axis1.max_endstop.config  [object, 7 attrs]
+        odrv0.axis1.max_endstop.config.debounce_ms = 50
+        odrv0.axis1.max_endstop.config.enabled = False
+        odrv0.axis1.max_endstop.config.from_json()  [callable]
+        odrv0.axis1.max_endstop.config.gpio_num = 0
+        odrv0.axis1.max_endstop.config.is_active_high = False
+        odrv0.axis1.max_endstop.config.offset = 0.0
+        odrv0.axis1.max_endstop.config.pullup = True
+      odrv0.axis1.max_endstop.endstop_state = False
+      odrv0.axis1.max_endstop.from_json()  [callable]
+    odrv0.axis1.min_endstop  [object, 3 attrs]
+      odrv0.axis1.min_endstop.config  [object, 7 attrs]
+        odrv0.axis1.min_endstop.config.debounce_ms = 50
+        odrv0.axis1.min_endstop.config.enabled = False
+        odrv0.axis1.min_endstop.config.from_json()  [callable]
+        odrv0.axis1.min_endstop.config.gpio_num = 0
+        odrv0.axis1.min_endstop.config.is_active_high = False
+        odrv0.axis1.min_endstop.config.offset = 0.0
+        odrv0.axis1.min_endstop.config.pullup = True
+      odrv0.axis1.min_endstop.endstop_state = False
+      odrv0.axis1.min_endstop.from_json()  [callable]
+    odrv0.axis1.motor  [object, 14 attrs]
+      odrv0.axis1.motor.DC_calib_phB = -1.5098493099212646
+      odrv0.axis1.motor.DC_calib_phC = -1.555536150932312
+      odrv0.axis1.motor.armed_state = 0
+      odrv0.axis1.motor.config  [object, 23 attrs]
+        odrv0.axis1.motor.config.acim_autoflux_attack_gain = 10.0
+        odrv0.axis1.motor.config.acim_autoflux_decay_gain = 1.0
+        odrv0.axis1.motor.config.acim_autoflux_enable = False
+        odrv0.axis1.motor.config.acim_autoflux_min_Id = 10.0
+        odrv0.axis1.motor.config.acim_gain_min_flux = 10.0
+        odrv0.axis1.motor.config.acim_slip_velocity = 14.706000328063965
+        odrv0.axis1.motor.config.calibration_current = 10.0
+        odrv0.axis1.motor.config.current_control_bandwidth = 1000.0
+        odrv0.axis1.motor.config.current_lim = 10.0
+        odrv0.axis1.motor.config.current_lim_margin = 8.0
+        odrv0.axis1.motor.config.direction = 0
+        odrv0.axis1.motor.config.from_json()  [callable]
+        odrv0.axis1.motor.config.inverter_temp_limit_lower = 100.0
+        odrv0.axis1.motor.config.inverter_temp_limit_upper = 120.0
+        odrv0.axis1.motor.config.motor_type = 0
+        odrv0.axis1.motor.config.phase_inductance = 0.0
+        odrv0.axis1.motor.config.phase_resistance = 0.0
+        odrv0.axis1.motor.config.pole_pairs = 7
+        odrv0.axis1.motor.config.pre_calibrated = False
+        odrv0.axis1.motor.config.requested_current_range = 60.0
+        odrv0.axis1.motor.config.resistance_calib_max_voltage = 2.0
+        odrv0.axis1.motor.config.torque_constant = 0.03999999910593033
+        odrv0.axis1.motor.config.torque_lim = inf
+      odrv0.axis1.motor.current_control  [object, 18 attrs]
+        odrv0.axis1.motor.current_control.I_measured_report_filter_k = 1.0
+        odrv0.axis1.motor.current_control.Ibus = 0.0
+        odrv0.axis1.motor.current_control.Id_measured = 0.0
+        odrv0.axis1.motor.current_control.Id_setpoint = 0.0
+        odrv0.axis1.motor.current_control.Iq_measured = 0.0
+        odrv0.axis1.motor.current_control.Iq_setpoint = 0.0
+        odrv0.axis1.motor.current_control.acim_rotor_flux = 0.0
+        odrv0.axis1.motor.current_control.async_phase_offset = 0.0
+        odrv0.axis1.motor.current_control.async_phase_vel = 0.0
+        odrv0.axis1.motor.current_control.final_v_alpha = 0.0
+        odrv0.axis1.motor.current_control.final_v_beta = 0.0
+        odrv0.axis1.motor.current_control.from_json()  [callable]
+        odrv0.axis1.motor.current_control.i_gain = nan
+        odrv0.axis1.motor.current_control.max_allowed_current = 60.75
+        odrv0.axis1.motor.current_control.overcurrent_trip_level = 67.5
+        odrv0.axis1.motor.current_control.p_gain = 0.0
+        odrv0.axis1.motor.current_control.v_current_control_integral_d = 0.0
+        odrv0.axis1.motor.current_control.v_current_control_integral_q = 0.0
+      odrv0.axis1.motor.current_meas_phB = -0.0606684684753418
+      odrv0.axis1.motor.current_meas_phC = -0.13542640209197998
+      odrv0.axis1.motor.effective_current_lim = 10.0
+      odrv0.axis1.motor.error = 0
+      odrv0.axis1.motor.from_json()  [callable]
+      odrv0.axis1.motor.gate_driver  [object, 2 attrs]
+        odrv0.axis1.motor.gate_driver.drv_fault = 0
+        odrv0.axis1.motor.gate_driver.from_json()  [callable]
+      odrv0.axis1.motor.is_calibrated = False
+      odrv0.axis1.motor.phase_current_rev_gain = 0.02500000037252903
+      odrv0.axis1.motor.timing_log  [object, 13 attrs]
+        odrv0.axis1.motor.timing_log.adc_cb_dc = 14742
+        odrv0.axis1.motor.timing_log.adc_cb_i = 5638
+        odrv0.axis1.motor.timing_log.enc_calib = 43670
+        odrv0.axis1.motor.timing_log.foc_current = 41719
+        odrv0.axis1.motor.timing_log.foc_voltage = 48758
+        odrv0.axis1.motor.timing_log.from_json()  [callable]
+        odrv0.axis1.motor.timing_log.general = 9851
+        odrv0.axis1.motor.timing_log.idx_search = 51158
+        odrv0.axis1.motor.timing_log.meas_l = 21449
+        odrv0.axis1.motor.timing_log.meas_r = 31521
+        odrv0.axis1.motor.timing_log.sample_now = 52613
+        odrv0.axis1.motor.timing_log.spi_end = 34165
+        odrv0.axis1.motor.timing_log.spi_start = 63188
+    odrv0.axis1.motor_thermistor  [object, 4 attrs]
+      odrv0.axis1.motor_thermistor.config  [object, 9 attrs]
+        odrv0.axis1.motor_thermistor.config.enabled = False
+        odrv0.axis1.motor_thermistor.config.from_json()  [callable]
+        odrv0.axis1.motor_thermistor.config.gpio_pin = 4
+        odrv0.axis1.motor_thermistor.config.poly_coefficient_0 = 0.0
+        odrv0.axis1.motor_thermistor.config.poly_coefficient_1 = 0.0
+        odrv0.axis1.motor_thermistor.config.poly_coefficient_2 = 0.0
+        odrv0.axis1.motor_thermistor.config.poly_coefficient_3 = 0.0
+        odrv0.axis1.motor_thermistor.config.temp_limit_lower = 100.0
+        odrv0.axis1.motor_thermistor.config.temp_limit_upper = 120.0
+      odrv0.axis1.motor_thermistor.error = 0
+      odrv0.axis1.motor_thermistor.from_json()  [callable]
+      odrv0.axis1.motor_thermistor.temperature = 0.0
+    odrv0.axis1.requested_state = 0
+    odrv0.axis1.sensorless_estimator  [object, 6 attrs]
+      odrv0.axis1.sensorless_estimator.config  [object, 4 attrs]
+        odrv0.axis1.sensorless_estimator.config.from_json()  [callable]
+        odrv0.axis1.sensorless_estimator.config.observer_gain = 1000.0
+        odrv0.axis1.sensorless_estimator.config.pll_bandwidth = 1000.0
+        odrv0.axis1.sensorless_estimator.config.pm_flux_linkage = 0.0015800000401213765
+      odrv0.axis1.sensorless_estimator.error = 0
+      odrv0.axis1.sensorless_estimator.from_json()  [callable]
+      odrv0.axis1.sensorless_estimator.phase = 0.0
+      odrv0.axis1.sensorless_estimator.pll_pos = 0.0
+      odrv0.axis1.sensorless_estimator.vel_estimate = 0.0
+    odrv0.axis1.step_dir_active = False
+    odrv0.axis1.trap_traj  [object, 2 attrs]
+      odrv0.axis1.trap_traj.config  [object, 4 attrs]
+        odrv0.axis1.trap_traj.config.accel_limit = 0.5
+        odrv0.axis1.trap_traj.config.decel_limit = 0.5
+        odrv0.axis1.trap_traj.config.from_json()  [callable]
+        odrv0.axis1.trap_traj.config.vel_limit = 2.0
+      odrv0.axis1.trap_traj.from_json()  [callable]
+    odrv0.axis1.watchdog_feed()  [callable]
+  odrv0.brake_resistor_armed = True
+  odrv0.brake_resistor_saturated = False
+  odrv0.can  [object, 4 attrs]
+    odrv0.can.config  [object, 3 attrs]
+      odrv0.can.config.baud_rate = 250000
+      odrv0.can.config.from_json()  [callable]
+      odrv0.can.config.protocol = 0
+    odrv0.can.error = 0
+    odrv0.can.from_json()  [callable]
+    odrv0.can.set_baud_rate()  [callable]
+  odrv0.config  [object, 20 attrs]
+    odrv0.config.brake_resistance = 2.0
+    odrv0.config.dc_bus_overvoltage_ramp_end = 59.92000198364258
+    odrv0.config.dc_bus_overvoltage_ramp_start = 59.92000198364258
+    odrv0.config.dc_bus_overvoltage_trip_level = 59.92000198364258
+    odrv0.config.dc_bus_undervoltage_trip_level = 8.0
+    odrv0.config.dc_max_negative_current = -9.999999974752427e-07
+    odrv0.config.dc_max_positive_current = inf
+    odrv0.config.enable_ascii_protocol_on_usb = True
+    odrv0.config.enable_dc_bus_overvoltage_ramp = False
+    odrv0.config.enable_i2c_instead_of_can = False
+    odrv0.config.enable_uart = True
+    odrv0.config.from_json()  [callable]
+    odrv0.config.gpio1_pwm_mapping  [object, 4 attrs]
+      odrv0.config.gpio1_pwm_mapping.endpoint = None
+      odrv0.config.gpio1_pwm_mapping.from_json()  [callable]
+      odrv0.config.gpio1_pwm_mapping.max = 0.0
+      odrv0.config.gpio1_pwm_mapping.min = 0.0
+    odrv0.config.gpio2_pwm_mapping  [object, 4 attrs]
+      odrv0.config.gpio2_pwm_mapping.endpoint = None
+      odrv0.config.gpio2_pwm_mapping.from_json()  [callable]
+      odrv0.config.gpio2_pwm_mapping.max = 0.0
+      odrv0.config.gpio2_pwm_mapping.min = 0.0
+    odrv0.config.gpio3_analog_mapping  [object, 4 attrs]
+      odrv0.config.gpio3_analog_mapping.endpoint = None
+      odrv0.config.gpio3_analog_mapping.from_json()  [callable]
+      odrv0.config.gpio3_analog_mapping.max = 0.0
+      odrv0.config.gpio3_analog_mapping.min = 0.0
+    odrv0.config.gpio3_pwm_mapping  [object, 4 attrs]
+      odrv0.config.gpio3_pwm_mapping.endpoint = None
+      odrv0.config.gpio3_pwm_mapping.from_json()  [callable]
+      odrv0.config.gpio3_pwm_mapping.max = 0.0
+      odrv0.config.gpio3_pwm_mapping.min = 0.0
+    odrv0.config.gpio4_analog_mapping  [object, 4 attrs]
+      odrv0.config.gpio4_analog_mapping.endpoint = None
+      odrv0.config.gpio4_analog_mapping.from_json()  [callable]
+      odrv0.config.gpio4_analog_mapping.max = 0.0
+      odrv0.config.gpio4_analog_mapping.min = 0.0
+    odrv0.config.gpio4_pwm_mapping  [object, 4 attrs]
+      odrv0.config.gpio4_pwm_mapping.endpoint = None
+      odrv0.config.gpio4_pwm_mapping.from_json()  [callable]
+      odrv0.config.gpio4_pwm_mapping.max = 0.0
+      odrv0.config.gpio4_pwm_mapping.min = 0.0
+    odrv0.config.max_regen_current = 0.0
+    odrv0.config.uart_baudrate = 115200
+  odrv0.enter_dfu_mode()  [callable]
+  odrv0.erase_configuration()  [callable]
+  odrv0.from_json()  [callable]
+  odrv0.fw_version_major = 0
+  odrv0.fw_version_minor = 0
+  odrv0.fw_version_revision = 0
+  odrv0.fw_version_unreleased = 1
+  odrv0.get_adc_voltage()  [callable]
+  odrv0.get_oscilloscope_val()  [callable]
+  odrv0.hw_version_major = 3
+  odrv0.hw_version_minor = 6
+  odrv0.hw_version_variant = 56
+  odrv0.ibus = 0.0
+  odrv0.ibus_report_filter_k = 1.0
+  odrv0.reboot()  [callable]
+  odrv0.save_configuration()  [callable]
+  odrv0.serial_number = 61985812394293
+  odrv0.system_stats  [object, 21 attrs]
+    odrv0.system_stats.from_json()  [callable]
+    odrv0.system_stats.i2c  [object, 5 attrs]
+      odrv0.system_stats.i2c.addr = 0
+      odrv0.system_stats.i2c.addr_match_cnt = 0
+      odrv0.system_stats.i2c.error_cnt = 0
+      odrv0.system_stats.i2c.from_json()  [callable]
+      odrv0.system_stats.i2c.rx_cnt = 0
+    odrv0.system_stats.min_heap_space = 41560
+    odrv0.system_stats.min_stack_space_axis0 = 1692
+    odrv0.system_stats.min_stack_space_axis1 = 1692
+    odrv0.system_stats.min_stack_space_can = 804
+    odrv0.system_stats.min_stack_space_comms = 3864
+    odrv0.system_stats.min_stack_space_startup = 1700
+    odrv0.system_stats.min_stack_space_uart = 3924
+    odrv0.system_stats.min_stack_space_usb = 3708
+    odrv0.system_stats.min_stack_space_usb_irq = 1784
+    odrv0.system_stats.stack_usage_axis0 = 356
+    odrv0.system_stats.stack_usage_axis1 = 356
+    odrv0.system_stats.stack_usage_can = 220
+    odrv0.system_stats.stack_usage_comms = 232
+    odrv0.system_stats.stack_usage_startup = 348
+    odrv0.system_stats.stack_usage_uart = 172
+    odrv0.system_stats.stack_usage_usb = 388
+    odrv0.system_stats.stack_usage_usb_irq = 264
+    odrv0.system_stats.uptime = 10317
+    odrv0.system_stats.usb  [object, 4 attrs]
+      odrv0.system_stats.usb.from_json()  [callable]
+      odrv0.system_stats.usb.rx_cnt = 1799
+      odrv0.system_stats.usb.tx_cnt = 1799
+      odrv0.system_stats.usb.tx_overrun_cnt = 0
+  odrv0.test_function()  [callable]
+  odrv0.test_property = 0
+  odrv0.user_config_loaded = True
+  odrv0.vbus_voltage = 23.925806045532227
+
+── Version Fingerprint Tests ─────────────────────────────────────────
+  OK     get_adc_voltage(4)                        [new in 0.5.6]
+  OK     odrv.can                                  [new in 0.5.4+]
+  OK     axis0.controller.config.anticogging       [0.5.4+]
+  OK     axis0.config.startup_homing               [0.5.4+]
+  OK     axis0.trap_traj.config                    [0.5.0+]
+  OK     axis0.controller.config.inertia           [0.5.1+]
+  OK     axis0.controller.config.input_filter_bandwidth [0.5.1+]
+  OK     axis0.config.general_lockin               [0.5.1+]
+  OK     axis0.sensorless_estimator                [0.5.0+]
+  ABSENT odrv.config.enable_brake_resistor         [0.5.0+]  ('anonymous_interface' object has no attribute 'enable_brake_resistor')
+  ABSENT axis0.acim_estimator                      [ACIM, 0.5.x]  ('anonymous_interface' object has no attribute 'acim_estimator')
+  OK     odrv.config.dc_bus_overvoltage_trip_level [0.5.3+]
+  OK     odrv.config.dc_bus_undervoltage_trip_level [0.5.3+]
+  OK     axis0.motor.config.current_control_bandwidth [0.5.1+]
+  OK     axis0.encoder.config.enable_phase_interpolation [0.5.4+]
+  ABSENT axis0.encoder.config.use_index_offset     [0.5.5+]  ('anonymous_interface' object has no attribute 'use_index_offset')
+  ABSENT odrv.config.gpio_modes                    [0.5.5+ style]  ('anonymous_interface' object has no attribute 'gpio_modes')
+  ABSENT axis0.controller.move_to_pos()            [pre-0.5.2 only]  ('anonymous_interface' object has no attribute 'move_to_pos')
+  OK     axis0.controller.move_incremental()       [0.5.2+]
+
+======================================================================
+Done.

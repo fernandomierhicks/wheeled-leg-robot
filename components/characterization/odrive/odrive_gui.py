@@ -10,7 +10,7 @@ import sys
 import time
 from collections import deque
 
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QPointF, QMargins
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QComboBox, QGroupBox, QFormLayout,
@@ -22,6 +22,7 @@ from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
 from PySide6.QtGui import QPainter, QColor
 
 import odrive
+import odrive.enums as enums
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 MOTOR_TYPE_NAMES  = ["High Current (0)", "Gimbal (2)", "ACIM (3)"]
@@ -60,77 +61,40 @@ class ConnectWorker(QThread):
             self.failed.emit(str(e))
 
 
-# ── Axis config widget ────────────────────────────────────────────────────────
-class AxisWidget(QGroupBox):
+# ── Axis config form (inputs only) ───────────────────────────────────────────
+class AxisWidget(QWidget):
     def __init__(self, ax_idx):
-        super().__init__(f"Axis {ax_idx}")
+        super().__init__()
         self.ax_idx = ax_idx
         self._build()
 
     def _build(self):
-        layout = QVBoxLayout(self)
-
-        # Live state row
-        state_row = QHBoxLayout()
-        self.lbl_state = QLabel("State: —")
-        self.lbl_temp  = QLabel("Temp: —")
-        state_row.addWidget(self.lbl_state)
-        state_row.addStretch()
-        state_row.addWidget(self.lbl_temp)
-        layout.addLayout(state_row)
-
-        line = QFrame(); line.setFrameShape(QFrame.HLine)
-        layout.addWidget(line)
-
-        # Config form
-        form = QFormLayout()
-        self.motor_type = QComboBox()
+        form = QFormLayout(self)
+        form.setSpacing(8)
+        self.motor_type  = QComboBox()
         self.motor_type.addItems(MOTOR_TYPE_NAMES)
-        self.pole_pairs    = QSpinBox();       self.pole_pairs.setRange(1, 50);      self.pole_pairs.setValue(7)
-        self.current_lim   = QDoubleSpinBox(); self.current_lim.setRange(0, 60);     self.current_lim.setValue(10); self.current_lim.setSuffix(" A")
-        self.cal_current   = QDoubleSpinBox(); self.cal_current.setRange(0, 60);     self.cal_current.setValue(10); self.cal_current.setSuffix(" A")
-        self.vel_lim       = QDoubleSpinBox(); self.vel_lim.setRange(0, 500);        self.vel_lim.setValue(2);      self.vel_lim.setSuffix(" t/s")
-        self.encoder_cpr   = QSpinBox();       self.encoder_cpr.setRange(1, 65536);  self.encoder_cpr.setValue(8192)
-        self.pre_cal_motor = QCheckBox()
-        self.pre_cal_enc   = QCheckBox()
-
-        form.addRow("Motor type",             self.motor_type)
-        form.addRow("Pole pairs",             self.pole_pairs)
-        form.addRow("Current limit",          self.current_lim)
-        form.addRow("Calibration current",    self.cal_current)
-        form.addRow("Velocity limit",         self.vel_lim)
-        form.addRow("Encoder CPR",            self.encoder_cpr)
-        form.addRow("Pre-calibrated motor",   self.pre_cal_motor)
-        form.addRow("Pre-calibrated encoder", self.pre_cal_enc)
-        layout.addLayout(form)
-
-        # Buttons
-        btn_row = QHBoxLayout()
-        self.btn_apply = QPushButton("Apply")
-        self.btn_cal   = QPushButton("Full Calibration")
-        self.btn_idle  = QPushButton("Set Idle")
-        for b in (self.btn_apply, self.btn_cal, self.btn_idle):
-            b.setEnabled(False)
-            btn_row.addWidget(b)
-        layout.addLayout(btn_row)
-
-    def set_connected(self, on):
-        for b in (self.btn_apply, self.btn_cal, self.btn_idle):
-            b.setEnabled(on)
+        self.pole_pairs  = QSpinBox();       self.pole_pairs.setRange(1, 50);     self.pole_pairs.setValue(7)
+        self.current_lim = QDoubleSpinBox(); self.current_lim.setRange(0, 60);    self.current_lim.setValue(10); self.current_lim.setSuffix(" A")
+        self.cal_current = QDoubleSpinBox(); self.cal_current.setRange(0, 60);    self.cal_current.setValue(10); self.cal_current.setSuffix(" A")
+        self.vel_lim     = QDoubleSpinBox(); self.vel_lim.setRange(0, 500);       self.vel_lim.setValue(2);      self.vel_lim.setSuffix(" t/s")
+        self.encoder_cpr = QSpinBox();       self.encoder_cpr.setRange(1, 65536); self.encoder_cpr.setValue(8192)
+        form.addRow("Motor type",          self.motor_type)
+        form.addRow("Pole pairs",          self.pole_pairs)
+        form.addRow("Current limit",       self.current_lim)
+        form.addRow("Calibration current", self.cal_current)
+        form.addRow("Velocity limit",      self.vel_lim)
+        form.addRow("Encoder CPR",         self.encoder_cpr)
 
     def load(self, axis):
         mc = axis.motor.config
         ec = axis.encoder.config
         mt = getattr(mc, "motor_type", 0)
-        idx = MOTOR_TYPE_VALUES.index(mt) if mt in MOTOR_TYPE_VALUES else 0
-        self.motor_type.setCurrentIndex(idx)
+        self.motor_type.setCurrentIndex(MOTOR_TYPE_VALUES.index(mt) if mt in MOTOR_TYPE_VALUES else 0)
         self.pole_pairs.setValue(getattr(mc, "pole_pairs", 7))
         self.current_lim.setValue(float(getattr(mc, "current_lim", 10)))
         self.cal_current.setValue(float(getattr(mc, "calibration_current", 10)))
         self.vel_lim.setValue(float(getattr(axis.controller.config, "vel_limit", 2)))
         self.encoder_cpr.setValue(getattr(ec, "cpr", 8192))
-        self.pre_cal_motor.setChecked(bool(getattr(mc, "pre_calibrated", False)))
-        self.pre_cal_enc.setChecked(bool(getattr(ec, "pre_calibrated", False)))
 
     def apply(self, axis):
         mc = axis.motor.config
@@ -141,17 +105,6 @@ class AxisWidget(QGroupBox):
         mc.calibration_current = self.cal_current.value()
         axis.controller.config.vel_limit = self.vel_lim.value()
         ec.cpr                 = self.encoder_cpr.value()
-        mc.pre_calibrated      = self.pre_cal_motor.isChecked()
-        ec.pre_calibrated      = self.pre_cal_enc.isChecked()
-
-    def update_live(self, axis):
-        state_id = getattr(axis, "current_state", 0)
-        self.lbl_state.setText(f"State: {AXIS_STATES.get(state_id, str(state_id))}")
-        try:
-            temp = axis.motor.get_inverter_temp()
-            self.lbl_temp.setText(f"Temp: {temp:.1f} °C")
-        except Exception:
-            self.lbl_temp.setText("Temp: —")
 
 
 # ── Motor control tab ─────────────────────────────────────────────────────────
@@ -171,6 +124,11 @@ class MotorControlTab(QWidget):
     def __init__(self):
         super().__init__()
         self.odrv = None
+        self._acog_cal_active  = False
+        self._acog_poll_count  = 0
+        self._acog_last_index  = -1
+        self._acog_last_state  = -1
+        self._acog_last_err    = 0
         self._build()
 
     def _build(self):
@@ -275,6 +233,52 @@ class MotorControlTab(QWidget):
         err_row.addStretch()
         root.addWidget(err_box)
 
+        # ── Anticogging ───────────────────────────────────────────────────────
+        acog_box  = QGroupBox("Anticogging")
+        acog_form = QFormLayout(acog_box)
+        acog_form.setSpacing(6)
+
+        self.chk_anticogging = QCheckBox("Enable anticogging")
+        self.chk_anticogging.setEnabled(False)
+        acog_form.addRow("", self.chk_anticogging)
+
+        self.lbl_acog_status = QLabel("—")
+        self.lbl_acog_status.setStyleSheet("font-family: monospace; font-size: 12px; color: #64ffb4")
+        acog_form.addRow("Status", self.lbl_acog_status)
+
+        # Cal-specific overrides applied before cal, originals restored after
+        def _dspin_acog(lo, hi, val, dec=3, step=0.01):
+            s = QDoubleSpinBox(); s.setRange(lo, hi); s.setDecimals(dec)
+            s.setSingleStep(step); s.setValue(val); s.setFixedWidth(90)
+            return s
+        self.spin_acog_pos_gain = _dspin_acog(0, 20,  2.0,  dec=2, step=0.5)
+        self.spin_acog_vel_gain = _dspin_acog(0, 10,  0.1,  dec=4, step=0.01)
+        self.spin_acog_cur_lim  = _dspin_acog(0, 60,  15.0, dec=1, step=1.0)
+        self.spin_acog_vel_lim  = _dspin_acog(0, 20,  0.5,  dec=2, step=0.1)
+        acog_form.addRow("Cal pos_gain",        self.spin_acog_pos_gain)
+        acog_form.addRow("Cal vel_gain",        self.spin_acog_vel_gain)
+        acog_form.addRow("Cal current_lim (A)", self.spin_acog_cur_lim)
+        acog_form.addRow("Cal vel_limit (t/s)", self.spin_acog_vel_lim)
+        lbl_acog_hint = QLabel("applied for cal only — originals restored after")
+        lbl_acog_hint.setStyleSheet("color: #aaa; font-size: 10px")
+        acog_form.addRow("", lbl_acog_hint)
+
+        acog_btn_row = QHBoxLayout()
+        self.btn_acog_cal  = QPushButton("Start Calibration")
+        self.btn_acog_cal.setToolTip(
+            "Applies cal gains, enters CL position mode, sweeps 1 full revolution.\n"
+            "Original vel_gain / current_lim / vel_limit restored automatically."
+        )
+        self.btn_acog_cal.setStyleSheet("color: #50a0ff")
+        self.btn_acog_cal.setEnabled(False)
+        self.btn_acog_apply = QPushButton("Apply Enable")
+        self.btn_acog_apply.setStyleSheet("color: #64ffb4")
+        self.btn_acog_apply.setEnabled(False)
+        acog_btn_row.addWidget(self.btn_acog_cal)
+        acog_btn_row.addWidget(self.btn_acog_apply)
+        acog_form.addRow("", acog_btn_row)
+        root.addWidget(acog_box)
+
         # ── Live readout ─────────────────────────────────────────────────────
         live_box = QGroupBox("Live Readout")
         live_form = QFormLayout(live_box)
@@ -314,6 +318,8 @@ class MotorControlTab(QWidget):
         self.btn_apply_pid.clicked.connect(self._apply_pid)
         self.btn_reset_err.clicked.connect(self._reset_errors)
         self.btn_reset_both.clicked.connect(self._reset_both)
+        self.btn_acog_cal.clicked.connect(self._start_anticogging_cal)
+        self.btn_acog_apply.clicked.connect(self._apply_anticogging)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
     def _axis(self):
@@ -333,10 +339,15 @@ class MotorControlTab(QWidget):
     def set_connected(self, on):
         for b in (self.btn_send, self.btn_cl, self.btn_stop,
                   self.btn_read_pid, self.btn_apply_pid,
-                  self.btn_reset_err, self.btn_reset_both):
+                  self.btn_reset_err, self.btn_reset_both,
+                  self.btn_acog_cal, self.btn_acog_apply):
             b.setEnabled(on)
+        self.chk_anticogging.setEnabled(on)
         if on:
             self._read_pid()
+            self._read_anticogging()
+        else:
+            self._acog_cal_active = False
 
     # ── Actions ───────────────────────────────────────────────────────────────
     def _send_setpoint(self):
@@ -347,7 +358,6 @@ class MotorControlTab(QWidget):
         mode_val  = CONTROL_MODES[mode_name]
         val       = self.setpoint_spin.value()
         try:
-            import odrive.enums as enums
             axis.controller.config.control_mode = mode_val
             axis.controller.config.input_mode   = 1  # INPUT_MODE_PASSTHROUGH
             if mode_name == "Position":
@@ -365,7 +375,6 @@ class MotorControlTab(QWidget):
         if not axis:
             return
         try:
-            import odrive.enums as enums
             mode_name = self.mode_combo.currentText()
             mode_val  = CONTROL_MODES[mode_name]
             axis.controller.config.control_mode = mode_val
@@ -376,7 +385,7 @@ class MotorControlTab(QWidget):
             axis.controller.input_vel     = 0.0
             axis.controller.input_torque  = 0.0
             try:
-                axis.controller.vel_integrator_current = 0.0  # flush integrator (fw 0.5.x)
+                axis.controller.vel_integrator_torque = 0.0  # flush integrator (this firmware)
             except Exception:
                 pass
 
@@ -386,6 +395,18 @@ class MotorControlTab(QWidget):
             axis.encoder.error     = 0
             axis.controller.error  = 0
 
+            # Restore gains if anticogging cal left them at cal values
+            if hasattr(self, "_acog_orig_pos_gain"):
+                axis.controller.config.pos_gain    = self._acog_orig_pos_gain
+                axis.controller.config.vel_gain    = self._acog_orig_vel_gain
+                axis.motor.config.current_lim      = self._acog_orig_cur_lim
+                axis.controller.config.vel_limit   = self._acog_orig_vel_limit
+                self._log(f"  gains restored: pos_gain={self._acog_orig_pos_gain:.2f} vel_gain={self._acog_orig_vel_gain:.4f} cur_lim={self._acog_orig_cur_lim:.1f}A vel_limit={self._acog_orig_vel_limit:.2f}", "#aaa")
+                del self._acog_orig_pos_gain, self._acog_orig_vel_gain
+                del self._acog_orig_cur_lim, self._acog_orig_vel_limit
+
+            # Always go through IDLE first for a clean state transition
+            axis.requested_state = enums.AXIS_STATE_IDLE
             axis.requested_state = enums.AXIS_STATE_CLOSED_LOOP_CONTROL
             self._log(f"Ax{self._ax_idx()} → Closed Loop ({mode_name}) — setpoints zeroed, integrator flushed", "#64ffb4")
         except Exception as e:
@@ -396,7 +417,6 @@ class MotorControlTab(QWidget):
         if not axis:
             return
         try:
-            import odrive.enums as enums
             axis.requested_state = enums.AXIS_STATE_IDLE
             self._log(f"Ax{self._ax_idx()} → Idle (stopped)", "#ffa03c")
         except Exception as e:
@@ -456,14 +476,184 @@ class MotorControlTab(QWidget):
         if not self.odrv:
             return
         self._log("── Reset ALL axis errors ──")
+        labels = ["error", "motor.error", "encoder.error", "controller.error"]
+        get_objs = lambda axis: [axis, axis.motor, axis.encoder, axis.controller]
         for ax_i, axis in enumerate([self.odrv.axis0, self.odrv.axis1]):
-            for obj, field in [(axis, "error"), (axis.motor, "error"),
-                               (axis.encoder, "error"), (axis.controller, "error")]:
+            for label, obj in zip(labels, get_objs(axis)):
                 try:
-                    setattr(obj, field, 0)
-                except Exception:
-                    pass
-        self._log("Done — all errors cleared", "#64ffb4")
+                    setattr(obj, "error", 0)
+                    self._log(f"  axis{ax_i}.{label} = 0")
+                except Exception as e:
+                    self._log(f"  axis{ax_i}.{label} ERR: {e}", "#ff6464")
+        self._log("Done", "#64ffb4")
+
+    def _read_anticogging(self):
+        axis = self._axis()
+        if not axis:
+            return
+        try:
+            enabled = bool(self._acog_get_enabled(axis))
+            self.chk_anticogging.setChecked(enabled)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _acog_get_enabled(axis):
+        """Try all known attribute paths across ODrive firmware variants."""
+        try:
+            return axis.controller.config.anticogging.anticogging_enabled  # dev snapshot 0.5.4–0.5.6
+        except Exception:
+            pass
+        try:
+            return axis.controller.config.anticogging.enabled              # some 0.5.x releases
+        except Exception:
+            pass
+        try:
+            return axis.controller.config.anticogging_enabled              # flat style
+        except Exception:
+            pass
+        return None  # attribute not found in this firmware
+
+    @staticmethod
+    def _acog_set_enabled(axis, value):
+        """Try all known attribute paths. Returns the path that worked, or raises."""
+        try:
+            axis.controller.config.anticogging.anticogging_enabled = value  # dev snapshot 0.5.4–0.5.6
+            return "anticogging.anticogging_enabled"
+        except Exception:
+            pass
+        try:
+            axis.controller.config.anticogging.enabled = value              # some 0.5.x releases
+            return "anticogging.enabled"
+        except Exception:
+            pass
+        axis.controller.config.anticogging_enabled = value                  # flat style
+        return "anticogging_enabled"
+
+    def _anticogging_diag(self, axis, ax_i):
+        """Dump anticogging-relevant state to the log."""
+        self._log("── Anticogging diag ──", "#aaa")
+        checks = [
+            ("axis.error",                    lambda: f"0x{axis.error:08X}"),
+            ("axis.current_state",            lambda: AXIS_STATES.get(axis.current_state, axis.current_state)),
+            ("encoder.is_ready",              lambda: axis.encoder.is_ready),
+            ("controller.config.control_mode",lambda: axis.controller.config.control_mode),
+            ("controller.config.input_mode",  lambda: axis.controller.config.input_mode),
+            ("controller.config.vel_limit",   lambda: axis.controller.config.vel_limit),
+            ("motor.config.current_lim",      lambda: axis.motor.config.current_lim),
+        ]
+        for name, fn in checks:
+            try:
+                self._log(f"  {name} = {fn()}")
+            except Exception as e:
+                self._log(f"  {name} = ERR({e})", "#ff6464")
+        # anticogging — try every plausible attribute path
+        for label, fn in [
+            ("anticogging.enabled",          lambda: axis.controller.config.anticogging.enabled),
+            ("anticogging_enabled (flat)",   lambda: axis.controller.config.anticogging_enabled),
+            ("anticogging.calib_anticogging",lambda: axis.controller.config.anticogging.calib_anticogging),
+            ("anticogging.pre_calibrated",   lambda: axis.controller.config.anticogging.pre_calibrated),
+            ("anticogging.index",            lambda: axis.controller.config.anticogging.index),
+        ]:
+            try:
+                self._log(f"  {label} = {fn()}")
+            except Exception as e:
+                self._log(f"  {label} = NOT FOUND", "#aaa")
+
+    def _start_anticogging_cal(self):
+        axis = self._axis()
+        if not axis:
+            return
+        ax_i = self._ax_idx()
+        self._log("── Anticogging pre-cal setup ──", "#aaa")
+        self._anticogging_diag(axis, ax_i)
+        try:
+            # Save originals on self so _enter_closed_loop can restore them after cal
+            self._acog_orig_pos_gain  = float(getattr(axis.controller.config,  "pos_gain",    20.0))
+            self._acog_orig_vel_gain  = float(getattr(axis.controller.config,  "vel_gain",    0.01))
+            self._acog_orig_cur_lim   = float(getattr(axis.motor.config,        "current_lim", 7.0))
+            self._acog_orig_vel_limit = float(getattr(axis.controller.config,  "vel_limit",   2.0))
+            orig_pos_gain  = self._acog_orig_pos_gain
+            orig_vel_gain  = self._acog_orig_vel_gain
+            orig_cur_lim   = self._acog_orig_cur_lim
+            orig_vel_limit = self._acog_orig_vel_limit
+
+            # Apply cal-specific overrides from the GUI spinboxes
+            cal_pos_gain  = self.spin_acog_pos_gain.value()
+            cal_vel_gain  = self.spin_acog_vel_gain.value()
+            cal_cur_lim   = self.spin_acog_cur_lim.value()
+            cal_vel_limit = self.spin_acog_vel_lim.value()
+            axis.controller.config.pos_gain    = cal_pos_gain
+            axis.controller.config.vel_gain    = cal_vel_gain
+            axis.motor.config.current_lim      = cal_cur_lim
+            axis.controller.config.vel_limit   = cal_vel_limit
+            self._log(f"  pos_gain  {orig_pos_gain:.2f} → {cal_pos_gain:.2f}", "#aaa")
+            self._log(f"  vel_gain  {orig_vel_gain:.4f} → {cal_vel_gain:.4f}", "#aaa")
+            self._log(f"  cur_lim   {orig_cur_lim:.1f} → {cal_cur_lim:.1f} A", "#aaa")
+            self._log(f"  vel_limit {orig_vel_limit:.2f} → {cal_vel_limit:.2f} t/s", "#aaa")
+
+            # Must be in closed loop POSITION mode for anticogging cal
+            axis.controller.config.control_mode = 3  # POSITION
+            axis.controller.config.input_mode   = 1  # PASSTHROUGH
+            axis.controller.input_pos           = axis.encoder.pos_estimate
+            axis.controller.input_vel           = 0.0
+            axis.controller.input_torque        = 0.0
+            try:
+                axis.controller.vel_integrator_torque = 0.0
+            except Exception:
+                pass
+            axis.error            = 0
+            axis.motor.error      = 0
+            axis.encoder.error    = 0
+            axis.controller.error = 0
+            axis.requested_state  = enums.AXIS_STATE_IDLE
+            axis.requested_state  = enums.AXIS_STATE_CLOSED_LOOP_CONTROL
+            self._log(f"  Ax{ax_i} → Closed Loop (Position) — motor will move slowly to pos 0, then sweep 1 rev", "#ffa03c")
+
+            axis.controller.start_anticogging_calibration()
+            self._acog_cal_active = True
+            self._acog_poll_count = 0
+            self._acog_last_index = -1
+            self._acog_last_state = -1
+            self._acog_last_err   = 0
+            self._log(f"Ax{ax_i} anticogging cal started — do not touch the motor", "#50a0ff")
+            self._log(f"Cal gains active until complete. When motor stops, click 'Enter Closed Loop' (Velocity).", "#ffa03c")
+            self._log(f"Originals to restore: pos_gain={orig_pos_gain:.2f} vel_gain={orig_vel_gain:.4f} cur_lim={orig_cur_lim:.1f}A vel_limit={orig_vel_limit:.2f}", "#aaa")
+            # NOTE: gains are intentionally left at cal values — the calibration sweep
+            # runs async on the ODrive and needs low pos_gain / vel_limit to avoid
+            # oscillation. Gains are restored when the user clicks Enter Closed Loop.
+
+        except Exception as e:
+            self._log(f"Anticogging cal error: {e}", "#ff6464")
+
+    def _apply_anticogging(self):
+        axis = self._axis()
+        if not axis:
+            return
+        ax_i = self._ax_idx()
+        try:
+            enabled = self.chk_anticogging.isChecked()
+            path = self._acog_set_enabled(axis, enabled)
+            readback = self._acog_get_enabled(axis)
+            state = "ENABLED" if enabled else "DISABLED"
+            if readback is None:
+                self._log(f"Ax{ax_i} anticogging: no known attribute found in this firmware", "#ff6464")
+            elif bool(readback) == enabled:
+                self._log(f"Ax{ax_i} anticogging {state} via {path} (readback confirmed)", "#64ffb4")
+            else:
+                self._log(
+                    f"Ax{ax_i} anticogging write={enabled} but readback={readback} — cal may not be complete",
+                    "#ff6464",
+                )
+                self._anticogging_diag(axis, ax_i)
+            rb_txt = "?" if readback is None else readback
+            self.lbl_acog_status.setText(f"{state} (readback={rb_txt})")
+            self.lbl_acog_status.setStyleSheet(
+                f"font-family: monospace; font-size: 12px; "
+                f"color: {'#64ffb4' if readback is not None and bool(readback) == enabled else '#ff6464'}"
+            )
+        except Exception as e:
+            self._log(f"Anticogging apply error: {e}", "#ff6464")
 
     def update_live(self, odrv):
         """Called by the poll timer. odrv may be None."""
@@ -530,6 +720,82 @@ class MotorControlTab(QWidget):
             else:
                 self.lbl_live_err.setText("None")
                 self.lbl_live_err.setStyleSheet("font-family: monospace; font-size: 12px; color: #64ffb4")
+
+            # Anticogging live status
+            try:
+                enabled = self._acog_get_enabled(axis)
+                calib_ok = False
+                try:
+                    calib_ok = bool(axis.controller.config.anticogging.calib_anticogging)
+                except Exception:
+                    pass
+                valid = False
+                try:
+                    valid = bool(axis.controller.anticogging_valid)
+                except Exception:
+                    pass
+                if enabled is None:
+                    self.lbl_acog_status.setText("not supported in this firmware")
+                    self.lbl_acog_status.setStyleSheet("font-family: monospace; font-size: 12px; color: #aaa")
+                else:
+                    status_txt = ("ENABLED" if enabled else "disabled") + \
+                                 (" | cal OK" if calib_ok else " | NOT calibrated") + \
+                                 (" | valid" if valid else "")
+                    self.lbl_acog_status.setText(status_txt)
+                    self.lbl_acog_status.setStyleSheet(
+                        f"font-family: monospace; font-size: 12px; "
+                        f"color: {'#64ffb4' if enabled and calib_ok else '#ffa03c'}"
+                    )
+            except Exception as _e:
+                self.lbl_acog_status.setText(f"read err: {_e}")
+                self.lbl_acog_status.setStyleSheet("font-family: monospace; font-size: 12px; color: #ff6464")
+
+            # ── Anticogging cal progress monitor ─────────────────────────────
+            if self._acog_cal_active:
+                self._acog_poll_count += 1
+                cur_state = getattr(axis, "current_state", -1)
+                cur_err   = getattr(axis, "error", 0)
+
+                # Always log state transitions and new errors immediately
+                if cur_state != self._acog_last_state:
+                    self._log(f"  [acog] state → {AXIS_STATES.get(cur_state, cur_state)}", "#ffa03c")
+                    self._acog_last_state = cur_state
+                if cur_err != self._acog_last_err:
+                    self._log(f"  [acog] error → 0x{cur_err:08X}", "#ff6464" if cur_err else "#64ffb4")
+                    self._acog_last_err = cur_err
+
+                # Log index changes immediately (shows sweep progress)
+                try:
+                    cur_idx = int(axis.controller.config.anticogging.index)
+                except Exception:
+                    cur_idx = -1
+                if cur_idx != self._acog_last_index:
+                    self._log(f"  [acog] index → {cur_idx}", "#50a0ff")
+                    self._acog_last_index = cur_idx
+
+                # Log periodic status every ~2 s (poll interval is 100 ms → every 20 polls)
+                if self._acog_poll_count % 20 == 0:
+                    pos  = axis.encoder.pos_estimate
+                    sp   = getattr(axis.controller, "input_pos", 0.0)
+                    iq   = axis.motor.current_control.Iq_measured
+                    pg   = getattr(axis.controller.config, "pos_gain",  "?")
+                    vl   = getattr(axis.controller.config, "vel_limit", "?")
+                    self._log(
+                        f"  [acog] idx={self._acog_last_index}  pos={pos:.3f}  sp={sp:.3f}  "
+                        f"Iq={iq:.2f}A  pos_gain={pg}  vel_limit={vl}",
+                        "#50a0ff"
+                    )
+                    # Detect completion: calib_anticogging flips True
+                    done = False
+                    try:
+                        done = bool(axis.controller.config.anticogging.calib_anticogging)
+                    except Exception:
+                        pass
+                    if done:
+                        self._acog_cal_active = False
+                        self._log("  [acog] calib_anticogging=True — calibration complete!", "#64ffb4")
+                        self._log("  Click 'Enter Closed Loop' to restore original gains.", "#ffa03c")
+
         except Exception:
             pass
 
@@ -551,6 +817,8 @@ class MainWindow(QMainWindow):
         self.poll_timer.timeout.connect(self._poll)
         self._plot_t0 = None
         self._was_calibrating = [False, False]
+        self._pending_precal_save = [False, False]
+        self._poll_fail_count = 0
 
     # ── UI build ──────────────────────────────────────────────────────────────
     def _build_ui(self):
@@ -590,12 +858,62 @@ class MainWindow(QMainWindow):
         # Config tab
         cfg_tab = QWidget()
         cfg_layout = QVBoxLayout(cfg_tab)
+        cfg_layout.setSpacing(8)
+
+        # Axis selector
+        ax_row = QHBoxLayout()
+        ax_row.addWidget(QLabel("Axis:"))
+        self._cfg_ax_grp = QButtonGroup(self)
+        for i in range(2):
+            rb = QRadioButton(str(i))
+            rb.setChecked(i == 0)
+            self._cfg_ax_grp.addButton(rb, i)
+            ax_row.addWidget(rb)
+        ax_row.addStretch()
+        cfg_layout.addLayout(ax_row)
+
+        # Live status row
+        status_row = QHBoxLayout()
+        self._cfg_lbl_state   = QLabel("State: —")
+        self._cfg_lbl_temp    = QLabel("Temp: —")
+        self._cfg_lbl_cal     = QLabel("Calibrated: —")
+        self._cfg_lbl_enc_rdy = QLabel("Encoder ready: —")
+        for lbl in (self._cfg_lbl_state, self._cfg_lbl_temp,
+                    self._cfg_lbl_cal, self._cfg_lbl_enc_rdy):
+            lbl.setStyleSheet("font-family: monospace; font-size: 12px; color: #64ffb4")
+            status_row.addWidget(lbl)
+        status_row.addStretch()
+        cfg_layout.addLayout(status_row)
+
+        line_cfg = QFrame(); line_cfg.setFrameShape(QFrame.HLine)
+        cfg_layout.addWidget(line_cfg)
+
+        # Axis form — one per axis, switched by selector
+        from PySide6.QtWidgets import QStackedWidget
         self.axis_widgets = [AxisWidget(0), AxisWidget(1)]
+        self._cfg_stack = QStackedWidget()
         for aw in self.axis_widgets:
-            cfg_layout.addWidget(aw)
-            aw.btn_apply.clicked.connect(lambda _, a=aw: self._apply_axis(a))
-            aw.btn_cal.clicked.connect(lambda _, a=aw: self._calibrate(a))
-            aw.btn_idle.clicked.connect(lambda _, a=aw: self._idle(a))
+            self._cfg_stack.addWidget(aw)
+        cfg_layout.addWidget(self._cfg_stack)
+        self._cfg_ax_grp.idClicked.connect(self._on_cfg_axis_changed)
+
+        # Action buttons
+        action_row = QHBoxLayout()
+        self.btn_cfg_read     = QPushButton("Read from ODrive")
+        self.btn_cfg_cal_save = QPushButton("Calibrate + Save")
+        self.btn_cfg_cal_save.setStyleSheet("color: #64ffb4; font-weight: bold")
+        self.btn_cfg_cal_save.setToolTip(
+            "Writes config values to ODrive, runs full calibration, then sets\n"
+            "pre_calibrated=True for motor & encoder and saves to flash.\n"
+            "After this the ODrive skips calibration on every boot."
+        )
+        for b in (self.btn_cfg_read, self.btn_cfg_cal_save):
+            b.setEnabled(False)
+            action_row.addWidget(b)
+        action_row.addStretch()
+        cfg_layout.addLayout(action_row)
+        self.btn_cfg_read.clicked.connect(self._cfg_read)
+        self.btn_cfg_cal_save.clicked.connect(self._calibrate_and_save)
 
         line2 = QFrame(); line2.setFrameShape(QFrame.HLine)
         cfg_layout.addWidget(line2)
@@ -654,6 +972,15 @@ class MainWindow(QMainWindow):
         btn_full_dump.setStyleSheet("color: #64c8ff; font-weight: bold")
         btn_full_dump.clicked.connect(self._full_state_dump)
         term_layout.addWidget(btn_full_dump)
+        btn_enforce_idle = QPushButton("Enforce Boot Idle (both axes)")
+        btn_enforce_idle.setStyleSheet("color: #ffa03c; font-weight: bold")
+        btn_enforce_idle.setToolTip(
+            "Disables all startup sequences for both axes and saves to flash.\n"
+            "After reboot the ODrive will sit in IDLE — motor not energized —\n"
+            "until you explicitly send a closed-loop command."
+        )
+        btn_enforce_idle.clicked.connect(self._enforce_boot_idle)
+        term_layout.addWidget(btn_enforce_idle)
         self.term_log = QTextEdit()
         self.term_log.setReadOnly(True)
         self.term_log.setStyleSheet("font-family: monospace; font-size: 11px;")
@@ -694,7 +1021,7 @@ class MainWindow(QMainWindow):
         self.chart.setPlotAreaBackgroundBrush(QColor("#252526"))
         self.chart.setPlotAreaBackgroundVisible(True)
         self.chart.legend().setVisible(False)
-        self.chart.setMargins(__import__('PySide6.QtCore', fromlist=['QMargins']).QMargins(4, 4, 4, 4))
+        self.chart.setMargins(QMargins(4, 4, 4, 4))
 
         self.axis_x = QValueAxis(); self.axis_x.setTitleText("Time (s)")
         self.axis_x.setLabelFormat("%.1f")
@@ -749,9 +1076,9 @@ class MainWindow(QMainWindow):
         self.btn_save.setEnabled(True)
         self.btn_reboot.setEnabled(True)
         self.btn_erase.setEnabled(True)
-        for aw in self.axis_widgets:
-            aw.set_connected(True)
-            aw.load(self.odrv.axis0 if aw.ax_idx == 0 else self.odrv.axis1)
+        self.btn_cfg_read.setEnabled(True)
+        self.btn_cfg_cal_save.setEnabled(True)
+        self._cfg_read()
         self.motor_ctrl_tab.odrv = self.odrv
         self.motor_ctrl_tab.set_connected(True)
         self._plot_t0 = time.time()
@@ -771,10 +1098,11 @@ class MainWindow(QMainWindow):
         self.btn_save.setEnabled(False)
         self.btn_reboot.setEnabled(False)
         self.btn_erase.setEnabled(False)
-        for aw in self.axis_widgets:
-            aw.set_connected(False)
-            aw.lbl_state.setText("State: —")
-            aw.lbl_temp.setText("Temp: —")
+        self.btn_cfg_read.setEnabled(False)
+        self.btn_cfg_cal_save.setEnabled(False)
+        for lbl in (self._cfg_lbl_state, self._cfg_lbl_temp,
+                    self._cfg_lbl_cal, self._cfg_lbl_enc_rdy):
+            lbl.setText(lbl.text().split(":")[0] + ": —")
         self.motor_ctrl_tab.set_connected(False)
         self.motor_ctrl_tab.update_live(None)
 
@@ -786,18 +1114,37 @@ class MainWindow(QMainWindow):
             vbus = self.odrv.vbus_voltage
             self.lbl_vbus.setText(f"Vbus: {vbus:.2f} V")
 
-            for aw in self.axis_widgets:
-                axis = self.odrv.axis0 if aw.ax_idx == 0 else self.odrv.axis1
-                aw.update_live(axis)
+            sel_ax_i = self._cfg_ax_grp.checkedId()
+            for ax_i in range(2):
+                axis = self.odrv.axis0 if ax_i == 0 else self.odrv.axis1
                 state = getattr(axis, "current_state", 0)
-                calibrating = state in (3, 4, 7)
-                if self._was_calibrating[aw.ax_idx] and not calibrating:
+                calibrating = state in (3, 4, 6, 7)
+                if self._was_calibrating[ax_i] and not calibrating:
                     err = getattr(axis, "error", 0)
                     if err:
-                        self._set_status(f"Axis {aw.ax_idx} calibration FAILED — error {hex(err)}", "#ff6464")
+                        self._set_status(f"Axis {ax_i} calibration FAILED — error {hex(err)}", "#ff6464")
+                        self._pending_precal_save[ax_i] = False
                     else:
-                        self._set_status(f"Axis {aw.ax_idx} calibration complete.", "#64ff64")
-                self._was_calibrating[aw.ax_idx] = calibrating
+                        self._set_status(f"Axis {ax_i} calibration complete.", "#64ff64")
+                        if self._pending_precal_save[ax_i]:
+                            self._pending_precal_save[ax_i] = False
+                            self._do_precal_save(ax_i, axis)
+                self._was_calibrating[ax_i] = calibrating
+                # Update config tab live labels for the selected axis only
+                if ax_i == sel_ax_i:
+                    self._cfg_lbl_state.setText(f"State: {AXIS_STATES.get(state, state)}")
+                    try:
+                        self._cfg_lbl_temp.setText(f"Temp: {axis.motor.get_inverter_temp():.1f} °C")
+                    except Exception:
+                        self._cfg_lbl_temp.setText("Temp: —")
+                    cal_ok  = bool(getattr(axis.motor,   "is_calibrated", False))
+                    enc_rdy = bool(getattr(axis.encoder, "is_ready",       False))
+                    self._cfg_lbl_cal.setText(f"Calibrated: {'YES' if cal_ok else 'NO'}")
+                    self._cfg_lbl_cal.setStyleSheet(
+                        f"font-family: monospace; font-size: 12px; color: {'#64ffb4' if cal_ok else '#ff6464'}")
+                    self._cfg_lbl_enc_rdy.setText(f"Encoder ready: {'YES' if enc_rdy else 'NO'}")
+                    self._cfg_lbl_enc_rdy.setStyleSheet(
+                        f"font-family: monospace; font-size: 12px; color: {'#64ffb4' if enc_rdy else '#ff6464'}")
 
             # Plot
             t = time.time() - self._plot_t0
@@ -826,7 +1173,7 @@ class MainWindow(QMainWindow):
                 if self.sig_checks[name].isChecked():
                     pts = list(self.plot_bufs[name])
                     series.replace([
-                        __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(t_list[i], pts[i])
+                        QPointF(t_list[i], pts[i])
                         for i in range(min(len(t_list), len(pts)))
                         if pts[i] == pts[i]  # skip nan
                     ])
@@ -842,9 +1189,13 @@ class MainWindow(QMainWindow):
                 self.axis_y.setRange(lo - pad, hi + pad)
 
             self.motor_ctrl_tab.update_live(self.odrv)
+            self._poll_fail_count = 0
 
         except Exception:
-            pass
+            self._poll_fail_count += 1
+            if self._poll_fail_count >= 3:
+                self._set_status("ODrive connection lost — disconnecting.", "#ff6464")
+                self._disconnect()
 
     def _clear_plot(self):
         self.plot_t.clear()
@@ -854,37 +1205,55 @@ class MainWindow(QMainWindow):
             s.clear()
 
     # ── Actions ───────────────────────────────────────────────────────────────
-    def _apply_axis(self, aw):
-        if not self.odrv:
-            return
-        axis = self.odrv.axis0 if aw.ax_idx == 0 else self.odrv.axis1
-        try:
-            aw.apply(axis)
-            self._set_status(f"Axis {aw.ax_idx} applied (not saved)", "#64c8ff")
-        except Exception as e:
-            self._set_status(f"Apply error: {e}", "#ff6464")
+    def _on_cfg_axis_changed(self, ax_i):
+        self._cfg_stack.setCurrentIndex(ax_i)
+        if self.odrv:
+            self._cfg_read()
 
-    def _calibrate(self, aw):
+    def _cfg_axis(self):
+        ax_i = self._cfg_ax_grp.checkedId()
+        return self.odrv.axis0 if ax_i == 0 else self.odrv.axis1
+
+    def _cfg_read(self):
         if not self.odrv:
             return
+        ax_i = self._cfg_ax_grp.checkedId()
         try:
-            import odrive.enums as enums
-            axis = self.odrv.axis0 if aw.ax_idx == 0 else self.odrv.axis1
+            self.axis_widgets[ax_i].load(self._cfg_axis())
+            self._set_status(f"Axis {ax_i} config read", "#64c8ff")
+        except Exception as e:
+            self._set_status(f"Read error: {e}", "#ff6464")
+
+    def _calibrate_and_save(self):
+        """Write config values, run full calibration, auto-save pre_calibrated on completion."""
+        if not self.odrv:
+            return
+        ax_i = self._cfg_ax_grp.checkedId()
+        axis = self._cfg_axis()
+        try:
+            self.axis_widgets[ax_i].apply(axis)
             axis.requested_state = enums.AXIS_STATE_FULL_CALIBRATION_SEQUENCE
-            self._set_status(f"Axis {aw.ax_idx}: calibration started…", "#ffc850")
+            self._pending_precal_save[ax_i] = True
+            self._set_status(
+                f"Axis {ax_i}: calibrating… will auto-set pre_calibrated + save on completion",
+                "#ffc850",
+            )
         except Exception as e:
-            self._set_status(f"Calibration error: {e}", "#ff6464")
+            self._set_status(f"Calibrate+Save error: {e}", "#ff6464")
 
-    def _idle(self, aw):
-        if not self.odrv:
-            return
+    def _do_precal_save(self, ax_i, axis):
+        """Called automatically after successful calibration."""
         try:
-            import odrive.enums as enums
-            axis = self.odrv.axis0 if aw.ax_idx == 0 else self.odrv.axis1
-            axis.requested_state = enums.AXIS_STATE_IDLE
-            self._set_status(f"Axis {aw.ax_idx}: Idle", "#aaa")
+            axis.motor.config.pre_calibrated   = True
+            axis.encoder.config.pre_calibrated = True
+            self.odrv.save_configuration()
+            self._set_status(
+                f"Axis {ax_i}: pre_calibrated saved — ODrive rebooting. Reconnect when ready.",
+                "#64ffb4",
+            )
+            self._disconnect()
         except Exception as e:
-            self._set_status(f"Idle error: {e}", "#ff6464")
+            self._set_status(f"Auto-save pre_calibrated error: {e}", "#ff6464")
 
     def _save(self):
         try:
@@ -990,6 +1359,60 @@ class MainWindow(QMainWindow):
         self.term_log.append("Run Diagnose to confirm errors cleared.")
         self.term_log.append("───────────────────────────────────────────")
 
+    def _enforce_boot_idle(self):
+        if not self.odrv:
+            self.term_log.append("ERROR: Not connected.")
+            return
+        self.term_log.append("── Enforce Boot Idle ───────────────────────")
+        STARTUP_FLAGS = [
+            "startup_motor_calibration",
+            "startup_encoder_index_search",
+            "startup_encoder_offset_calibration",
+            "startup_closed_loop_control",
+            "startup_homing",
+        ]
+        for ax_i, axis in enumerate([self.odrv.axis0, self.odrv.axis1]):
+            for flag in STARTUP_FLAGS:
+                try:
+                    setattr(axis.config, flag, False)
+                except Exception as e:
+                    self.term_log.append(f"<span style='color:#ff6464'>ERR</span> axis{ax_i}.config.{flag} write → {e}")
+
+        # Read back every flag before saving so we can confirm what will be stored
+        self.term_log.append("── Readback before save ────────────────────")
+        readback_ok = True
+        for ax_i, axis in enumerate([self.odrv.axis0, self.odrv.axis1]):
+            for flag in STARTUP_FLAGS:
+                try:
+                    val = getattr(axis.config, flag)
+                    color = "#64ff64" if val is False else "#ff6464"
+                    self.term_log.append(
+                        f"<span style='color:{color}'>{'OK' if val is False else 'FAIL'}</span>"
+                        f"  axis{ax_i}.config.{flag} = {val}"
+                    )
+                    if val is not False:
+                        readback_ok = False
+                except Exception as e:
+                    self.term_log.append(
+                        f"<span style='color:#aaa'>N/A</span>  axis{ax_i}.config.{flag} not present ({e})"
+                    )
+
+        if not readback_ok:
+            self.term_log.append(
+                "<span style='color:#ff6464'>WARNING: one or more flags not False — save aborted.</span>"
+            )
+            self.term_log.append("───────────────────────────────────────────")
+            return
+
+        try:
+            self.odrv.save_configuration()
+            self.term_log.append("<span style='color:#ffa03c'>Saved to flash — ODrive will reboot.</span>")
+            self.term_log.append("On next boot: IDLE, motor not energized until you request closed-loop.")
+            self._disconnect()
+        except Exception as e:
+            self.term_log.append(f"<span style='color:#ff6464'>ERR</span> save_configuration() → {e}")
+        self.term_log.append("───────────────────────────────────────────")
+
     def _full_state_dump(self):
         if not self.odrv:
             self.term_log.append("ERROR: Not connected.")
@@ -1023,6 +1446,12 @@ class MainWindow(QMainWindow):
                 ("controller.config.pos_gain",      lambda a=axis: a.controller.config.pos_gain),
                 ("controller.config.vel_gain",      lambda a=axis: a.controller.config.vel_gain),
                 ("controller.config.vel_integrator_gain", lambda a=axis: a.controller.config.vel_integrator_gain),
+                # Startup sequence flags (should all be False for safe boot)
+                ("config.startup_motor_calibration",          lambda a=axis: a.config.startup_motor_calibration),
+                ("config.startup_encoder_index_search",       lambda a=axis: a.config.startup_encoder_index_search),
+                ("config.startup_encoder_offset_calibration", lambda a=axis: a.config.startup_encoder_offset_calibration),
+                ("config.startup_closed_loop_control",        lambda a=axis: a.config.startup_closed_loop_control),
+                ("config.startup_homing",                     lambda a=axis: a.config.startup_homing),
                 # Live setpoints
                 ("controller.input_vel",            lambda a=axis: f"{a.controller.input_vel:.4f}"),
                 ("controller.input_pos",            lambda a=axis: f"{a.controller.input_pos:.4f}"),
@@ -1041,7 +1470,8 @@ class MainWindow(QMainWindow):
                            (label == "motor.config.phase_resistance" and float(str(val).split()[0]) == 0) or
                            (label == "controller.config.input_mode" and str(val) == "0") or
                            (label == "motor.is_calibrated" and not val) or
-                           (label == "encoder.is_ready" and not val))
+                           (label == "encoder.is_ready" and not val) or
+                           ("startup_" in label and val is True))
                     color = "#ff6464" if bad else "#ccc"
                     self.term_log.append(f"  <span style='color:{color}'>{label} = {val}</span>")
                 except Exception as e:
