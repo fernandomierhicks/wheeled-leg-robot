@@ -352,14 +352,22 @@ controller.autotuning_phase           = 0.0
 
 ### Anticogging
 
+> Probed defaults below. See **[§ Anticogging — How It Works & Setup](#anticogging--how-it-works--setup)** for calibration procedure.
+
 ```
-controller.config.anticogging.anticogging_enabled = True
-controller.config.anticogging.pre_calibrated      = False
-controller.config.anticogging.calib_pos_threshold = 1.0
-controller.config.anticogging.calib_vel_threshold = 1.0
-controller.config.anticogging.cogging_ratio        = 1.0
-controller.config.anticogging.index               = 0
+controller.config.anticogging.anticogging_enabled = True   ← compensation active after calibration
+controller.config.anticogging.pre_calibrated      = False  ← auto-load map from NVM on startup
+controller.config.anticogging.calib_pos_threshold = 1.0   ← position error tolerance during cal
+controller.config.anticogging.calib_vel_threshold = 1.0   ← velocity error tolerance during cal
+controller.config.anticogging.cogging_ratio        = 1.0  ← scale factor on the stored map
+controller.config.anticogging.index               = 0      ← current position index in map (read-only)
+controller.config.anticogging.calib_anticogging   = True   ← firmware-internal, READ-ONLY from Python
+controller.anticogging_valid                      = False  ← True once map is loaded this session
 ```
+
+**Note:** The probed properties differ from the upstream 0.5.6 docs (`start_vel`, `end_vel`, `start_gain`, `end_gain`, `end_tolerance`). The probe values above are the ground truth for this device.
+
+**`calib_anticogging` is read-only** — writing it from Python raises `Exception: this attribute cannot be written to`. Use `anticogging_valid` to check if the map is loaded. See [§ Anticogging — How It Works & Setup](#anticogging--how-it-works--setup) for full details.
 
 ---
 
@@ -463,6 +471,156 @@ odrv0.axis1.config.can.node_id = 1
 # Thermistor path changed in 0.5.6
 temp = odrv0.axis0.motor.fet_thermistor.temperature  # was axis0.fet_thermistor
 ```
+
+---
+
+## Anticogging — How It Works & Setup
+
+### What Is Cogging?
+
+BLDC motors produce uneven torque at different rotor positions because the rotor magnets are attracted
+to stator teeth. This "cogging" causes periodic torque ripple — especially noticeable at low speeds —
+and appears as velocity fluctuations even under constant command.
+
+### How ODrive Anticogging Works
+
+> **Source-verified:** behaviour confirmed from `Firmware/MotorControl/controller.cpp` at tag `fw-v0.5.6`.
+> The upstream ODrive docs and many community examples say to use velocity control — **this is wrong for 0.5.6**.
+
+ODrive builds a **position-indexed lookup table** of correction torques. During calibration it:
+
+1. Receives `start_anticogging_calibration()` — sets an internal `calib_anticogging` flag (only checks `axis.error == 0`; does NOT check control mode)
+2. On the next control loop tick, **internally forces `CONTROL_MODE_POSITION_CONTROL`** — it overwrites whatever mode was set by the user
+3. Steps through position indices across one electrical cycle, measuring position error
+4. At each index, integrates the error into the cogging map entry
+5. Ends when position error stays below `calib_pos_threshold` across all indices
+6. Stores the completed map in NVM on `save_configuration()`
+
+At runtime, `controller.config.anticogging.cogging_ratio` scales the stored correction before it is
+added to the torque output. `anticogging_enabled = True` activates the compensation.
+
+### Requirements
+
+| Requirement | Details |
+|---|---|
+| Absolute position reference | Absolute encoder (SPI ABS) or incremental encoder with index pin |
+| Stable **position** control | `pos_gain` and `vel_integrator_gain` must be set; calibration runs in position mode internally |
+| Motor must not stall during cal | Tune `pos_gain` / `vel_integrator_gain` if motor stops partway through |
+| axis0 on this device | AMS SPI ABS encoder (mode=257, cpr=16384) — satisfies the absolute reference requirement |
+
+### Calibration Procedure
+
+```python
+import odrive
+from odrive.enums import *
+
+odrv0 = odrive.find_any()
+
+# --- 1. Prerequisites (must all pass before proceeding) ---
+# encoder.is_ready    == True
+# motor.is_calibrated == True
+# axis.error          == 0
+# axis.current_state  == 1  (IDLE)
+#
+# If encoder not yet configured after a config wipe:
+odrv0.axis0.encoder.config.mode = 257               # ENCODER_MODE_SPI_ABS_AMS
+odrv0.axis0.encoder.config.cpr  = 16384
+odrv0.axis0.encoder.config.abs_spi_cs_gpio_pin = 3
+odrv0.save_configuration()
+odrv0.reboot()
+odrv0 = odrive.find_any()
+
+# --- 2. Full motor calibration (skip if already pre_calibrated) ---
+odrv0.axis0.requested_state = AXIS_STATE_FULL_CALIBRATION_SEQUENCE
+# Wait for IDLE. Then mark as pre-calibrated to skip on next boot:
+odrv0.axis0.motor.config.pre_calibrated   = True
+odrv0.axis0.encoder.config.pre_calibrated = True
+
+# --- 3. Enter POSITION control with passthrough, then closed loop ---
+# NOTE: velocity control is WRONG here. The firmware forces position control
+# internally anyway, so set it correctly up front.
+odrv0.axis0.controller.config.control_mode = CONTROL_MODE_POSITION_CONTROL
+odrv0.axis0.controller.config.input_mode   = INPUT_MODE_PASSTHROUGH
+odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
+# Verify: axis.current_state should be 8, axis.error should be 0
+
+# --- 4. Run anticogging calibration ---
+# The firmware takes over control mode internally. Motor will move through
+# positions and stop when the map is complete (~1 min).
+# Monitor progress via: odrv0.axis0.controller.config.anticogging.index
+odrv0.axis0.controller.start_anticogging_calibration()
+
+# Wait until motor stops on its own (calibration complete).
+
+# --- 5. Post-calibration ---
+odrv0.axis0.requested_state = AXIS_STATE_IDLE
+odrv0.axis0.controller.remove_anticogging_bias()
+
+# --- 6. Enable and save ---
+odrv0.axis0.controller.config.anticogging.anticogging_enabled = True
+odrv0.axis0.controller.config.anticogging.pre_calibrated      = True
+odrv0.save_configuration()
+odrv0.reboot()
+
+# --- 7. Normal startup thereafter ---
+odrv0 = odrive.find_any()
+odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
+# Anticogging map loads automatically from NVM (pre_calibrated = True).
+```
+
+### Config Parameters Reference
+
+| Property | Default | Writable? | Meaning |
+|---|---|---|---|
+| `anticogging_enabled` | True | YES | Enable/disable cogging compensation at runtime |
+| `pre_calibrated` | False | YES | Auto-load stored map from NVM on boot |
+| `calib_pos_threshold` | 1.0 | YES | Position error tolerance used during calibration |
+| `calib_vel_threshold` | 1.0 | YES | Velocity error tolerance — calibration ends when vel stays below this |
+| `cogging_ratio` | 1.0 | YES | Scale factor applied to map corrections (1.0 = full correction) |
+| `index` | 0 | NO | Current lookup position in the map (read-only, updates in real time) |
+| `calib_anticogging` | — | **NO** | Firmware-internal flag: True=calibrating, False=done. **Cannot be written from Python.** |
+
+### Runtime Status: `anticogging_valid`
+
+`axis.controller.anticogging_valid` (not in config struct) is the correct indicator that the map is
+loaded and active in the current session:
+
+| State | Meaning |
+|---|---|
+| `anticogging_valid = False` | Map not loaded (no calibration run this session, or not yet post-reboot) |
+| `anticogging_valid = True` | Map loaded and compensation is active |
+
+After a `save_configuration()` + reboot with `pre_calibrated = True`, `anticogging_valid` comes up
+`True` automatically — this is the expected state after a successful calibration and flash.
+
+### `calib_anticogging` — Read-Only Gotcha
+
+**Confirmed via live probe (2026-04-04):** `axis.controller.config.anticogging.calib_anticogging`
+raises `Exception: this attribute cannot be written to` if you try to assign it from Python.
+
+- The firmware sets it `True` when `start_anticogging_calibration()` is called
+- The firmware sets it back `False` when calibration completes
+- If the ODrive is rebooted or power-cycled mid-calibration, `calib_anticogging = True` is
+  saved to NVM and **persists across reboots** as a stale `True`
+- **This does NOT re-trigger calibration on boot** — the axis boots to IDLE (state 1) regardless
+- The correct post-calibration indicator is `anticogging_valid`, not `calib_anticogging`
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Motor stalls during calibration | Increase `pos_gain` or `vel_integrator_gain`; ensure no mechanical binding |
+| Map not loading on boot | Confirm `pre_calibrated = True` saved, and absolute encoder is ready before closed loop |
+| Compensation seems weak | Try re-running calibration; check `cogging_ratio = 1.0`; lower `calib_vel_threshold` for finer map |
+| `remove_anticogging_bias` not found | The probed callable is `remove_anticogging_bias()` — upstream docs show `anticogging_remove_bias()`, ignore those |
+| GUI shows "Calibrating" after reboot | Stale `calib_anticogging = True` in NVM — harmless. Check `anticogging_valid` and `pre_calibrated` instead |
+
+### API Discrepancy vs. Upstream Docs
+
+The upstream ODrive v0.5.6 docs (GitHub commit `7271aa8`) describe different config property names
+(`start_vel`, `end_vel`, `start_gain`, `end_gain`, `end_tolerance`) than what this device exposes.
+The **probed values above are authoritative**. The implementation on this board uses threshold-based
+config instead of the gain-scheduling approach described upstream.
 
 ---
 

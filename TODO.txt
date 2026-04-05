@@ -4,12 +4,26 @@
 
 -Able to move legs up and down and stay in place. 
 
-Update firmware to known v0.5.6
-https://docs.odriverobotics.com/v/latest/guides/legacy-dfu.html
 
--Disable calibration on odrive startup. MOtor should not move until commanded. 
---SMooth motion or verify that it will work during balancing
---Upgrade firmware for anticogging?
+
+MOTOR
+
+--Buggy GUI.Broke regular position and velocioty commanded after doing anticogging. 
+--Add brake resistor to board
+
+
+--MOtor
+-Gain scheduling
+-Watchdog
+-Autotuning
+-Spinout detection
+-R_wL_FF + bEMF feedforward
+-Hard bus current limits
+-Leak current limit 
+-Live Power Monitoring Torque estimation
+
+
+
 
 -Flip?
 Want me to build this as a new scenario (S11)? The sequence would be:
