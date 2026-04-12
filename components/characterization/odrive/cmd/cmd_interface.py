@@ -9,6 +9,7 @@ connected ODrive and writes results to:
 import json
 import logging
 import os
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +33,8 @@ class CmdInterface(QObject):
 
     # Emitted after every command so the Terminal tab can show the result
     result_ready = Signal(str, str, bool)  # (command, result_text, is_error)
+    # Emitted when __CONNECT__ finishes (success: bool, message: str)
+    connect_finished = Signal(bool, str)
 
     def __init__(self, manager, parent=None):
         super().__init__(parent)
@@ -79,6 +82,10 @@ class CmdInterface(QObject):
             return self._meta_stop()
         if meta == "__STATUS__":
             return self._meta_status()
+        if meta == "__CONNECT__":
+            return self._meta_connect()
+        if meta == "__DISCONNECT__":
+            return self._meta_disconnect()
 
         # Regular eval/exec against ODrive namespace
         return self._eval_cmd(cmd)
@@ -107,6 +114,36 @@ class CmdInterface(QObject):
     def _meta_stop(self) -> tuple[str, bool]:
         """Same as __IDLE__ — safe stop."""
         return self._meta_idle()
+
+    def _meta_connect(self) -> tuple[str, bool]:
+        if self._mgr.connected:
+            return ("Already connected", False)
+        # Kick off blocking connect in a background thread; result logged async
+        log.info("CMD __CONNECT__: searching for ODrive...")
+        threading.Thread(target=self._connect_thread, daemon=True).start()
+        return ("Connecting... (async, check log for result)", False)
+
+    def _connect_thread(self):
+        try:
+            self._mgr.connect()
+            info = self._mgr.device_info() or {}
+            msg = f"Connected — hw={info.get('hw','')} fw={info.get('fw','')} serial={info.get('serial','')}"
+            log.info("CMD __CONNECT__: %s", msg)
+            self._log_result("__CONNECT__", msg, False)
+            self.connect_finished.emit(True, msg)
+            self.result_ready.emit("__CONNECT__", msg, False)
+        except Exception as e:
+            msg = f"Connect failed: {e}"
+            log.error("CMD __CONNECT__: %s", msg)
+            self._log_result("__CONNECT__", msg, True)
+            self.connect_finished.emit(False, msg)
+            self.result_ready.emit("__CONNECT__", msg, True)
+
+    def _meta_disconnect(self) -> tuple[str, bool]:
+        if not self._mgr.connected:
+            return ("Not connected", True)
+        self._mgr.disconnect()
+        return ("Disconnected", False)
 
     def _meta_status(self) -> tuple[str, bool]:
         if not self._mgr.connected:

@@ -20,8 +20,8 @@ MOTOR_TYPE_NAMES = ["High Current (0)", "Gimbal (2)", "ACIM (3)"]
 MOTOR_TYPE_VALUES = [0, 2, 3]
 
 # Encoder types
-ENCODER_TYPE_NAMES = ["SPI Absolute AMS (257)", "Incremental (0)"]
-ENCODER_TYPE_VALUES = [257, 0]
+ENCODER_TYPE_NAMES = ["SPI Absolute AMS (257)", "SPI Absolute CUI (256)", "Incremental (0)"]
+ENCODER_TYPE_VALUES = [257, 256, 0]
 
 # Anticogging map size (fixed in ODrive 0.5.6 firmware)
 COGGING_MAP_SIZE = 3600

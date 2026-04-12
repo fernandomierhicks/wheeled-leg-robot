@@ -15,16 +15,18 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QRadioButton, QButtonGroup,
-    QFrame, QTabWidget,
+    QFrame, QTabWidget, QMessageBox,
 )
 
 from core.odrive_manager import ODriveManager
 from core.odrive_errors import (
-    decode_errors_str, AXIS_ERRORS, MOTOR_ERRORS,
-    ENCODER_ERRORS, CONTROLLER_ERRORS,
+    decode_errors_str, AXIS_ERRORS, MOTOR_ERRORS, CONTROLLER_ERRORS,
 )
 from core.constants import POLL_MS
 from cmd.cmd_interface import CmdInterface
+from tabs.tab_setup import TabSetup
+from tabs.tab_control import TabControl
+from tabs.tab_anticogging import TabAnticogging
 from tabs.tab_terminal import TabTerminal
 from ui.theme import (
     DARK_STYLE, CLR_OK, CLR_WARN, CLR_ERR, CLR_INFO, CLR_MUTED,
@@ -67,6 +69,23 @@ class ConnectWorker(QThread):
             self.failed.emit(str(e))
 
 
+class ReconnectWorker(QThread):
+    success = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, manager: ODriveManager):
+        super().__init__()
+        self._mgr = manager
+
+    def run(self):
+        try:
+            self._mgr.disconnect()
+            odrv = self._mgr.connect()
+            self.success.emit(odrv)
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
 # ── Main window ──────────────────────────────────────────────────────────────
 
 class MainWindow(QMainWindow):
@@ -78,6 +97,10 @@ class MainWindow(QMainWindow):
         self._mgr = manager
         self._cmd = cmd_interface
         self._connect_worker: ConnectWorker | None = None
+        self._reconnect_worker: ReconnectWorker | None = None
+        self._erase_reboot_timer = QTimer(self)
+        self._erase_reboot_timer.setSingleShot(True)
+        self._erase_reboot_timer.timeout.connect(self._reconnect_after_erase)
 
         # Poll timer (100 ms) for live readouts
         self._poll_timer = QTimer(self)
@@ -87,6 +110,9 @@ class MainWindow(QMainWindow):
         self._build()
         self._poll_timer.start()
         self._cmd.start()
+        self._cmd.connect_finished.connect(self._on_cmd_connect)
+        self._tab_setup.reconnected.connect(self._on_setup_reconnected)
+        self._tab_anticog.reconnected.connect(self._on_setup_reconnected)
 
     # ── UI build ──────────────────────────────────────────────────────────────
 
@@ -128,6 +154,13 @@ class MainWindow(QMainWindow):
         top.addWidget(self.lbl_status)
         top.addStretch()
 
+        # Erase Config button (far right, away from other controls)
+        self.btn_erase = QPushButton("Erase Config")
+        self.btn_erase.setFixedWidth(110)
+        self.btn_erase.setStyleSheet(f"color: {CLR_ERR};")
+        self.btn_erase.clicked.connect(self._on_erase_config)
+        top.addWidget(self.btn_erase)
+
         root.addLayout(top)
 
         # Divider
@@ -158,15 +191,26 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         root.addWidget(self.tabs)
 
-        # Placeholder tabs — will be replaced in later steps
-        for name in ["Setup", "Control", "Anticogging", "Inspector"]:
-            placeholder = QWidget()
-            ph_layout = QVBoxLayout(placeholder)
-            lbl = QLabel(f"{name} tab — coming soon")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(f"color: {CLR_MUTED}; font-size: 14px;")
-            ph_layout.addWidget(lbl)
-            self.tabs.addTab(placeholder, name)
+        # Real Setup tab (Step 3)
+        self._tab_setup = TabSetup(self._mgr, self._ax_idx)
+        self.tabs.addTab(self._tab_setup, "Setup")
+
+        # Real Control tab (Step 4)
+        self._tab_control = TabControl(self._mgr, self._ax_idx)
+        self.tabs.addTab(self._tab_control, "Control")
+
+        # Real Anticogging tab (Step 5)
+        self._tab_anticog = TabAnticogging(self._mgr, self._ax_idx)
+        self.tabs.addTab(self._tab_anticog, "Anticogging")
+
+        # Placeholder — Inspector tab coming in Step 6
+        ph_inspector = QWidget()
+        ph_layout = QVBoxLayout(ph_inspector)
+        lbl = QLabel("Inspector tab — coming soon")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setStyleSheet(f"color: {CLR_MUTED}; font-size: 14px;")
+        ph_layout.addWidget(lbl)
+        self.tabs.addTab(ph_inspector, "Inspector")
 
         # Real Terminal tab (Step 2)
         self._tab_terminal = TabTerminal(self._cmd)
@@ -225,6 +269,90 @@ class MainWindow(QMainWindow):
         self.btn_connect.setEnabled(True)
         log.error("GUI: connect failed: %s", msg)
 
+    def _on_setup_reconnected(self):
+        """Handle reconnect after reboot triggered by Setup tab."""
+        if self._mgr.connected:
+            info = self._mgr.device_info()
+            if info:
+                self._set_status(f"Reconnected — hw{info['hw']}  fw{info['fw']}", CLR_OK)
+            else:
+                self._set_status("Reconnected", CLR_OK)
+            self.btn_connect.setText("Disconnect")
+            self.btn_connect.setEnabled(True)
+
+    def _on_cmd_connect(self, success: bool, msg: str):
+        """Handle connect/disconnect triggered via inbox __CONNECT__ command."""
+        if success:
+            self._set_status(msg, CLR_OK)
+            self.btn_connect.setText("Disconnect")
+            self.btn_connect.setEnabled(True)
+        else:
+            self._set_status(msg, CLR_ERR)
+            self.btn_connect.setText("Connect")
+            self.btn_connect.setEnabled(True)
+
+    # ── Erase Config ────────────────────────────────────────────────────────
+
+    _ERASE_REBOOT_WAIT_MS = 4000
+
+    def _on_erase_config(self):
+        if not self._mgr.connected:
+            self._set_status("Not connected — cannot erase", CLR_ERR)
+            return
+
+        reply = QMessageBox.warning(
+            self,
+            "Erase Configuration",
+            "This will erase ALL configuration and restore factory defaults.\n"
+            "The ODrive will reboot.\n\n"
+            "Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        log.info("GUI: erasing configuration (factory reset)")
+        try:
+            self._mgr.odrv.erase_configuration()
+        except Exception:
+            pass  # erase triggers reboot — USB exception expected
+
+        self.btn_connect.setEnabled(False)
+        self.btn_erase.setEnabled(False)
+        self._mgr.disconnect()
+        self._set_status("Erased — rebooting ODrive...", CLR_WARN)
+        self._clear_readouts()
+        self._erase_reboot_timer.start(self._ERASE_REBOOT_WAIT_MS)
+
+    def _reconnect_after_erase(self):
+        self._set_status("Reconnecting after erase...", CLR_INFO)
+        self._reconnect_worker = ReconnectWorker(self._mgr)
+        self._reconnect_worker.success.connect(self._on_erase_reconnect_ok)
+        self._reconnect_worker.failed.connect(self._on_erase_reconnect_fail)
+        self._reconnect_worker.start()
+
+    def _on_erase_reconnect_ok(self, odrv):
+        info = self._mgr.device_info()
+        if info:
+            self._set_status(
+                f"Factory defaults restored — hw{info['hw']}  fw{info['fw']}",
+                CLR_OK,
+            )
+        else:
+            self._set_status("Factory defaults restored", CLR_OK)
+        self.btn_connect.setText("Disconnect")
+        self.btn_connect.setEnabled(True)
+        self.btn_erase.setEnabled(True)
+        log.info("GUI: erase complete, reconnected")
+
+    def _on_erase_reconnect_fail(self, msg):
+        self._set_status(f"Erase OK but reconnect failed: {msg}", CLR_ERR)
+        self.btn_connect.setText("Connect")
+        self.btn_connect.setEnabled(True)
+        self.btn_erase.setEnabled(True)
+        log.error("GUI: reconnect after erase failed: %s", msg)
+
     def _set_status(self, msg: str, color: str):
         self.lbl_status.setText(msg)
         self.lbl_status.setStyleSheet(f"color: {color}; font-family: monospace;")
@@ -232,6 +360,11 @@ class MainWindow(QMainWindow):
     # ── Poll (100 ms) ─────────────────────────────────────────────────────────
 
     def _poll(self):
+        # Tab poll updates (must run even when disconnected)
+        self._tab_setup.poll_update()
+        self._tab_control.poll_update()
+        self._tab_anticog.poll_update()
+
         if not self._mgr.connected:
             return
         try:
@@ -249,13 +382,15 @@ class MainWindow(QMainWindow):
             state_str = self._mgr.axis_state_str(ax)
             self.lbl_axis_state.setText(f"State: {state_str}")
 
-            # Errors
+            # Errors — encoder suppressed: mode 256 (CUI) reads fine but
+            # raises spurious SPI errors that drown out real faults.
             errs = self._mgr.axis_errors(ax)
-            any_err = any(v != 0 for v in errs.values())
+            err_tables = [("axis", AXIS_ERRORS), ("motor", MOTOR_ERRORS),
+                          ("controller", CONTROLLER_ERRORS)]
+            any_err = any(errs[k] != 0 for k, _ in err_tables)
             if any_err:
                 parts = []
-                for key, table in [("axis", AXIS_ERRORS), ("motor", MOTOR_ERRORS),
-                                   ("encoder", ENCODER_ERRORS), ("controller", CONTROLLER_ERRORS)]:
+                for key, table in err_tables:
                     val = errs[key]
                     if val != 0:
                         parts.append(f"{key}: {decode_errors_str(val, table)}")
