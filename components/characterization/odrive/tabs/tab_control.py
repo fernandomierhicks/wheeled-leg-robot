@@ -309,6 +309,10 @@ class TabControl(QWidget):
 
         return box
 
+    def on_connected(self):
+        """Called by MainWindow after any successful connect — refresh gains."""
+        self._read_gains()
+
     def _read_gains(self):
         axis = self._mgr.get_axis(self._ax_idx())
         if axis is None:

@@ -68,16 +68,74 @@ work but SPI error bits still flicker.
    ~100 Hz while the magnet is stationary. If it's rock-steady, the bottom
    14 bits are being read correctly and only the checksum wrapper is wrong.
 
-### Possible fixes once confirmed
+### Working fix: error-suppression during calibration
 
-- Patch ODrive 0.5.6 firmware `SPI_ABS_AMS` to use the AS5048A parity/EF bit
-  layout, or add a new mode (e.g. `SPI_ABS_AS5048A`). Requires rebuilding
-  firmware.
-- Live with mode 256 permanently and never trust `encoder.error` for SPI bits.
-  Acceptable for bench characterization; **not** acceptable for the balancing
-  robot's control loop — a silent SPI dropout would be invisible.
-- Replace the AS5048A with an AS5047P, which the official driver supports
-  cleanly.
+The root cause (parity/EF bit swap) cannot be fixed without patching ODrive
+firmware. However, the error only fires every ~150 ms, and the error register
+is writable from the host. The workaround:
+
+1. A background thread calls `odrv.clear_errors()` at ~333 Hz, keeping
+   `encoder.error` at zero faster than the SPI ISR sets it.
+2. Calibration runs as a **split sequence**: motor calibration (state 4)
+   first, then encoder offset calibration (state 7). Both complete
+   successfully while the suppressor is active.
+3. After calibration, `pre_calibrated = True` is saved to NVM so
+   subsequent boots skip calibration and the suppressor is not needed
+   at runtime.
+
+This is implemented in:
+- `encoder_cal_fix.py` — standalone script (close GUI first)
+- `tabs/tab_setup.py` — GUI "Calibrate" button uses `_ErrorSuppressor`
+  class with the same split-calibration approach
+
+### Current status (2026-04-12)
+
+Calibration under mode 257 now completes successfully thanks to the error
+suppressor + split calibration. With `pre_calibrated = True` saved to NVM,
+subsequent boots skip calibration and the encoder reads position correctly.
+Everything *appears* to work — but the underlying parity/EF bit-swap issue
+is still present. The SPI error bits still flicker at ~150 ms; they're just
+no longer checked after boot because calibration is skipped. This is
+acceptable for bench characterization but not for the final robot.
+
+### Permanent fix options
+
+ODrive 0.5.6 has **no setting** to disable SPI error checking. A proposed
+`ignore_abs_ams_error_flag` parameter (GitHub PR #563) was never merged into
+mainline — it only exists in ODrive Pro/S1 firmware (0.6.x+). The three
+realistic paths:
+
+1. **Keep error-suppression workaround (current, $0).** With
+   `pre_calibrated = True` saved to NVM, the suppressor is only needed
+   during one-time calibration. Normal closed-loop operation works because
+   the PLL tracks position despite the flickering SPI error bit. Acceptable
+   for bench characterization; for the balancing robot's final control loop
+   a silent SPI dropout would be invisible — consider option 2 or 3.
+
+2. **Build custom 0.5.6 firmware (~15 line change).** Modify
+   `Firmware/MotorControl/encoder.cpp` `abs_spi_cb()` to swap the
+   parity/error-flag bits for AS5048A: read error flag from bit 15 (not 14),
+   compute parity over bits 14..0 (not 15..0). Requires ARM GCC toolchain +
+   `tup` build system
+   ([developer guide](https://docs.odriverobotics.com/v/0.5.6/developer-guide.html)).
+   A community fork exists at
+   `github.com/grahameth/ODrive_hbuhle2s_0.5.4_abs_ignore` but only adds
+   an ignore flag — it does **not** fix the parity calculation, so it would
+   still silently discard ~50% of frames. A proper fix must also rewrite
+   `ams_parity()`.
+
+3. **Replace AS5048A with AS5047P (~$5–8/board, drop-in).** Pin-compatible,
+   same magnetic interface, native ODrive support. Also provides incremental
+   ABZ outputs (the AS5048A lacks these). This is the ODrive community
+   consensus recommendation.
+
+   Alternative: **MagAlpha MA732 / MA702** (mode 260, `SPI_ABS_MA732`).
+   ODrive's driver for these does zero parity validation — just a bit shift —
+   making it the most reliable SPI encoder option for ODrive v3.6.
+
+Note: the AS5048A's PWM output mode is **not usable** — ODrive 0.5.6 has no
+PWM-input encoder mode. The AS5048A also lacks incremental ABZ outputs, so
+incremental mode is not an option either.
 
 ---
 
@@ -93,3 +151,4 @@ work but SPI error bits still flicker.
 - `core/odrive_manager.py` — USB connection + axis helpers.
 - `cmd/cmd_interface.py` — file-based command inbox so Claude can poke the
   ODrive while the GUI is running.
+- `encoder_cal_fix.py` — standalone calibration script with error suppression.

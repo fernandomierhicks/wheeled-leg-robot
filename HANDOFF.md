@@ -147,49 +147,59 @@ Each step produces a **runnable, testable GUI** (except Step 1.1 which produces 
 
 **Test:** The reference doc is complete enough that for any "what parameter controls X?" question, we can look it up without connecting to the ODrive.
 
-### Step 1: Core + Connect + Status Bar
+### Step 1: Core + Connect + Status Bar [COMPLETE]
 - `ODriveManager` class: connect, disconnect, safe_get/set, execute_command, thread lock
 - `odrive_errors.py`: merged error tables from v2 GUI + vel_test.py
 - `MainWindow`: axis selector, connect/disconnect button, status label, empty tab widget, 100ms poll timer
 - Dark theme
 - **Test:** Run GUI -> click Connect -> see hw/fw version + Vbus in status bar
 
-### Step 2: Terminal Tab + Claude Command Interface
+### Step 2: Terminal Tab + Claude Command Interface [COMPLETE]
 - Terminal with eval namespace (`odrv`, `ax0`, `ax1`)
 - `cmd_interface.py`: polls `odrive_cmd_inbox.txt` every 500ms, writes results to `odrive_cmd_log.txt` + `odrive_cmd_output.json`
 - Continuous `odrive_gui.log` captures all GUI events
-- Meta-commands: `__CLEAR_ERRORS__`, `__IDLE__`, `__STOP__`, `__STATUS__`
+- Meta-commands: `__CLEAR_ERRORS__`, `__IDLE__`, `__STOP__`, `__STATUS__`, `__CONNECT__`, `__DISCONNECT__`
 - **Test:** Type `odrv.vbus_voltage` in terminal -> see result. Write command to inbox file -> see result in log
 
-### Step 3: Motor Setup Tab
+### Step 3: Motor Setup Tab [COMPLETE — pending physical motor test]
 - Motor/encoder config form (from v2 `MotorSetupTab`)
 - Flash config, reboot, reconnect, verify cycle
 - Full calibration with progress polling
 - Post-cal auto-tuning (compute vel_gain from phase_resistance)
 - Startup flag safety (force all to False on connect)
 - **Test:** Read config -> modify -> Flash -> reboot -> Verify. Run calibration -> motor beeps -> gains auto-set
+- **Note:** Config read verified via inbox commands. Flash/Calibrate/Reboot cycle needs user-present motor test.
 
-### Step 4: Motor Control Tab
+### Step 4: Motor Control Tab [COMPLETE — pending physical motor test]
 - Control mode selector (velocity/position/torque), setpoint, enable/disable
-- Gains panel (pos_gain, vel_gain, vel_integrator_gain, current_bandwidth)
-- Error display with decode + hint popups
-- Live readout (state, pos, vel, Iq, Vbus)
-- Quick buttons: Clear Errors, Stop Motor, Quick Spin Test
+- Gains panel (pos_gain, vel_gain, vel_integrator_gain, vel_limit) with Read/Apply
+- Error display with decode + hint popup dialogs (? buttons)
+- Live readout (state, pos, vel, Iq, Vbus, electrical/mechanical power)
+- Quick buttons: Clear Errors, STOP Motor, Quick Spin Test
 - **Test:** Enable closed loop -> command velocity -> motor spins -> live readouts update
+- **Note:** All readouts verified via inbox. Motor motion tests need user present.
 
-### Step 5: Anticogging Tab
+### Step 5: Anticogging Tab [COMPLETE]
 - Consolidates `run_anticogging.py` + `check_anticog_nvm.py` + `probe_anticogging.py`
 - Step buttons: Prerequisites Check -> Velocity Smoke Test -> Start Calibration -> Quality Test -> Save
-- Progress bar tracking sweep index
+- Progress bar tracking sweep index (0-3600)
 - Threshold presets (Good=5, Quick=100)
-- **Test:** Full anticogging workflow from GUI with progress tracking
+- Sequential step unlocking: prereqs -> vel test -> calibration -> quality/save
+- Quality test: Iq stdev comparison ON vs OFF (4s each, poll-based sampling)
+- Save + reboot + reconnect + verify (anticogging_enabled + pre_calibrated flags)
+- All operations poll-based via `poll_update()` (no QThread except reconnect)
+- Added `anticogging_prerequisites()` to `core/odrive_operations.py`
+- **Test:** GUI launches, tab renders. Full workflow needs user-present motor test.
 
-### Step 6: Inspector Tab
-- Recursive property tree walk (from `probe_firmware.py` algorithm)
-- QTreeWidget with search/filter
-- Inline editing of writable properties
-- Firmware version display
-- **Test:** Browse full property tree, search for a property, edit it
+### Step 6: Inspector Tab [COMPLETE]
+- Recursive property tree walk (from `probe_firmware.py` algorithm) in background QThread
+- QTreeWidget with Path/Value/Type columns, alternating dark rows, monospace font
+- Search/filter bar — real-time filtering preserving ancestor tree structure
+- Inline editing of writable properties (`.config.` paths) via double-click, with readback
+- Color coding: blue = writable, gray = callable, red = error, white = read-only
+- Firmware version + serial displayed at top on probe
+- Progress indicator during probe with property count
+- **Test:** GUI launches, tab renders. Probe walks full tree. Search filters correctly. Inline edit writes + reads back.
 
 ### Step 7: Live Charts Tab
 - pyqtgraph ring-buffer plots (based on [fastchart.py](misc/fastchart.py))

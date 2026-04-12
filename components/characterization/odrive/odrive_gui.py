@@ -27,6 +27,7 @@ from cmd.cmd_interface import CmdInterface
 from tabs.tab_setup import TabSetup
 from tabs.tab_control import TabControl
 from tabs.tab_anticogging import TabAnticogging
+from tabs.tab_inspector import TabInspector
 from tabs.tab_terminal import TabTerminal
 from ui.theme import (
     DARK_STYLE, CLR_OK, CLR_WARN, CLR_ERR, CLR_INFO, CLR_MUTED,
@@ -203,14 +204,9 @@ class MainWindow(QMainWindow):
         self._tab_anticog = TabAnticogging(self._mgr, self._ax_idx)
         self.tabs.addTab(self._tab_anticog, "Anticogging")
 
-        # Placeholder — Inspector tab coming in Step 6
-        ph_inspector = QWidget()
-        ph_layout = QVBoxLayout(ph_inspector)
-        lbl = QLabel("Inspector tab — coming soon")
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(f"color: {CLR_MUTED}; font-size: 14px;")
-        ph_layout.addWidget(lbl)
-        self.tabs.addTab(ph_inspector, "Inspector")
+        # Inspector tab (Step 6)
+        self._tab_inspector = TabInspector(self._mgr, self._ax_idx)
+        self.tabs.addTab(self._tab_inspector, "Inspector")
 
         # Real Terminal tab (Step 2)
         self._tab_terminal = TabTerminal(self._cmd)
@@ -261,7 +257,13 @@ class MainWindow(QMainWindow):
             self._set_status("Connected", CLR_OK)
         self.btn_connect.setText("Disconnect")
         self.btn_connect.setEnabled(True)
+        self._refresh_tabs()
         log.info("GUI: connect success")
+
+    def _refresh_tabs(self):
+        """Read config from ODrive into all tab forms."""
+        self._tab_setup.on_connected()
+        self._tab_control.on_connected()
 
     def _on_connect_fail(self, msg):
         self._set_status(f"Connect failed: {msg}", CLR_ERR)
@@ -279,6 +281,7 @@ class MainWindow(QMainWindow):
                 self._set_status("Reconnected", CLR_OK)
             self.btn_connect.setText("Disconnect")
             self.btn_connect.setEnabled(True)
+            self._tab_control.on_connected()
 
     def _on_cmd_connect(self, success: bool, msg: str):
         """Handle connect/disconnect triggered via inbox __CONNECT__ command."""
@@ -286,6 +289,7 @@ class MainWindow(QMainWindow):
             self._set_status(msg, CLR_OK)
             self.btn_connect.setText("Disconnect")
             self.btn_connect.setEnabled(True)
+            self._refresh_tabs()
         else:
             self._set_status(msg, CLR_ERR)
             self.btn_connect.setText("Connect")
@@ -344,6 +348,7 @@ class MainWindow(QMainWindow):
         self.btn_connect.setText("Disconnect")
         self.btn_connect.setEnabled(True)
         self.btn_erase.setEnabled(True)
+        self._refresh_tabs()
         log.info("GUI: erase complete, reconnected")
 
     def _on_erase_reconnect_fail(self, msg):

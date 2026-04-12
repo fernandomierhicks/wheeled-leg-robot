@@ -5,6 +5,8 @@ the same logic can be triggered from Claude inbox commands.
 """
 
 import logging
+import threading
+import time
 
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtWidgets import (
@@ -30,8 +32,56 @@ _CAL_IDLE = 0
 _CAL_RUNNING = 1
 _CAL_DONE = 2
 _CAL_FAIL = 3
+# Split calibration: motor done, now doing encoder offset
+_CAL_ENCODER = 4
 
 _REBOOT_WAIT_MS = 4000
+
+
+class _ErrorSuppressor:
+    """Background thread that clears ODrive errors at ~333 Hz.
+
+    The AS5048A under mode 256 (SPI_ABS_CUI) generates spurious
+    ABS_SPI_COM_FAIL errors every ~150 ms. The ODrive firmware checks
+    encoder.error during calibration states and aborts if any bits are
+    set. This thread keeps the register clear so calibration can proceed.
+    """
+
+    def __init__(self, odrv):
+        self._odrv = odrv
+        self._stop = threading.Event()
+        self._count = 0
+        self._thread = None
+
+    def start(self):
+        self._stop.clear()
+        self._count = 0
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=2)
+            self._thread = None
+
+    @property
+    def running(self):
+        return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def clear_count(self):
+        return self._count
+
+    def _run(self):
+        odrv = self._odrv
+        while not self._stop.is_set():
+            try:
+                odrv.clear_errors()
+                self._count += 1
+            except Exception:
+                pass
+            time.sleep(0.003)
 
 
 # ── Reconnect worker (QThread) ───────────────────────────────────────────────
@@ -350,6 +400,10 @@ class TabSetup(QWidget):
 
     # ── Read ──────────────────────────────────────────────────────────────────
 
+    def on_connected(self):
+        """Called by MainWindow after any successful connect — refresh form."""
+        self._on_read()
+
     def _on_read(self):
         try:
             cfg = read_config(self._mgr, self._ax_idx())
@@ -443,58 +497,123 @@ class TabSetup(QWidget):
             _colored(self.lbl_cal_msg, str(e), CLR_ERR)
             return
 
+        # Start error suppressor — clears spurious AS5048A SPI errors at
+        # ~333 Hz so the firmware doesn't see them during calibration.
+        self._error_suppressor = _ErrorSuppressor(self._mgr.odrv)
+        self._error_suppressor.start()
+        log.info("Setup: error suppressor started for calibration")
+
         self._cal_state = _CAL_RUNNING
         self._set_buttons(False)
-        _colored(self.lbl_cal_state, "Calibrating...", CLR_CAL)
-        _colored(self.lbl_cal_msg, "FULL_CALIBRATION_SEQUENCE started", CLR_CAL)
+        _colored(self.lbl_cal_state, "Motor calibration...", CLR_CAL)
+        _colored(self.lbl_cal_msg, "MOTOR_CALIBRATION (state 4) — measuring R & L", CLR_CAL)
 
         try:
-            axis.requested_state = 3  # FULL_CALIBRATION_SEQUENCE
-            log.info("Setup: axis%d calibration started", self._ax_idx())
+            axis.requested_state = 4  # MOTOR_CALIBRATION only
+            log.info("Setup: axis%d motor calibration started (split cal phase 1)", self._ax_idx())
         except Exception as e:
+            self._stop_error_suppressor()
             self._cal_state = _CAL_FAIL
             self._set_buttons(True)
             _colored(self.lbl_cal_state, "FAILED", CLR_ERR)
             _colored(self.lbl_cal_msg, str(e), CLR_ERR)
 
+    def _stop_error_suppressor(self):
+        sup = getattr(self, "_error_suppressor", None)
+        if sup and sup.running:
+            count = sup.clear_count
+            sup.stop()
+            log.info("Setup: error suppressor stopped (cleared %d times)", count)
+
     def _poll_calibration(self, axis):
-        """Called from poll_update() while calibrating."""
+        """Called from poll_update() while calibrating.
+
+        Uses split calibration: motor cal (state 4) first, then encoder
+        offset cal (state 7), with error suppression active throughout.
+        """
         state = getattr(axis, "current_state", 0)
         err = getattr(axis, "error", 0)
         state_name = AXIS_STATES.get(state, f"State {state}")
 
-        _colored(self.lbl_cal_state, f"Calibrating — {state_name}", CLR_CAL)
+        if self._cal_state == _CAL_RUNNING:
+            _colored(self.lbl_cal_state, f"Motor cal — {state_name}", CLR_CAL)
+        elif self._cal_state == _CAL_ENCODER:
+            _colored(self.lbl_cal_state, f"Encoder cal — {state_name}", CLR_CAL)
 
-        if state == 1:  # back to IDLE — finished
+        if state != 1:
+            return  # still running
+
+        # Back to IDLE — check which phase just finished
+        if self._cal_state == _CAL_RUNNING:
+            # Motor calibration just finished
+            if err != 0 or not getattr(axis.motor, "is_calibrated", False):
+                self._stop_error_suppressor()
+                self._cal_state = _CAL_FAIL
+                from core.odrive_errors import decode_errors_str, AXIS_ERRORS
+                desc = decode_errors_str(err, AXIS_ERRORS)
+                _colored(self.lbl_cal_state, "Motor cal FAILED", CLR_ERR)
+                _colored(self.lbl_cal_msg, f"Axis error 0x{err:04X}: {desc}", CLR_ERR)
+                log.error("Setup: axis%d motor cal FAILED — 0x%04X: %s",
+                         self._ax_idx(), err, desc)
+                self._set_buttons(True)
+                return
+
+            R = axis.motor.config.phase_resistance
+            L = axis.motor.config.phase_inductance
+            log.info("Setup: axis%d motor cal OK — R=%.4f L=%.6f",
+                     self._ax_idx(), R, L)
+
+            # Phase 2: encoder offset calibration
+            self._cal_state = _CAL_ENCODER
+            _colored(self.lbl_cal_state, "Encoder offset calibration...", CLR_CAL)
+            _colored(self.lbl_cal_msg,
+                     f"R={R:.4f} L={L:.6f} — now finding encoder offset",
+                     CLR_CAL)
+            try:
+                axis.requested_state = 7  # ENCODER_OFFSET_CALIBRATION
+                log.info("Setup: axis%d encoder offset cal started (split cal phase 2)",
+                         self._ax_idx())
+            except Exception as e:
+                self._stop_error_suppressor()
+                self._cal_state = _CAL_FAIL
+                self._set_buttons(True)
+                _colored(self.lbl_cal_state, "FAILED", CLR_ERR)
+                _colored(self.lbl_cal_msg, str(e), CLR_ERR)
+            return
+
+        if self._cal_state == _CAL_ENCODER:
+            # Encoder offset calibration just finished
+            self._stop_error_suppressor()
+
             if err != 0:
                 self._cal_state = _CAL_FAIL
                 from core.odrive_errors import decode_errors_str, AXIS_ERRORS
                 desc = decode_errors_str(err, AXIS_ERRORS)
-                _colored(self.lbl_cal_state, "FAILED", CLR_ERR)
+                _colored(self.lbl_cal_state, "Encoder cal FAILED", CLR_ERR)
                 _colored(self.lbl_cal_msg, f"Axis error 0x{err:04X}: {desc}", CLR_ERR)
-                log.error("Setup: axis%d calibration FAILED — 0x%04X: %s",
+                log.error("Setup: axis%d encoder cal FAILED — 0x%04X: %s",
                          self._ax_idx(), err, desc)
                 self._set_buttons(True)
-            else:
-                # Success — auto-tune and save
-                self._cal_state = _CAL_DONE
-                _colored(self.lbl_cal_state, "Calibration OK, auto-tuning...", CLR_OK)
-                try:
-                    tuned = auto_tune_after_cal(self._mgr, self._ax_idx())
-                    _colored(self.lbl_cal_state, "Done — saved + rebooting", CLR_OK)
-                    _colored(self.lbl_cal_msg,
-                             f"vel_gain={tuned['vel_gain']:.4f}  "
-                             f"R={tuned['phase_resistance']:.4f}  "
-                             f"L={tuned['phase_inductance']:.6f}",
-                             CLR_OK)
-                    log.info("Setup: axis%d calibration + auto-tune complete", self._ax_idx())
-                    # Reboot sequence (save_configuration already triggered reboot)
-                    self._post_reboot_action = "cal_done"
-                    self._start_reboot_sequence()
-                except Exception as e:
-                    _colored(self.lbl_cal_msg, f"Auto-tune warning: {e}", CLR_WARN)
-                    log.warning("Setup: auto-tune warning: %s", e)
-                    self._set_buttons(True)
+                return
+
+            # Full success — auto-tune and save
+            self._cal_state = _CAL_DONE
+            _colored(self.lbl_cal_state, "Calibration OK, auto-tuning...", CLR_OK)
+            try:
+                tuned = auto_tune_after_cal(self._mgr, self._ax_idx())
+                _colored(self.lbl_cal_state, "Done — saved + rebooting", CLR_OK)
+                _colored(self.lbl_cal_msg,
+                         f"vel_gain={tuned['vel_gain']:.4f}  "
+                         f"R={tuned['phase_resistance']:.4f}  "
+                         f"L={tuned['phase_inductance']:.6f}",
+                         CLR_OK)
+                log.info("Setup: axis%d calibration + auto-tune complete", self._ax_idx())
+                self._post_reboot_action = "cal_done"
+                self._start_reboot_sequence()
+            except Exception as e:
+                _colored(self.lbl_cal_msg, f"Auto-tune warning: {e}", CLR_WARN)
+                log.warning("Setup: auto-tune warning: %s", e)
+                self._set_buttons(True)
 
     # ── Reboot & Verify ───────────────────────────────────────────────────────
 
@@ -583,11 +702,11 @@ class TabSetup(QWidget):
             return
 
         # Enable buttons when connected (unless calibrating)
-        if self._cal_state != _CAL_RUNNING:
+        if self._cal_state not in (_CAL_RUNNING, _CAL_ENCODER):
             self._set_buttons(True)
 
         # Calibration polling
-        if self._cal_state == _CAL_RUNNING:
+        if self._cal_state in (_CAL_RUNNING, _CAL_ENCODER):
             self._poll_calibration(axis)
 
         # Live status
