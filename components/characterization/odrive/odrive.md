@@ -1,3 +1,6 @@
+# couldng get GUI and motor config to work properly after updating firmware  (specially the anti cogging tuning). Reprogram with original file or continue fixing gui
+
+
 # ODrive 3.6 — Hardware & Firmware Reference (v0.5.6)
 
 > Probed: 2026-04-03 via `probe_firmware.py` (full recursive tree, depth 8).

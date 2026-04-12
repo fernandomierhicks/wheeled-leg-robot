@@ -9,6 +9,10 @@
 MOTOR
 
 --Buggy GUI.Broke regular position and velocioty commanded after doing anticogging. 
+--Start over, based on the webGUI features?
+--Check the firmware for the 3.5.6 and the GUI folder in it https://github.com/odriverobotics/ODrive
+-----Ensure you can flash it to dual board?
+
 --Add brake resistor to board
 
 
