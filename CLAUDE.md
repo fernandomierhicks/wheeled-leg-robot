@@ -8,6 +8,7 @@
 - **Ask when in doubt.** Never go deep into an approach if something is ambiguous — ask first.
 - **3-minute rule.** Every interaction must complete in under 3 minutes of work. If a task will take longer, stop and propose smaller intermediate steps so the user can confirm progress at each stage before continuing.
 - Always run the file you are working with after you are done editing it.
+- **Commit checkpoint.** After any meaningful step that took ~10–20 min of work, prompt the user to commit and push so progress is never lost.
 
 ---
 
@@ -82,39 +83,3 @@ Each simulation folder owns its own parameters — sims may deviate from COMPONE
 - **Balance algorithm:** LQR on linearised inverted pendulum, 500 Hz, 3-state: [pitch−θ_ref, pitch_rate, wheel_vel_avg−v_ref] — fully tuned in simulation
 - **Wheel odometry:** ODESC encoder feedback via CAN
 
----
-
-## Simulation — Current State
-
-### Active: `simulation\mujoco\master_sim_jump\`
-
-Each sim folder owns all its parameters in `params.py`. New sims fork from the
-previous one and note lineage in a comment at the top of `params.py`.
-
-## Folder Structure
-
-```
-firmware/src/                        ← PlatformIO firmware
-software/
-  dashboard/                         ← Dear PyGui telemetry (planned)
-  tools/                             ← odrivetool scripts, calibration
-simulation/
-  mujoco/
-    master_sim_jump/                 ← ✅ Active — balance + jump (S1–S10)
-      params.py                      ← all parameters (geometry, gains, timing)
-      sim_loop.py                    ← main simulation loop
-      scenarios/                     ← per-scenario configs & profiles
-      controllers/                   ← LQR, VelocityPI, YawPI, hip, jump
-    master_sim/                      ← prior iteration (balance only, no jump)
-    archive/                         ← old sims (baseline1, LQR_opt, latency)
-  sil/                               ← C++ DLL bridge (future)
-docs/
-  math/                              ← LQR derivations, jump energy
-  design_decisions/
-  datasheets/
-components/
-  COMPONENTS.md                      ← Shopping list / best-estimate BOM
-.claude/settings.json                ← Claude Code permissions
-```
-
----

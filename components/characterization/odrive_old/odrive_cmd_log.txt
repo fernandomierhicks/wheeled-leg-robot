@@ -1,0 +1,4 @@
+[09:39:50] >> 1 + 1
+[ERR] ODrive not connected
+[09:39:50] >> "hello from inbox"
+[ERR] ODrive not connected
