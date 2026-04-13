@@ -1,12 +1,17 @@
-"""tab_control.py — Motor control: mode select, setpoint, gains, errors, live readouts."""
+"""tab_control.py — Motor control + live charts in a split pane.
+
+Left pane:  mode select, setpoint, gains, errors, live readouts (scrollable).
+Right pane: pyqtgraph live telemetry charts.
+"""
 
 import logging
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QGroupBox, QLabel, QPushButton, QRadioButton, QButtonGroup,
-    QDoubleSpinBox, QScrollArea, QDialog, QDialogButtonBox, QTextEdit,
+    QDoubleSpinBox, QScrollArea, QSplitter,
+    QDialog, QDialogButtonBox, QTextEdit,
 )
 
 from core.constants import AXIS_STATES
@@ -15,6 +20,7 @@ from core.odrive_errors import (
     AXIS_ERRORS, MOTOR_ERRORS, ENCODER_ERRORS, CONTROLLER_ERRORS,
     AXIS_ERROR_HINTS, MOTOR_ERROR_HINTS, ENCODER_ERROR_HINTS, CONTROLLER_ERROR_HINTS,
 )
+from tabs.tab_charts import TabCharts
 from ui.theme import CLR_OK, CLR_WARN, CLR_ERR, CLR_INFO, CLR_CAL, CLR_MUTED, CLR_PANEL, CLR_LABEL
 
 log = logging.getLogger("odrive_gui")
@@ -37,7 +43,7 @@ def _colored(label: QLabel, text: str, color: str):
 
 
 class TabControl(QWidget):
-    """Motor control tab: mode, setpoint, gains, errors, live readouts."""
+    """Motor control + live charts in a horizontal split pane."""
 
     def __init__(self, manager, get_axis_idx, parent=None):
         super().__init__(parent)
@@ -52,24 +58,40 @@ class TabControl(QWidget):
     # ── Build UI ──────────────────────────────────────────────────────────────
 
     def _build(self):
-        scroll = QScrollArea(self)
-        scroll.setWidgetResizable(True)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        outer.addWidget(splitter)
+
+        # ── Left pane: controls ──────────────────────────────────────────────
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMinimumWidth(250)
+        scroll.setMaximumWidth(340)
 
         inner = QWidget()
         scroll.setWidget(inner)
-        root = QVBoxLayout(inner)
-        root.setSpacing(10)
-        root.setContentsMargins(10, 10, 10, 10)
+        left = QVBoxLayout(inner)
+        left.setSpacing(8)
+        left.setContentsMargins(8, 8, 8, 8)
 
-        root.addWidget(self._build_errors_group())
-        root.addWidget(self._build_control_group())
-        root.addWidget(self._build_gains_group())
-        root.addWidget(self._build_quick_buttons())
-        root.addWidget(self._build_readout_group())
-        root.addStretch()
+        left.addWidget(self._build_errors_group())
+        left.addWidget(self._build_control_group())
+        left.addWidget(self._build_gains_group())
+        left.addWidget(self._build_quick_buttons())
+        left.addWidget(self._build_readout_group())
+        left.addStretch()
+
+        splitter.addWidget(scroll)
+
+        # ── Right pane: live charts ──────────────────────────────────────────
+        self._charts = TabCharts(self._mgr, self._get_axis_idx)
+        splitter.addWidget(self._charts)
+
+        # Charts get the lion's share of space
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
 
     # ── Errors group ──────────────────────────────────────────────────────────
 
@@ -177,9 +199,9 @@ class TabControl(QWidget):
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel("Mode:"))
         self._mode_grp = QButtonGroup(self)
-        self._rb_vel = QRadioButton("Velocity")
-        self._rb_pos = QRadioButton("Position")
-        self._rb_trq = QRadioButton("Torque")
+        self._rb_vel = QRadioButton("Vel")
+        self._rb_pos = QRadioButton("Pos")
+        self._rb_trq = QRadioButton("Trq")
         self._rb_vel.setChecked(True)
         for i, rb in enumerate((self._rb_vel, self._rb_pos, self._rb_trq)):
             self._mode_grp.addButton(rb, i)
@@ -189,12 +211,11 @@ class TabControl(QWidget):
 
         # Setpoint
         sp_row = QHBoxLayout()
-        sp_row.addWidget(QLabel("Setpoint:"))
+        sp_row.addWidget(QLabel("SP:"))
         self.sp_setpoint = _dspin(-1000, 1000, 0.0, dec=3, step=0.1)
         self._lbl_sp_units = QLabel("t/s")
         sp_row.addWidget(self.sp_setpoint)
         sp_row.addWidget(self._lbl_sp_units)
-        sp_row.addStretch()
         col.addLayout(sp_row)
 
         self._rb_vel.toggled.connect(self._on_mode_changed)
@@ -204,8 +225,8 @@ class TabControl(QWidget):
 
         # Enable / Disable buttons
         btn_row = QHBoxLayout()
-        self.btn_enable = QPushButton("Enable / Closed Loop")
-        self.btn_disable = QPushButton("Disable / Idle")
+        self.btn_enable = QPushButton("Enable")
+        self.btn_disable = QPushButton("Idle")
         self.btn_enable.setStyleSheet(f"color: {CLR_OK};")
         self.btn_disable.setStyleSheet(f"color: {CLR_WARN};")
         for b in (self.btn_enable, self.btn_disable):
@@ -292,12 +313,12 @@ class TabControl(QWidget):
 
         form.addRow("pos_gain", self.sp_pos_gain)
         form.addRow("vel_gain", self.sp_vel_gain)
-        form.addRow("vel_integrator_gain", self.sp_vel_int)
+        form.addRow("vel_int", self.sp_vel_int)
         form.addRow("vel_limit", self.sp_vel_lim)
 
         btn_row = QHBoxLayout()
-        self.btn_read_gains = QPushButton("Read Gains")
-        self.btn_apply_gains = QPushButton("Apply Gains")
+        self.btn_read_gains = QPushButton("Read")
+        self.btn_apply_gains = QPushButton("Apply")
         self.btn_apply_gains.setStyleSheet(f"color: {CLR_INFO};")
         for b in (self.btn_read_gains, self.btn_apply_gains):
             b.setEnabled(False)
@@ -348,13 +369,13 @@ class TabControl(QWidget):
         box = QGroupBox("Quick Actions")
         row = QHBoxLayout(box)
 
-        self.btn_stop = QPushButton("STOP Motor")
+        self.btn_stop = QPushButton("STOP")
         self.btn_stop.setStyleSheet(f"color: {CLR_ERR}; font-weight: bold;")
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._stop_motor)
         row.addWidget(self.btn_stop)
 
-        self.btn_spin_test = QPushButton("Quick Spin Test")
+        self.btn_spin_test = QPushButton("Spin Test")
         self.btn_spin_test.setStyleSheet(f"color: {CLR_CAL};")
         self.btn_spin_test.setEnabled(False)
         self.btn_spin_test.clicked.connect(self._quick_spin_test)
@@ -437,6 +458,7 @@ class TabControl(QWidget):
                 _colored(lbl, "—", CLR_MUTED)
             for lbl in self._err_labels.values():
                 _colored(lbl, "—", CLR_MUTED)
+            self._charts.poll_update()
             return
 
         # Errors
@@ -477,7 +499,10 @@ class TabControl(QWidget):
 
             elec_power = getattr(axis.controller, "electrical_power", 0.0)
             mech_power = getattr(axis.controller, "mechanical_power", 0.0)
-            _colored(self.lbl_power, f"elec={elec_power:.1f} W  mech={mech_power:.1f} W", CLR_OK)
+            _colored(self.lbl_power, f"E={elec_power:.1f} M={mech_power:.1f} W", CLR_OK)
 
         except Exception:
             pass
+
+        # Update charts
+        self._charts.poll_update()

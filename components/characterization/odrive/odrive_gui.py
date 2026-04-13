@@ -11,7 +11,7 @@ import os
 import sys
 
 import psutil
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtCore import QThread, Signal, QTimer
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QRadioButton, QButtonGroup,
@@ -212,14 +212,6 @@ class MainWindow(QMainWindow):
         self._tab_terminal = TabTerminal(self._cmd)
         self.tabs.addTab(self._tab_terminal, "Terminal")
 
-        # Placeholder Charts tab
-        ph_charts = QWidget()
-        ph_layout = QVBoxLayout(ph_charts)
-        lbl = QLabel("Charts tab — coming soon")
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(f"color: {CLR_MUTED}; font-size: 14px;")
-        ph_layout.addWidget(lbl)
-        self.tabs.addTab(ph_charts, "Charts")
 
     # ── Axis helper ───────────────────────────────────────────────────────────
 
