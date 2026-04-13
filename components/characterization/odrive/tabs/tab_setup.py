@@ -167,6 +167,9 @@ class TabSetup(QWidget):
         top_row.addWidget(self._build_encoder_group())
         root.addLayout(top_row)
 
+        # Brake resistor
+        root.addWidget(self._build_brake_resistor_group())
+
         # Safety status
         root.addWidget(self._build_safety_group())
 
@@ -263,17 +266,51 @@ class TabSetup(QWidget):
 
         return box
 
-    def _build_safety_group(self):
-        box = QGroupBox("Boot Safety — Startup Motion Flags")
+    def _build_brake_resistor_group(self):
+        box = QGroupBox("Brake Resistor")
         row = QHBoxLayout(box)
 
+        self.brake_enabled_chk = QCheckBox("Enable brake resistor")
+        self.brake_enabled_chk.setChecked(True)
+        self.brake_enabled_chk.setToolTip(
+            "Must match hardware — if a brake resistor is connected, enable this. "
+            "If enabled without a resistor, the ODrive may fault on regen."
+        )
+        row.addWidget(self.brake_enabled_chk)
+
+        row.addSpacing(20)
+        row.addWidget(QLabel("Resistance:"))
+        self.brake_resistance = _dspin(0.1, 100, 2.0, dec=1, step=0.1, suffix="\u2126")
+        self.brake_resistance.setToolTip("Resistance of the brake resistor in ohms (default 2.0 for ODrive stock resistor)")
+        self.brake_resistance.setFixedWidth(120)
+        row.addWidget(self.brake_resistance)
+
+        row.addSpacing(20)
+        row.addWidget(QLabel("Max regen current:"))
+        self.dc_max_neg_current = _dspin(-50, 0, -0.01, dec=2, step=0.5, suffix="A")
+        self.dc_max_neg_current.setToolTip(
+            "dc_max_negative_current — max current fed back to supply. "
+            "Set to -0.01 to reject all regen (brake resistor absorbs it). "
+            "Use a larger negative value (e.g. -5) if your supply accepts regen."
+        )
+        self.dc_max_neg_current.setFixedWidth(120)
+        row.addWidget(self.dc_max_neg_current)
+
+        row.addStretch()
+        return box
+
+    def _build_safety_group(self):
+        box = QGroupBox("Safety & Protection")
+        col = QVBoxLayout(box)
+
+        # Row 1: startup flags + watchdog
+        row1 = QHBoxLayout()
         self.lbl_startup_safe = QLabel("Not connected")
         self.lbl_startup_safe.setStyleSheet(f"font-family: monospace; color: {CLR_MUTED};")
-        row.addWidget(self.lbl_startup_safe)
-        row.addStretch()
+        row1.addWidget(self.lbl_startup_safe)
+        row1.addStretch()
 
-        # Watchdog timeout
-        row.addWidget(QLabel("Watchdog:"))
+        row1.addWidget(QLabel("Watchdog:"))
         self.watchdog_timeout = QDoubleSpinBox()
         self.watchdog_timeout.setRange(0, 60)
         self.watchdog_timeout.setDecimals(1)
@@ -282,13 +319,37 @@ class TabSetup(QWidget):
         self.watchdog_timeout.setSuffix("  s")
         self.watchdog_timeout.setToolTip("0 = disabled. If no command received within this time, motor faults.")
         self.watchdog_timeout.setFixedWidth(100)
-        row.addWidget(self.watchdog_timeout)
+        row1.addWidget(self.watchdog_timeout)
 
-        row.addSpacing(12)
-
-        note = QLabel("On every Flash: startup_* = False, enable_brake_resistor = True")
+        row1.addSpacing(12)
+        note = QLabel("On every Flash: startup_* = False")
         note.setStyleSheet(f"color: {CLR_MUTED}; font-size: 10px;")
-        row.addWidget(note)
+        row1.addWidget(note)
+        col.addLayout(row1)
+
+        # Row 2: bus voltage protection
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Undervoltage trip:"))
+        self.undervoltage_trip = _dspin(0, 56, 8.0, dec=1, step=0.5, suffix="V")
+        self.undervoltage_trip.setToolTip(
+            "dc_bus_undervoltage_trip_level — ODrive disarms with DC_BUS_UNDER_VOLTAGE "
+            "if Vbus drops below this. Set a few volts below your nominal supply."
+        )
+        self.undervoltage_trip.setFixedWidth(120)
+        row2.addWidget(self.undervoltage_trip)
+
+        row2.addSpacing(20)
+        row2.addWidget(QLabel("Overvoltage trip:"))
+        self.overvoltage_trip = _dspin(12, 60, 59.0, dec=1, step=0.5, suffix="V")
+        self.overvoltage_trip.setToolTip(
+            "dc_bus_overvoltage_trip_level — ODrive disarms with DC_BUS_OVER_VOLTAGE "
+            "if Vbus exceeds this (e.g. from regen). Keep above nominal supply + margin."
+        )
+        self.overvoltage_trip.setFixedWidth(120)
+        row2.addWidget(self.overvoltage_trip)
+
+        row2.addStretch()
+        col.addLayout(row2)
 
         return box
 
@@ -448,6 +509,11 @@ class TabSetup(QWidget):
         self.enc_precal_chk.setChecked(cfg["encoder_pre_calibrated"])
         self.motor_precal_chk.setChecked(cfg["motor_pre_calibrated"])
         self.watchdog_timeout.setValue(cfg.get("watchdog_timeout", 0.0))
+        self.undervoltage_trip.setValue(cfg.get("dc_bus_undervoltage_trip_level", 8.0))
+        self.overvoltage_trip.setValue(cfg.get("dc_bus_overvoltage_trip_level", 59.0))
+        self.brake_enabled_chk.setChecked(cfg.get("enable_brake_resistor", True))
+        self.brake_resistance.setValue(cfg.get("brake_resistance", 2.0))
+        self.dc_max_neg_current.setValue(cfg.get("dc_max_negative_current", -0.01))
 
         _colored(self.lbl_cal_state, "Config read OK", CLR_OK)
         _colored(self.lbl_cal_msg,
@@ -486,6 +552,11 @@ class TabSetup(QWidget):
             "abs_spi_cs_gpio_pin":          self.enc_cs_pin.value(),
             "cpr":                          self.enc_cpr.value(),
             "watchdog_timeout":             self.watchdog_timeout.value(),
+            "dc_bus_undervoltage_trip_level": self.undervoltage_trip.value(),
+            "dc_bus_overvoltage_trip_level":  self.overvoltage_trip.value(),
+            "enable_brake_resistor":        self.brake_enabled_chk.isChecked(),
+            "brake_resistance":             self.brake_resistance.value(),
+            "dc_max_negative_current":      self.dc_max_neg_current.value(),
         }
 
     # ── Calibrate ─────────────────────────────────────────────────────────────

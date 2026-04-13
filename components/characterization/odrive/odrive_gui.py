@@ -147,6 +147,7 @@ class MainWindow(QMainWindow):
             self._ax_grp.addButton(rb, i)
             top.addWidget(rb)
             self._rb_ax.append(rb)
+        self._ax_grp.idClicked.connect(self._on_axis_changed)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
@@ -235,6 +236,11 @@ class MainWindow(QMainWindow):
 
     def _ax_idx(self) -> int:
         return self._ax_grp.checkedId()
+
+    def _on_axis_changed(self, _id: int):
+        """Re-read ODrive parameters into all tabs when axis selection changes."""
+        if self._mgr.connected:
+            self._refresh_tabs()
 
     # ── Connection ────────────────────────────────────────────────────────────
 

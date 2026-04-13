@@ -73,8 +73,12 @@ def read_config(mgr, axis_idx: int) -> dict:
         "encoder_pre_calibrated":       getattr(ec, "pre_calibrated", False),
         "motor_pre_calibrated":         getattr(mc, "pre_calibrated", False),
         "enable_brake_resistor":        getattr(odrv.config, "enable_brake_resistor", False),
+        "brake_resistance":            float(getattr(odrv.config, "brake_resistance", 2.0)),
+        "dc_max_negative_current":     float(getattr(odrv.config, "dc_max_negative_current", -0.01)),
         "watchdog_timeout":             float(getattr(axis.config, "watchdog_timeout", 0)),
         "enable_watchdog":              getattr(axis.config, "enable_watchdog", False),
+        "dc_bus_undervoltage_trip_level": float(getattr(odrv.config, "dc_bus_undervoltage_trip_level", 8.0)),
+        "dc_bus_overvoltage_trip_level":  float(getattr(odrv.config, "dc_bus_overvoltage_trip_level", 59.0)),
     }
 
 
@@ -125,12 +129,18 @@ def flash_config(mgr, axis_idx: int, params: dict) -> dict:
     axis.config.watchdog_timeout = wdt
     axis.config.enable_watchdog = (wdt > 0)
 
+    # Bus voltage protection
+    odrv.config.dc_bus_undervoltage_trip_level = params.get("dc_bus_undervoltage_trip_level", 8.0)
+    odrv.config.dc_bus_overvoltage_trip_level = params.get("dc_bus_overvoltage_trip_level", 59.0)
+
     # Safety: lock all startup flags
     lock_startup_flags(axis)
     cc.enable_overspeed_error = False
 
-    # Brake resistor — always enable
-    odrv.config.enable_brake_resistor = True
+    # Brake resistor
+    odrv.config.enable_brake_resistor = params.get("enable_brake_resistor", True)
+    odrv.config.brake_resistance = params.get("brake_resistance", 2.0)
+    odrv.config.dc_max_negative_current = params.get("dc_max_negative_current", -0.01)
 
     # Snapshot before save
     snapshot = snapshot_params(mgr, axis_idx)
@@ -168,8 +178,12 @@ def snapshot_params(mgr, axis_idx: int) -> dict:
         "vel_limit":                    getattr(cc, "vel_limit", None),
         "enable_overspeed_error":       getattr(cc, "enable_overspeed_error", None),
         "enable_brake_resistor":        getattr(odrv.config, "enable_brake_resistor", None),
+        "brake_resistance":            getattr(odrv.config, "brake_resistance", None),
+        "dc_max_negative_current":     getattr(odrv.config, "dc_max_negative_current", None),
         "watchdog_timeout":             getattr(axis.config, "watchdog_timeout", None),
         "enable_watchdog":              getattr(axis.config, "enable_watchdog", None),
+        "dc_bus_undervoltage_trip_level": getattr(odrv.config, "dc_bus_undervoltage_trip_level", None),
+        "dc_bus_overvoltage_trip_level":  getattr(odrv.config, "dc_bus_overvoltage_trip_level", None),
         "encoder_mode":                 getattr(ec, "mode", None),
         "abs_spi_cs_gpio_pin":          getattr(ec, "abs_spi_cs_gpio_pin", None),
         "cpr":                          getattr(ec, "cpr", None),

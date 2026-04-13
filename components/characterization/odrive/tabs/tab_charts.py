@@ -144,6 +144,9 @@ class TabCharts(QWidget):
             plot.showGrid(x=True, y=True, alpha=0.15)
             plot.setXRange(-WINDOW_SECONDS, 0, padding=0)
             plot.enableAutoRange(axis="y")
+            # Minimum ±1 Y range for iq/vel/pos (avoid x0.001 scale)
+            if key in ("iq", "vel", "pos"):
+                plot.setLimits(minYRange=2.0)
             plot.setMouseEnabled(x=False, y=True)
 
             # Only show x-axis label on the bottom plot
@@ -199,6 +202,17 @@ class TabCharts(QWidget):
             self._stat_labels[key].setText(f"{label}: --")
         self._t0 = time.perf_counter()
         log.info("Charts: cleared all buffers")
+
+    # ── Autotuner injection ────────────────────────────────────────────────────
+
+    def inject_autotune_sample(self, t_rel_from_test: float, vel: float):
+        """Feed a velocity sample from the autotuner relay test into the chart.
+
+        The autotuner runs in its own thread at ~200 Hz.  We convert its
+        relative timestamp to our chart time-base and push into the vel buffer.
+        """
+        t_chart = time.perf_counter() - self._t0
+        self._buffers["vel"].append(t_chart, vel)
 
     # ── Poll update (called by MainWindow every 100 ms) ──────────────────────
 

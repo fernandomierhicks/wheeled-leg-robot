@@ -88,6 +88,14 @@ This is implemented in:
 - `tabs/tab_setup.py` — GUI "Calibrate" button uses `_ErrorSuppressor`
   class with the same split-calibration approach
 
+### Important: power-cycle required when switching encoder mode
+
+If an axis was previously calibrated under mode 256 (CUI), changing to mode 257
+(AMS) and re-calibrating is **not enough** — the board needs a full power-cycle
+(unplug and replug DC power) before the new mode takes effect cleanly. A software
+reboot (`odrv.reboot()` / save_configuration) does not fully reset the SPI
+encoder state, and errors will persist until a real power-cycle.
+
 ### Current status (2026-04-12)
 
 Calibration under mode 257 now completes successfully thanks to the error

@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QGroupBox, QLabel, QPushButton, QRadioButton, QButtonGroup,
     QDoubleSpinBox, QScrollArea, QSplitter, QCheckBox,
-    QDialog, QDialogButtonBox, QTextEdit,
+    QDialog, QDialogButtonBox, QTextEdit, QComboBox,
 )
 
 from core.constants import AXIS_STATES
@@ -22,6 +22,7 @@ from core.odrive_errors import (
     AXIS_ERRORS, MOTOR_ERRORS, ENCODER_ERRORS, CONTROLLER_ERRORS,
     AXIS_ERROR_HINTS, MOTOR_ERROR_HINTS, ENCODER_ERROR_HINTS, CONTROLLER_ERROR_HINTS,
 )
+from core.autotuner import RelayTestWorker, ValidationWorker, TUNING_RULES
 from tabs.tab_charts import TabCharts
 from ui.theme import CLR_OK, CLR_WARN, CLR_ERR, CLR_INFO, CLR_CAL, CLR_MUTED, CLR_PANEL, CLR_LABEL
 
@@ -56,6 +57,12 @@ class TabControl(QWidget):
         # Setpoint tracking (last commanded value — shown as dashed overlay in charts)
         self._cur_sp_vel = 0.0
         self._cur_sp_pos = 0.0
+
+        # Autotuner state
+        self._relay_worker = None
+        self._valid_worker = None
+        self._autotune_results = None   # last relay test results
+        self._saved_gains = None        # gains before autotune (for revert)
 
         # Waveform generator state
         self._wave_timer = QTimer(self)
@@ -97,6 +104,7 @@ class TabControl(QWidget):
         left.addWidget(self._build_gains_group())
         left.addWidget(self._build_ff_group())
         left.addWidget(self._build_quick_buttons())
+        left.addWidget(self._build_autotune_group())
         left.addWidget(self._build_readout_group())
         left.addStretch()
 
@@ -685,6 +693,252 @@ class TabControl(QWidget):
         except Exception as e:
             log.error("Control: spin test error: %s", e)
 
+    # ── Autotuner ─────────────────────────────────────────────────────────────
+
+    def _build_autotune_group(self):
+        box = QGroupBox("Autotuner (Relay Feedback)")
+        col = QVBoxLayout(box)
+        col.setSpacing(4)
+
+        # Parameters row
+        p1 = QHBoxLayout()
+        p1.addWidget(QLabel("Relay:"))
+        self.sp_relay_amp = _dspin(0.001, 5.0, 0.1, dec=3, step=0.01, suffix="Nm")
+        p1.addWidget(self.sp_relay_amp)
+        p1.addWidget(QLabel("Timeout:"))
+        self.sp_relay_timeout = _dspin(2, 30, 15.0, dec=1, step=1.0, suffix="s")
+        p1.addWidget(self.sp_relay_timeout)
+        col.addLayout(p1)
+
+        # Tuning rule selector
+        p2 = QHBoxLayout()
+        p2.addWidget(QLabel("Rule:"))
+        self.cmb_tune_rule = QComboBox()
+        for name in TUNING_RULES:
+            self.cmb_tune_rule.addItem(name)
+        self.cmb_tune_rule.setCurrentText("TL-PI")
+        self.cmb_tune_rule.currentTextChanged.connect(self._on_tune_rule_changed)
+        p2.addWidget(self.cmb_tune_rule)
+        p2.addStretch()
+        col.addLayout(p2)
+
+        # Buttons row 1: Start / Stop
+        b1 = QHBoxLayout()
+        self.btn_autotune_start = QPushButton("Start Autotune")
+        self.btn_autotune_start.setStyleSheet(f"color: {CLR_CAL}; font-weight: bold;")
+        self.btn_autotune_start.setEnabled(False)
+        self.btn_autotune_start.clicked.connect(self._start_autotune)
+        b1.addWidget(self.btn_autotune_start)
+
+        self.btn_autotune_stop = QPushButton("Abort")
+        self.btn_autotune_stop.setStyleSheet(f"color: {CLR_ERR};")
+        self.btn_autotune_stop.setEnabled(False)
+        self.btn_autotune_stop.clicked.connect(self._stop_autotune)
+        b1.addWidget(self.btn_autotune_stop)
+        col.addLayout(b1)
+
+        # Status label
+        self.lbl_autotune_status = QLabel("Idle")
+        self.lbl_autotune_status.setStyleSheet(
+            f"font-family: monospace; font-size: 11px; color: {CLR_MUTED};"
+        )
+        self.lbl_autotune_status.setWordWrap(True)
+        col.addWidget(self.lbl_autotune_status)
+
+        # Results display
+        self.lbl_autotune_result = QLabel("")
+        self.lbl_autotune_result.setStyleSheet(
+            f"font-family: monospace; font-size: 11px; color: {CLR_INFO};"
+        )
+        self.lbl_autotune_result.setWordWrap(True)
+        col.addWidget(self.lbl_autotune_result)
+
+        # Buttons row 2: Accept / Validate / Revert
+        b2 = QHBoxLayout()
+        self.btn_autotune_accept = QPushButton("Accept Gains")
+        self.btn_autotune_accept.setStyleSheet(f"color: {CLR_OK};")
+        self.btn_autotune_accept.setEnabled(False)
+        self.btn_autotune_accept.clicked.connect(self._accept_autotune_gains)
+        b2.addWidget(self.btn_autotune_accept)
+
+        self.btn_autotune_validate = QPushButton("Validate")
+        self.btn_autotune_validate.setStyleSheet(f"color: {CLR_INFO};")
+        self.btn_autotune_validate.setEnabled(False)
+        self.btn_autotune_validate.clicked.connect(self._start_validation)
+        b2.addWidget(self.btn_autotune_validate)
+
+        self.btn_autotune_revert = QPushButton("Revert")
+        self.btn_autotune_revert.setStyleSheet(f"color: {CLR_WARN};")
+        self.btn_autotune_revert.setEnabled(False)
+        self.btn_autotune_revert.clicked.connect(self._revert_gains)
+        b2.addWidget(self.btn_autotune_revert)
+        col.addLayout(b2)
+
+        return box
+
+    def _start_autotune(self):
+        if self._relay_worker is not None and self._relay_worker.isRunning():
+            return
+
+        # Save current gains for revert
+        axis = self._mgr.get_axis(self._ax_idx())
+        if axis is not None:
+            try:
+                cc = axis.controller.config
+                self._saved_gains = {
+                    "vel_gain": float(cc.vel_gain),
+                    "vel_integrator_gain": float(cc.vel_integrator_gain),
+                }
+            except Exception:
+                self._saved_gains = None
+
+        self._autotune_results = None
+        self.btn_autotune_start.setEnabled(False)
+        self.btn_autotune_stop.setEnabled(True)
+        self.btn_autotune_accept.setEnabled(False)
+        self.btn_autotune_validate.setEnabled(False)
+        self.btn_autotune_revert.setEnabled(False)
+        self.lbl_autotune_result.setText("")
+
+        self._relay_worker = RelayTestWorker(
+            manager=self._mgr,
+            axis_idx=self._ax_idx(),
+            relay_amplitude=self.sp_relay_amp.value(),
+            timeout=self.sp_relay_timeout.value(),
+        )
+        self._relay_worker.progress.connect(self._on_autotune_progress)
+        self._relay_worker.sample.connect(self._on_autotune_sample)
+        self._relay_worker.finished.connect(self._on_autotune_finished)
+        self._relay_worker.error.connect(self._on_autotune_error)
+        self._relay_worker.start()
+        log.info("Autotuner: relay test launched")
+
+    def _on_tune_rule_changed(self, rule_name: str):
+        """Re-compute gains from stored Ku/Tu when the user switches tuning rule."""
+        if self._autotune_results is None:
+            return
+        gains = self._autotune_results["gains"].get(rule_name, {})
+        if not gains:
+            return
+        self.sp_vel_gain.setValue(gains.get("vel_gain", 0))
+        self.sp_vel_int.setValue(gains.get("vel_integrator_gain", 0))
+        text = (
+            f"Ku={self._autotune_results['Ku']:.5f}  "
+            f"Tu={self._autotune_results['Tu']:.4f}s\n"
+            f"─── {gains.get('rule', rule_name)} ───\n"
+            f"vel_gain = {gains.get('vel_gain', 0):.5f}\n"
+            f"vel_int  = {gains.get('vel_integrator_gain', 0):.5f}"
+        )
+        _colored(self.lbl_autotune_result, text, CLR_OK)
+
+    def _stop_autotune(self):
+        if self._relay_worker is not None and self._relay_worker.isRunning():
+            self._relay_worker.stop()
+        if self._valid_worker is not None and self._valid_worker.isRunning():
+            self._valid_worker.stop()
+        self.btn_autotune_stop.setEnabled(False)
+
+    def _on_autotune_progress(self, text: str):
+        _colored(self.lbl_autotune_status, text, CLR_INFO)
+
+    def _on_autotune_sample(self, t: float, vel: float):
+        # Feed the live chart via the existing chart infrastructure
+        self._charts.inject_autotune_sample(t, vel)
+
+    def _on_autotune_error(self, text: str):
+        _colored(self.lbl_autotune_status, f"ERROR: {text}", CLR_ERR)
+        log.error("Autotuner: %s", text)
+        self.btn_autotune_start.setEnabled(True)
+        self.btn_autotune_stop.setEnabled(False)
+        if self._saved_gains:
+            self.btn_autotune_revert.setEnabled(True)
+
+    def _on_autotune_finished(self, results: dict):
+        self._autotune_results = results
+        rule_name = self.cmb_tune_rule.currentText()
+        gains = results["gains"].get(rule_name, {})
+
+        # Show results
+        text = (
+            f"Ku={results['Ku']:.5f}  Tu={results['Tu']:.4f}s\n"
+            f"Oscillation: {results['amplitude']:.4f} t/s "
+            f"({results['n_cycles']} cycles)\n"
+            f"─── {gains.get('rule', rule_name)} ───\n"
+            f"vel_gain = {gains.get('vel_gain', 0):.5f}\n"
+            f"vel_int  = {gains.get('vel_integrator_gain', 0):.5f}"
+        )
+        _colored(self.lbl_autotune_result, text, CLR_OK)
+
+        # Populate the gain spinboxes (don't apply to ODrive yet)
+        self.sp_vel_gain.setValue(gains.get("vel_gain", 0))
+        self.sp_vel_int.setValue(gains.get("vel_integrator_gain", 0))
+
+        self.btn_autotune_start.setEnabled(True)
+        self.btn_autotune_stop.setEnabled(False)
+        self.btn_autotune_accept.setEnabled(True)
+        self.btn_autotune_validate.setEnabled(True)
+        self.btn_autotune_revert.setEnabled(self._saved_gains is not None)
+
+        log.info("Autotuner: results — Ku=%.5f Tu=%.4f vel_gain=%.5f vel_int=%.5f",
+                 results["Ku"], results["Tu"],
+                 gains.get("vel_gain", 0), gains.get("vel_integrator_gain", 0))
+
+    def _accept_autotune_gains(self):
+        """Apply the proposed gains to the ODrive (same as clicking Apply in Gains)."""
+        self._apply_gains()
+        _colored(self.lbl_autotune_status, "Gains applied to ODrive", CLR_OK)
+        self.btn_autotune_accept.setEnabled(False)
+
+    def _revert_gains(self):
+        """Restore gains from before the autotune run."""
+        if not self._saved_gains:
+            return
+        self.sp_vel_gain.setValue(self._saved_gains["vel_gain"])
+        self.sp_vel_int.setValue(self._saved_gains["vel_integrator_gain"])
+        self._apply_gains()
+        _colored(self.lbl_autotune_status, "Gains reverted to pre-autotune values", CLR_WARN)
+        self.btn_autotune_revert.setEnabled(False)
+
+    def _start_validation(self):
+        if self._valid_worker is not None and self._valid_worker.isRunning():
+            return
+
+        # Use the gains currently in the spinboxes
+        vel_gain = self.sp_vel_gain.value()
+        vel_int = self.sp_vel_int.value()
+
+        self.btn_autotune_validate.setEnabled(False)
+        self.btn_autotune_stop.setEnabled(True)
+
+        self._valid_worker = ValidationWorker(
+            manager=self._mgr,
+            axis_idx=self._ax_idx(),
+            vel_gain=vel_gain,
+            vel_int_gain=vel_int,
+            test_vel=max(self.sp_wave_amp.value(), 1.0),
+            period=max(self.sp_wave_period.value(), 2.0),
+        )
+        self._valid_worker.progress.connect(self._on_autotune_progress)
+        self._valid_worker.sample.connect(self._on_autotune_sample)
+        self._valid_worker.finished.connect(self._on_validation_finished)
+        self._valid_worker.error.connect(self._on_autotune_error)
+        self._valid_worker.start()
+        log.info("Autotuner: validation started (vel_gain=%.5f vel_int=%.5f)",
+                 vel_gain, vel_int)
+
+    def _on_validation_finished(self, results: dict):
+        text = (
+            f"─── Validation ───\n"
+            f"Overshoot: {results['avg_overshoot_pct']:.1f}%\n"
+            f"Settling:  {results['avg_settling_time']:.3f}s\n"
+            f"SS error:  {results['avg_ss_error']:.4f} t/s"
+        )
+        _colored(self.lbl_autotune_result, text, CLR_OK)
+        self.btn_autotune_validate.setEnabled(True)
+        self.btn_autotune_stop.setEnabled(False)
+        log.info("Autotuner: validation done — overshoot=%.1f%% settling=%.3fs",
+                 results["avg_overshoot_pct"], results["avg_settling_time"])
+
     # ── Live readout ──────────────────────────────────────────────────────────
 
     def _build_readout_group(self):
@@ -732,6 +986,15 @@ class TabControl(QWidget):
         self.cb_rwl_ff.setEnabled(connected)
         self.cb_bemf_ff.setEnabled(connected)
         self.cb_anticog.setEnabled(connected)
+
+        # Autotune buttons — only enable Start when no test is running
+        relay_running = (self._relay_worker is not None
+                         and self._relay_worker.isRunning())
+        valid_running = (self._valid_worker is not None
+                         and self._valid_worker.isRunning())
+        any_running = relay_running or valid_running
+        self.btn_autotune_start.setEnabled(connected and not any_running)
+        self.btn_autotune_stop.setEnabled(connected and any_running)
 
         if axis is None:
             for lbl in (self.lbl_state, self.lbl_pos, self.lbl_vel,

@@ -8,23 +8,20 @@
 
 MOTOR
 
-Do 30min anticogging run. 
+Do 30min anticogging run or longer for both motors
 
 -Fix encoder parity issue in README.MD
 --Check the firmware for the 3.5.6 and the GUI folder in it https://github.com/odriverobotics/ODrive
 -----Ensure you can flash it to dual board?
---Add brake resistor to board
 
 
 --MOtor
--Gain scheduling
--Autotuning
 -Spinout detection
 -Hard bus current limits
 -Leak current limit 
 -Live Power Monitoring Torque estimation
 
-
+--CAN into ODRIVE to check latencies. 
 
 
 -Flip?

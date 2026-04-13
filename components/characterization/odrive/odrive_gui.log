@@ -1314,3 +1314,890 @@
 2026-04-12 21:10:24 [INFO] EXEC clear_errors(() {}) -> None
 2026-04-12 21:10:24 [INFO] Control: errors cleared + watchdog fed
 2026-04-12 21:10:26 [INFO] Control: square wave on vel axis0 amp=1.000 period=2.000s
+2026-04-12 21:16:17 [INFO] No stale ODrive processes found.
+2026-04-12 21:16:18 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:16:29 [INFO] No stale ODrive processes found.
+2026-04-12 21:16:29 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:16:31 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:16:31 [INFO] Setup: axis0 config read OK
+2026-04-12 21:16:31 [INFO] Control: axis0 gains read OK
+2026-04-12 21:16:31 [INFO] GUI: connect success
+2026-04-12 21:20:21 [INFO] No stale ODrive processes found.
+2026-04-12 21:20:21 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:20:54 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:20:54 [INFO] Setup: axis0 config read OK
+2026-04-12 21:20:54 [INFO] Control: axis0 gains read OK
+2026-04-12 21:20:54 [INFO] GUI: connect success
+2026-04-12 21:20:59 [INFO] Setup: axis1 config read OK
+2026-04-12 21:20:59 [INFO] Control: axis1 gains read OK
+2026-04-12 21:21:01 [INFO] Setup: axis0 config read OK
+2026-04-12 21:21:01 [INFO] Control: axis0 gains read OK
+2026-04-12 21:21:02 [INFO] Setup: axis1 config read OK
+2026-04-12 21:21:02 [INFO] Control: axis1 gains read OK
+2026-04-12 21:21:26 [INFO] Setup: axis1 encoder configured — mode=256 CPR=16384 CS=4  gpio3/4/5=DIGITAL
+2026-04-12 21:21:27 [INFO] Disconnected
+2026-04-12 21:21:31 [INFO] Disconnected
+2026-04-12 21:21:31 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:21:31 [INFO] Setup: reconnected after reboot
+2026-04-12 21:21:31 [INFO] Control: axis1 gains read OK
+2026-04-12 21:21:31 [INFO] Setup: axis1 config read OK
+2026-04-12 21:21:38 [INFO] Setup: axis0 config read OK
+2026-04-12 21:21:38 [INFO] Control: axis0 gains read OK
+2026-04-12 21:21:42 [INFO] Setup: axis1 config read OK
+2026-04-12 21:21:42 [INFO] Control: axis1 gains read OK
+2026-04-12 21:21:44 [INFO] Setup: axis0 config read OK
+2026-04-12 21:21:44 [INFO] Control: axis0 gains read OK
+2026-04-12 21:21:47 [INFO] Setup: axis1 config read OK
+2026-04-12 21:21:47 [INFO] Control: axis1 gains read OK
+2026-04-12 21:22:04 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-12 21:22:04 [INFO] Disconnected
+2026-04-12 21:22:08 [INFO] Disconnected
+2026-04-12 21:22:08 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:22:08 [INFO] Setup: reconnected after reboot
+2026-04-12 21:22:08 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 21:22:08 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 21:22:08 [INFO]   PASS  current_lim: expected=10.0  got=10.0
+2026-04-12 21:22:08 [INFO]   PASS  calibration_current: expected=3.0  got=3.0
+2026-04-12 21:22:08 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 21:22:08 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 21:22:08 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 21:22:08 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 21:22:08 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 21:22:08 [INFO]   PASS  watchdog_timeout: expected=0.0  got=0.0
+2026-04-12 21:22:08 [INFO]   PASS  enable_watchdog: expected=False  got=False
+2026-04-12 21:22:08 [INFO]   PASS  encoder_mode: expected=256  got=256
+2026-04-12 21:22:08 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=4  got=4
+2026-04-12 21:22:08 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 21:22:08 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 21:22:08 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 21:22:08 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 21:22:08 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 21:22:08 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 21:22:08 [INFO] Control: axis1 gains read OK
+2026-04-12 21:22:08 [INFO] Setup: axis1 config read OK
+2026-04-12 21:22:09 [INFO] Setup: axis0 config read OK
+2026-04-12 21:22:09 [INFO] Control: axis0 gains read OK
+2026-04-12 21:22:12 [INFO] Setup: axis1 config read OK
+2026-04-12 21:22:12 [INFO] Control: axis1 gains read OK
+2026-04-12 21:22:13 [INFO] Setup: axis0 config read OK
+2026-04-12 21:22:13 [INFO] Control: axis0 gains read OK
+2026-04-12 21:22:14 [INFO] Setup: axis1 config read OK
+2026-04-12 21:22:14 [INFO] Control: axis1 gains read OK
+2026-04-12 21:22:16 [INFO] Setup: axis0 config read OK
+2026-04-12 21:22:16 [INFO] Control: axis0 gains read OK
+2026-04-12 21:22:17 [INFO] Setup: axis1 config read OK
+2026-04-12 21:22:17 [INFO] Control: axis1 gains read OK
+2026-04-12 21:22:19 [INFO] Setup: axis0 config read OK
+2026-04-12 21:22:19 [INFO] Control: axis0 gains read OK
+2026-04-12 21:22:22 [INFO] flash_config: axis0 flashed + saved, rebooting
+2026-04-12 21:22:22 [INFO] Disconnected
+2026-04-12 21:22:26 [INFO] Disconnected
+2026-04-12 21:22:26 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:22:26 [INFO] Setup: reconnected after reboot
+2026-04-12 21:22:26 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 21:22:26 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 21:22:26 [INFO]   PASS  current_lim: expected=10.0  got=10.0
+2026-04-12 21:22:26 [INFO]   PASS  calibration_current: expected=3.0  got=3.0
+2026-04-12 21:22:26 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 21:22:26 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 21:22:26 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 21:22:26 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 21:22:26 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 21:22:26 [INFO]   PASS  watchdog_timeout: expected=5.0  got=5.0
+2026-04-12 21:22:26 [INFO]   PASS  enable_watchdog: expected=True  got=True
+2026-04-12 21:22:26 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 21:22:26 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=3  got=3
+2026-04-12 21:22:26 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 21:22:26 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 21:22:26 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 21:22:26 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 21:22:26 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 21:22:26 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 21:22:26 [INFO] Control: axis0 gains read OK
+2026-04-12 21:22:26 [INFO] Setup: axis0 config read OK
+2026-04-12 21:22:28 [INFO] Setup: axis1 config read OK
+2026-04-12 21:22:28 [INFO] Control: axis1 gains read OK
+2026-04-12 21:22:32 [INFO] Setup: error suppressor started for calibration
+2026-04-12 21:22:32 [INFO] Setup: axis1 motor calibration started (split cal phase 1)
+2026-04-12 21:22:36 [INFO] Setup: axis1 motor cal OK — R=0.3205 L=0.000201
+2026-04-12 21:22:36 [INFO] Setup: axis1 encoder offset cal started (split cal phase 2)
+2026-04-12 21:22:45 [INFO] Setup: error suppressor stopped (cleared 3459 times)
+2026-04-12 21:22:45 [INFO] auto_tune: axis1 vel_gain=0.0624 vel_int=0.0312 R=0.3205 kT=0.0400
+2026-04-12 21:22:45 [INFO] Setup: axis1 calibration + auto-tune complete
+2026-04-12 21:22:45 [INFO] Disconnected
+2026-04-12 21:22:49 [INFO] Disconnected
+2026-04-12 21:22:49 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:22:49 [INFO] Setup: reconnected after reboot
+2026-04-12 21:22:49 [INFO] Control: axis1 gains read OK
+2026-04-12 21:22:49 [INFO] Setup: axis1 config read OK
+2026-04-12 21:23:02 [INFO] Setup: axis0 config read OK
+2026-04-12 21:23:02 [INFO] Control: axis0 gains read OK
+2026-04-12 21:23:03 [INFO] Setup: axis1 config read OK
+2026-04-12 21:23:03 [INFO] Control: axis1 gains read OK
+2026-04-12 21:23:04 [INFO] Setup: axis0 config read OK
+2026-04-12 21:23:04 [INFO] Control: axis0 gains read OK
+2026-04-12 21:23:05 [INFO] Setup: axis1 config read OK
+2026-04-12 21:23:05 [INFO] Control: axis1 gains read OK
+2026-04-12 21:23:08 [INFO] Setup: axis0 config read OK
+2026-04-12 21:23:08 [INFO] Control: axis0 gains read OK
+2026-04-12 21:23:10 [INFO] Setup: axis1 config read OK
+2026-04-12 21:23:10 [INFO] Control: axis1 gains read OK
+2026-04-12 21:23:16 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-12 21:23:16 [INFO] Disconnected
+2026-04-12 21:23:20 [INFO] Disconnected
+2026-04-12 21:23:20 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:23:20 [INFO] Setup: reconnected after reboot
+2026-04-12 21:23:20 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 21:23:20 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 21:23:20 [INFO]   PASS  current_lim: expected=10.0  got=10.0
+2026-04-12 21:23:20 [INFO]   PASS  calibration_current: expected=3.0  got=3.0
+2026-04-12 21:23:20 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 21:23:20 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 21:23:20 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 21:23:20 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 21:23:20 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 21:23:20 [INFO]   PASS  watchdog_timeout: expected=0.0  got=0.0
+2026-04-12 21:23:20 [INFO]   PASS  enable_watchdog: expected=False  got=False
+2026-04-12 21:23:20 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 21:23:20 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=4  got=4
+2026-04-12 21:23:20 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 21:23:20 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 21:23:20 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 21:23:20 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 21:23:20 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 21:23:20 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 21:23:20 [INFO] Control: axis1 gains read OK
+2026-04-12 21:23:20 [INFO] Setup: axis1 config read OK
+2026-04-12 21:23:23 [INFO] Setup: axis0 config read OK
+2026-04-12 21:23:23 [INFO] Control: axis0 gains read OK
+2026-04-12 21:23:24 [INFO] Setup: axis1 config read OK
+2026-04-12 21:23:24 [INFO] Control: axis1 gains read OK
+2026-04-12 21:23:31 [INFO] Setup: axis0 config read OK
+2026-04-12 21:23:31 [INFO] Control: axis0 gains read OK
+2026-04-12 21:23:32 [INFO] Setup: axis1 config read OK
+2026-04-12 21:23:32 [INFO] Control: axis1 gains read OK
+2026-04-12 21:23:46 [INFO] Setup: axis1 encoder configured — mode=256 CPR=16384 CS=4  gpio3/4/5=DIGITAL
+2026-04-12 21:23:47 [INFO] Disconnected
+2026-04-12 21:23:51 [INFO] Disconnected
+2026-04-12 21:23:51 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:23:51 [INFO] Setup: reconnected after reboot
+2026-04-12 21:23:51 [INFO] Control: axis1 gains read OK
+2026-04-12 21:23:51 [INFO] Setup: axis1 config read OK
+2026-04-12 21:24:28 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-12 21:24:28 [INFO] Disconnected
+2026-04-12 21:24:32 [INFO] Disconnected
+2026-04-12 21:24:32 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:24:32 [INFO] Setup: reconnected after reboot
+2026-04-12 21:24:32 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 21:24:32 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 21:24:32 [INFO]   PASS  current_lim: expected=10.0  got=10.0
+2026-04-12 21:24:32 [INFO]   PASS  calibration_current: expected=3.0  got=3.0
+2026-04-12 21:24:32 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 21:24:32 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 21:24:32 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 21:24:32 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 21:24:32 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 21:24:32 [INFO]   PASS  watchdog_timeout: expected=0.0  got=0.0
+2026-04-12 21:24:32 [INFO]   PASS  enable_watchdog: expected=False  got=False
+2026-04-12 21:24:32 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 21:24:32 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=4  got=4
+2026-04-12 21:24:32 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 21:24:32 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 21:24:32 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 21:24:32 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 21:24:32 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 21:24:32 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 21:24:32 [INFO] Control: axis1 gains read OK
+2026-04-12 21:24:32 [INFO] Setup: axis1 config read OK
+2026-04-12 21:24:42 [INFO] Setup: axis1 encoder configured — mode=256 CPR=16384 CS=4  gpio3/4/5=DIGITAL
+2026-04-12 21:24:42 [INFO] Disconnected
+2026-04-12 21:24:46 [INFO] Disconnected
+2026-04-12 21:24:46 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:24:46 [INFO] Setup: reconnected after reboot
+2026-04-12 21:24:46 [INFO] Control: axis1 gains read OK
+2026-04-12 21:24:46 [INFO] Setup: axis1 config read OK
+2026-04-12 21:25:05 [INFO] Setup: axis1 encoder configured — mode=256 CPR=16384 CS=4  gpio3/4/5=DIGITAL
+2026-04-12 21:25:05 [INFO] Disconnected
+2026-04-12 21:25:09 [INFO] Disconnected
+2026-04-12 21:25:09 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:25:09 [INFO] Setup: reconnected after reboot
+2026-04-12 21:25:09 [INFO] Control: axis1 gains read OK
+2026-04-12 21:25:09 [INFO] Setup: axis1 config read OK
+2026-04-12 21:25:12 [INFO] Setup: error suppressor started for calibration
+2026-04-12 21:25:12 [INFO] Setup: axis1 motor calibration started (split cal phase 1)
+2026-04-12 21:25:16 [INFO] Setup: axis1 motor cal OK — R=0.3367 L=0.000207
+2026-04-12 21:25:16 [INFO] Setup: axis1 encoder offset cal started (split cal phase 2)
+2026-04-12 21:25:25 [INFO] Setup: error suppressor stopped (cleared 3535 times)
+2026-04-12 21:25:25 [INFO] auto_tune: axis1 vel_gain=0.0594 vel_int=0.0297 R=0.3367 kT=0.0400
+2026-04-12 21:25:25 [INFO] Setup: axis1 calibration + auto-tune complete
+2026-04-12 21:25:25 [INFO] Disconnected
+2026-04-12 21:25:29 [INFO] Disconnected
+2026-04-12 21:25:29 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:25:29 [INFO] Setup: reconnected after reboot
+2026-04-12 21:25:29 [INFO] Control: axis1 gains read OK
+2026-04-12 21:25:29 [INFO] Setup: axis1 config read OK
+2026-04-12 21:25:32 [INFO] Setup: axis0 config read OK
+2026-04-12 21:25:32 [INFO] Control: axis0 gains read OK
+2026-04-12 21:25:35 [INFO] Setup: axis1 config read OK
+2026-04-12 21:25:35 [INFO] Control: axis1 gains read OK
+2026-04-12 21:28:13 [INFO] No stale ODrive processes found.
+2026-04-12 21:28:13 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:28:29 [INFO] No stale ODrive processes found.
+2026-04-12 21:28:29 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:28:31 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:28:31 [INFO] Setup: axis0 config read OK
+2026-04-12 21:28:31 [INFO] Control: axis0 gains read OK
+2026-04-12 21:28:31 [INFO] GUI: connect success
+2026-04-12 21:28:32 [INFO] Setup: axis1 config read OK
+2026-04-12 21:28:32 [INFO] Control: axis1 gains read OK
+2026-04-12 21:28:43 [INFO] Setup: axis0 config read OK
+2026-04-12 21:28:43 [INFO] Control: axis0 gains read OK
+2026-04-12 21:28:44 [INFO] Setup: axis1 config read OK
+2026-04-12 21:28:44 [INFO] Control: axis1 gains read OK
+2026-04-12 21:28:50 [INFO] Setup: axis1 encoder configured — mode=257 CPR=16384 CS=4  gpio3/4/5=DIGITAL
+2026-04-12 21:28:50 [INFO] Disconnected
+2026-04-12 21:28:54 [INFO] Disconnected
+2026-04-12 21:28:55 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:28:55 [INFO] Setup: reconnected after reboot
+2026-04-12 21:28:55 [INFO] Control: axis1 gains read OK
+2026-04-12 21:28:55 [INFO] Setup: axis1 config read OK
+2026-04-12 21:29:54 [INFO] Control: axis1 anticogging = False
+2026-04-12 21:29:59 [INFO] Anticogging: prerequisites OK
+2026-04-12 21:30:06 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:30:06 [INFO] Anticogging: velocity smoke test started
+2026-04-12 21:30:07 [INFO] Anticogging: velocity test passed (vel=1.8692)
+2026-04-12 21:30:08 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:30:08 [INFO] Anticogging: calibration started (threshold=100.0)
+2026-04-12 21:30:17 [INFO] Anticogging: sweep idx=600 vel=0.0000 Iq=-0.298 t=9s
+2026-04-12 21:30:55 [INFO] Anticogging: sweep idx=2400 vel=-0.0687 Iq=-0.400 t=47s
+2026-04-12 21:30:59 [INFO] Anticogging: sweep idx=2600 vel=0.0229 Iq=0.046 t=51s
+2026-04-12 21:31:18 [INFO] Anticogging: sweep idx=0 vel=-11.8103 Iq=-1.130 t=70s
+2026-04-12 21:31:18 [INFO] Anticogging: remove_anticogging_bias() OK
+2026-04-12 21:31:18 [INFO] Anticogging: calibration complete (70s, idx=0, valid=True)
+2026-04-12 21:31:20 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:31:20 [INFO] Anticogging: quality test started (spinning @ 0.50 t/s, ON phase)
+2026-04-12 21:31:25 [INFO] Anticogging: quality ON done (mean=0.1920 std=0.1454 n=38)
+2026-04-12 21:31:30 [WARNING] Anticogging: quality FAILED -- ON worse than OFF (std_on=0.1454A  std_off=0.1361A  ratio=1.07  (+7% vs OFF))
+2026-04-12 21:31:30 [INFO] Anticogging: quality OFF done (mean=0.2106 std=0.1361 n=37)
+2026-04-12 21:31:39 [INFO] Anticogging: flags set (enabled=True, pre_calibrated=True)
+2026-04-12 21:31:40 [INFO] Disconnected
+2026-04-12 21:31:40 [INFO] Anticogging: save + reboot
+2026-04-12 21:31:44 [INFO] Disconnected
+2026-04-12 21:31:45 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:31:45 [INFO] Anticogging: save verified OK (valid=True)
+2026-04-12 21:31:45 [INFO] Control: axis1 gains read OK
+2026-04-12 21:31:49 [INFO] Control: axis1 bEMF_FF = True
+2026-04-12 21:31:50 [INFO] Control: axis1 R_wL_FF = True
+2026-04-12 21:31:53 [INFO] Control: square wave on vel axis1 amp=1.000 period=2.000s
+2026-04-12 21:31:57 [INFO] Control: axis1 anticogging = False
+2026-04-12 21:32:01 [INFO] Control: axis1 bEMF_FF = False
+2026-04-12 21:32:01 [INFO] Control: axis1 R_wL_FF = False
+2026-04-12 21:32:10 [INFO] Control: sine wave on vel axis1 amp=5.000 period=2.000s
+2026-04-12 21:32:23 [INFO] SET axis0.requested_state = 1
+2026-04-12 21:32:23 [INFO] SET axis1.requested_state = 1
+2026-04-12 21:32:23 [INFO] Control: STOP — both axes to idle
+2026-04-12 21:32:32 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 21:33:56 [INFO] SET axis0.requested_state = 1
+2026-04-12 21:33:56 [INFO] SET axis1.requested_state = 1
+2026-04-12 21:33:56 [INFO] Control: STOP — both axes to idle
+2026-04-12 21:42:35 [INFO] No stale ODrive processes found.
+2026-04-12 21:42:35 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:42:37 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:42:37 [INFO] Setup: axis0 config read OK
+2026-04-12 21:42:37 [INFO] Control: axis0 gains read OK
+2026-04-12 21:42:37 [INFO] GUI: connect success
+2026-04-12 21:42:39 [INFO] Setup: axis1 config read OK
+2026-04-12 21:42:39 [INFO] Control: axis1 gains read OK
+2026-04-12 21:42:53 [INFO] Setup: axis0 config read OK
+2026-04-12 21:42:53 [INFO] Control: axis0 gains read OK
+2026-04-12 21:43:03 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:43:03 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:43:05 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:43:05 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:43:09 [INFO] Disconnected
+2026-04-12 21:43:09 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:43:09 [INFO] Setup: axis0 config read OK
+2026-04-12 21:43:09 [INFO] Control: axis0 gains read OK
+2026-04-12 21:43:10 [INFO] GUI: connect success
+2026-04-12 21:43:10 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:43:10 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:43:11 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:43:11 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:43:11 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:43:11 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:43:19 [INFO] Setup: axis1 config read OK
+2026-04-12 21:43:19 [INFO] Control: axis1 gains read OK
+2026-04-12 21:46:52 [INFO] No stale ODrive processes found.
+2026-04-12 21:46:53 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:47:26 [INFO] No stale ODrive processes found.
+2026-04-12 21:47:26 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:47:51 [INFO] No stale ODrive processes found.
+2026-04-12 21:47:52 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:47:54 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:47:54 [INFO] Setup: axis1 config read OK
+2026-04-12 21:47:54 [INFO] Control: axis1 gains read OK
+2026-04-12 21:47:54 [INFO] GUI: connect success
+2026-04-12 21:48:35 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-12 21:48:35 [INFO] Disconnected
+2026-04-12 21:48:39 [INFO] Disconnected
+2026-04-12 21:48:40 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:48:40 [INFO] Setup: reconnected after reboot
+2026-04-12 21:48:40 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 21:48:40 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 21:48:40 [INFO]   PASS  current_lim: expected=10.0  got=10.0
+2026-04-12 21:48:40 [INFO]   PASS  calibration_current: expected=3.0  got=3.0
+2026-04-12 21:48:40 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 21:48:40 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 21:48:40 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 21:48:40 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 21:48:40 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 21:48:40 [INFO]   PASS  brake_resistance: expected=2.0  got=2.0
+2026-04-12 21:48:40 [INFO]   PASS  dc_max_negative_current: expected=-0.10000000149011612  got=-0.10000000149011612
+2026-04-12 21:48:40 [INFO]   PASS  watchdog_timeout: expected=0.0  got=0.0
+2026-04-12 21:48:40 [INFO]   PASS  enable_watchdog: expected=False  got=False
+2026-04-12 21:48:40 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 21:48:40 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=4  got=4
+2026-04-12 21:48:40 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 21:48:40 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 21:48:40 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 21:48:40 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 21:48:40 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 21:48:40 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 21:48:40 [INFO] Control: axis1 gains read OK
+2026-04-12 21:48:40 [INFO] Setup: axis1 config read OK
+2026-04-12 21:48:41 [INFO] Setup: axis0 config read OK
+2026-04-12 21:48:41 [INFO] Control: axis0 gains read OK
+2026-04-12 21:48:42 [INFO] Setup: axis1 config read OK
+2026-04-12 21:48:42 [INFO] Control: axis1 gains read OK
+2026-04-12 21:49:00 [INFO] Autotuner: relay test launched
+2026-04-12 21:49:00 [INFO] Autotuner: relay test started, amp=0.1000 Nm, target=0.0000 t/s
+2026-04-12 21:49:00 [INFO] Autotuner: Tu=0.0248 s, a=1.5130 t/s, Ku=0.08416
+2026-04-12 21:49:00 [INFO] Autotuner: results — Ku=0.08416 Tu=0.0248 vel_gain=0.03787 vel_int=1.83416
+2026-04-12 21:49:32 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:49:35 [INFO] Autotuner: relay test launched
+2026-04-12 21:49:35 [INFO] Autotuner: relay test started, amp=0.1000 Nm, target=0.0000 t/s
+2026-04-12 21:49:36 [INFO] Autotuner: Tu=0.0252 s, a=1.6606 t/s, Ku=0.07667
+2026-04-12 21:49:36 [INFO] Autotuner: results — Ku=0.07667 Tu=0.0252 vel_gain=0.03450 vel_int=1.64443
+2026-04-12 21:49:39 [INFO] Autotuner: relay test launched
+2026-04-12 21:49:39 [INFO] Autotuner: relay test started, amp=0.1000 Nm, target=0.0000 t/s
+2026-04-12 21:49:40 [INFO] Autotuner: Tu=0.0256 s, a=1.6484 t/s, Ku=0.07724
+2026-04-12 21:49:40 [INFO] Autotuner: results — Ku=0.07724 Tu=0.0256 vel_gain=0.03476 vel_int=1.63120
+2026-04-12 21:49:53 [INFO] Autotuner: relay test launched
+2026-04-12 21:49:54 [ERROR] Autotuner: Failed to enter closed-loop (state=1)
+2026-04-12 21:49:56 [INFO] Autotuner: relay test launched
+2026-04-12 21:49:56 [ERROR] Autotuner: Axis has errors (ax=0x340 mot=0x110000000 enc=0x80). Clear errors first.
+2026-04-12 21:50:42 [INFO] No stale ODrive processes found.
+2026-04-12 21:50:43 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:50:46 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:50:46 [INFO] Setup: axis1 config read OK
+2026-04-12 21:50:46 [INFO] Control: axis1 gains read OK
+2026-04-12 21:50:46 [INFO] GUI: connect success
+2026-04-12 21:50:53 [INFO] Autotuner: relay test launched
+2026-04-12 21:50:53 [INFO] Autotuner: relay test started, amp=0.1000 Nm, target=0.0000 t/s
+2026-04-12 21:50:54 [INFO] Autotuner: Tu=0.0258 s, a=1.5692 t/s, Ku=0.08114
+2026-04-12 21:50:54 [INFO] Autotuner: results — Ku=0.08114 Tu=0.0258 vel_gain=0.02536 vel_int=0.44712
+2026-04-12 21:51:01 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:51:04 [INFO] Autotuner: relay test launched
+2026-04-12 21:51:04 [INFO] Autotuner: relay test started, amp=0.1000 Nm, target=0.0000 t/s
+2026-04-12 21:51:05 [INFO] Autotuner: Tu=0.0254 s, a=1.6215 t/s, Ku=0.07852
+2026-04-12 21:51:05 [INFO] Autotuner: results — Ku=0.07852 Tu=0.0254 vel_gain=0.02454 vel_int=0.43930
+2026-04-12 21:51:09 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:51:11 [INFO] Autotuner: relay test launched
+2026-04-12 21:51:11 [INFO] Autotuner: relay test started, amp=0.1000 Nm, target=0.0000 t/s
+2026-04-12 21:51:11 [INFO] Autotuner: Tu=0.0257 s, a=1.6439 t/s, Ku=0.07745
+2026-04-12 21:51:11 [INFO] Autotuner: results — Ku=0.07745 Tu=0.0257 vel_gain=0.02420 vel_int=0.42851
+2026-04-12 21:51:20 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:51:22 [INFO] Setup: axis0 config read OK
+2026-04-12 21:51:22 [INFO] Control: axis0 gains read OK
+2026-04-12 21:51:32 [INFO] Setup: axis1 config read OK
+2026-04-12 21:51:32 [INFO] Control: axis1 gains read OK
+2026-04-12 21:51:36 [INFO] Setup: axis0 config read OK
+2026-04-12 21:51:36 [INFO] Control: axis0 gains read OK
+2026-04-12 21:51:38 [INFO] Setup: axis1 config read OK
+2026-04-12 21:51:38 [INFO] Control: axis1 gains read OK
+2026-04-12 21:51:40 [INFO] Autotuner: relay test launched
+2026-04-12 21:51:40 [INFO] Autotuner: relay test started, amp=0.1000 Nm, target=0.0000 t/s
+2026-04-12 21:51:40 [INFO] Autotuner: Tu=0.0261 s, a=1.6895 t/s, Ku=0.07536
+2026-04-12 21:51:40 [INFO] Autotuner: results — Ku=0.07536 Tu=0.0261 vel_gain=0.02355 vel_int=0.40991
+2026-04-12 21:51:45 [INFO] Autotuner: validation started (vel_gain=0.02355 vel_int=0.40991)
+2026-04-12 21:51:54 [INFO] Autotuner: validation done — overshoot=51.4% settling=2.000s
+2026-04-12 21:51:58 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:52:01 [INFO] Autotuner: validation started (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:52:09 [INFO] Autotuner: validation done — overshoot=25.7% settling=1.997s
+2026-04-12 21:52:13 [INFO] Autotuner: validation started (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:52:21 [INFO] Autotuner: validation done — overshoot=26.5% settling=2.000s
+2026-04-12 21:52:31 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.00970)
+2026-04-12 21:52:32 [INFO] Autotuner: validation started (vel_gain=0.05940 vel_int=0.00970)
+2026-04-12 21:52:39 [INFO] Control: axis1 gains applied (vel_gain=0.00940 vel_int=0.00970)
+2026-04-12 21:52:41 [INFO] Autotuner: validation done — overshoot=31.8% settling=1.999s
+2026-04-12 21:52:42 [INFO] Autotuner: validation started (vel_gain=0.00940 vel_int=0.00970)
+2026-04-12 21:52:50 [INFO] Autotuner: validation done — overshoot=-42.6% settling=2.000s
+2026-04-12 21:52:54 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:52:55 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:53:17 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:53:18 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.02970)
+2026-04-12 21:53:20 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:53:20 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:53:20 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:53:20 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:53:21 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:53:21 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:53:40 [INFO] No stale ODrive processes found.
+2026-04-12 21:53:41 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:53:43 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:53:43 [INFO] Setup: axis0 config read OK
+2026-04-12 21:53:43 [INFO] Control: axis0 gains read OK
+2026-04-12 21:53:43 [INFO] GUI: connect success
+2026-04-12 21:53:44 [INFO] Setup: axis1 config read OK
+2026-04-12 21:53:44 [INFO] Control: axis1 gains read OK
+2026-04-12 21:53:54 [INFO] Control: sine wave on vel axis1 amp=1.000 period=2.000s
+2026-04-12 21:53:58 [INFO] Control: square wave on vel axis1 amp=1.000 period=2.000s
+2026-04-12 21:54:13 [INFO] Control: sine wave on vel axis1 amp=5.000 period=1.000s
+2026-04-12 21:54:38 [INFO] Control: axis1 gains applied (vel_gain=0.05940 vel_int=0.06000)
+2026-04-12 21:54:42 [INFO] Control: axis1 gains applied (vel_gain=0.06000 vel_int=0.06000)
+2026-04-12 21:54:54 [INFO] Control: axis1 gains applied (vel_gain=0.10000 vel_int=0.06000)
+2026-04-12 21:54:56 [INFO] Control: axis1 gains applied (vel_gain=0.10000 vel_int=0.10000)
+2026-04-12 21:55:20 [INFO] Control: axis1 gains applied (vel_gain=0.50000 vel_int=0.10000)
+2026-04-12 21:55:22 [INFO] SET axis0.requested_state = 1
+2026-04-12 21:55:22 [INFO] SET axis1.requested_state = 1
+2026-04-12 21:55:22 [INFO] Control: STOP — both axes to idle
+2026-04-12 21:55:22 [INFO] SET axis0.requested_state = 1
+2026-04-12 21:55:22 [INFO] SET axis1.requested_state = 1
+2026-04-12 21:55:22 [INFO] Control: STOP — both axes to idle
+2026-04-12 21:55:24 [INFO] Control: axis1 gains applied (vel_gain=0.30000 vel_int=0.10000)
+2026-04-12 21:55:25 [INFO] Control: axis1 gains applied (vel_gain=0.30000 vel_int=0.10000)
+2026-04-12 21:55:25 [INFO] Control: axis1 gains applied (vel_gain=0.30000 vel_int=0.10000)
+2026-04-12 21:55:25 [INFO] Control: axis1 gains applied (vel_gain=0.30000 vel_int=0.10000)
+2026-04-12 21:55:27 [INFO] Control: square wave on vel axis1 amp=5.000 period=5.000s
+2026-04-12 21:55:29 [INFO] SET axis0.requested_state = 1
+2026-04-12 21:55:29 [INFO] SET axis1.requested_state = 1
+2026-04-12 21:55:29 [INFO] Control: STOP — both axes to idle
+2026-04-12 21:55:29 [INFO] SET axis0.requested_state = 1
+2026-04-12 21:55:29 [INFO] SET axis1.requested_state = 1
+2026-04-12 21:55:29 [INFO] Control: STOP — both axes to idle
+2026-04-12 21:55:33 [INFO] Control: axis1 gains applied (vel_gain=0.20000 vel_int=0.10000)
+2026-04-12 21:55:33 [INFO] Control: axis1 gains applied (vel_gain=0.20000 vel_int=0.10000)
+2026-04-12 21:55:33 [INFO] Control: axis1 gains applied (vel_gain=0.20000 vel_int=0.10000)
+2026-04-12 21:55:34 [INFO] Control: square wave on vel axis1 amp=5.000 period=5.000s
+2026-04-12 21:55:35 [INFO] SET axis0.requested_state = 1
+2026-04-12 21:55:35 [INFO] SET axis1.requested_state = 1
+2026-04-12 21:55:35 [INFO] Control: STOP — both axes to idle
+2026-04-12 21:55:39 [INFO] Control: axis1 gains applied (vel_gain=0.10000 vel_int=0.10000)
+2026-04-12 21:55:40 [INFO] Control: square wave on vel axis1 amp=5.000 period=5.000s
+2026-04-12 21:55:42 [INFO] Control: sine wave on vel axis1 amp=5.000 period=5.000s
+2026-04-12 21:56:04 [INFO] SET axis0.requested_state = 1
+2026-04-12 21:56:04 [INFO] SET axis1.requested_state = 1
+2026-04-12 21:56:04 [INFO] Control: STOP — both axes to idle
+2026-04-12 21:56:12 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-12 21:56:12 [INFO] Disconnected
+2026-04-12 21:56:16 [INFO] Disconnected
+2026-04-12 21:56:16 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:56:16 [INFO] Setup: reconnected after reboot
+2026-04-12 21:56:16 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 21:56:16 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 21:56:16 [INFO]   PASS  current_lim: expected=20.0  got=20.0
+2026-04-12 21:56:16 [INFO]   PASS  calibration_current: expected=3.0  got=3.0
+2026-04-12 21:56:16 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 21:56:16 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 21:56:16 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 21:56:16 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 21:56:16 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 21:56:16 [INFO]   PASS  brake_resistance: expected=2.0  got=2.0
+2026-04-12 21:56:16 [INFO]   PASS  dc_max_negative_current: expected=-0.10000000149011612  got=-0.10000000149011612
+2026-04-12 21:56:16 [INFO]   PASS  watchdog_timeout: expected=0.0  got=0.0
+2026-04-12 21:56:16 [INFO]   PASS  enable_watchdog: expected=False  got=False
+2026-04-12 21:56:16 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 21:56:16 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=4  got=4
+2026-04-12 21:56:16 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 21:56:16 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 21:56:16 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 21:56:16 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 21:56:16 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 21:56:16 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 21:56:16 [INFO] Control: axis1 gains read OK
+2026-04-12 21:56:16 [INFO] Setup: axis1 config read OK
+2026-04-12 21:56:16 [INFO] Setup: axis0 config read OK
+2026-04-12 21:56:16 [INFO] Control: axis0 gains read OK
+2026-04-12 21:56:25 [INFO] flash_config: axis0 flashed + saved, rebooting
+2026-04-12 21:56:25 [INFO] Disconnected
+2026-04-12 21:56:29 [INFO] Disconnected
+2026-04-12 21:56:29 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:56:29 [INFO] Setup: reconnected after reboot
+2026-04-12 21:56:29 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 21:56:29 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 21:56:29 [INFO]   PASS  current_lim: expected=20.0  got=20.0
+2026-04-12 21:56:29 [INFO]   PASS  calibration_current: expected=10.0  got=10.0
+2026-04-12 21:56:29 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 21:56:29 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 21:56:29 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 21:56:29 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 21:56:29 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 21:56:29 [INFO]   PASS  brake_resistance: expected=2.0  got=2.0
+2026-04-12 21:56:29 [INFO]   PASS  dc_max_negative_current: expected=-0.10000000149011612  got=-0.10000000149011612
+2026-04-12 21:56:29 [INFO]   PASS  watchdog_timeout: expected=5.0  got=5.0
+2026-04-12 21:56:29 [INFO]   PASS  enable_watchdog: expected=True  got=True
+2026-04-12 21:56:29 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 21:56:29 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=3  got=3
+2026-04-12 21:56:29 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 21:56:29 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 21:56:29 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 21:56:29 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 21:56:29 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 21:56:29 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 21:56:29 [INFO] Control: axis0 gains read OK
+2026-04-12 21:56:29 [INFO] Setup: axis0 config read OK
+2026-04-12 21:56:35 [INFO] Setup: axis1 config read OK
+2026-04-12 21:56:35 [INFO] Control: axis1 gains read OK
+2026-04-12 21:57:01 [INFO] Control: sine wave on vel axis1 amp=5.000 period=5.000s
+2026-04-12 21:57:32 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:57:32 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:57:34 [INFO] Control: sine wave on vel axis1 amp=5.000 period=5.000s
+2026-04-12 21:58:22 [INFO] SET axis0.requested_state = 1
+2026-04-12 21:58:22 [INFO] SET axis1.requested_state = 1
+2026-04-12 21:58:22 [INFO] Control: STOP — both axes to idle
+2026-04-12 21:58:24 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 21:58:26 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 21:58:28 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 21:58:28 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 21:58:28 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 21:58:28 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 21:58:31 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:58:31 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:58:31 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:58:31 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:58:33 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:58:33 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:58:33 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:58:33 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:58:34 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:58:34 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:58:36 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:58:36 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:58:38 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 21:58:38 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 21:58:40 [INFO] Control: axis1 -> idle
+2026-04-12 21:58:40 [INFO] Control: axis1 -> idle
+2026-04-12 21:58:40 [INFO] Control: axis1 -> idle
+2026-04-12 21:58:40 [INFO] Control: axis1 -> closed loop (mode=2)
+2026-04-12 21:58:52 [INFO] No stale ODrive processes found.
+2026-04-12 21:58:52 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:59:07 [INFO] No stale ODrive processes found.
+2026-04-12 21:59:07 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:59:41 [INFO] No stale ODrive processes found.
+2026-04-12 21:59:42 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 21:59:47 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 21:59:47 [INFO] Setup: axis1 config read OK
+2026-04-12 21:59:47 [INFO] Control: axis1 gains read OK
+2026-04-12 21:59:47 [INFO] GUI: connect success
+2026-04-12 21:59:59 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 22:00:20 [INFO] Control: axis1 gains applied (vel_gain=0.05000 vel_int=0.05000)
+2026-04-12 22:00:21 [INFO] Control: axis1 gains applied (vel_gain=0.05000 vel_int=0.05000)
+2026-04-12 22:00:21 [INFO] Control: axis1 gains applied (vel_gain=0.05000 vel_int=0.05000)
+2026-04-12 22:00:21 [INFO] Control: axis1 gains applied (vel_gain=0.05000 vel_int=0.05000)
+2026-04-12 22:00:47 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 22:00:47 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 22:00:48 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 22:00:48 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 22:01:06 [INFO] No stale ODrive processes found.
+2026-04-12 22:01:06 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:01:08 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:01:08 [INFO] Setup: axis0 config read OK
+2026-04-12 22:01:08 [INFO] Control: axis0 gains read OK
+2026-04-12 22:01:08 [INFO] GUI: connect success
+2026-04-12 22:01:09 [INFO] Setup: axis1 config read OK
+2026-04-12 22:01:09 [INFO] Control: axis1 gains read OK
+2026-04-12 22:01:19 [INFO] Control: axis1 gains applied (vel_gain=0.50000 vel_int=0.50000)
+2026-04-12 22:01:19 [INFO] Control: axis1 gains applied (vel_gain=0.50000 vel_int=0.50000)
+2026-04-12 22:01:19 [INFO] Control: axis1 gains applied (vel_gain=0.50000 vel_int=0.50000)
+2026-04-12 22:01:19 [INFO] Control: axis1 gains applied (vel_gain=0.50000 vel_int=0.50000)
+2026-04-12 22:01:22 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 22:01:24 [INFO] SET axis0.requested_state = 1
+2026-04-12 22:01:24 [INFO] SET axis1.requested_state = 1
+2026-04-12 22:01:24 [INFO] Control: STOP — both axes to idle
+2026-04-12 22:01:24 [INFO] SET axis0.requested_state = 1
+2026-04-12 22:01:24 [INFO] SET axis1.requested_state = 1
+2026-04-12 22:01:24 [INFO] Control: STOP — both axes to idle
+2026-04-12 22:01:48 [INFO] Control: axis1 gains applied (vel_gain=0.10000 vel_int=0.10000)
+2026-04-12 22:01:48 [INFO] Control: axis1 gains applied (vel_gain=0.10000 vel_int=0.10000)
+2026-04-12 22:01:48 [INFO] Control: axis1 gains applied (vel_gain=0.10000 vel_int=0.10000)
+2026-04-12 22:01:49 [INFO] Control: axis1 gains applied (vel_gain=0.10000 vel_int=0.10000)
+2026-04-12 22:01:51 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 22:02:05 [INFO] Control: axis1 -> idle
+2026-04-12 22:02:06 [INFO] Control: axis1 -> idle
+2026-04-12 22:02:06 [INFO] Control: axis1 -> idle
+2026-04-12 22:02:06 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 22:02:06 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 22:02:08 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 22:02:08 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 22:02:29 [INFO] No stale ODrive processes found.
+2026-04-12 22:02:30 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:02:32 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:02:32 [INFO] Setup: axis0 config read OK
+2026-04-12 22:02:32 [INFO] Control: axis0 gains read OK
+2026-04-12 22:02:32 [INFO] GUI: connect success
+2026-04-12 22:02:38 [INFO] Setup: axis1 config read OK
+2026-04-12 22:02:38 [INFO] Control: axis1 gains read OK
+2026-04-12 22:02:41 [INFO] Setup: axis0 config read OK
+2026-04-12 22:02:41 [INFO] Control: axis0 gains read OK
+2026-04-12 22:02:56 [INFO] Setup: axis1 config read OK
+2026-04-12 22:02:56 [INFO] Control: axis1 gains read OK
+2026-04-12 22:03:02 [INFO] Setup: axis0 config read OK
+2026-04-12 22:03:02 [INFO] Control: axis0 gains read OK
+2026-04-12 22:03:06 [INFO] Control: axis0 gains applied (vel_gain=0.06000 vel_int=0.03000)
+2026-04-12 22:03:07 [INFO] Control: axis0 gains applied (vel_gain=0.06000 vel_int=0.03000)
+2026-04-12 22:03:11 [INFO] Setup: axis1 config read OK
+2026-04-12 22:03:11 [INFO] Control: axis1 gains read OK
+2026-04-12 22:03:17 [INFO] Control: axis1 gains applied (vel_gain=0.06000 vel_int=0.03000)
+2026-04-12 22:03:19 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-12 22:03:19 [INFO] Disconnected
+2026-04-12 22:03:23 [INFO] Disconnected
+2026-04-12 22:03:24 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:03:24 [INFO] Setup: reconnected after reboot
+2026-04-12 22:03:24 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 22:03:24 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 22:03:24 [INFO]   PASS  current_lim: expected=20.0  got=20.0
+2026-04-12 22:03:24 [INFO]   PASS  calibration_current: expected=3.0  got=3.0
+2026-04-12 22:03:24 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 22:03:24 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 22:03:24 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 22:03:24 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 22:03:24 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 22:03:24 [INFO]   PASS  brake_resistance: expected=2.0  got=2.0
+2026-04-12 22:03:24 [INFO]   PASS  dc_max_negative_current: expected=-0.10000000149011612  got=-0.10000000149011612
+2026-04-12 22:03:24 [INFO]   PASS  watchdog_timeout: expected=0.0  got=0.0
+2026-04-12 22:03:24 [INFO]   PASS  enable_watchdog: expected=False  got=False
+2026-04-12 22:03:24 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 22:03:24 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=4  got=4
+2026-04-12 22:03:24 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 22:03:24 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 22:03:24 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 22:03:24 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 22:03:24 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 22:03:24 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 22:03:24 [INFO] Control: axis1 gains read OK
+2026-04-12 22:03:24 [INFO] Setup: axis1 config read OK
+2026-04-12 22:03:29 [INFO] Control: axis1 -> closed loop (mode=1)
+2026-04-12 22:03:39 [INFO] Setup: axis0 config read OK
+2026-04-12 22:03:39 [INFO] Control: axis0 gains read OK
+2026-04-12 22:03:45 [INFO] Setup: axis1 config read OK
+2026-04-12 22:03:45 [INFO] Control: axis1 gains read OK
+2026-04-12 22:03:47 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-12 22:03:47 [INFO] Disconnected
+2026-04-12 22:03:51 [INFO] Disconnected
+2026-04-12 22:04:14 [INFO] No stale ODrive processes found.
+2026-04-12 22:04:14 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:04:16 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:04:16 [INFO] Setup: axis0 config read OK
+2026-04-12 22:04:16 [INFO] Control: axis0 gains read OK
+2026-04-12 22:04:16 [INFO] GUI: connect success
+2026-04-12 22:04:26 [INFO] flash_config: axis0 flashed + saved, rebooting
+2026-04-12 22:04:26 [INFO] Disconnected
+2026-04-12 22:04:30 [INFO] Disconnected
+2026-04-12 22:04:30 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:04:30 [INFO] Setup: reconnected after reboot
+2026-04-12 22:04:30 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 22:04:30 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 22:04:30 [INFO]   PASS  current_lim: expected=10.0  got=10.0
+2026-04-12 22:04:30 [INFO]   PASS  calibration_current: expected=5.0  got=5.0
+2026-04-12 22:04:30 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 22:04:30 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 22:04:30 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 22:04:30 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 22:04:30 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 22:04:30 [INFO]   PASS  brake_resistance: expected=2.0  got=2.0
+2026-04-12 22:04:30 [INFO]   PASS  dc_max_negative_current: expected=-0.10000000149011612  got=-0.10000000149011612
+2026-04-12 22:04:30 [INFO]   PASS  watchdog_timeout: expected=5.0  got=5.0
+2026-04-12 22:04:30 [INFO]   PASS  enable_watchdog: expected=True  got=True
+2026-04-12 22:04:30 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 22:04:30 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=3  got=3
+2026-04-12 22:04:30 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 22:04:30 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 22:04:30 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 22:04:30 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 22:04:30 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 22:04:30 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 22:04:30 [INFO] Control: axis0 gains read OK
+2026-04-12 22:04:30 [INFO] Setup: axis0 config read OK
+2026-04-12 22:04:32 [INFO] Setup: axis1 config read OK
+2026-04-12 22:04:32 [INFO] Control: axis1 gains read OK
+2026-04-12 22:04:37 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-12 22:04:37 [INFO] Disconnected
+2026-04-12 22:04:41 [INFO] Disconnected
+2026-04-12 22:04:41 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:04:41 [INFO] Setup: reconnected after reboot
+2026-04-12 22:04:41 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 22:04:41 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 22:04:41 [INFO]   PASS  current_lim: expected=10.0  got=10.0
+2026-04-12 22:04:41 [INFO]   PASS  calibration_current: expected=5.0  got=5.0
+2026-04-12 22:04:41 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 22:04:41 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 22:04:41 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 22:04:41 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 22:04:41 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 22:04:41 [INFO]   PASS  brake_resistance: expected=2.0  got=2.0
+2026-04-12 22:04:41 [INFO]   PASS  dc_max_negative_current: expected=-0.10000000149011612  got=-0.10000000149011612
+2026-04-12 22:04:41 [INFO]   PASS  watchdog_timeout: expected=0.0  got=0.0
+2026-04-12 22:04:41 [INFO]   PASS  enable_watchdog: expected=False  got=False
+2026-04-12 22:04:41 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 22:04:41 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=4  got=4
+2026-04-12 22:04:41 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 22:04:41 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 22:04:41 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 22:04:41 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 22:04:41 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 22:04:41 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 22:04:41 [INFO] Control: axis1 gains read OK
+2026-04-12 22:04:41 [INFO] Setup: axis1 config read OK
+2026-04-12 22:04:43 [INFO] Setup: axis0 config read OK
+2026-04-12 22:04:43 [INFO] Control: axis0 gains read OK
+2026-04-12 22:04:45 [INFO] Setup: axis1 config read OK
+2026-04-12 22:04:45 [INFO] Control: axis1 gains read OK
+2026-04-12 22:04:46 [INFO] Setup: axis0 config read OK
+2026-04-12 22:04:46 [INFO] Control: axis0 gains read OK
+2026-04-12 22:04:47 [INFO] Setup: axis1 config read OK
+2026-04-12 22:04:47 [INFO] Control: axis1 gains read OK
+2026-04-12 22:04:49 [INFO] Setup: axis0 config read OK
+2026-04-12 22:04:49 [INFO] Control: axis0 gains read OK
+2026-04-12 22:04:51 [INFO] Setup: axis1 config read OK
+2026-04-12 22:04:51 [INFO] Control: axis1 gains read OK
+2026-04-12 22:05:00 [INFO] Control: axis1 R_wL_FF = True
+2026-04-12 22:05:01 [INFO] Control: axis1 bEMF_FF = True
+2026-04-12 22:05:09 [INFO] Control: sine wave on vel axis1 amp=1.400 period=2.000s
+2026-04-12 22:05:12 [INFO] SET axis0.requested_state = 1
+2026-04-12 22:05:12 [INFO] SET axis1.requested_state = 1
+2026-04-12 22:05:12 [INFO] Control: STOP — both axes to idle
+2026-04-12 22:05:14 [INFO] Control: axis1 -> closed loop (mode=2)
+2026-04-12 22:05:39 [INFO] Control: axis1 gains applied (vel_gain=0.06000 vel_int=0.06000)
+2026-04-12 22:06:02 [INFO] Control: axis1 gains applied (vel_gain=0.06000 vel_int=0.06000)
+2026-04-12 22:06:03 [INFO] Setup: axis0 config read OK
+2026-04-12 22:06:03 [INFO] Control: axis0 gains read OK
+2026-04-12 22:06:06 [INFO] Setup: axis1 config read OK
+2026-04-12 22:06:06 [INFO] Control: axis1 gains read OK
+2026-04-12 22:06:11 [INFO] Control: axis1 gains applied (vel_gain=0.06000 vel_int=0.03000)
+2026-04-12 22:06:17 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 22:06:38 [INFO] Disconnected
+2026-04-12 22:06:49 [INFO] No stale ODrive processes found.
+2026-04-12 22:06:49 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:07:14 [INFO] No stale ODrive processes found.
+2026-04-12 22:07:14 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:07:16 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:07:16 [INFO] Setup: axis0 config read OK
+2026-04-12 22:07:16 [INFO] Control: axis0 gains read OK
+2026-04-12 22:07:16 [INFO] GUI: connect success
+2026-04-12 22:07:18 [INFO] Setup: axis1 config read OK
+2026-04-12 22:07:18 [INFO] Control: axis1 gains read OK
+2026-04-12 22:07:21 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 22:08:42 [INFO] No stale ODrive processes found.
+2026-04-12 22:08:42 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:08:44 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:08:44 [INFO] Setup: axis0 config read OK
+2026-04-12 22:08:44 [INFO] Control: axis0 gains read OK
+2026-04-12 22:08:44 [INFO] GUI: connect success
+2026-04-12 22:08:55 [INFO] flash_config: axis0 flashed + saved, rebooting
+2026-04-12 22:08:55 [INFO] Disconnected
+2026-04-12 22:08:59 [INFO] Disconnected
+2026-04-12 22:09:13 [INFO] No stale ODrive processes found.
+2026-04-12 22:09:14 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:09:20 [INFO] No stale ODrive processes found.
+2026-04-12 22:09:20 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:09:26 [INFO] No stale ODrive processes found.
+2026-04-12 22:09:26 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:09:34 [INFO] No stale ODrive processes found.
+2026-04-12 22:09:35 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:10:44 [INFO] No stale ODrive processes found.
+2026-04-12 22:10:44 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:10:59 [WARNING] Killing stale process PID 42796: c:\users\ferna\appdata\local\microsoft\windowsapps\python.exe odrive_gui.py
+2026-04-12 22:10:59 [INFO] Killed 1 stale process(es): [42796]
+2026-04-12 22:11:00 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:11:03 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:11:03 [INFO] Setup: axis0 config read OK
+2026-04-12 22:11:03 [INFO] Control: axis0 gains read OK
+2026-04-12 22:11:03 [INFO] GUI: connect success
+2026-04-12 22:11:04 [INFO] Setup: axis1 config read OK
+2026-04-12 22:11:04 [INFO] Control: axis1 gains read OK
+2026-04-12 22:11:13 [INFO] Setup: axis0 config read OK
+2026-04-12 22:11:13 [INFO] Control: axis0 gains read OK
+2026-04-12 22:11:53 [INFO] No stale ODrive processes found.
+2026-04-12 22:11:53 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:12:11 [INFO] No stale ODrive processes found.
+2026-04-12 22:12:12 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:12:46 [INFO] No stale ODrive processes found.
+2026-04-12 22:12:46 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:12:48 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:12:48 [INFO] Setup: axis0 config read OK
+2026-04-12 22:12:48 [INFO] Control: axis0 gains read OK
+2026-04-12 22:12:48 [INFO] GUI: connect success
+2026-04-12 22:12:49 [INFO] Setup: axis1 config read OK
+2026-04-12 22:12:49 [INFO] Control: axis1 gains read OK
+2026-04-12 22:12:51 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 22:12:51 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 22:12:58 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 22:12:58 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 22:12:58 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 22:12:58 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 22:12:58 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 22:12:58 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 22:13:01 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-12 22:13:01 [INFO] Control: errors cleared + watchdog fed
+2026-04-12 22:14:20 [INFO] No stale ODrive processes found.
+2026-04-12 22:14:20 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:14:39 [INFO] No stale ODrive processes found.
+2026-04-12 22:14:39 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:14:42 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:14:42 [INFO] Setup: axis0 config read OK
+2026-04-12 22:14:42 [INFO] Control: axis0 gains read OK
+2026-04-12 22:14:42 [INFO] GUI: connect success
+2026-04-12 22:14:43 [INFO] Setup: axis1 config read OK
+2026-04-12 22:14:43 [INFO] Control: axis1 gains read OK
+2026-04-12 22:15:02 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-12 22:15:02 [INFO] Disconnected
+2026-04-12 22:15:06 [INFO] Disconnected
+2026-04-12 22:15:07 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:15:07 [INFO] Setup: reconnected after reboot
+2026-04-12 22:15:07 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-12 22:15:07 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-12 22:15:07 [INFO]   PASS  current_lim: expected=10.0  got=10.0
+2026-04-12 22:15:07 [INFO]   PASS  calibration_current: expected=5.0  got=5.0
+2026-04-12 22:15:07 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-12 22:15:07 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-12 22:15:07 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-12 22:15:07 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-12 22:15:07 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-12 22:15:07 [INFO]   PASS  brake_resistance: expected=2.0  got=2.0
+2026-04-12 22:15:07 [INFO]   PASS  dc_max_negative_current: expected=-1.0  got=-1.0
+2026-04-12 22:15:07 [INFO]   PASS  watchdog_timeout: expected=0.0  got=0.0
+2026-04-12 22:15:07 [INFO]   PASS  enable_watchdog: expected=False  got=False
+2026-04-12 22:15:07 [INFO]   PASS  dc_bus_undervoltage_trip_level: expected=20.0  got=20.0
+2026-04-12 22:15:07 [INFO]   PASS  dc_bus_overvoltage_trip_level: expected=28.0  got=28.0
+2026-04-12 22:15:07 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-12 22:15:07 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=4  got=4
+2026-04-12 22:15:07 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-12 22:15:07 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-12 22:15:07 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-12 22:15:07 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-12 22:15:07 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-12 22:15:07 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-12 22:15:07 [INFO] Control: axis1 gains read OK
+2026-04-12 22:15:07 [INFO] Setup: axis1 config read OK
+2026-04-12 22:15:13 [INFO] Control: axis1 bEMF_FF = True
+2026-04-12 22:15:13 [INFO] Control: axis1 R_wL_FF = True
+2026-04-12 22:15:18 [INFO] Control: axis1 R_wL_FF = False
+2026-04-12 22:15:18 [INFO] Control: axis1 bEMF_FF = False
+2026-04-12 22:15:19 [INFO] Control: axis1 anticogging = False
+2026-04-12 22:15:37 [INFO] Control: axis1 -> closed loop (mode=2)
+2026-04-12 22:16:37 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-12 22:16:39 [WARNING] Killing stale process PID 17168: c:\users\ferna\appdata\local\microsoft\windowsapps\python3.13.exe c:/dropbox/personal projects/robotics/wheeled-leg-robot/components/characterization/odrive/odrive_gui.py
+2026-04-12 22:16:39 [INFO] Killed 1 stale process(es): [17168]
+2026-04-12 22:16:40 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:16:56 [INFO] No stale ODrive processes found.
+2026-04-12 22:16:56 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-12 22:16:58 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-12 22:16:58 [INFO] Setup: axis0 config read OK
+2026-04-12 22:16:58 [INFO] Control: axis0 gains read OK
+2026-04-12 22:16:58 [INFO] GUI: connect success
+2026-04-12 22:16:59 [INFO] Setup: axis1 config read OK
+2026-04-12 22:16:59 [INFO] Control: axis1 gains read OK
+2026-04-12 22:17:59 [INFO] Control: axis1 gains applied (vel_gain=0.06000 vel_int=0.06000)
+2026-04-12 22:18:29 [INFO] Control: axis1 -> idle
+2026-04-12 22:18:45 [INFO] presets: saved config to C:/Dropbox/Personal Projects/Robotics/wheeled-leg-robot/components/characterization/odrive/savedPresets/Both axis working.json (11 sections)
+2026-04-12 22:18:45 [INFO] Presets: saved 221 params to C:/Dropbox/Personal Projects/Robotics/wheeled-leg-robot/components/characterization/odrive/savedPresets/Both axis working.json
