@@ -33,8 +33,10 @@ _QUALITY_OFF = 4      # sampling Iq with anticogging OFF
 _SAVING = 5           # reboot in progress
 
 _VEL_TEST_TIMEOUT = 10.0    # seconds
-_QUALITY_SAMPLE_SEC = 4.0   # seconds per ON/OFF phase
-_SWEEP_TIMEOUT = 600.0      # 10 min max for full sweep
+_QUALITY_SAMPLE_SEC = 4.0   # seconds of actual Iq sampling per ON/OFF phase
+_QUALITY_VELOCITY = 0.5     # turns/sec — slow spin to traverse cogging waveform
+_QUALITY_SPINUP_SEC = 1.5   # settle time before ON sampling (spin up from rest)
+_QUALITY_SWITCH_SEC = 0.5   # settle time between ON→OFF map switch (already spinning)
 _REBOOT_WAIT_MS = 4000
 
 # Threshold presets
@@ -363,6 +365,7 @@ class TabAnticogging(QWidget):
         self.lbl_q_on = QLabel("--")
         self.lbl_q_off = QLabel("--")
         self.lbl_q_result = QLabel("--")
+        self.lbl_q_result.setWordWrap(True)
         for lbl in (self.lbl_q_on, self.lbl_q_off, self.lbl_q_result):
             lbl.setStyleSheet(
                 f"font-family: monospace; font-size: 12px; color: {CLR_MUTED};")
@@ -380,16 +383,14 @@ class TabAnticogging(QWidget):
 
         try:
             self._mgr.execute("clear_errors")
-            axis.controller.config.control_mode = 3   # POSITION
+            axis.controller.config.control_mode = 2   # VELOCITY
             axis.controller.config.input_mode = 1     # PASSTHROUGH
+            axis.controller.input_vel = 0.0
             axis.requested_state = 8                   # CLOSED_LOOP
 
-            # Hold current position
-            pos = axis.encoder.pos_estimate
-            axis.controller.input_pos = pos
-
-            # Enable anticogging for ON phase
+            # Enable anticogging for ON phase, then start the slow spin
             axis.controller.config.anticogging.anticogging_enabled = True
+            axis.controller.input_vel = _QUALITY_VELOCITY
         except Exception as e:
             _colored(self.lbl_q_result, f"Setup failed: {e}", CLR_ERR)
             log.error("Anticogging: quality test setup failed: %s", e)
@@ -399,11 +400,13 @@ class TabAnticogging(QWidget):
         self._t0 = time.monotonic()
         self._quality_samples = []
         self._quality_on_result = None
-        _colored(self.lbl_q_on, "Sampling Iq with anticogging ON...", CLR_CAL)
+        _colored(self.lbl_q_on,
+                 f"Spinning up at {_QUALITY_VELOCITY} t/s...", CLR_CAL)
         _colored(self.lbl_q_off, "--", CLR_MUTED)
         _colored(self.lbl_q_result, "Running...", CLR_CAL)
         self._update_buttons()
-        log.info("Anticogging: quality test started (ON phase)")
+        log.info("Anticogging: quality test started (spinning @ %.2f t/s, "
+                 "ON phase)", _QUALITY_VELOCITY)
 
     # ── 4. Save ──────────────────────────────────────────────────────────────
 
@@ -439,6 +442,13 @@ class TabAnticogging(QWidget):
             _colored(self.lbl_save_status, "Not connected", CLR_ERR)
             return
 
+        ac_valid = bool(getattr(axis.controller, "anticogging_valid", False))
+        if not ac_valid:
+            _colored(self.lbl_save_status,
+                     "anticogging_valid=False — run calibration first!", CLR_ERR)
+            log.warning("Anticogging: save aborted — anticogging_valid=False")
+            return
+
         try:
             axis.controller.config.anticogging.anticogging_enabled = True
             axis.controller.config.anticogging.pre_calibrated = True
@@ -471,20 +481,30 @@ class TabAnticogging(QWidget):
     def _on_reconnect_ok(self, odrv):
         self._state = _IDLE
 
-        # Verify flags persisted
+        # Verify flags AND map persisted
         axis = self._mgr.get_axis(self._ax_idx())
         if axis:
             acog = axis.controller.config.anticogging
             enabled = getattr(acog, "anticogging_enabled", False)
             precal = getattr(acog, "pre_calibrated", False)
-            if enabled and precal:
+            ac_valid = bool(getattr(axis.controller, "anticogging_valid", False))
+            if enabled and precal and ac_valid:
                 _colored(self.lbl_save_status,
-                         "Saved + verified: enabled=True, pre_calibrated=True",
+                         "Saved + verified: enabled, pre_calibrated, valid all True",
                          CLR_OK)
-                log.info("Anticogging: save verified OK")
+                log.info("Anticogging: save verified OK (valid=True)")
+            elif enabled and precal and not ac_valid:
+                _colored(self.lbl_save_status,
+                         "WARNING: flags saved but anticogging_valid=False "
+                         "— map did not survive reboot!",
+                         CLR_ERR)
+                log.error("Anticogging: map did not persist — "
+                          "enabled=%s pre_calibrated=%s valid=%s",
+                          enabled, precal, ac_valid)
             else:
                 _colored(self.lbl_save_status,
-                         f"WARNING: enabled={enabled}, pre_calibrated={precal}",
+                         f"WARNING: enabled={enabled}, pre_calibrated={precal}, "
+                         f"valid={ac_valid}",
                          CLR_WARN)
                 log.warning("Anticogging: save verification mismatch")
         else:
@@ -545,9 +565,10 @@ class TabAnticogging(QWidget):
 
     def poll_update(self):
         """Called from MainWindow's poll timer."""
-        # Always update buttons on connection state changes
+        # Always refresh button enable/disable state
+        self._update_buttons()
+
         if not self._mgr.connected and self._state == _IDLE:
-            self._update_buttons()
             for lbl in (self.lbl_acog_enabled, self.lbl_acog_precal,
                         self.lbl_acog_index, self.lbl_acog_thresholds):
                 _colored(lbl, "--", CLR_MUTED)
@@ -638,6 +659,7 @@ class TabAnticogging(QWidget):
         try:
             acog = axis.controller.config.anticogging
             idx = acog.index
+            calibrating = acog.calib_anticogging
             vel = axis.encoder.vel_estimate
             iq = axis.motor.current_control.Iq_measured
             state = axis.current_state
@@ -670,37 +692,45 @@ class TabAnticogging(QWidget):
             self._update_buttons()
             return
 
-        # Axis returns to IDLE when sweep is done (ignore first 3s of startup)
-        if state == 1 and elapsed > 3.0:
+        # Sweep done: firmware clears calib_anticogging, or axis returns to IDLE
+        if (not calibrating and elapsed > 3.0) or (state == 1 and elapsed > 3.0):
             try:
                 axis.controller.remove_anticogging_bias()
                 log.info("Anticogging: remove_anticogging_bias() OK")
             except Exception as e:
                 log.warning("Anticogging: remove_anticogging_bias(): %s", e)
 
-            self._state = _IDLE
-            self._step_done = max(self._step_done, 3)
-            self.progress.setValue(COGGING_MAP_SIZE)
-            _colored(self.lbl_cal_status,
-                     f"Calibration COMPLETE -- {elapsed:.0f}s, {idx} entries",
-                     CLR_OK)
-            _colored(self.lbl_cal_detail,
-                     "Ready for quality test or save", CLR_OK)
-            log.info("Anticogging: calibration complete (%.0fs, idx=%d)",
-                     elapsed, idx)
-            self._update_buttons()
-            return
-
-        if elapsed > _SWEEP_TIMEOUT:
+            # Drop to IDLE (firmware may leave axis in closed-loop after sweep)
             try:
                 axis.requested_state = 1
             except Exception:
                 pass
+
+            ac_valid = bool(getattr(axis.controller, "anticogging_valid", False))
+
             self._state = _IDLE
-            _colored(self.lbl_cal_status,
-                     "Calibration TIMEOUT -- 10 min exceeded", CLR_ERR)
-            log.error("Anticogging: calibration timeout")
+            self._step_done = max(self._step_done, 3)
+            self.progress.setValue(COGGING_MAP_SIZE)
+
+            if ac_valid:
+                _colored(self.lbl_cal_status,
+                         f"Calibration COMPLETE -- {elapsed:.0f}s, {idx} entries",
+                         CLR_OK)
+                _colored(self.lbl_cal_detail,
+                         "anticogging_valid=True — ready for quality test or save",
+                         CLR_OK)
+            else:
+                _colored(self.lbl_cal_status,
+                         f"Sweep finished but anticogging_valid=False!", CLR_WARN)
+                _colored(self.lbl_cal_detail,
+                         "Map may be empty — save will likely not persist",
+                         CLR_WARN)
+                log.warning("Anticogging: sweep done but anticogging_valid=False")
+
+            log.info("Anticogging: calibration complete (%.0fs, idx=%d, valid=%s)",
+                     elapsed, idx, ac_valid)
             self._update_buttons()
+            return
 
     def _poll_quality_on(self):
         axis = self._mgr.get_axis(self._ax_idx())
@@ -711,16 +741,25 @@ class TabAnticogging(QWidget):
         elapsed = time.monotonic() - self._t0
         try:
             iq = abs(axis.motor.current_control.Iq_measured)
+            vel = axis.encoder.vel_estimate
         except Exception:
             self._abort_to_idle("USB error during quality test")
+            return
+
+        # Spin-up settle window: don't collect samples yet
+        if elapsed < _QUALITY_SPINUP_SEC:
+            _colored(self.lbl_q_on,
+                     f"Spin-up... t={elapsed:.1f}s  "
+                     f"vel={vel:+.3f} t/s  Iq={iq:.4f} A", CLR_CAL)
             return
 
         self._quality_samples.append(iq)
         n = len(self._quality_samples)
         _colored(self.lbl_q_on,
-                 f"Sampling... n={n}  latest Iq={iq:.4f} A", CLR_CAL)
+                 f"Sampling ON... n={n}  vel={vel:+.3f} t/s  "
+                 f"Iq={iq:.4f} A", CLR_CAL)
 
-        if elapsed >= _QUALITY_SAMPLE_SEC:
+        if elapsed >= _QUALITY_SPINUP_SEC + _QUALITY_SAMPLE_SEC:
             # ON phase done -- compute stats
             mean_on = statistics.mean(self._quality_samples)
             std_on = (statistics.stdev(self._quality_samples)
@@ -730,7 +769,7 @@ class TabAnticogging(QWidget):
                      f"mean={mean_on:.4f} A  stdev={std_on:.4f} A  (n={n})",
                      CLR_OK)
 
-            # Switch to OFF phase
+            # Switch to OFF phase (motor keeps spinning)
             try:
                 axis.controller.config.anticogging.anticogging_enabled = False
             except Exception:
@@ -740,7 +779,7 @@ class TabAnticogging(QWidget):
             self._t0 = time.monotonic()
             self._quality_samples = []
             _colored(self.lbl_q_off,
-                     "Sampling Iq with anticogging OFF...", CLR_CAL)
+                     "Settling after map switch...", CLR_CAL)
             log.info("Anticogging: quality ON done (mean=%.4f std=%.4f n=%d)",
                      mean_on, std_on, n)
 
@@ -753,16 +792,25 @@ class TabAnticogging(QWidget):
         elapsed = time.monotonic() - self._t0
         try:
             iq = abs(axis.motor.current_control.Iq_measured)
+            vel = axis.encoder.vel_estimate
         except Exception:
             self._abort_to_idle("USB error during quality test")
+            return
+
+        # Short settle between map switch and OFF sampling
+        if elapsed < _QUALITY_SWITCH_SEC:
+            _colored(self.lbl_q_off,
+                     f"Settle... t={elapsed:.1f}s  "
+                     f"vel={vel:+.3f} t/s  Iq={iq:.4f} A", CLR_CAL)
             return
 
         self._quality_samples.append(iq)
         n = len(self._quality_samples)
         _colored(self.lbl_q_off,
-                 f"Sampling... n={n}  latest Iq={iq:.4f} A", CLR_CAL)
+                 f"Sampling OFF... n={n}  vel={vel:+.3f} t/s  "
+                 f"Iq={iq:.4f} A", CLR_CAL)
 
-        if elapsed >= _QUALITY_SAMPLE_SEC:
+        if elapsed >= _QUALITY_SWITCH_SEC + _QUALITY_SAMPLE_SEC:
             mean_off = statistics.mean(self._quality_samples)
             std_off = (statistics.stdev(self._quality_samples)
                        if n > 1 else 0.0)
@@ -770,8 +818,9 @@ class TabAnticogging(QWidget):
                      f"mean={mean_off:.4f} A  stdev={std_off:.4f} A  (n={n})",
                      CLR_OK)
 
-            # Restore anticogging ON and go idle
+            # Stop motor, restore anticogging ON, go IDLE
             try:
+                axis.controller.input_vel = 0.0
                 axis.controller.config.anticogging.anticogging_enabled = True
                 axis.requested_state = 1  # IDLE
             except Exception:
@@ -779,23 +828,57 @@ class TabAnticogging(QWidget):
 
             # Compute result
             mean_on, std_on, n_on = self._quality_on_result
+            ratio = (std_on / std_off) if std_off > 0 else float("inf")
+            delta_pct = (ratio - 1.0) * 100  # + = worse with ON, - = better
+            summary = (f"std_on={std_on:.4f}A  std_off={std_off:.4f}A  "
+                       f"ratio={ratio:.2f}  ({delta_pct:+.0f}% vs OFF)")
+
             if std_off > 0 and std_on < std_off * 0.8:
-                reduction = (1 - std_on / std_off) * 100
+                reduction = (1 - ratio) * 100
                 _colored(self.lbl_q_result,
-                         f"Map VALID -- Iq stdev reduced by {reduction:.0f}%",
+                         f"Map VALID -- Iq stdev reduced by {reduction:.0f}%.\n"
+                         f"{summary}\n"
+                         f"Anticogging is cancelling cogging torque as "
+                         f"intended. Proceed to Save.",
                          CLR_OK)
-                log.info("Anticogging: quality VALID (%.0f%% reduction)",
-                         reduction)
+                log.info("Anticogging: quality VALID (%.0f%% reduction, "
+                         "std_on=%.4f std_off=%.4f)",
+                         reduction, std_on, std_off)
             elif std_on <= std_off:
                 _colored(self.lbl_q_result,
-                         "Marginal effect -- stdev similar ON vs OFF",
+                         f"Marginal effect -- stdev similar ON vs OFF.\n"
+                         f"{summary}\n"
+                         f"Map is not hurting but barely helping. Either "
+                         f"this motor has low intrinsic cogging, or the "
+                         f"sweep threshold was too loose (re-run with "
+                         f"Good=5 if you used Quick=100).",
                          CLR_WARN)
-                log.info("Anticogging: quality marginal")
+                log.info("Anticogging: quality marginal (%s)", summary)
             else:
                 _colored(self.lbl_q_result,
-                         "Map may be corrupt -- ON increased variance",
+                         f"Map may be CORRUPT -- variance got worse with "
+                         f"anticogging ON.\n"
+                         f"{summary}\n"
+                         f"Meaning: holding a fixed position, |Iq| swings "
+                         f"MORE when the map is applied than when it is "
+                         f"off. The map is pushing in phase with cogging "
+                         f"(wrong sign / wrong alignment) instead of "
+                         f"cancelling it.\n"
+                         f"Likely causes:\n"
+                         f"  1. Encoder offset shifted after calibration "
+                         f"(power-cycled, re-homed, or hall/index moved) "
+                         f"- map is locked to the old phase reference.\n"
+                         f"  2. Sweep threshold too loose (Quick=100 "
+                         f"captures transients, not steady-state cogging) "
+                         f"- re-run with Good=5.\n"
+                         f"  3. Mechanical disturbance during the sweep "
+                         f"(cable pull, friction step, external load).\n"
+                         f"  4. Motor moved under external force between "
+                         f"sweep and quality test.\n"
+                         f"Do NOT save this map. Re-run the calibration.",
                          CLR_ERR)
-                log.warning("Anticogging: quality FAILED -- ON worse than OFF")
+                log.warning("Anticogging: quality FAILED -- ON worse than "
+                            "OFF (%s)", summary)
 
             self._state = _IDLE
             self._step_done = max(self._step_done, 4)

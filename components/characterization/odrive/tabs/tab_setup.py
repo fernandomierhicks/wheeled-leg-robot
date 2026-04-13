@@ -272,6 +272,20 @@ class TabSetup(QWidget):
         row.addWidget(self.lbl_startup_safe)
         row.addStretch()
 
+        # Watchdog timeout
+        row.addWidget(QLabel("Watchdog:"))
+        self.watchdog_timeout = QDoubleSpinBox()
+        self.watchdog_timeout.setRange(0, 60)
+        self.watchdog_timeout.setDecimals(1)
+        self.watchdog_timeout.setSingleStep(0.5)
+        self.watchdog_timeout.setValue(2.0)
+        self.watchdog_timeout.setSuffix("  s")
+        self.watchdog_timeout.setToolTip("0 = disabled. If no command received within this time, motor faults.")
+        self.watchdog_timeout.setFixedWidth(100)
+        row.addWidget(self.watchdog_timeout)
+
+        row.addSpacing(12)
+
         note = QLabel("On every Flash: startup_* = False, enable_brake_resistor = True")
         note.setStyleSheet(f"color: {CLR_MUTED}; font-size: 10px;")
         row.addWidget(note)
@@ -433,6 +447,7 @@ class TabSetup(QWidget):
         self.enc_cpr.setValue(cfg["cpr"])
         self.enc_precal_chk.setChecked(cfg["encoder_pre_calibrated"])
         self.motor_precal_chk.setChecked(cfg["motor_pre_calibrated"])
+        self.watchdog_timeout.setValue(cfg.get("watchdog_timeout", 0.0))
 
         _colored(self.lbl_cal_state, "Config read OK", CLR_OK)
         _colored(self.lbl_cal_msg,
@@ -470,6 +485,7 @@ class TabSetup(QWidget):
             "encoder_mode":                 ENCODER_TYPE_VALUES[self.enc_type_combo.currentIndex()],
             "abs_spi_cs_gpio_pin":          self.enc_cs_pin.value(),
             "cpr":                          self.enc_cpr.value(),
+            "watchdog_timeout":             self.watchdog_timeout.value(),
         }
 
     # ── Calibrate ─────────────────────────────────────────────────────────────

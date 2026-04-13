@@ -73,6 +73,8 @@ def read_config(mgr, axis_idx: int) -> dict:
         "encoder_pre_calibrated":       getattr(ec, "pre_calibrated", False),
         "motor_pre_calibrated":         getattr(mc, "pre_calibrated", False),
         "enable_brake_resistor":        getattr(odrv.config, "enable_brake_resistor", False),
+        "watchdog_timeout":             float(getattr(axis.config, "watchdog_timeout", 0)),
+        "enable_watchdog":              getattr(axis.config, "enable_watchdog", False),
     }
 
 
@@ -118,6 +120,11 @@ def flash_config(mgr, axis_idx: int, params: dict) -> dict:
     if enc_mode in (256, 257):  # SPI_ABS_CUI / SPI_ABS_AMS
         ec.abs_spi_cs_gpio_pin = params.get("abs_spi_cs_gpio_pin", 3)
 
+    # Watchdog
+    wdt = params.get("watchdog_timeout", 0.0)
+    axis.config.watchdog_timeout = wdt
+    axis.config.enable_watchdog = (wdt > 0)
+
     # Safety: lock all startup flags
     lock_startup_flags(axis)
     cc.enable_overspeed_error = False
@@ -161,6 +168,8 @@ def snapshot_params(mgr, axis_idx: int) -> dict:
         "vel_limit":                    getattr(cc, "vel_limit", None),
         "enable_overspeed_error":       getattr(cc, "enable_overspeed_error", None),
         "enable_brake_resistor":        getattr(odrv.config, "enable_brake_resistor", None),
+        "watchdog_timeout":             getattr(axis.config, "watchdog_timeout", None),
+        "enable_watchdog":              getattr(axis.config, "enable_watchdog", None),
         "encoder_mode":                 getattr(ec, "mode", None),
         "abs_spi_cs_gpio_pin":          getattr(ec, "abs_spi_cs_gpio_pin", None),
         "cpr":                          getattr(ec, "cpr", None),

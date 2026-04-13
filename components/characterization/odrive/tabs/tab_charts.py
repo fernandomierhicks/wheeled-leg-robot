@@ -81,12 +81,17 @@ class RingBuffer:
 class TabCharts(QWidget):
     """Live telemetry charts with pyqtgraph ring-buffer plots."""
 
-    def __init__(self, manager, get_axis_idx, parent=None):
+    def __init__(self, manager, get_axis_idx, get_setpoints=None, parent=None):
         super().__init__(parent)
         self._mgr = manager
         self._get_axis_idx = get_axis_idx
+        self._get_setpoints = get_setpoints  # () -> (vel_sp, pos_sp) or None
         self._t0 = time.perf_counter()
         self._buffers = {sig[0]: RingBuffer(BUFFER_SIZE) for sig in SIGNALS}
+        self._sp_buffers = {
+            "vel": RingBuffer(BUFFER_SIZE),
+            "pos": RingBuffer(BUFFER_SIZE),
+        }
         self._build()
 
     def _ax_idx(self) -> int:
@@ -155,6 +160,12 @@ class TabCharts(QWidget):
             self._plots[key] = plot
             self._curves[key] = curve
 
+        # Setpoint overlay curves on vel and pos plots (dashed white)
+        self._sp_curves = {}
+        for key in ("vel", "pos"):
+            sp_pen = pg.mkPen(color="#e0e0e0", width=1, style=Qt.PenStyle.DashLine)
+            self._sp_curves[key] = self._plots[key].plot(pen=sp_pen, name="setpoint")
+
         # ── Statistics row ───────────────────────────────────────────────────
         stats_row = QHBoxLayout()
         self._stat_labels = {}
@@ -178,7 +189,11 @@ class TabCharts(QWidget):
     def _clear_all(self):
         for buf in self._buffers.values():
             buf.clear()
+        for buf in self._sp_buffers.values():
+            buf.clear()
         for curve in self._curves.values():
+            curve.setData([], [])
+        for curve in self._sp_curves.values():
             curve.setData([], [])
         for key, label, _unit, _color in SIGNALS:
             self._stat_labels[key].setText(f"{label}: --")
@@ -219,6 +234,15 @@ class TabCharts(QWidget):
         except Exception:
             pass
 
+        # Setpoint overlay samples (mirror of last commanded value)
+        if self._get_setpoints is not None:
+            try:
+                sp_vel, sp_pos = self._get_setpoints()
+                self._sp_buffers["vel"].append(t_now, float(sp_vel))
+                self._sp_buffers["pos"].append(t_now, float(sp_pos))
+            except Exception:
+                pass
+
         # ── Update curves + stats ────────────────────────────────────────────
         for key, label, unit, _color in SIGNALS:
             if not self._checkboxes[key].isChecked():
@@ -237,3 +261,11 @@ class TabCharts(QWidget):
             if mean is not None:
                 self._stat_labels[key].setText(
                     f"{label}: \u03bc={mean:.3f} \u03c3={std:.3f} {unit}")
+
+            # Update setpoint overlay for vel/pos plots
+            if key in self._sp_curves:
+                sp_t, sp_y = self._sp_buffers[key].get_ordered()
+                if len(sp_t) > 0:
+                    sp_rel = sp_t - t_now
+                    sp_mask = sp_rel > -WINDOW_SECONDS
+                    self._sp_curves[key].setData(sp_rel[sp_mask], sp_y[sp_mask])

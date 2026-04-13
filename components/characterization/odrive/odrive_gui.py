@@ -30,6 +30,7 @@ from tabs.tab_anticogging import TabAnticogging
 from tabs.tab_inspector import TabInspector
 from tabs.tab_terminal import TabTerminal
 from tabs.tab_presets import TabPresets
+from tabs.tab_characterization import TabCharacterization
 from ui.theme import (
     DARK_STYLE, CLR_OK, CLR_WARN, CLR_ERR, CLR_INFO, CLR_MUTED,
 )
@@ -109,13 +110,20 @@ class MainWindow(QMainWindow):
         self._poll_timer.setInterval(POLL_MS)
         self._poll_timer.timeout.connect(self._poll)
 
+        # Watchdog feeder (500 ms) — keeps motor alive while GUI is connected
+        self._watchdog_timer = QTimer(self)
+        self._watchdog_timer.setInterval(500)
+        self._watchdog_timer.timeout.connect(self._feed_watchdog)
+
         self._build()
         self._poll_timer.start()
+        self._watchdog_timer.start()
         self._cmd.start()
         self._cmd.connect_finished.connect(self._on_cmd_connect)
         self._tab_setup.reconnected.connect(self._on_setup_reconnected)
         self._tab_anticog.reconnected.connect(self._on_setup_reconnected)
         self._tab_presets.reconnected.connect(self._on_setup_reconnected)
+        self._tab_char.reconnected.connect(self._on_setup_reconnected)
 
     # ── UI build ──────────────────────────────────────────────────────────────
 
@@ -213,6 +221,10 @@ class MainWindow(QMainWindow):
         # Presets tab (Step 8)
         self._tab_presets = TabPresets(self._mgr, self._ax_idx)
         self.tabs.addTab(self._tab_presets, "Presets")
+
+        # Characterization tab (Step 9)
+        self._tab_char = TabCharacterization(self._mgr, self._ax_idx)
+        self.tabs.addTab(self._tab_char, "Characterization")
 
         # Real Terminal tab (Step 2)
         self._tab_terminal = TabTerminal(self._cmd)
@@ -360,6 +372,19 @@ class MainWindow(QMainWindow):
         self.lbl_status.setText(msg)
         self.lbl_status.setStyleSheet(f"color: {color}; font-family: monospace;")
 
+    # ── Watchdog feeder (500 ms) ─────────────────────────────────────────────
+
+    def _feed_watchdog(self):
+        if not self._mgr.connected:
+            return
+        for i in range(2):
+            ax = self._mgr.get_axis(i)
+            if ax is not None:
+                try:
+                    ax.watchdog_feed()
+                except Exception:
+                    pass
+
     # ── Poll (100 ms) ─────────────────────────────────────────────────────────
 
     def _poll(self):
@@ -367,6 +392,7 @@ class MainWindow(QMainWindow):
         self._tab_setup.poll_update()
         self._tab_control.poll_update()
         self._tab_anticog.poll_update()
+        self._tab_char.poll_update()
 
         if not self._mgr.connected:
             return

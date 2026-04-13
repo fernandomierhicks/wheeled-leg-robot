@@ -5,12 +5,14 @@ Right pane: pyqtgraph live telemetry charts.
 """
 
 import logging
+import math
+import time
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QGroupBox, QLabel, QPushButton, QRadioButton, QButtonGroup,
-    QDoubleSpinBox, QScrollArea, QSplitter,
+    QDoubleSpinBox, QScrollArea, QSplitter, QCheckBox,
     QDialog, QDialogButtonBox, QTextEdit,
 )
 
@@ -50,6 +52,20 @@ class TabControl(QWidget):
         self._mgr = manager
         self._get_axis_idx = get_axis_idx
         self._last_err = {"axis": 0, "motor": 0, "encoder": 0, "controller": 0}
+
+        # Setpoint tracking (last commanded value — shown as dashed overlay in charts)
+        self._cur_sp_vel = 0.0
+        self._cur_sp_pos = 0.0
+
+        # Waveform generator state
+        self._wave_timer = QTimer(self)
+        self._wave_timer.setInterval(20)  # 50 Hz
+        self._wave_timer.timeout.connect(self._wave_tick)
+        self._wave_type = None   # "square" | "sine" | None
+        self._wave_mode = None   # "vel" | "pos"
+        self._wave_t0 = 0.0
+        self._wave_offset = 0.0  # center for position waveform
+
         self._build()
 
     def _ax_idx(self) -> int:
@@ -79,6 +95,7 @@ class TabControl(QWidget):
         left.addWidget(self._build_errors_group())
         left.addWidget(self._build_control_group())
         left.addWidget(self._build_gains_group())
+        left.addWidget(self._build_ff_group())
         left.addWidget(self._build_quick_buttons())
         left.addWidget(self._build_readout_group())
         left.addStretch()
@@ -86,7 +103,7 @@ class TabControl(QWidget):
         splitter.addWidget(scroll)
 
         # ── Right pane: live charts ──────────────────────────────────────────
-        self._charts = TabCharts(self._mgr, self._get_axis_idx)
+        self._charts = TabCharts(self._mgr, self._get_axis_idx, self._get_setpoints)
         splitter.addWidget(self._charts)
 
         # Charts get the lion's share of space
@@ -184,7 +201,15 @@ class TabControl(QWidget):
     def _clear_errors(self):
         try:
             self._mgr.execute("clear_errors")
-            log.info("Control: errors cleared")
+            # Feed watchdog so it doesn't immediately re-fault
+            for i in range(2):
+                ax = self._mgr.get_axis(i)
+                if ax is not None:
+                    try:
+                        ax.watchdog_feed()
+                    except Exception:
+                        pass
+            log.info("Control: errors cleared + watchdog fed")
         except Exception as e:
             log.error("Control: clear errors failed: %s", e)
 
@@ -256,6 +281,10 @@ class TabControl(QWidget):
         return 1
 
     def _send_setpoint(self, val):
+        # Manual setpoint change from spinbox cancels any running waveform
+        if self._wave_timer.isActive():
+            self._wave_timer.stop()
+            self._wave_type = None
         axis = self._mgr.get_axis(self._ax_idx())
         if axis is None:
             return
@@ -263,12 +292,18 @@ class TabControl(QWidget):
             mode = self._get_control_mode()
             if mode == 3:
                 axis.controller.input_pos = val
+                self._cur_sp_pos = float(val)
             elif mode == 2:
                 axis.controller.input_vel = val
+                self._cur_sp_vel = float(val)
             else:
                 axis.controller.input_torque = val
         except Exception as e:
             log.error("Control: setpoint write error: %s", e)
+
+    def _get_setpoints(self):
+        """Return (vel_sp, pos_sp) for the charts overlay."""
+        return self._cur_sp_vel, self._cur_sp_pos
 
     def _enable_closed_loop(self):
         axis = self._mgr.get_axis(self._ax_idx())
@@ -289,12 +324,17 @@ class TabControl(QWidget):
             log.error("Control: enable error: %s", e)
 
     def _disable_idle(self):
+        if self._wave_timer.isActive():
+            self._wave_timer.stop()
+        self._wave_type = None
         axis = self._mgr.get_axis(self._ax_idx())
         if axis is None:
             return
         try:
             axis.requested_state = 1  # IDLE
             self.sp_setpoint.setValue(0.0)
+            self._cur_sp_vel = 0.0
+            self._cur_sp_pos = 0.0
             log.info("Control: axis%d -> idle", self._ax_idx())
         except Exception as e:
             log.error("Control: disable error: %s", e)
@@ -333,6 +373,7 @@ class TabControl(QWidget):
     def on_connected(self):
         """Called by MainWindow after any successful connect — refresh gains."""
         self._read_gains()
+        self._read_ff_flags()
 
     def _read_gains(self):
         axis = self._mgr.get_axis(self._ax_idx())
@@ -363,32 +404,266 @@ class TabControl(QWidget):
         except Exception as e:
             log.error("Control: apply gains error: %s", e)
 
+    # ── Feedforward / anticogging toggles ────────────────────────────────────
+
+    def _build_ff_group(self):
+        box = QGroupBox("Feedforwards")
+        col = QVBoxLayout(box)
+        col.setSpacing(4)
+
+        # Track whether user is actively toggling to avoid fighting with poll read-back
+        self._ff_user_toggling = False
+
+        self.cb_rwl_ff = QCheckBox("R·I + ωL·I feedforward  (R_wL_FF)")
+        self.cb_bemf_ff = QCheckBox("Back-EMF feedforward  (bEMF_FF)")
+        self.cb_anticog = QCheckBox("Anticogging enabled")
+
+        self.lbl_rwl_reg = QLabel("register: —")
+        self.lbl_bemf_reg = QLabel("register: —")
+        self.lbl_anticog_reg = QLabel("register: —")
+
+        _reg_style = f"font-family: monospace; font-size: 11px; color: {CLR_MUTED}; margin-left: 20px;"
+        for lbl in (self.lbl_rwl_reg, self.lbl_bemf_reg, self.lbl_anticog_reg):
+            lbl.setStyleSheet(_reg_style)
+
+        for cb in (self.cb_rwl_ff, self.cb_bemf_ff, self.cb_anticog):
+            cb.setEnabled(False)
+
+        col.addWidget(self.cb_rwl_ff)
+        col.addWidget(self.lbl_rwl_reg)
+        col.addWidget(self.cb_bemf_ff)
+        col.addWidget(self.lbl_bemf_reg)
+        col.addWidget(self.cb_anticog)
+        col.addWidget(self.lbl_anticog_reg)
+
+        self.cb_rwl_ff.toggled.connect(
+            lambda on: self._user_write_flag("motor.config.R_wL_FF_enable", on, "R_wL_FF")
+        )
+        self.cb_bemf_ff.toggled.connect(
+            lambda on: self._user_write_flag("motor.config.bEMF_FF_enable", on, "bEMF_FF")
+        )
+        self.cb_anticog.toggled.connect(
+            lambda on: self._user_write_flag(
+                "controller.config.anticogging.anticogging_enabled", on, "anticogging"
+            )
+        )
+
+        self.lbl_anticog_valid = QLabel("anticogging_valid: —")
+        self.lbl_anticog_valid.setStyleSheet(f"font-family: monospace; font-size: 11px; color: {CLR_MUTED};")
+        col.addWidget(self.lbl_anticog_valid)
+
+        self.lbl_anticog_precal = QLabel("pre_calibrated: —")
+        self.lbl_anticog_precal.setStyleSheet(f"font-family: monospace; font-size: 11px; color: {CLR_MUTED};")
+        col.addWidget(self.lbl_anticog_precal)
+
+        return box
+
+    def _user_write_flag(self, attr_path: str, value: bool, label: str):
+        """Write flag from user checkbox click — sets guard so poll doesn't fight."""
+        self._ff_user_toggling = True
+        self._write_flag(attr_path, value, label)
+        # Allow poll read-back after a short delay so the write has time to settle
+        QTimer.singleShot(500, self._clear_ff_toggle_guard)
+
+    def _clear_ff_toggle_guard(self):
+        self._ff_user_toggling = False
+
+    def _write_flag(self, attr_path: str, value: bool, label: str):
+        axis = self._mgr.get_axis(self._ax_idx())
+        if axis is None:
+            return
+        try:
+            obj = axis
+            parts = attr_path.split(".")
+            for p in parts[:-1]:
+                obj = getattr(obj, p)
+            setattr(obj, parts[-1], bool(value))
+            log.info("Control: axis%d %s = %s", self._ax_idx(), label, value)
+        except Exception as e:
+            log.error("Control: write %s error: %s", label, e)
+
+    def _read_ff_flags(self):
+        axis = self._mgr.get_axis(self._ax_idx())
+        if axis is None:
+            return
+        try:
+            rwl = bool(getattr(axis.motor.config, "R_wL_FF_enable", False))
+            bemf = bool(getattr(axis.motor.config, "bEMF_FF_enable", False))
+            ac = bool(getattr(axis.controller.config.anticogging, "anticogging_enabled", False))
+            ac_valid = bool(getattr(axis.controller, "anticogging_valid", False))
+            ac_precal = bool(getattr(axis.controller.config.anticogging, "pre_calibrated", False))
+
+            # Update checkboxes only if user isn't actively toggling
+            if not self._ff_user_toggling:
+                for cb, v in ((self.cb_rwl_ff, rwl), (self.cb_bemf_ff, bemf), (self.cb_anticog, ac)):
+                    cb.blockSignals(True)
+                    cb.setChecked(v)
+                    cb.blockSignals(False)
+
+            # Always update register readback labels
+            _colored(self.lbl_rwl_reg, f"register: {rwl}",
+                     CLR_OK if rwl else CLR_MUTED)
+            _colored(self.lbl_bemf_reg, f"register: {bemf}",
+                     CLR_OK if bemf else CLR_MUTED)
+            _colored(self.lbl_anticog_reg, f"register: {ac}",
+                     CLR_OK if ac else CLR_MUTED)
+
+            _colored(self.lbl_anticog_valid, f"anticogging_valid: {ac_valid}",
+                     CLR_OK if ac_valid else CLR_WARN)
+            _colored(self.lbl_anticog_precal, f"pre_calibrated: {ac_precal}",
+                     CLR_OK if ac_precal else CLR_WARN)
+        except Exception as e:
+            log.error("Control: read FF flags error: %s", e)
+
     # ── Quick buttons ─────────────────────────────────────────────────────────
 
     def _build_quick_buttons(self):
         box = QGroupBox("Quick Actions")
-        row = QHBoxLayout(box)
+        col = QVBoxLayout(box)
+        col.setSpacing(4)
 
+        row1 = QHBoxLayout()
         self.btn_stop = QPushButton("STOP")
         self.btn_stop.setStyleSheet(f"color: {CLR_ERR}; font-weight: bold;")
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._stop_motor)
-        row.addWidget(self.btn_stop)
+        row1.addWidget(self.btn_stop)
 
         self.btn_spin_test = QPushButton("Spin Test")
         self.btn_spin_test.setStyleSheet(f"color: {CLR_CAL};")
         self.btn_spin_test.setEnabled(False)
         self.btn_spin_test.clicked.connect(self._quick_spin_test)
-        row.addWidget(self.btn_spin_test)
+        row1.addWidget(self.btn_spin_test)
+        col.addLayout(row1)
+
+        # Waveform parameters
+        wf_params = QHBoxLayout()
+        wf_params.addWidget(QLabel("Amp:"))
+        self.sp_wave_amp = _dspin(0, 100, 1.0, dec=3, step=0.1)
+        wf_params.addWidget(self.sp_wave_amp)
+        wf_params.addWidget(QLabel("Period:"))
+        self.sp_wave_period = _dspin(0.05, 60, 2.0, dec=2, step=0.1, suffix="s")
+        wf_params.addWidget(self.sp_wave_period)
+        col.addLayout(wf_params)
+
+        # Waveform buttons — mode (vel/pos) is taken from the Control radio
+        wf_btns = QHBoxLayout()
+        self.btn_square = QPushButton("Square")
+        self.btn_square.setStyleSheet(f"color: {CLR_INFO};")
+        self.btn_square.setEnabled(False)
+        self.btn_square.clicked.connect(lambda: self._start_waveform("square"))
+        wf_btns.addWidget(self.btn_square)
+
+        self.btn_sine = QPushButton("Sine")
+        self.btn_sine.setStyleSheet(f"color: {CLR_INFO};")
+        self.btn_sine.setEnabled(False)
+        self.btn_sine.clicked.connect(lambda: self._start_waveform("sine"))
+        wf_btns.addWidget(self.btn_sine)
+
+        self.btn_stop_wave = QPushButton("Stop Wave")
+        self.btn_stop_wave.setStyleSheet(f"color: {CLR_WARN};")
+        self.btn_stop_wave.setEnabled(False)
+        self.btn_stop_wave.clicked.connect(self._stop_waveform)
+        wf_btns.addWidget(self.btn_stop_wave)
+        col.addLayout(wf_btns)
 
         return box
 
+    # ── Waveform generator ───────────────────────────────────────────────────
+
+    def _start_waveform(self, wave_type: str):
+        axis = self._mgr.get_axis(self._ax_idx())
+        if axis is None:
+            return
+        mode = self._get_control_mode()
+        if mode not in (2, 3):
+            log.warning("Control: waveform requires Vel or Pos mode (got torque)")
+            return
+        try:
+            axis.controller.config.control_mode = mode
+            axis.controller.config.input_mode = 1  # PASSTHROUGH
+
+            if mode == 3:
+                self._wave_mode = "pos"
+                self._wave_offset = float(getattr(axis.encoder, "pos_estimate", 0.0))
+            else:
+                self._wave_mode = "vel"
+                self._wave_offset = 0.0
+
+            if getattr(axis, "current_state", 0) != 8:
+                for attr in ("input_pos", "input_vel", "input_torque"):
+                    try:
+                        setattr(axis.controller, attr, 0.0)
+                    except Exception:
+                        pass
+                axis.requested_state = 8  # CLOSED_LOOP_CONTROL
+
+            self._wave_type = wave_type
+            self._wave_t0 = time.perf_counter()
+            self._wave_timer.start()
+            log.info("Control: %s wave on %s axis%d amp=%.3f period=%.3fs",
+                     wave_type, self._wave_mode, self._ax_idx(),
+                     self.sp_wave_amp.value(), self.sp_wave_period.value())
+        except Exception as e:
+            log.error("Control: waveform start error: %s", e)
+
+    def _stop_waveform(self):
+        if self._wave_timer.isActive():
+            self._wave_timer.stop()
+        was_active = self._wave_type is not None
+        self._wave_type = None
+        if not was_active:
+            return
+        # Hold the last position (pos mode) or zero velocity (vel mode)
+        axis = self._mgr.get_axis(self._ax_idx())
+        if axis is None:
+            return
+        try:
+            if self._wave_mode == "pos":
+                axis.controller.input_pos = self._cur_sp_pos
+            else:
+                axis.controller.input_vel = 0.0
+                self._cur_sp_vel = 0.0
+        except Exception as e:
+            log.error("Control: waveform stop error: %s", e)
+        log.info("Control: waveform stopped")
+
+    def _wave_tick(self):
+        axis = self._mgr.get_axis(self._ax_idx())
+        if axis is None or self._wave_type is None:
+            return
+        amp = float(self.sp_wave_amp.value())
+        period = max(float(self.sp_wave_period.value()), 0.01)
+        t = time.perf_counter() - self._wave_t0
+        phase = (t % period) / period  # 0..1
+        if self._wave_type == "square":
+            val = amp if phase < 0.5 else -amp
+        elif self._wave_type == "sine":
+            val = amp * math.sin(2.0 * math.pi * phase)
+        else:
+            return
+        try:
+            if self._wave_mode == "pos":
+                target = self._wave_offset + val
+                axis.controller.input_pos = target
+                self._cur_sp_pos = target
+            else:
+                axis.controller.input_vel = val
+                self._cur_sp_vel = val
+        except Exception as e:
+            log.error("Control: wave write error: %s", e)
+
     def _stop_motor(self):
         """Emergency stop — set both axes to idle."""
+        if self._wave_timer.isActive():
+            self._wave_timer.stop()
+        self._wave_type = None
         try:
             self._mgr.safe_set("axis0.requested_state", 1)
             self._mgr.safe_set("axis1.requested_state", 1)
             self.sp_setpoint.setValue(0.0)
+            self._cur_sp_vel = 0.0
+            self._cur_sp_pos = 0.0
             log.info("Control: STOP — both axes to idle")
         except Exception as e:
             log.error("Control: stop error: %s", e)
@@ -451,6 +726,12 @@ class TabControl(QWidget):
         self.btn_apply_gains.setEnabled(connected)
         self.btn_stop.setEnabled(connected)
         self.btn_spin_test.setEnabled(connected)
+        self.btn_square.setEnabled(connected)
+        self.btn_sine.setEnabled(connected)
+        self.btn_stop_wave.setEnabled(connected)
+        self.cb_rwl_ff.setEnabled(connected)
+        self.cb_bemf_ff.setEnabled(connected)
+        self.cb_anticog.setEnabled(connected)
 
         if axis is None:
             for lbl in (self.lbl_state, self.lbl_pos, self.lbl_vel,
@@ -503,6 +784,9 @@ class TabControl(QWidget):
 
         except Exception:
             pass
+
+        # Update FF register labels
+        self._read_ff_flags()
 
         # Update charts
         self._charts.poll_update()
