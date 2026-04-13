@@ -1,0 +1,116 @@
+[
+  {
+    "timestamp": "2026-04-12 11:10:12",
+    "command": "__CONNECT__",
+    "result": "Connecting... (async, check log for result)",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:12",
+    "command": "__CONNECT__",
+    "result": "Connected \u2014 hw=3.6.56 fw=0.5.6 serial=0x386032543135",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "__STATUS__",
+    "result": "hw=3.6.56  fw=0.5.6  serial=0x386032543135\nvbus=23.90 V\naxis0: state=Idle  errors=none\naxis1: state=Idle  errors=none",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.controller.config.pos_gain",
+    "result": "20.0",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.controller.config.vel_gain",
+    "result": "0.06150650605559349",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.controller.config.vel_integrator_gain",
+    "result": "0.030753253027796745",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.controller.config.vel_limit",
+    "result": "20.0",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.controller.config.control_mode",
+    "result": "3",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.controller.config.input_mode",
+    "result": "1",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.encoder.pos_estimate",
+    "result": "0.1501941680908203",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.encoder.vel_estimate",
+    "result": "0.015258783474564552",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.motor.current_control.Iq_measured",
+    "result": "0.0",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.controller.electrical_power",
+    "result": "0.0",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.controller.mechanical_power",
+    "result": "0.0",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.error",
+    "result": "0",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.motor.error",
+    "result": "0",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.encoder.error",
+    "result": "0",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:28",
+    "command": "ax0.controller.error",
+    "result": "0",
+    "error": false
+  },
+  {
+    "timestamp": "2026-04-12 11:10:41",
+    "command": "__DISCONNECT__",
+    "result": "Disconnected",
+    "error": false
+  }
+]

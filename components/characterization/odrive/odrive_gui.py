@@ -29,6 +29,7 @@ from tabs.tab_control import TabControl
 from tabs.tab_anticogging import TabAnticogging
 from tabs.tab_inspector import TabInspector
 from tabs.tab_terminal import TabTerminal
+from tabs.tab_presets import TabPresets
 from ui.theme import (
     DARK_STYLE, CLR_OK, CLR_WARN, CLR_ERR, CLR_INFO, CLR_MUTED,
 )
@@ -114,6 +115,7 @@ class MainWindow(QMainWindow):
         self._cmd.connect_finished.connect(self._on_cmd_connect)
         self._tab_setup.reconnected.connect(self._on_setup_reconnected)
         self._tab_anticog.reconnected.connect(self._on_setup_reconnected)
+        self._tab_presets.reconnected.connect(self._on_setup_reconnected)
 
     # ── UI build ──────────────────────────────────────────────────────────────
 
@@ -207,6 +209,10 @@ class MainWindow(QMainWindow):
         # Inspector tab (Step 6)
         self._tab_inspector = TabInspector(self._mgr, self._ax_idx)
         self.tabs.addTab(self._tab_inspector, "Inspector")
+
+        # Presets tab (Step 8)
+        self._tab_presets = TabPresets(self._mgr, self._ax_idx)
+        self.tabs.addTab(self._tab_presets, "Presets")
 
         # Real Terminal tab (Step 2)
         self._tab_terminal = TabTerminal(self._cmd)

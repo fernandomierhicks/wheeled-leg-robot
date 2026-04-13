@@ -1,1 +1,22 @@
-[2026-04-12 10:44:38] ERR | __STATUS__ | Not connected
+[2026-04-12 11:10:12] OK | __CONNECT__ | Connecting... (async, check log for result)
+[2026-04-12 11:10:12] OK | __CONNECT__ | Connected — hw=3.6.56 fw=0.5.6 serial=0x386032543135
+[2026-04-12 11:10:28] OK | __STATUS__ | hw=3.6.56  fw=0.5.6  serial=0x386032543135
+vbus=23.90 V
+axis0: state=Idle  errors=none
+axis1: state=Idle  errors=none
+[2026-04-12 11:10:28] OK | ax0.controller.config.pos_gain | 20.0
+[2026-04-12 11:10:28] OK | ax0.controller.config.vel_gain | 0.06150650605559349
+[2026-04-12 11:10:28] OK | ax0.controller.config.vel_integrator_gain | 0.030753253027796745
+[2026-04-12 11:10:28] OK | ax0.controller.config.vel_limit | 20.0
+[2026-04-12 11:10:28] OK | ax0.controller.config.control_mode | 3
+[2026-04-12 11:10:28] OK | ax0.controller.config.input_mode | 1
+[2026-04-12 11:10:28] OK | ax0.encoder.pos_estimate | 0.1501941680908203
+[2026-04-12 11:10:28] OK | ax0.encoder.vel_estimate | 0.015258783474564552
+[2026-04-12 11:10:28] OK | ax0.motor.current_control.Iq_measured | 0.0
+[2026-04-12 11:10:28] OK | ax0.controller.electrical_power | 0.0
+[2026-04-12 11:10:28] OK | ax0.controller.mechanical_power | 0.0
+[2026-04-12 11:10:28] OK | ax0.error | 0
+[2026-04-12 11:10:28] OK | ax0.motor.error | 0
+[2026-04-12 11:10:28] OK | ax0.encoder.error | 0
+[2026-04-12 11:10:28] OK | ax0.controller.error | 0
+[2026-04-12 11:10:41] OK | __DISCONNECT__ | Disconnected
