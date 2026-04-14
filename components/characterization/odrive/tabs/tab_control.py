@@ -251,6 +251,30 @@ class TabControl(QWidget):
         sp_row.addWidget(self._lbl_sp_units)
         col.addLayout(sp_row)
 
+        # (5) Redundant safety limits — placed next to the setpoint so the
+        # ceiling is always visible while commanding motion. These mirror
+        # the vel_limit in the Gains group and add current_lim (motor side).
+        safety = QGroupBox("Safety Limits")
+        safety.setStyleSheet(f"QGroupBox {{ color: {CLR_WARN}; }}")
+        sfl = QFormLayout(safety)
+        sfl.setSpacing(4)
+        sfl.setContentsMargins(6, 6, 6, 6)
+        self.sp_safe_ilim = _dspin(0, 60, 10.0, dec=2, step=0.5, suffix="A")
+        self.sp_safe_vlim = _dspin(0, 500, 5.0, dec=2, step=0.5, suffix="t/s")
+        sfl.addRow("current_lim", self.sp_safe_ilim)
+        sfl.addRow("vel_limit", self.sp_safe_vlim)
+        sfb = QHBoxLayout()
+        self.btn_safe_read = QPushButton("Read")
+        self.btn_safe_apply = QPushButton("Apply")
+        self.btn_safe_apply.setStyleSheet(f"color: {CLR_WARN};")
+        for b in (self.btn_safe_read, self.btn_safe_apply):
+            b.setEnabled(False)
+            sfb.addWidget(b)
+        sfl.addRow("", sfb)
+        self.btn_safe_read.clicked.connect(self._read_safety_limits)
+        self.btn_safe_apply.clicked.connect(self._apply_safety_limits)
+        col.addWidget(safety)
+
         self._rb_vel.toggled.connect(self._on_mode_changed)
         self._rb_pos.toggled.connect(self._on_mode_changed)
         self._rb_trq.toggled.connect(self._on_mode_changed)
@@ -318,16 +342,52 @@ class TabControl(QWidget):
         if axis is None:
             return
         try:
-            axis.controller.config.control_mode = self._get_control_mode()
-            axis.controller.config.input_mode = 1  # PASSTHROUGH
-            # Zero all setpoints before enabling
-            for attr in ("input_pos", "input_vel", "input_torque"):
+            mode = self._get_control_mode()
+
+            # (3) Force IDLE before writing control_mode. ODrive rejects config
+            # writes in CLOSED_LOOP and we want a clean state transition.
+            if getattr(axis, "current_state", 1) != 1:
+                axis.requested_state = 1
+                for _ in range(50):
+                    if getattr(axis, "current_state", 0) == 1:
+                        break
+                    time.sleep(0.01)
+
+            # (1) Seed input_pos from current encoder position so enabling
+            # position mode doesn't slam the load toward turn 0.
+            cur_pos = float(getattr(axis.encoder, "pos_estimate", 0.0))
+
+            axis.controller.config.control_mode = mode
+            if mode == 3:
+                # (2) TRAP_TRAJ caps accel/decel/vel regardless of setpoint jumps.
+                axis.controller.config.input_mode = 5  # TRAP_TRAJ
                 try:
-                    setattr(axis.controller, attr, 0.0)
-                except Exception:
-                    pass
+                    axis.trap_traj.config.vel_limit = 2.0
+                    axis.trap_traj.config.accel_limit = 5.0
+                    axis.trap_traj.config.decel_limit = 5.0
+                except Exception as e:
+                    log.warning("Control: trap_traj config write failed: %s", e)
+            else:
+                axis.controller.config.input_mode = 1  # PASSTHROUGH
+
+            # Seed setpoints: pos = current encoder pos, vel/torque = 0
+            try: axis.controller.input_pos = cur_pos
+            except Exception: pass
+            try: axis.controller.input_vel = 0.0
+            except Exception: pass
+            try: axis.controller.input_torque = 0.0
+            except Exception: pass
+
+            self._cur_sp_pos = cur_pos
+            self._cur_sp_vel = 0.0
+            # Reflect seeded setpoint in the spinbox so the user sees what's commanded.
+            self.sp_setpoint.blockSignals(True)
+            self.sp_setpoint.setValue(cur_pos if mode == 3 else 0.0)
+            self.sp_setpoint.blockSignals(False)
+
             axis.requested_state = 8  # CLOSED_LOOP_CONTROL
-            log.info("Control: axis%d -> closed loop (mode=%d)", self._ax_idx(), self._get_control_mode())
+            log.info("Control: axis%d -> closed loop (mode=%d, seeded input_pos=%.4f turns)",
+                     self._ax_idx(), mode, cur_pos)
         except Exception as e:
             log.error("Control: enable error: %s", e)
 
@@ -382,6 +442,42 @@ class TabControl(QWidget):
         """Called by MainWindow after any successful connect — refresh gains."""
         self._read_gains()
         self._read_ff_flags()
+        self._read_safety_limits()
+
+    def _read_safety_limits(self):
+        axis = self._mgr.get_axis(self._ax_idx())
+        if axis is None:
+            return
+        try:
+            ilim = float(getattr(axis.motor.config, "current_lim", 10.0))
+            vlim = float(getattr(axis.controller.config, "vel_limit", 5.0))
+            self.sp_safe_ilim.setValue(ilim)
+            self.sp_safe_vlim.setValue(vlim)
+            # Keep gains-group vel_limit in sync so there's one truth.
+            try: self.sp_vel_lim.setValue(vlim)
+            except Exception: pass
+            log.info("Control: safety limits read (I=%.2fA V=%.2ft/s)", ilim, vlim)
+        except Exception as e:
+            log.error("Control: read safety limits error: %s", e)
+
+    def _apply_safety_limits(self):
+        axis = self._mgr.get_axis(self._ax_idx())
+        if axis is None:
+            return
+        ilim = float(self.sp_safe_ilim.value())
+        vlim = float(self.sp_safe_vlim.value())
+        try:
+            axis.motor.config.current_lim = ilim
+            axis.controller.config.vel_limit = vlim
+            # Also clamp trap_traj vel_limit so TRAP_TRAJ position moves obey it.
+            try: axis.trap_traj.config.vel_limit = min(vlim, axis.trap_traj.config.vel_limit)
+            except Exception: pass
+            # Mirror into the Gains-group vel_limit spinbox.
+            try: self.sp_vel_lim.setValue(vlim)
+            except Exception: pass
+            log.info("Control: safety limits applied (I=%.2fA V=%.2ft/s)", ilim, vlim)
+        except Exception as e:
+            log.error("Control: apply safety limits error: %s", e)
 
     def _read_gains(self):
         axis = self._mgr.get_axis(self._ax_idx())
@@ -974,10 +1070,10 @@ class TabControl(QWidget):
 
         # Button state
         self.btn_clear_errors.setEnabled(connected)
-        self.btn_enable.setEnabled(connected)
-        self.btn_disable.setEnabled(connected)
         self.btn_read_gains.setEnabled(connected)
         self.btn_apply_gains.setEnabled(connected)
+        self.btn_safe_read.setEnabled(connected)
+        self.btn_safe_apply.setEnabled(connected)
         self.btn_stop.setEnabled(connected)
         self.btn_spin_test.setEnabled(connected)
         self.btn_square.setEnabled(connected)
@@ -997,6 +1093,11 @@ class TabControl(QWidget):
         self.btn_autotune_stop.setEnabled(connected and any_running)
 
         if axis is None:
+            # (4) No axis — freeze mode radios and enable/disable buttons.
+            for rb in (self._rb_vel, self._rb_pos, self._rb_trq):
+                rb.setEnabled(False)
+            self.btn_enable.setEnabled(False)
+            self.btn_disable.setEnabled(False)
             for lbl in (self.lbl_state, self.lbl_pos, self.lbl_vel,
                         self.lbl_iq, self.lbl_vbus, self.lbl_power):
                 _colored(lbl, "—", CLR_MUTED)
@@ -1004,6 +1105,19 @@ class TabControl(QWidget):
                 _colored(lbl, "—", CLR_MUTED)
             self._charts.poll_update()
             return
+
+        # (4) Gate mode radios + Enable button on IDLE state.
+        # Changing control_mode in CLOSED_LOOP is exactly the failure path that
+        # fried the board — only allow it when the axis is IDLE.
+        cur_state = int(getattr(axis, "current_state", 0))
+        is_idle = (cur_state == 1)
+        is_closed = (cur_state == 8)
+        for rb in (self._rb_vel, self._rb_pos, self._rb_trq):
+            rb.setEnabled(is_idle)
+        self.btn_enable.setEnabled(is_idle)
+        self.btn_disable.setEnabled(not is_idle)
+        # Setpoint spinbox is only useful once armed.
+        self.sp_setpoint.setEnabled(is_closed)
 
         # Errors
         err_tables = {
