@@ -133,10 +133,9 @@ class JumpGains:
 ################################## FEED FORWARD
 @dataclass(frozen=True)
 class FeedforwardGains:
-    """Feedforward terms (FF1–FF4).  alpha=0 disables; alpha=1 full cancellation."""
+    """Feedforward terms (FF1, FF2, FF4).  alpha=0 disables; alpha=1 full cancellation."""
     ff1_alpha: float = 0.5   # Hip reaction torque cancellation gain
     ff2_alpha: float = 1.0   # Gravity compensation torque on wheels gain
-    ff3_alpha: float = 1.0   # CoM shift compensation pitch offset gain
     ff4_alpha: float = 0.0   # Centripetal turn coupling pitch offset gain
 
 
@@ -216,7 +215,7 @@ class MetricThresholds:
 class HardwareLimits:
     """Per-tick safety checks — violations logged, early-exit in optimizer."""
     max_bearing_force: float = 500.0   # [N] 608 bearing static rating
-    max_motor_current_hip: float = 20.0    # [A] AK45-10 continuous
+    max_motor_current_hip: float = 6.0     # [A] AK45-10 peak phase current at 7 N·m (datasheet curve @24V)
     max_motor_current_wheel: float = 50.0  # [A] ODESC limit
     max_winding_temp_C: float = 130.0  # [°C] Class B insulation
 
@@ -294,11 +293,13 @@ class S8Bump:
 
 @dataclass(frozen=True)
 class BatteryParams:
-    """6S LiPo battery model."""
-    capacity_Ah: float = 5.0
+    """6S LiPo battery model (1800 mAh, 50C cont / 100C burst, 275 g)."""
+    capacity_Ah: float = 1.8
     V_full: float = 25.2           # [V] 4.2 V/cell × 6
-    V_nom: float = 24.0            # [V] rated operating voltage
+    V_nom: float = 24.0            # [V] operating voltage (assumed fully charged, ~4.0 V/cell)
     V_cutoff: float = 18.0         # [V] 3.0 V/cell × 6
+    I_cont_max: float = 90.0       # [A] 50C × 1.8 Ah continuous
+    I_burst_max: float = 180.0     # [A] 100C × 1.8 Ah burst
     R0: float = 0.040              # [Ω] internal resistance at SoC=1
     K_soc: float = 0.50            # R_int rise factor at SoC=0
     K_temp: float = 0.010          # [1/°C] Arrhenius-like temp coefficient
@@ -326,7 +327,7 @@ class HipMotorParams:
         return 60.0 / (self.KV * 2 * math.pi) * self.gear_ratio
 
     # Thermal model
-    R_eff: float = 0.75            # [Ω] effective winding resistance
+    R_eff: float = 0.22            # [Ω] phase-to-phase winding resistance (CubeMars datasheet)
     C_winding: float = 30.0        # [J/°C] copper thermal mass
     C_case: float = 200.0          # [J/°C] motor + gearbox housing
     R_th_wc: float = 1.0           # [°C/W] winding-to-case
@@ -386,7 +387,7 @@ class RobotGeometry:
     F_Z: float = -0.01821           # [m] coupler pivot Z in body frame
     A_Z: float = -0.0235            # [m] hip motor Z offset from body centre
 
-    m_box: float = 1.430            # [kg] body box (210) + electronics (244) + battery (720)
+    m_box: float = 0.985            # [kg] body box (210) + electronics (244) + battery (275)
                                      #       + motor mounts (90) + wiring (100) + fasteners (50)
                                      #       + XT60 (10) + MR30 (6)  — see COMPONENTS.MD
     m_femur: float = 0.0192         # [kg] femur Al tube (14×1.0mm, 174mm — scaled by length)

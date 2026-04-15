@@ -172,6 +172,29 @@ def _add_knee_spring_sphere(viewer, data, body_id, active=False, radius=0.015):
     scn.ngeom += 1
 
 
+def _compute_com_pair(data, box_bid, robot, q_hip_avg_rad, m_spring):
+    """Return (com_x_truth_m, com_x_calc_m) in body frame.
+
+    Truth: MuJoCo subtree CoM expressed in the body's local frame by
+    rotating (com_world − body_world) through the body orientation R^T.
+    Calc:  analytical body-frame CoM from our mass model.
+    """
+    import numpy as _np
+    from master_sim_jump.physics import compute_com_x_body_frame
+    try:
+        com_world = _np.asarray(data.subtree_com[box_bid], dtype=float)
+        body_world = _np.asarray(data.xpos[box_bid], dtype=float)
+        R = _np.asarray(data.xmat[box_bid], dtype=float).reshape(3, 3)
+        com_body = R.T @ (com_world - body_world)
+        com_x_truth = float(com_body[0])
+    except Exception:
+        com_x_truth = 0.0
+    com_x_calc = compute_com_x_body_frame(robot, q_hip_avg_rad, m_spring=m_spring)
+    if com_x_calc is None:
+        com_x_calc = 0.0
+    return com_x_truth, float(com_x_calc)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SANDBOX ARENA — 28 static obstacles + 6 movable props
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1047,6 +1070,10 @@ def replay(scenario_name: str, with_viewer: bool = False,
                 omega_cmd = max(-_ocm, min(_ocm,
                     omega_profile_fn(float(data.time))
                     if omega_profile_fn else 0.0))
+                _q_avg = 0.5 * (tk['hip_q_L'] + tk['hip_q_R'])
+                _com_truth, _com_calc = _compute_com_pair(
+                    data, ctrl.box_bid, params.robot, _q_avg,
+                    params.gains.knee_spring.m_spring)
                 data_q.put_nowait((
                     float(data.time),
                     math.degrees(pitch_true_now),
@@ -1084,6 +1111,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     tk.get('gx_imu', 0.0),
                     tk.get('gy_imu', 0.0),
                     tk.get('gz_imu', 0.0),
+                    _com_truth,
+                    _com_calc,
                 ))
                 last_push = wall_now
 
@@ -1375,7 +1404,6 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ("RollLev",    "Roll Leveling"),
         ("HipFF",      "Hip FF"),
         ("GravFF",     "Grav FF"),
-        ("CoMFF",      "CoM FF"),
         ("TurnFF",     "Turn FF"),
         ("KneeSpr",    "Knee Spring"),
     ]
@@ -2261,6 +2289,38 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ln_gy = p_gyro.plot(pen=pg.mkPen('#60ff80', width=LINE_WIDTH), name="gy")
     ln_gz = p_gyro.plot(pen=pg.mkPen('#60d0ff', width=LINE_WIDTH), name="gz")
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # GEOMETRY TAB — CoM X (body frame): MuJoCo truth vs analytical model
+    # ══════════════════════════════════════════════════════════════════════════
+    glw_geom = pg.GraphicsLayoutWidget()
+    glw_geom.setBackground("#12121e")
+    tab_widget.addTab(glw_geom, "Geometry")
+
+    def _gp(ttl, ylabel):
+        pl = glw_geom.addPlot()
+        pl.setTitle(
+            f'<span style="color:#e0e0e0;font-size:9pt;font-weight:600">{ttl}</span>')
+        pl.setLabel(
+            "left",
+            f'<span style="color:#c8c8c8;font-size:9pt">{ylabel}</span>')
+        pl.showGrid(x=True, y=True, alpha=GRID_ALPHA)
+        for ax_name in ("left", "bottom"):
+            ax = pl.getAxis(ax_name)
+            ax.setTextPen(TICK_PEN)
+            ax.setPen(pg.mkPen('#555'))
+            ax.setStyle(tickFont=TICK_FONT)
+        pl.setXRange(-window_s, 0, padding=0.02)
+        return pl
+
+    p_comx = _gp("Whole-robot CoM X (body frame)", "mm")
+    p_comx.addLegend(offset=(10, 10))
+    ln_com_truth = p_comx.plot(pen=pg.mkPen('#60d0ff', width=LINE_WIDTH), name="MuJoCo truth")
+    ln_com_calc  = p_comx.plot(pen=pg.mkPen('#ffa040', width=LINE_WIDTH, style=_DASH), name="analytical")
+
+    glw_geom.nextRow()
+    p_comerr = _gp("CoM X error (truth − analytical)", "mm")
+    ln_com_err = p_comerr.plot(pen=pg.mkPen('#ff6060', width=LINE_WIDTH), name="err")
+
     # ── Ring buffers — 29 channels ────────────────────────────────────────────
     MAXLEN = int(window_s * TELEMETRY_HZ) + 200
     (t_buf,
@@ -2331,6 +2391,10 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     gx_imu_buf = deque(maxlen=MAXLEN)
     gy_imu_buf = deque(maxlen=MAXLEN)
     gz_imu_buf = deque(maxlen=MAXLEN)
+
+    # ── Geometry tab ring buffers ─────────────────────────────────────────────
+    com_x_truth_buf = deque(maxlen=MAXLEN)
+    com_x_calc_buf  = deque(maxlen=MAXLEN)
 
     # ── 4-bar force estimation from hip torque + kinematics ──────────────────
     def _estimate_forces(q_hip_deg, tau_hip, tau_whl):
@@ -2416,6 +2480,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         az_imu_buf.clear()
         ax_imu_buf.clear(); ay_imu_buf.clear()
         gx_imu_buf.clear(); gy_imu_buf.clear(); gz_imu_buf.clear()
+        com_x_truth_buf.clear(); com_x_calc_buf.clear()
+        ln_com_truth.setData([], []); ln_com_calc.setData([], [])
+        ln_com_err.setData([], [])
         for ln in all_lines:
             ln.setData([], [])
         for ln in mech_lines:
@@ -2483,7 +2550,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
              tau_spring_L, tau_spring_R,
              wh_L_mm, wh_R_mm,
              robot_mode, az_imu,
-             ax_imu, ay_imu, gx_imu, gy_imu, gz_imu) = item
+             ax_imu, ay_imu, gx_imu, gy_imu, gz_imu,
+             com_x_truth, com_x_calc) = item
 
             t_buf.append(t)
             pitch_buf.append(pitch);          pitch_ref_buf.append(pitch_ref)
@@ -2506,6 +2574,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             az_imu_buf.append(az_imu)
             ax_imu_buf.append(ax_imu); ay_imu_buf.append(ay_imu)
             gx_imu_buf.append(gx_imu); gy_imu_buf.append(gy_imu); gz_imu_buf.append(gz_imu)
+            com_x_truth_buf.append(com_x_truth * 1000.0)  # m → mm
+            com_x_calc_buf.append(com_x_calc * 1000.0)
 
             # ── Jump phase edge detection from robot's own mode ──
             if robot_mode == 'CROUCH' and _prev_mode[0] != 'CROUCH':
@@ -2637,6 +2707,14 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             ln_gx.setData(xw, _a(gx_imu_buf))
             ln_gy.setData(xw, _a(gy_imu_buf))
             ln_gz.setData(xw, _a(gz_imu_buf))
+
+        # ── Update Geometry tab charts ────────────────────────────────────────
+        if len(com_x_truth_buf) > 1:
+            _truth = _a(com_x_truth_buf)
+            _calc  = _a(com_x_calc_buf)
+            ln_com_truth.setData(xw, _truth)
+            ln_com_calc.setData(xw, _calc)
+            ln_com_err.setData(xw, _truth - _calc)
         # Move jump-phase markers on az chart with the scrolling window
         for _ln_m, _mt in ((_ln_az_crouch,  _crouch_t[0]),
                             (_ln_az_extend,  _extend_t[0]),
@@ -2757,7 +2835,7 @@ def _ctrl_defaults_from_cfg(cfg) -> dict:
         # Sandbox: everything enabled
         return {"LQR": True, "VelPI": True, "YawPI": True,
                 "Suspension": True, "RollLev": True, "HipFF": True,
-                "GravFF": True, "CoMFF": True, "TurnFF": True,
+                "GravFF": True, "TurnFF": True,
                 "KneeSpr": False}
     ac = cfg.active_controllers
     imp = cfg.hip_mode in ("impedance", "jump")
@@ -2769,7 +2847,6 @@ def _ctrl_defaults_from_cfg(cfg) -> dict:
         "RollLev":    imp,
         "HipFF":      True,
         "GravFF":     True,
-        "CoMFF":      True,
         "TurnFF":     True,
         "KneeSpr":    cfg.hip_mode == "jump",
     }
@@ -2821,7 +2898,6 @@ def sandbox(rng_seed: int = 0):
     _en_roll_lev   = [True]
     _en_ff1        = [True]
     _en_ff2        = [True]
-    _en_ff3        = [True]
     _en_ff4        = [True]
     _en_knee_spr   = [False]
     _hip_mode      = ["impedance"]
@@ -2978,7 +3054,6 @@ def sandbox(rng_seed: int = 0):
                         elif key == "RollLev":    _en_roll_lev[0]   = val
                         elif key == "HipFF":      _en_ff1[0]        = val
                         elif key == "GravFF":     _en_ff2[0]        = val
-                        elif key == "CoMFF":      _en_ff3[0]        = val
                         elif key == "TurnFF":     _en_ff4[0]        = val
                         elif key == "KneeSpr":    _en_knee_spr[0]   = val
                     elif cmd[0] == "HIP_MODE":
@@ -3044,7 +3119,6 @@ def sandbox(rng_seed: int = 0):
                         use_suspension=_en_suspension[0],
                         use_ff1=_en_ff1[0],
                         use_ff2=_en_ff2[0],
-                        use_ff3=_en_ff3[0],
                         use_ff4=_en_ff4[0],
                         use_knee_spring=_en_knee_spr[0],
                         jump_active=_jump_active[0])
@@ -3084,6 +3158,10 @@ def sandbox(rng_seed: int = 0):
                 pitch_true_now, _ = get_pitch_and_rate(
                     data, ctrl.box_bid, ctrl.d_pitch)
                 pitch_ref_display = tk['pitch_ff'] + tk['theta_ref']
+                _q_avg = 0.5 * (tk['hip_q_L'] + tk['hip_q_R'])
+                _com_truth, _com_calc = _compute_com_pair(
+                    data, ctrl.box_bid, params.robot, _q_avg,
+                    params.gains.knee_spring.m_spring)
                 data_q.put_nowait((
                     sim_t,
                     math.degrees(pitch_true_now),
@@ -3121,6 +3199,8 @@ def sandbox(rng_seed: int = 0):
                     tk.get('gx_imu', 0.0),
                     tk.get('gy_imu', 0.0),
                     tk.get('gz_imu', 0.0),
+                    _com_truth,
+                    _com_calc,
                 ))
                 last_push = wall_now
 
@@ -3245,7 +3325,6 @@ def run_unified(initial_scenario: str = "sandbox",
     _en_roll_lev   = [_ctrl_init.get("RollLev", True)]
     _en_ff1        = [_ctrl_init.get("HipFF", True)]
     _en_ff2        = [_ctrl_init.get("GravFF", True)]
-    _en_ff3        = [_ctrl_init.get("CoMFF", True)]
     _en_ff4        = [_ctrl_init.get("TurnFF", True)]
     _en_knee_spr   = [_ctrl_init.get("KneeSpr", False)]
     _hip_mode      = ["position_pd" if not _ctrl_init.get("Suspension", True) else "impedance"]
@@ -3409,7 +3488,6 @@ def run_unified(initial_scenario: str = "sandbox",
                                         _en_roll_lev[0]   = new_cd["RollLev"]
                                         _en_ff1[0]        = new_cd["HipFF"]
                                         _en_ff2[0]        = new_cd["GravFF"]
-                                        _en_ff3[0]        = new_cd["CoMFF"]
                                         _en_ff4[0]        = new_cd["TurnFF"]
                                     title = new_title
                                     _reset_sim()
@@ -3462,7 +3540,6 @@ def run_unified(initial_scenario: str = "sandbox",
                                 elif key == "RollLev":    _en_roll_lev[0]   = val
                                 elif key == "HipFF":      _en_ff1[0]        = val
                                 elif key == "GravFF":     _en_ff2[0]        = val
-                                elif key == "CoMFF":      _en_ff3[0]        = val
                                 elif key == "KneeSpr":    _en_knee_spr[0]   = val
                             elif cmd[0] == "HIP_MODE":
                                 _hip_mode[0] = cmd[1]
@@ -3601,8 +3678,7 @@ def run_unified(initial_scenario: str = "sandbox",
                                 use_suspension=_en_suspension[0],
                                 use_ff1=_en_ff1[0],
                                 use_ff2=_en_ff2[0],
-                                use_ff3=_en_ff3[0],
-                        use_ff4=_en_ff4[0],
+                                use_ff4=_en_ff4[0],
                                 use_knee_spring=_en_knee_spr[0],
                                 jump_active=_jump_active[0])
 
@@ -3660,6 +3736,10 @@ def run_unified(initial_scenario: str = "sandbox",
                         v_cmd_display = _v_desired[0]
                         omega_cmd_display = max(-_ocm, min(_ocm, _omega_desired[0]))
 
+                    _q_avg = 0.5 * (tk['hip_q_L'] + tk['hip_q_R'])
+                    _com_truth, _com_calc = _compute_com_pair(
+                        data, ctrl.box_bid, params.robot, _q_avg,
+                        params.gains.knee_spring.m_spring)
                     data_q.put_nowait((
                         float(data.time),
                         math.degrees(pitch_true_now),
@@ -3697,6 +3777,8 @@ def run_unified(initial_scenario: str = "sandbox",
                         tk.get('gx_imu', 0.0),
                         tk.get('gy_imu', 0.0),
                         tk.get('gz_imu', 0.0),
+                        _com_truth,
+                        _com_calc,
                     ))
                     last_push = wall_now
 

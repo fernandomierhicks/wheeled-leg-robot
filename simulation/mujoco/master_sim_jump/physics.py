@@ -378,62 +378,52 @@ def get_equilibrium_pitch(robot: RobotGeometry, q_hip: float,
     return -math.atan2(dx, dz)
 
 
-def compute_com_x_from_wheel(robot: RobotGeometry, q_hip: float,
+def compute_com_x_body_frame(robot: RobotGeometry, q_hip: float,
                               m_spring: float = 0.0) -> float | None:
-    """Return X-offset [m] of whole-body CoM from wheel centre at given hip angle.
+    """Return X-coordinate [m] of whole-body CoM in body frame (box origin = 0).
 
-    Positive = CoM is forward of wheel.  Returns None at IK singularity.
-    Uses the same mass model as get_equilibrium_pitch().
-
-    Args:
-        m_spring: mass of one knee spring [kg] (located at knee pivot C, ×2 legs)
+    Same mass model as get_equilibrium_pitch(). Returns the raw CoM X
+    (body frame, wheel not subtracted). Used to compare against MuJoCo's
+    ground-truth subtree CoM in the Geometry tab.
     """
     p = robot.as_dict()
     ik = solve_ik(q_hip, p)
     if ik is None:
         return None
 
-    n = 2  # two legs
+    n = 2
     m_sys = p['m_box']
     mx = 0.0
 
-    # Hip motors (at body origin X=0)
     m_sys += n * robot.motor_mass
 
-    # Femur midpoint
     C_x, _ = ik['C']
     m_sys += n * p['m_femur']
     mx    += n * p['m_femur'] * C_x / 2.0
 
-    # Coupler midpoint
     E_x, _ = ik['E']
     F_X, _ = ik['F']
     m_sys += n * p['m_coupler']
     mx    += n * p['m_coupler'] * (F_X + E_x) / 2.0
 
-    # Tibia CoM
     L_s, L_t = p['L_stub'], p['L_tibia']
     alpha = ik['alpha']
     off = (L_s - L_t) / 2.0
     m_sys += n * p['m_tibia']
     mx    += n * p['m_tibia'] * (C_x + off * math.sin(alpha))
 
-    # Bearings (4 per leg)
     m_sys += n * p['m_bearing'] * 4
     mx    += n * p['m_bearing'] * (F_X + 2.0 * E_x + C_x)
 
-    # Knee springs (at knee pivot C)
     if m_spring > 0.0:
         m_sys += n * m_spring
         mx    += n * m_spring * C_x
 
-    # Wheels
     W_x, _ = ik['W']
     m_sys += n * p['m_wheel']
     mx    += n * p['m_wheel'] * W_x
 
-    com_x = mx / m_sys
-    return com_x - W_x
+    return mx / m_sys
 
 
 # ---------------------------------------------------------------------------
@@ -666,6 +656,38 @@ def build_xml(robot: RobotGeometry = None,
     femur_inertial_mass = p['m_femur'] + m_brg               # bearing at knee C
     tibia_inertial_mass = p['m_tibia'] + m_brg               # bearing at stub E
 
+    # ── Composite link inertials (rod + folded bearings, at true CoM) ─────
+    # Each link's <inertial> must be at the mass-weighted CoM of (rod +
+    # bearings that were folded into its mass). Previously everything sat at
+    # pos=0, which placed femur/coupler mass at the pivot instead of along
+    # the rod — the bias drove pitch_ff undercompensation.
+    femur_r, coupler_r, tibia_r = 0.007, 0.005, 0.008
+
+    # Femur: rod CoM at -L_f/2, bearing (knee C) at -L_f
+    m_f, m_b = p['m_femur'], m_brg
+    femur_com_x = (m_f * (-L_f / 2.0) + m_b * (-L_f)) / (m_f + m_b)
+    femur_Iyz = (m_f * L_f**2 / 12.0
+                 + m_f * (femur_com_x - (-L_f / 2.0))**2
+                 + m_b * (femur_com_x - (-L_f))**2)
+    femur_Ix  = 0.5 * (m_f + m_b) * femur_r**2
+
+    # Coupler: rod CoM at -Lc/2, bearings at F (0) and E (-Lc) — mean = rod midpoint
+    m_c = p['m_coupler']
+    coupler_com_x = -Lc / 2.0
+    coupler_Iyz = (m_c * Lc**2 / 12.0
+                   + 2 * m_b * (Lc / 2.0)**2)
+    coupler_Ix  = 0.5 * (m_c + 2 * m_b) * coupler_r**2
+
+    # Tibia (local frame: rod along Z from +L_s down to -L_t)
+    #   rod CoM z = (L_s - L_t)/2, bearing (stub E) z = +L_s
+    m_t = p['m_tibia']
+    tib_rod_cz = (L_s - L_t) / 2.0
+    tibia_com_z = (m_t * tib_rod_cz + m_b * L_s) / (m_t + m_b)
+    tibia_Ixy = (m_t * (L_s + L_t)**2 / 12.0
+                 + m_t * (tibia_com_z - tib_rod_cz)**2
+                 + m_b * (tibia_com_z - L_s)**2)
+    tibia_Iz  = 0.5 * (m_t + m_b) * tibia_r**2
+
     # Body frame geometry
     ch_hx, ch_hy, ch_hz = 0.070, 0.050, 0.052
     arm_x_lo = F_X - 0.010; arm_x_hi = 0.015
@@ -693,7 +715,7 @@ def build_xml(robot: RobotGeometry = None,
         return f"""\
       <!-- == {side} LEG ====================================================== -->
       <body name="coupler_{side}" pos="{F_X:.5f} {sy:.5f} {F_Z:.5f}">
-        <inertial pos="0 0 0" mass="{coupler_inertial_mass:.4f}" diaginertia="1.8e-5 1.8e-5 2.0e-7"/>
+        <inertial pos="{coupler_com_x:.5f} 0 0" mass="{coupler_inertial_mass:.4f}" diaginertia="{coupler_Ix:.3e} {coupler_Iyz:.3e} {coupler_Iyz:.3e}"/>
         <joint name="hinge_F_{side}" type="hinge" axis="0 1 0" damping="0.001"/>
         <geom type="cylinder" pos="0 0 0" euler="90 0 0"
               size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
@@ -706,7 +728,7 @@ def build_xml(robot: RobotGeometry = None,
               contype="0" conaffinity="0" mass="0"/>
       </body>
       <body name="femur_{side}" pos="0 {sy:.5f} {A_Z:.5f}">
-        <inertial pos="0 0 0" mass="{femur_inertial_mass:.4f}" diaginertia="4.9e-5 4.9e-5 8.2e-7"/>
+        <inertial pos="{femur_com_x:.5f} 0 0" mass="{femur_inertial_mass:.4f}" diaginertia="{femur_Ix:.3e} {femur_Iyz:.3e} {femur_Iyz:.3e}"/>
         <joint name="hip_{side}" type="hinge" axis="0 1 0"
                range="-180 180" armature="0.01" damping="0.05"/>
         <geom name="femur_geom_{side}" type="cylinder" fromto="0 0 0 {-L_f:.5f} 0 0"
@@ -716,7 +738,7 @@ def build_xml(robot: RobotGeometry = None,
               euler="90 0 0" size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
               contype="0" conaffinity="0" mass="0" solref="0.02 1"/>
         <body name="tibia_{side}" pos="{-L_f:.5f} 0 0">
-          <inertial pos="0 0 {tib_cz:.5f}" mass="{tibia_inertial_mass:.4f}" diaginertia="4.2e-5 4.2e-5 1.0e-6"/>
+          <inertial pos="0 0 {tibia_com_z:.5f}" mass="{tibia_inertial_mass:.4f}" diaginertia="{tibia_Ixy:.3e} {tibia_Ixy:.3e} {tibia_Iz:.3e}"/>
           <joint name="knee_joint_{side}" type="hinge" axis="0 1 0"
                  range="-60 60" damping="0.001"/>
           <geom name="tibia_geom_{side}" type="cylinder"

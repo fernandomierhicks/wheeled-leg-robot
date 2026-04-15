@@ -23,7 +23,7 @@ import mujoco
 from master_sim_jump.params import SimParams
 from master_sim_jump.scenarios.base import ScenarioConfig, WorldConfig
 from master_sim_jump.physics import (build_xml, build_assets, solve_ik,
-                                     get_equilibrium_pitch, compute_com_x_from_wheel)
+                                     get_equilibrium_pitch)
 from master_sim_jump.models.battery import BatteryModel
 from master_sim_jump.models.motor import motor_taper, motor_currents
 from master_sim_jump.models.latency import LatencyBuffer
@@ -302,11 +302,6 @@ class SimController:
         ik0 = solve_ik(robot.Q_NOM, robot.as_dict())
         self._l_eff_nom = abs(ik0['W_z']) if ik0 else 0.2
 
-        # FF3: CoM X offset at nominal hip angle (reference for delta computation)
-        _com_x_nom = compute_com_x_from_wheel(robot, robot.Q_NOM,
-                                              m_spring=params.gains.knee_spring.m_spring)
-        self._com_x_nom = _com_x_nom if _com_x_nom is not None else 0.0
-
         # Body mass (excluding wheels) — same as lqr.py for consistency
         self._m_b = (robot.m_box
                      + 2 * (robot.m_femur + robot.m_tibia + robot.m_coupler
@@ -398,7 +393,6 @@ class SimController:
              use_suspension: bool = True,
              use_ff1: bool = True,
              use_ff2: bool = True,
-             use_ff3: bool = True,
              use_ff4: bool = True,
              use_knee_spring: bool = False,
              jump_active: bool = False) -> dict:
@@ -494,19 +488,6 @@ class SimController:
             # v_ref_rads passes through to LQR even without VelocityPI
         self.prev_theta_ref = theta_ref
 
-        # ── FF3: CoM shift compensation (pitch offset) ───────────────────────
-        theta_ff3 = 0.0
-        ff3_alpha = params.gains.feedforward.ff3_alpha
-        if use_ff3 and ff3_alpha > 0.0:
-            _com_x = compute_com_x_from_wheel(robot, hip_q_avg,
-                                              m_spring=params.gains.knee_spring.m_spring)
-            if _com_x is not None:
-                _delta_com_x = _com_x - self._com_x_nom
-                _ik_ff3 = solve_ik(hip_q_avg, robot.as_dict())
-                _l_eff_ff3 = abs(_ik_ff3['W_z']) if _ik_ff3 else self._l_eff_nom
-                if _l_eff_ff3 > 0.01:
-                    theta_ff3 = ff3_alpha * math.atan2(_delta_com_x, _l_eff_ff3)
-
         # ── FF4: Centripetal turn coupling (pitch offset) ──────────────────
         theta_ff4 = 0.0
         ff4_alpha = params.gains.feedforward.ff4_alpha
@@ -520,7 +501,7 @@ class SimController:
             tau_sym = lqr_torque(
                 _pitch_d, _pitch_rate_d, _wheel_vel_d, hip_q_avg,
                 self.K_table, robot, params.motors.wheel,
-                v_ref=v_ref_rads, theta_ref=theta_ref + theta_ff3 + theta_ff4)
+                v_ref=v_ref_rads, theta_ref=theta_ref + theta_ff4)
         else:
             tau_sym = 0.0
 
@@ -686,7 +667,7 @@ class SimController:
             wheel_vel=wheel_vel,
             v_target=v_target_ms, v_measured=v_measured_ms,
             theta_ref=theta_ref,
-            tau_sym=tau_sym, tau_yaw=tau_yaw, tau_ff1=tau_ff1, tau_ff2=tau_ff2, theta_ff3=theta_ff3, theta_ff4=theta_ff4,
+            tau_sym=tau_sym, tau_yaw=tau_yaw, tau_ff1=tau_ff1, tau_ff2=tau_ff2, theta_ff4=theta_ff4,
             tau_whl_L=float(data.ctrl[self.act_wheel_L]),
             tau_whl_R=float(data.ctrl[self.act_wheel_R]),
             tau_hip_L=float(data.ctrl[self.act_hip_L]),
@@ -866,10 +847,9 @@ def run(params: SimParams, scenario: ScenarioConfig,
 
             # ── Metrics ──────────────────────────────────────────────────────
             theta_ref_corr = tick['theta_ref'] if use_theta_ref_correction else 0.0
-            theta_ff3_corr = tick.get('theta_ff3', 0.0)
             theta_ff4_corr = tick.get('theta_ff4', 0.0)
-            pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff - theta_ref_corr - theta_ff3_corr - theta_ff4_corr))
-            pitch_err_rad = pitch_true - pitch_ff - theta_ref_corr - theta_ff3_corr - theta_ff4_corr
+            pitch_err_deg = math.degrees(abs(pitch_true - pitch_ff - theta_ref_corr - theta_ff4_corr))
+            pitch_err_rad = pitch_true - pitch_ff - theta_ref_corr - theta_ff4_corr
             pitch_sq_sum     += pitch_err_deg ** 2
             ise_pitch        += pitch_err_rad ** 2 * dt
             ise_pitch_rate   += pitch_rate_true ** 2 * dt
