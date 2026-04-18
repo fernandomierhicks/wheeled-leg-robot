@@ -28,6 +28,7 @@
 #include "wifi_fast.h"
 #include "commands.h"
 #include "odesc_can.h"
+#include "ak45_can.h"
 #endif
 
 // ── 500 Hz hardware timer ───────────────────────────────────────────────────
@@ -101,6 +102,7 @@ void setup() {
         Serial.println("FATAL: CAN init failed");
         while (1) { delay(1000); }
     }
+    ak45_init();
 
     // Controllers
     lqr.init();
@@ -193,6 +195,12 @@ void loop() {
 
     // ── CAN TX: motor commands ──
     odesc_can_send_torque(state.tau_wheel_L, state.tau_wheel_R);
+    if (state.hip_enabled) {
+        ak45_send_cmd(CAN_ID_HIP_L, state.hip_q_target, 0.0f,
+                      HIP_POS_KP, HIP_POS_KD, state.tau_hip_L);
+        ak45_send_cmd(CAN_ID_HIP_R, state.hip_q_target, 0.0f,
+                      HIP_POS_KP, HIP_POS_KD, state.tau_hip_R);
+    }
 #endif // !IMU_ONLY
 
     state.tick++;

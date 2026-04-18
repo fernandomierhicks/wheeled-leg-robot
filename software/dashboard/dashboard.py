@@ -40,16 +40,17 @@ except ImportError:
 TELEMETRY_PORT = 4210
 COMMAND_PORT   = 4211
 
-# Telemetry packet: '<' = little-endian, I=uint32, B=uint8, 16f=16 floats
-TELEM_FMT  = '<IB16f'
-TELEM_SIZE = struct.calcsize(TELEM_FMT)  # 69 bytes
-assert TELEM_SIZE == 69
+# Telemetry packet: '<' = little-endian, I=uint32, B=uint8, 17f=17 floats
+TELEM_FMT  = '<IB17f'
+TELEM_SIZE = struct.calcsize(TELEM_FMT)  # 73 bytes
+assert TELEM_SIZE == 73
 
 # Command type IDs
 CMD_DRIVE = 1
 CMD_MODE  = 2
 CMD_GAIN  = 3
 CMD_PING  = 4
+CMD_HIP   = 5
 
 # ── Style constants (from simulation visualizer) ────────────────────────────
 BG_COLOR   = "#12121e"
@@ -105,8 +106,8 @@ class UDPReceiver(threading.Thread):
             vals = struct.unpack(TELEM_FMT, data)
             # vals: (timestamp_ms, mode, pitch, pitch_rate, roll, yaw,
             #        wheel_vel_avg, v_cmd, theta_ref, tau_sym, tau_yaw,
-            #        tau_wheel_L, tau_wheel_R, hip_q_avg, tau_hip_L, tau_hip_R, dt_us,
-            #        debug_sine)
+            #        tau_wheel_L, tau_wheel_R, hip_q_L, tau_hip_L, tau_hip_R, hip_q_R,
+            #        dt_us, debug_sine)
             try:
                 self.data_q.put_nowait(vals)
             except Exception:
@@ -242,6 +243,15 @@ class CommandSender:
         if not self.robot_ip:
             return
         pkt = struct.pack('<BB', CMD_MODE, mode)
+        self.sock.sendto(pkt, (self.robot_ip, COMMAND_PORT))
+
+    def send_hip(self, motor_id: int, hip_cmd: int,
+                 p_des: float = 0.0, v_des: float = 0.0,
+                 kp: float = 0.0, kd: float = 0.0, t_ff: float = 0.0):
+        if not self.robot_ip:
+            return
+        pkt = struct.pack('<BBBfffff', CMD_HIP, motor_id, hip_cmd,
+                          p_des, v_des, kp, kd, t_ff)
         self.sock.sendto(pkt, (self.robot_ip, COMMAND_PORT))
 
     def send_broadcast_ping(self):
@@ -478,6 +488,154 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     hbox_cmd.addStretch()
     vbox.addWidget(cmd_row)
 
+    # ── AK45 Motors tab ──────────────────────────────────────────────────────
+    _SPIN_STYLE = ("QDoubleSpinBox{background:#1e1e3a;color:white;"
+                   "font-family:Consolas;font-size:10px;border:1px solid #444;"
+                   "border-radius:3px;padding:1px 4px}"
+                   "QDoubleSpinBox::up-button,QDoubleSpinBox::down-button{"
+                   "width:12px;background:#3a3a5e}")
+    _LBL_LIVE = ("color:#80ff80;font-family:Consolas;font-size:11px;"
+                 "font-weight:bold;min-width:120px")
+    _LBL_DIM  = "color:#888;font-family:Consolas;font-size:10px;"
+
+    tab_widget = QtWidgets.QTabWidget()
+    tab_widget.setStyleSheet(
+        "QTabWidget::pane{background:#1a1a2e;border:1px solid #333}"
+        "QTabBar::tab{background:#2a2a4e;color:#aaa;font-family:Consolas;"
+        "font-size:10px;padding:4px 14px;border-radius:3px 3px 0 0}"
+        "QTabBar::tab:selected{background:#3a3a6e;color:white}")
+    tab_widget.setMaximumHeight(280)
+
+    ak45_tab = QtWidgets.QWidget()
+    ak45_tab.setStyleSheet(f"background:{BG_COLOR};")
+    tab_widget.addTab(ak45_tab, "AK45 Motors")
+
+    ak45_hbox = QtWidgets.QHBoxLayout(ak45_tab)
+    ak45_hbox.setContentsMargins(6, 6, 6, 6)
+    ak45_hbox.setSpacing(8)
+
+    # Live label dicts — filled per motor panel, read in _update
+    _hip_lbl = {}   # key: (motor_idx, field) → QLabel
+
+    def _make_motor_panel(motor_id: int, title: str):
+        frame = QtWidgets.QFrame()
+        frame.setStyleSheet(f"background:{BAR_COLOR};border-radius:4px;")
+        vb = QtWidgets.QVBoxLayout(frame)
+        vb.setContentsMargins(6, 6, 6, 6)
+        vb.setSpacing(4)
+
+        hdr = QtWidgets.QLabel(title)
+        hdr.setStyleSheet("color:white;font-family:Consolas;font-size:11px;font-weight:bold;")
+        vb.addWidget(hdr)
+
+        # Live labels
+        for field in ("pos_deg", "vel_rads", "torque_nm", "temp_c"):
+            row_w = QtWidgets.QWidget()
+            row_h = QtWidgets.QHBoxLayout(row_w)
+            row_h.setContentsMargins(0, 0, 0, 0)
+            dim_txt = {"pos_deg": "Pos (deg)", "vel_rads": "Vel (rad/s)",
+                       "torque_nm": "Torque (N·m)", "temp_c": "Temp (°C)"}[field]
+            dim_lbl = QtWidgets.QLabel(dim_txt)
+            dim_lbl.setStyleSheet(_LBL_DIM)
+            val_lbl = QtWidgets.QLabel("--")
+            val_lbl.setStyleSheet(_LBL_LIVE)
+            _hip_lbl[(motor_id, field)] = val_lbl
+            row_h.addWidget(dim_lbl)
+            row_h.addWidget(val_lbl)
+            row_h.addStretch()
+            vb.addWidget(row_w)
+
+        # Small plot: position + torque
+        mini_glw = pg.GraphicsLayoutWidget()
+        mini_glw.setBackground(BG_COLOR)
+        mini_glw.setMaximumHeight(100)
+        mini_pl = mini_glw.addPlot()
+        mini_pl.showGrid(x=True, y=True, alpha=0.15)
+        mini_pl.setXRange(-WINDOW_S, 0, padding=0.02)
+        mini_pl.disableAutoRange()
+        mini_ln_pos = mini_pl.plot(pen=pg.mkPen('#00e5ff', width=1.2), name="pos")
+        mini_ln_tau = mini_pl.plot(pen=pg.mkPen('#ffa040', width=1.2), name="τ")
+        _hip_lbl[(motor_id, '_mini_pos')] = mini_ln_pos
+        _hip_lbl[(motor_id, '_mini_tau')] = mini_ln_tau
+        vb.addWidget(mini_glw, stretch=1)
+
+        # Enable / Disable / Zero buttons
+        btn_row = QtWidgets.QHBoxLayout()
+        for btn_txt, hip_cmd_val, col in [
+                ("Enable",  1, "#2e7d32"), ("Disable", 0, "#7d2e2e"), ("Zero", 2, "#4a4a2e")]:
+            b = QtWidgets.QPushButton(btn_txt)
+            b.setStyleSheet(
+                f"QPushButton{{background:{col};color:white;font-family:Consolas;"
+                f"font-size:10px;border-radius:3px;padding:3px 8px}}"
+                f"QPushButton:hover{{background:{col}cc}}")
+            _hcv = hip_cmd_val
+            _mid = motor_id
+            b.clicked.connect(lambda _, m=_mid, c=_hcv: cmd.send_hip(m, c))
+            btn_row.addWidget(b)
+        vb.addLayout(btn_row)
+
+        # MIT cmd spinboxes + Send
+        mit_row = QtWidgets.QHBoxLayout()
+        mit_row.setSpacing(4)
+
+        def _spin(lo, hi, step, val, dec=3):
+            s = QtWidgets.QDoubleSpinBox()
+            s.setRange(lo, hi); s.setSingleStep(step)
+            s.setValue(val); s.setDecimals(dec)
+            s.setStyleSheet(_SPIN_STYLE)
+            s.setFixedWidth(75)
+            return s
+
+        sp_p  = _spin(-716, 716, 1.0,  0.0, 1)  # degrees
+        sp_kp = _spin(0, 500, 5.0,    50.0, 1)
+        sp_kd = _spin(0,   5, 0.1,     3.0, 2)
+        sp_t  = _spin(-8,  8, 0.1,     0.0, 2)
+
+        for lbl_txt, sp in [("p°", sp_p), ("Kp", sp_kp), ("Kd", sp_kd), ("τff", sp_t)]:
+            lbl = QtWidgets.QLabel(lbl_txt)
+            lbl.setStyleSheet(_LBL_DIM)
+            mit_row.addWidget(lbl)
+            mit_row.addWidget(sp)
+
+        btn_send = QtWidgets.QPushButton("Send")
+        btn_send.setStyleSheet(_BTN_STYLE)
+        _mid = motor_id
+        btn_send.clicked.connect(lambda _, m=_mid: cmd.send_hip(
+            m, 3,
+            math.radians(sp_p.value()), 0.0,
+            sp_kp.value(), sp_kd.value(), sp_t.value()))
+        mit_row.addWidget(btn_send)
+        mit_row.addStretch()
+        vb.addLayout(mit_row)
+
+        return frame
+
+    panel_L = _make_motor_panel(1, "Hip L (ID 0x41)")
+    ak45_hbox.addWidget(panel_L, stretch=1)
+
+    # Centre column: Both buttons
+    centre = QtWidgets.QWidget()
+    centre.setFixedWidth(110)
+    centre_vb = QtWidgets.QVBoxLayout(centre)
+    centre_vb.setAlignment(QtCore.Qt.AlignmentFlag.AlignVCenter)
+    centre_vb.setSpacing(6)
+    for btn_txt, hip_cmd_val, col in [
+            ("Enable\nBoth", 1, "#2e7d32"), ("Disable\nBoth", 0, "#7d2e2e"), ("Zero\nBoth", 2, "#4a4a2e")]:
+        b = QtWidgets.QPushButton(btn_txt)
+        b.setStyleSheet(
+            f"QPushButton{{background:{col};color:white;font-family:Consolas;"
+            f"font-size:10px;border-radius:3px;padding:6px 8px}}"
+            f"QPushButton:hover{{background:{col}cc}}")
+        _hcv = hip_cmd_val
+        b.clicked.connect(lambda _, c=_hcv: cmd.send_hip(3, c))
+        centre_vb.addWidget(b)
+    ak45_hbox.addWidget(centre)
+
+    panel_R = _make_motor_panel(2, "Hip R (ID 0x42)")
+    ak45_hbox.addWidget(panel_R, stretch=1)
+
+    vbox.addWidget(tab_widget)
+
     # ── Style helpers ────────────────────────────────────────────────────────
     TICK_FONT = QtGui.QFont("Consolas", 9)
     TICK_PEN  = pg.mkColor(TICK_COLOR)
@@ -543,7 +701,8 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     # ── Row 2: Hip Position | Roll ───────────────────────────────────────────
     p_hip = _p(2, 0, "Hip Position", "deg")
     _leg(p_hip)
-    ln_hip = p_hip.plot(pen=pg.mkPen('#60d0ff', width=W), name="hip_avg")
+    ln_hip_L = p_hip.plot(pen=pg.mkPen('#00e5ff', width=W), name="L")
+    ln_hip_R = p_hip.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
 
     p_roll = _p(2, 1, "Roll", "deg")
     _leg(p_roll)
@@ -615,7 +774,8 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     tau_sym_buf   = deque(maxlen=MAXLEN)
     tau_yaw_buf   = deque(maxlen=MAXLEN)
     theta_buf     = deque(maxlen=MAXLEN)
-    hip_buf       = deque(maxlen=MAXLEN)
+    hip_q_L_buf   = deque(maxlen=MAXLEN)
+    hip_q_R_buf   = deque(maxlen=MAXLEN)
     roll_buf      = deque(maxlen=MAXLEN)
     yaw_buf       = deque(maxlen=MAXLEN)
     tau_wL_buf    = deque(maxlen=MAXLEN)
@@ -626,7 +786,8 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     sine_buf      = deque(maxlen=MAXLEN)
 
     all_bufs = [t_buf, pitch_buf, pitch_ref_buf, prate_buf, vel_buf, vcmd_buf,
-                tau_sym_buf, tau_yaw_buf, theta_buf, hip_buf, roll_buf, yaw_buf,
+                tau_sym_buf, tau_yaw_buf, theta_buf,
+                hip_q_L_buf, hip_q_R_buf, roll_buf, yaw_buf,
                 tau_wL_buf, tau_wR_buf, tau_hL_buf, tau_hR_buf, dt_buf, sine_buf]
 
     _pkt_count = [0]
@@ -650,8 +811,8 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
              wheel_vel_avg, v_cmd, theta_ref,
              tau_sym, tau_yaw,
              tau_wheel_L, tau_wheel_R,
-             hip_q_avg, tau_hip_L, tau_hip_R, dt_us,
-             debug_sine) = item
+             hip_q_L, tau_hip_L, tau_hip_R, hip_q_R,
+             dt_us, debug_sine) = item
 
             # Convert timestamp to seconds
             t_s = ts_ms / 1000.0
@@ -667,7 +828,8 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             tau_sym_buf.append(tau_sym)
             tau_yaw_buf.append(tau_yaw)
             theta_buf.append(math.degrees(theta_ref))
-            hip_buf.append(math.degrees(hip_q_avg))
+            hip_q_L_buf.append(math.degrees(hip_q_L))
+            hip_q_R_buf.append(math.degrees(hip_q_R))
             roll_buf.append(math.degrees(roll))
             yaw_buf.append(math.degrees(yaw))
             tau_wL_buf.append(tau_wheel_L)
@@ -723,7 +885,8 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
         ln_tau_sym.setData(xw, _a(tau_sym_buf))
         ln_tau_yaw.setData(xw, _a(tau_yaw_buf))
         ln_theta.setData(xw, _a(theta_buf))
-        ln_hip.setData(xw, _a(hip_buf))
+        ln_hip_L.setData(xw, _a(hip_q_L_buf))
+        ln_hip_R.setData(xw, _a(hip_q_R_buf))
         ln_roll.setData(xw, _a(roll_buf))
         ln_tau_L.setData(xw, _a(tau_wL_buf))
         ln_tau_R.setData(xw, _a(tau_wR_buf))
@@ -731,6 +894,28 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
         ln_htau_R.setData(xw, _a(tau_hR_buf))
         ln_dt.setData(xw, _a(dt_buf))
         ln_sine.setData(xw, _a(sine_buf))
+
+        # ── AK45 tab live labels + mini plots ──
+        for motor_id, pos_buf, tau_buf in [
+                (1, hip_q_L_buf, tau_hL_buf),
+                (2, hip_q_R_buf, tau_hR_buf)]:
+            if pos_buf:
+                _hip_lbl[(motor_id, 'pos_deg')].setText(f"{pos_buf[-1]:+.1f}")
+            if tau_buf:
+                _hip_lbl[(motor_id, 'torque_nm')].setText(f"{tau_buf[-1]:+.2f}")
+            mini_pos = _a(pos_buf)
+            mini_tau = _a(tau_buf)
+            _hip_lbl[(motor_id, '_mini_pos')].setData(xw, mini_pos)
+            _hip_lbl[(motor_id, '_mini_tau')].setData(xw, mini_tau)
+            if len(mini_pos) > 0 or len(mini_tau) > 0:
+                all_y = []
+                if len(mini_pos) > 0: all_y.extend([float(np.min(mini_pos)), float(np.max(mini_pos))])
+                if len(mini_tau) > 0: all_y.extend([float(np.min(mini_tau)), float(np.max(mini_tau))])
+                lo, hi = min(all_y), max(all_y)
+                span = max(hi - lo, _MIN_Y_SPAN)
+                mid = (lo + hi) / 2
+                _hip_lbl[(motor_id, '_mini_pos')].getViewBox().setYRange(
+                    mid - span * 0.6, mid + span * 0.6, padding=0)
 
         # ── Update 3D IMU axes ──
         if len(pitch_buf) > 0:

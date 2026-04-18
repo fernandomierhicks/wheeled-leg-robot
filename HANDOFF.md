@@ -1,90 +1,183 @@
-# HANDOFF — Tube-sizing bending analysis
+# HANDOFF — AK45-10 Hip Motor CAN Control + Dashboard Tab
 
-## Context
+**Status:** Firmware + dashboard fully implemented. Pending flash & hardware verification.
 
-User asked whether all leg tubes can be made 16×1.0 mm Al (strength-wise) and
-what the mass impact would be. We already made a what-if swap:
+---
 
-- `params.py` — `m_femur`, `m_coupler` updated to 16×1 values
-  (femur 19.2 g → 22.1 g; coupler 11.5 g → 19.2 g; tibia unchanged 18.3 g)
-- `viz/visualizer.py` `_robot_geom_dict` — all three `F_yield_*` set to 2912 N
-  (16×1 axial yield, same as the current tibia)
+## Goal
 
-Jump sim ran — on the Mechanical tab the axial-load lines were barely visible
-against the yield threshold. **Axial is not the binding constraint.**
+Add MIT CAN control of the AK45-10 hip motors to the Arduino firmware and a new "AK45 Motors" tab to `software/dashboard/dashboard.py`. One motor is wired and powered for initial testing.
 
-## Why axial is misleading
+---
 
-`_estimate_forces` at [viz/visualizer.py:2410](simulation/mujoco/master_sim_jump/viz/visualizer.py#L2410)
-computes axial-only loads. But:
+## ⚠️ Pre-Flight (must do before firmware works)
 
-- **Femur & tibia**: cantilever-loaded — transverse force at knee / wheel
-  creates bending moment at the root. For thin Al tubes, `σ_bend = M·c/I`
-  is typically the binding constraint.
-- **Coupler**: actual two-force member (pinned both ends, no transverse
-  load) → axial IS the right check. High axial SF (5.79 → ~12 at 16×1)
-  reflects that.
+The motor ships with MIT CAN ID = **1**, which collides with ODESC_NODE_L heartbeat (CAN ID 0x01) on the shared 1 MHz bus.
 
-## Rough bending bounds (6061-T6, σ_y = 276 MPa, S = π(OD⁴−ID⁴)/(32·OD))
+1. Flash `components/datasheets/Leg Motor/ak45-10-firmware-and-parameters/AK45-10/CMESC_MIT_APP_AK45_10.bin` to motor via CubeMars PC software (USB-C to motor board)
+2. In CubeMars PC software: change motor CAN ID → **0x41** (65) for Hip L, **0x42** (66) for Hip R
+3. In `firmware/src/config.h`: update `CAN_ID_HIP_L 0x41` and `CAN_ID_HIP_R 0x42`
 
-| Tube | S [mm³] | M_yield [N·m] | F_tip @ yield |
-|---|---|---|---|
-| Femur 14×1 (L=174 mm) | 124 | 34.2 | 197 N |
-| Femur 16×1 (L=174 mm) | 166 | 45.9 | 264 N |
-| Tibia 16×1 (L=129 mm) | 166 | 45.9 | 356 N |
+---
 
-Bending capacity 14→16 mm femur: **+34%** for the +2.9 g mass penalty.
-Real "can we use all 16×1?" answer requires comparing these to the *actual*
-bending moments in sim — which we don't compute yet.
+## Protocol Reference (CubeMars Manual v1.0.18, §5.3)
 
-## Plan — add bending to Mechanical tab
+**Frame type:** Standard CAN (11-bit ID), 1 MHz  
+**TX ID** = motor MIT ID | **RX ID** = motor MIT ID (same)
 
-### Step 1 — extend `_estimate_forces` (viz/visualizer.py:2410)
+### Special commands — 8 bytes sent to motor ID:
+| Command  | Bytes                           |
+|----------|---------------------------------|
+| Enable   | `FF FF FF FF FF FF FF FC`       |
+| Disable  | `FF FF FF FF FF FF FF FD`       |
+| Set Zero | `FF FF FF FF FF FF FF FE`       |
 
-Return two new keys:
+### TX frame (pack_cmd) — AK45-10 specific ranges:
+```
+P:  [-12.5, 12.5] rad   16 bits
+V:  [-20.0, 20.0] rad/s 12 bits
+T:  [ -8.0,  8.0] N·m   12 bits
+Kp: [    0,  500]        12 bits
+Kd: [    0,    5]        12 bits
 
-- `M_fem`: bending moment at femur root (pivot A)
-  = |F_knee ⊥ femur_axis| · L_femur
-- `M_tib`: bending moment at tibia root (knee C)
-  = |F_wheel ⊥ tibia_axis| · L_tibia
+Data[0] = p_int >> 8
+Data[1] = p_int & 0xFF
+Data[2] = v_int >> 4
+Data[3] = (v_int & 0xF) << 4 | (kp_int >> 8)
+Data[4] = kp_int & 0xFF
+Data[5] = kd_int >> 4
+Data[6] = (kd_int & 0xF) << 4 | (t_int >> 8)
+Data[7] = t_int & 0xFF
+```
 
-The transverse components come from resolving the knee-reaction and
-wheel-reaction vectors (already computed) perpendicular to each tube's
-axis, which is defined by the IK pose (hip angle → knee pos → tibia
-direction via stub geometry).
+### RX frame (unpack_reply) — 8 bytes from motor:
+```
+Data[0]              = Drive ID
+Data[1]<<8 | Data[2] = position int (16-bit) → uint_to_float(..., -12.5, 12.5, 16)
+Data[3]<<4 | Data[4]>>4 = velocity int (12-bit) → uint_to_float(..., -20.0, 20.0, 12)
+(Data[4]&0xF)<<8 | Data[5] = torque int (12-bit) → uint_to_float(..., -8.0, 8.0, 12)
+Data[6]              = temperature (raw; temp_C = Data[6] - 40)
+Data[7]              = error code
+```
 
-### Step 2 — add 2 panels to Mechanical tab
+---
 
-In the "Row 2 / Row 3" grid block around
-[viz/visualizer.py:2153](simulation/mujoco/master_sim_jump/viz/visualizer.py#L2153):
+## Implementation Plan
 
-- **Femur bending moment** [N·m], red line at M_yield_femur (34.2 or 45.9)
-- **Tibia bending moment** [N·m], red line at M_yield_tibia (45.9)
+### Step 1 — `firmware/src/config.h` ✅
+Change:
+```cpp
+#define CAN_ID_HIP_L  0x41   // was 2 — changed to avoid ODESC collision
+#define CAN_ID_HIP_R  0x42   // was 3
+```
 
-Pass `M_yield_femur`, `M_yield_tibia` through `_robot_geom_dict`
-(around [viz/visualizer.py:2823](simulation/mujoco/master_sim_jump/viz/visualizer.py#L2823)),
-computed from OD/wall/length so it auto-updates when the tube is changed.
+### Step 2 — CREATE `firmware/src/ak45_can.h` + `ak45_can.cpp` ✅
+New MIT CAN driver. Mirrors `odesc_can.h/cpp` structure.
 
-### Step 3 — rerun the S10 jump scenario
+Public API:
+```cpp
+void ak45_init();
+void ak45_enable(uint8_t id);
+void ak45_disable(uint8_t id);
+void ak45_set_zero(uint8_t id);
+void ak45_send_cmd(uint8_t id, float p_des, float v_des,
+                   float kp, float kd, float t_ff);
+void ak45_parse_rx(uint32_t can_id, const uint8_t* data, RobotState& state);
+bool ak45_hip_ok();
+```
 
-Verdict is simple:
+Implementation notes:
+- `float_to_uint` / `uint_to_float` with AK45-10 ranges above
+- `can_send_ak()` uses `CanStandardId(id)` + `CAN.write()` (same API as odesc)
+- Watchdog: module-static `s_last_rx_L_ms`, `s_last_rx_R_ms`; `ak45_hip_ok()` checks both < `CAN_TIMEOUT_MS`
+- `#ifdef NO_CAN` empty stubs for every public function (required for default build env)
 
-- If bending panels stay well below yield with **14×1 femur**: keep current
-  baseline (cheaper, lighter).
-- If bending panels only pass with **16×1 femur**: the +2.9 g upsize is
-  justified for the strength margin.
-- Coupler stays 10×1 regardless — axial-only, and well within yield.
+### Step 3 — `firmware/src/robot_state.h` ✅
+Add three fields:
+```cpp
+bool    hip_enabled;   // true = send MIT commands each tick
+float   hip_temp;      // motor temperature °C
+uint8_t hip_error;     // motor error code
+```
 
-## Files currently modified (what-if state, not committed)
+### Step 4 — `firmware/src/odesc_can.cpp` ✅
+Add `#include "ak45_can.h"`.  
+In `odesc_can_poll()`'s CAN drain loop, after existing node-ID checks:
+```cpp
+if (std_id == CAN_ID_HIP_L || std_id == CAN_ID_HIP_R) {
+    if (msg.data_length >= 6)
+        ak45_parse_rx(std_id, msg.data, state);
+}
+```
 
-- `simulation/mujoco/master_sim_jump/params.py` — m_femur, m_coupler at 16×1
-- `simulation/mujoco/master_sim_jump/viz/visualizer.py` — all F_yield=2912 N
+### Step 5 — `firmware/src/main.cpp` ✅
+- Add `#include "ak45_can.h"`
+- In `setup()`: `ak45_init()` after `odesc_can_init()`
+- In ISR control loop after `odesc_can_send_torque(...)`:
+```cpp
+if (state.hip_enabled) {
+    ak45_send_cmd(CAN_ID_HIP_L, state.hip_q_target, 0.0f,
+                  HIP_POS_KP, HIP_POS_KD, state.tau_hip_L);
+    ak45_send_cmd(CAN_ID_HIP_R, state.hip_q_target, 0.0f,
+                  HIP_POS_KP, HIP_POS_KD, state.tau_hip_R);
+}
+```
 
-Revert both if we decide bending analysis should be done with the true
-baseline (14×1 femur, 10×1 coupler) for an apples-to-apples strength
-comparison. Recommended order:
+### Step 6 — Telemetry packet: 69 → 73 bytes ✅
+**`firmware/src/telemetry.h`**: replace `float hip_q_avg` → `float hip_q_L`, add `float hip_q_R` after `tau_hip_R`. Update `static_assert` to 73.
 
-1. Revert what-if edits (back to 14×1 femur / 10×1 coupler baseline).
-2. Implement bending panels.
-3. Rerun S10 — read peak bending moments.
-4. Decide: keep baseline, upsize to 16×1 femur, or go further.
+**`firmware/src/telemetry.cpp`** and **`firmware/src/wifi_fast.cpp`**: fill `hip_q_L` and `hip_q_R` from `state.hip_q_L` / `state.hip_q_R`.
+
+### Step 7 — `firmware/src/wifi_fast.cpp` — CMD_HIP ✅
+Add `CMD_HIP = 5` to local enum.  
+Enlarge `static uint8_t buf[16]` → `buf[24]`.  
+New case — wire format: `[CMD_HIP u8][motor_id u8][cmd u8][p_des f32][v_des f32][kp f32][kd f32][t_ff f32]` = 23 bytes total:
+
+| motor_id | meaning   | cmd | meaning   |
+|----------|-----------|-----|-----------|
+| 1        | Hip L     | 0   | Disable   |
+| 2        | Hip R     | 1   | Enable    |
+| 3        | Both      | 2   | Set Zero  |
+|          |           | 3   | MIT cmd   |
+
+### Step 8 — `software/dashboard/dashboard.py` ✅
+1. Format: `'<IB16f'` → `'<IB17f'` (73 bytes); update assert
+2. Unpack: rename `hip_q_avg` → `hip_q_L`, insert `hip_q_R` after `tau_hip_R`
+3. Ring bufs: rename `hip_buf` → `hip_q_L_buf`, add `hip_q_R_buf`
+4. Row-2 Hip Position plot: two lines (L=cyan, R=green)
+5. Add `CMD_HIP = 5` constant
+6. Add `CommandSender.send_hip(motor_id, hip_cmd, p_des, v_des, kp, kd, t_ff)`:
+   ```python
+   pkt = struct.pack('<BBBfffff', CMD_HIP, motor_id, hip_cmd,
+                     p_des, v_des, kp, kd, t_ff)
+   self.sock.sendto(pkt, (self.robot_ip, COMMAND_PORT))
+   ```
+7. New `QTabWidget` at bottom of main vbox — tab "AK45 Motors":
+   - Left panel (motor_id=1) and Right panel (motor_id=2), each with:
+     - Live labels: Position (deg), Velocity (rad/s), Torque (N·m), Temp (°C)
+     - Small pyqtgraph plot: position + torque (last 15 s)
+     - Enable / Disable / Zero buttons
+     - MIT cmd: p_des (deg), kp, kd, t_ff spinboxes + Send button
+   - Between panels: Enable Both / Disable Both / Zero Both
+
+---
+
+## Build & Flash
+
+```bash
+# Compile (wifi env — no -DNO_CAN flag)
+pio run -e wifi
+
+# Flash over USB
+pio run -e wifi -t upload
+```
+
+---
+
+## Verification Sequence
+
+1. ✅ `pio run -e wifi` → zero errors; `static_assert(sizeof(TelemetryPacket) == 73)` passes
+2. ✅ `pio run -e uno_r4_wifi` → NO_CAN stubs compile cleanly
+3. ✅ `python -c "import struct; print(struct.calcsize('<IB17f'))"` → `73`
+4. ⬜ Flash + open dashboard → all 10 existing plots still live; AK45 tab visible
+5. ⬜ Motor configured to MIT ID=0x41: Enable L → motor stiffens; p_des=0.2 rad → motor moves; Disable → goes limp; position plot updates in real time

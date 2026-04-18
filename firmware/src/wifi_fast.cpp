@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "telemetry.h"    // TelemetryPacket struct
+#include "ak45_can.h"
 #include <Arduino.h>
 #include <WiFiS3.h>
 #include <WiFiUdp.h>
@@ -104,9 +105,10 @@ void wifi_fast_fill_telemetry(const RobotState& state) {
     pkt.tau_yaw       = state.tau_yaw;
     pkt.tau_wheel_L   = state.tau_wheel_L;
     pkt.tau_wheel_R   = state.tau_wheel_R;
-    pkt.hip_q_avg     = state.hip_q_avg;
+    pkt.hip_q_L       = state.hip_q_L;
     pkt.tau_hip_L     = state.tau_hip_L;
     pkt.tau_hip_R     = state.tau_hip_R;
+    pkt.hip_q_R       = state.hip_q_R;
     pkt.dt_us         = static_cast<float>(state.dt_us);
     pkt.debug_sine    = state.debug_sine;
 
@@ -161,7 +163,7 @@ bool wifi_try_receive(RobotState& state, uint32_t tick, uint32_t tick_start_us) 
         Serial.println(s_dashboard_ip);
     }
 
-    static uint8_t buf[16];
+    static uint8_t buf[24];
     int n = s_cmd_udp.read(buf, sizeof(buf));
     if (n < 1) {
         s_last_recv_us = micros() - t0;
@@ -171,7 +173,7 @@ bool wifi_try_receive(RobotState& state, uint32_t tick, uint32_t tick_start_us) 
     state.host_connected = true;
 
     // Command type IDs (must match Python dashboard)
-    enum : uint8_t { CMD_DRIVE = 1, CMD_MODE = 2, CMD_GAIN = 3, CMD_PING = 4 };
+    enum : uint8_t { CMD_DRIVE = 1, CMD_MODE = 2, CMD_GAIN = 3, CMD_PING = 4, CMD_HIP = 5 };
 
     switch (buf[0]) {
     case CMD_DRIVE: {
@@ -210,6 +212,43 @@ bool wifi_try_receive(RobotState& state, uint32_t tick, uint32_t tick_start_us) 
     case CMD_PING:
         Serial.println("[Cmd]  Ping from dashboard");
         break;
+    case CMD_HIP: {
+        // [CMD_HIP u8][motor_id u8][cmd u8][p_des f32][v_des f32][kp f32][kd f32][t_ff f32]
+        // motor_id: 1=Hip L, 2=Hip R, 3=Both   cmd: 0=Disable,1=Enable,2=SetZero,3=MITcmd
+        if (n < 3) break;
+        uint8_t motor_id = buf[1];
+        uint8_t hip_cmd  = buf[2];
+
+        // Helper lambdas capture nothing — plain per-motor dispatch
+        auto do_enable  = [&](uint8_t id) { ak45_enable(id);   state.hip_enabled = true; };
+        auto do_disable = [&](uint8_t id) { ak45_disable(id);  };
+        auto do_zero    = [&](uint8_t id) { ak45_set_zero(id); };
+
+        if (hip_cmd == 0) {  // Disable
+            if (motor_id == 1 || motor_id == 3) do_disable(CAN_ID_HIP_L);
+            if (motor_id == 2 || motor_id == 3) do_disable(CAN_ID_HIP_R);
+            if (motor_id == 3) state.hip_enabled = false;
+        } else if (hip_cmd == 1) {  // Enable
+            if (motor_id == 1 || motor_id == 3) do_enable(CAN_ID_HIP_L);
+            if (motor_id == 2 || motor_id == 3) do_enable(CAN_ID_HIP_R);
+        } else if (hip_cmd == 2) {  // Set Zero
+            if (motor_id == 1 || motor_id == 3) do_zero(CAN_ID_HIP_L);
+            if (motor_id == 2 || motor_id == 3) do_zero(CAN_ID_HIP_R);
+        } else if (hip_cmd == 3) {  // MIT cmd
+            if (n < 23) break;
+            float p_des, v_des, kp, kd, t_ff;
+            memcpy(&p_des, &buf[3],  4);
+            memcpy(&v_des, &buf[7],  4);
+            memcpy(&kp,    &buf[11], 4);
+            memcpy(&kd,    &buf[15], 4);
+            memcpy(&t_ff,  &buf[19], 4);
+            if (motor_id == 1 || motor_id == 3)
+                ak45_send_cmd(CAN_ID_HIP_L, p_des, v_des, kp, kd, t_ff);
+            if (motor_id == 2 || motor_id == 3)
+                ak45_send_cmd(CAN_ID_HIP_R, p_des, v_des, kp, kd, t_ff);
+        }
+        break;
+    }
     }
 
     s_last_recv_us = micros() - t0;

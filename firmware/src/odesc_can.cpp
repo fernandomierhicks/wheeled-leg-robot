@@ -7,6 +7,7 @@
 // Build with -DNO_CAN to compile no-op stubs (bench testing without hardware).
 
 #include "odesc_can.h"
+#include "ak45_can.h"
 #include "config.h"
 #include <Arduino.h>
 
@@ -131,6 +132,12 @@ void odesc_can_poll(RobotState& state) {
                 state.wheel_vel_R = vel_rad;
                 s_last_encoder_R_ms = millis();
             }
+        }
+
+        // ── AK45-10 hip motor reply ──
+        else if (std_id == CAN_ID_HIP_L || std_id == CAN_ID_HIP_R) {
+            if (msg.data_length >= 6)
+                ak45_parse_rx(std_id, msg.data, state);
         }
 
         // ── Heartbeat (error + state) ──

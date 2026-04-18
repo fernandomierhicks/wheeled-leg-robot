@@ -50,6 +50,9 @@ struct RobotState {
     float hip_dq_R;             // [rad/s] right hip velocity
     bool  hip_ok;               // CAN feedback fresh
     uint32_t hip_last_ms;
+    bool    hip_enabled;        // true = send MIT commands each tick
+    float   hip_temp;           // [°C] motor temperature (last RX)
+    uint8_t hip_error;          // motor error code (last RX)
 
     // Computed averages
     float wheel_vel_avg;        // (L + R) / 2

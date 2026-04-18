@@ -50,9 +50,10 @@ void telemetry_send(const RobotState& state) {
     pkt.tau_yaw       = state.tau_yaw;
     pkt.tau_wheel_L   = state.tau_wheel_L;
     pkt.tau_wheel_R   = state.tau_wheel_R;
-    pkt.hip_q_avg     = state.hip_q_avg;
+    pkt.hip_q_L       = state.hip_q_L;
     pkt.tau_hip_L     = state.tau_hip_L;
     pkt.tau_hip_R     = state.tau_hip_R;
+    pkt.hip_q_R       = state.hip_q_R;
     pkt.dt_us         = static_cast<float>(state.dt_us);
     pkt.debug_sine    = state.debug_sine;
 

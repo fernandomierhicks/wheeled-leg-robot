@@ -50,8 +50,8 @@
 
 // CAN node IDs — each axis is a separate CAN node.
 // Set on ODESC via odrivetool: odrv0.axisN.config.can.node_id = <value>
-#define CAN_ID_HIP_L        2         // AK45-10 left hip (MIT CAN)
-#define CAN_ID_HIP_R        3         // AK45-10 right hip (MIT CAN)
+#define CAN_ID_HIP_L        0x41      // AK45-10 left hip (MIT CAN) — avoids ODESC collision
+#define CAN_ID_HIP_R        0x42      // AK45-10 right hip (MIT CAN)
 #define ODESC_NODE_L        0         // ODESC axis 0 — left wheel
 #define ODESC_NODE_R        1         // ODESC axis 1 — right wheel
 

@@ -3,7 +3,7 @@
 
 #include "robot_state.h"
 
-// Packed telemetry struct sent over UDP/Serial (69 bytes, little-endian).
+// Packed telemetry struct sent over UDP/Serial (73 bytes, little-endian).
 struct __attribute__((packed)) TelemetryPacket {
     uint32_t timestamp_ms;    // millis()
     uint8_t  mode;            // Mode enum value
@@ -18,13 +18,14 @@ struct __attribute__((packed)) TelemetryPacket {
     float    tau_yaw;         // [N·m]
     float    tau_wheel_L;     // [N·m]
     float    tau_wheel_R;     // [N·m]
-    float    hip_q_avg;       // [rad]
+    float    hip_q_L;         // [rad] left hip position
     float    tau_hip_L;       // [N·m]
     float    tau_hip_R;       // [N·m]
+    float    hip_q_R;         // [rad] right hip position
     float    dt_us;           // loop dt [µs]
-    float    debug_sine;     // noisy sine for rate check
+    float    debug_sine;      // noisy sine for rate check
 };
-static_assert(sizeof(TelemetryPacket) == 69, "TelemetryPacket must be 69 bytes");
+static_assert(sizeof(TelemetryPacket) == 73, "TelemetryPacket must be 73 bytes");
 
 // Initialise the telemetry UDP socket.  Call once in setup() after wifi_init().
 void telemetry_init();
