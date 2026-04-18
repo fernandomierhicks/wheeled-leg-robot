@@ -571,6 +571,8 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
     omega_tgt     = telemetry['omega_tgt']
     tau_whl_L     = telemetry['tau_whl_L']
     tau_whl_R     = telemetry['tau_whl_R']
+    tau_cmd_L     = telemetry.get('tau_cmd_L', np.zeros_like(t))
+    tau_cmd_R     = telemetry.get('tau_cmd_R', np.zeros_like(t))
     v_batt        = telemetry['v_batt']
 
     # Compute pitch reference (equilibrium + theta_ref) for display
@@ -720,6 +722,8 @@ def replay_show(telemetry: dict, metrics: dict, scenario_name: str,
     ChartPanel.add_legend(pl_tau)
     pl_tau.plot(t, tau_whl_L, pen=pg.mkPen(PALETTE[4], width=LINE_WIDTH), name="t_L")
     pl_tau.plot(t, tau_whl_R, pen=pg.mkPen(PALETTE[3], width=1.2, style=DASH), name="t_R")
+    pl_tau.plot(t, tau_cmd_L, pen=pg.mkPen('#ff6060', width=1.0), name="cmd_L")
+    pl_tau.plot(t, tau_cmd_R, pen=pg.mkPen('#ffaa44', width=1.0, style=DASH), name="cmd_R")
     pl_tau.addLine(y=0, pen=pg.mkPen("#666688", width=0.7, style=DASH))
 
     # [4,0] Battery Voltage
@@ -1090,6 +1094,8 @@ def replay(scenario_name: str, with_viewer: bool = False,
                     math.degrees(tk['roll']),
                     tk['tau_whl_L'],
                     tk['tau_whl_R'],
+                    tk.get('tau_cmd_L', 0.0),
+                    tk.get('tau_cmd_R', 0.0),
                     tk['v_batt'],
                     tk['batt_temp'],
                     tk['batt_soc'],
@@ -1969,6 +1975,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     p_tau.setYRange(-wheel_limit * 1.1, wheel_limit * 1.1, padding=0)
     ln_tau_L = p_tau.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
     ln_tau_R = p_tau.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+    ln_tau_cmd_L = p_tau.plot(pen=pg.mkPen('#ff6060', width=W), name="cmd L")
+    ln_tau_cmd_R = p_tau.plot(pen=pg.mkPen('#ffaa44', width=W), name="cmd R")
 
     # ── Row 4: Battery V + I_total (dual Y) | Motor Currents ─────────────────
     p_batt = _p(4, 0, "Battery", "V")
@@ -2182,12 +2190,31 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     ln_mi_whl_L  = pm_icur.plot(pen=pg.mkPen('#60d0ff', width=W), name="whl L")
     ln_mi_whl_R  = pm_icur.plot(pen=pg.mkPen('#80ff80', width=W), name="whl R")
 
+    # ── Row 4: Femur bending moment | Tibia bending moment ──────────────────
+    _My_fem = _rg.get('M_yield_femur', 45.9)
+    _My_tib = _rg.get('M_yield_tibia', 45.9)
+
+    pm_mfem = _mp(4, 0, "Femur Bending Moment (at root A)", "N·m")
+    _mlimit_pos(pm_mfem, _My_fem, f'yield={_My_fem:.1f}N·m')
+    pm_mfem.setYRange(0, _My_fem * 1.2, padding=0)
+    _leg(pm_mfem)
+    ln_mfem_L = pm_mfem.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_mfem_R = pm_mfem.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
+    pm_mtib = _mp(4, 1, "Tibia Bending Moment (at root C)", "N·m")
+    _mlimit_pos(pm_mtib, _My_tib, f'yield={_My_tib:.1f}N·m')
+    pm_mtib.setYRange(0, _My_tib * 1.2, padding=0)
+    _leg(pm_mtib)
+    ln_mtib_L = pm_mtib.plot(pen=pg.mkPen('#60d0ff', width=W), name="L")
+    ln_mtib_R = pm_mtib.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
+
     mech_lines = [
         ln_brg_a_L, ln_brg_a_R, ln_brg_c_L, ln_brg_c_R,
         ln_brg_e_L, ln_brg_e_R, ln_brg_w_L, ln_brg_w_R,
         ln_fem_L, ln_fem_R, ln_tib_L, ln_tib_R,
         ln_coup_L, ln_coup_R,
         ln_mi_hip_L, ln_mi_hip_R, ln_mi_whl_L, ln_mi_whl_R,
+        ln_mfem_L, ln_mfem_R, ln_mtib_L, ln_mtib_R,
     ]
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -2330,18 +2357,20 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
      hip_L_buf, hip_R_buf, hip_cmd_L_buf, hip_cmd_R_buf,
      roll_buf,
      tau_whl_L_buf, tau_whl_R_buf,
+     tau_cmd_L_buf, tau_cmd_R_buf,
      v_batt_buf, batt_temp_buf, soc_buf,
      I_whl_L_buf, I_whl_R_buf, I_hip_L_buf, I_hip_R_buf, I_total_buf,
      tau_hip_L_buf, tau_hip_R_buf,
      tau_spring_L_buf, tau_spring_R_buf,
      wheel_h_L_buf, wheel_h_R_buf,
-     ) = (deque(maxlen=MAXLEN) for _ in range(29))
+     ) = (deque(maxlen=MAXLEN) for _ in range(31))
 
     all_bufs = [
         t_buf, pitch_buf, pitch_ref_buf, pitch_rate_buf,
         vel_buf, v_cmd_buf, yaw_rate_buf, omega_cmd_buf,
         hip_L_buf, hip_R_buf, hip_cmd_L_buf, hip_cmd_R_buf, roll_buf,
         tau_whl_L_buf, tau_whl_R_buf,
+        tau_cmd_L_buf, tau_cmd_R_buf,
         v_batt_buf, batt_temp_buf, soc_buf,
         I_whl_L_buf, I_whl_R_buf, I_hip_L_buf, I_hip_R_buf, I_total_buf,
         tau_hip_L_buf, tau_hip_R_buf,
@@ -2353,14 +2382,14 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_pitch, ln_pitch_ref, ln_prate,
         ln_vel, ln_vcmd, ln_yaw, ln_ocmd,
         ln_hip_L, ln_hip_R, ln_hip_cmd_L, ln_hip_cmd_R, ln_roll,
-        ln_tau_L, ln_tau_R, ln_vbatt, ln_ibat_batt,
+        ln_tau_L, ln_tau_R, ln_tau_cmd_L, ln_tau_cmd_R, ln_vbatt, ln_ibat_batt,
         ln_iwhl_L, ln_iwhl_R, ln_ihip_L, ln_ihip_R, ln_itotal,
         ln_htau_L, ln_htau_R,
         ln_htau_spr_L, ln_htau_spr_R,
         ln_wh_L, ln_wh_R, ln_wh_avg,
     ]
 
-    # ── Mechanical tab ring buffers (18 channels) ─────────────────────────────
+    # ── Mechanical tab ring buffers (22 channels) ─────────────────────────────
     (mech_brg_a_L_buf, mech_brg_a_R_buf,
      mech_brg_c_L_buf, mech_brg_c_R_buf,
      mech_brg_e_L_buf, mech_brg_e_R_buf,
@@ -2370,7 +2399,9 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
      mech_coup_L_buf, mech_coup_R_buf,
      mech_ihip_L_buf, mech_ihip_R_buf,
      mech_iwhl_L_buf, mech_iwhl_R_buf,
-     ) = (deque(maxlen=MAXLEN) for _ in range(18))
+     mech_mfem_L_buf, mech_mfem_R_buf,
+     mech_mtib_L_buf, mech_mtib_R_buf,
+     ) = (deque(maxlen=MAXLEN) for _ in range(22))
 
     mech_bufs = [
         mech_brg_a_L_buf, mech_brg_a_R_buf,
@@ -2382,6 +2413,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         mech_coup_L_buf, mech_coup_R_buf,
         mech_ihip_L_buf, mech_ihip_R_buf,
         mech_iwhl_L_buf, mech_iwhl_R_buf,
+        mech_mfem_L_buf, mech_mfem_R_buf,
+        mech_mtib_L_buf, mech_mtib_R_buf,
     ]
 
     # ── IMU tab ring buffers ──────────────────────────────────────────────────
@@ -2398,18 +2431,21 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
     # ── 4-bar force estimation from hip torque + kinematics ──────────────────
     def _estimate_forces(q_hip_deg, tau_hip, tau_whl):
-        """Estimate bearing reaction forces and link axial loads [N].
+        """Estimate bearing reaction forces, axial loads [N] and bending moments [N·m].
 
         Uses static torque equilibrium at the hip pivot:
           F_femur ≈ |tau_hip| / L_femur  (axial load in femur)
         and propagates through the 4-bar to estimate loads at each pivot.
 
-        Returns dict with keys: brg_a, brg_c, brg_e, brg_w, fem, tib, coup
-        All values are |force| in Newtons.
+        Bending moments:
+          M_fem: at femur root A, from knee-reaction transverse component × L_femur
+          M_tib: at tibia root C, from wheel-reaction transverse component × L_tibia
+
+        Returns dict: brg_a, brg_c, brg_e, brg_w, fem, tib, coup, M_fem, M_tib.
         """
         if not _has_mech:
             return dict(brg_a=0, brg_c=0, brg_e=0, brg_w=0,
-                        fem=0, tib=0, coup=0)
+                        fem=0, tib=0, coup=0, M_fem=0, M_tib=0)
 
         import math as _m
         q_hip_rad = _m.radians(q_hip_deg)
@@ -2435,7 +2471,20 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         R = _m.sqrt(dx*dx + dz*dz)
         if R < 1e-9:
             return dict(brg_a=0, brg_c=0, brg_e=0, brg_w=0,
-                        fem=0, tib=0, coup=0)
+                        fem=0, tib=0, coup=0, M_fem=0, M_tib=0)
+
+        # Solve 4-bar for stub/tibia angle alpha (mirrors physics.solve_ik)
+        K = (Lc**2 - dx*dx - dz*dz - L_s**2) / (2.0 * L_s)
+        kr = abs(K) / R
+        if kr >= 0.9999:
+            alpha = 0.0  # singularity fallback — tibia vertical
+        else:
+            phi   = _m.atan2(dz, dx)
+            asinv = _m.asin(max(-1.0, min(1.0, K / R)))
+            a1 = ((asinv - phi) + _m.pi) % (2 * _m.pi) - _m.pi
+            a2 = ((_m.pi - asinv - phi) + _m.pi) % (2 * _m.pi) - _m.pi
+            # Pick branch closer to q_hip (same rule as physics.solve_ik)
+            alpha = a1 if abs(a1 - q_hip_rad) <= abs(a2 - q_hip_rad) else a2
 
         # Femur: hip torque → axial force along femur
         F_femur = abs(tau_hip) / max(L_f, 0.01) + W_leg * abs(_m.cos(q_hip_rad))
@@ -2458,9 +2507,28 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         # Bearing W (wheel axle): weight + ground reaction + wheel torque
         F_brg_w = W_leg + abs(tau_whl) / max(wheel_r, 0.01)
 
+        # ── Bending moments (cantilever model, conservative) ─────────────
+        # Femur root (A): torque balance on femur (pinned at A, pinned at C,
+        # motor moment M_hip at A) gives transverse knee force F_C_perp =
+        # |tau_hip| / L_f. Bending moment at root is F_C_perp × L_f = |tau_hip|.
+        M_fem = abs(tau_hip)
+
+        # Tibia root (C): wheel-force vector F_W at W decomposed onto tibia
+        # normal. Tibia axis from C to W is u_t = -(sin(alpha), cos(alpha));
+        # normal n_t = (cos(alpha), -sin(alpha)).
+        # F_W components (magnitudes, worst-case additive):
+        #   horizontal: |tau_whl|/wheel_r  (ground reaction from wheel torque)
+        #   vertical  : W_leg              (body weight)
+        # Transverse component: |F_wx · cos(alpha)| + |F_wz · sin(alpha)|
+        F_wx = abs(tau_whl) / max(wheel_r, 0.01)
+        F_wz = W_leg
+        F_w_perp = F_wx * abs(_m.cos(alpha)) + F_wz * abs(_m.sin(alpha))
+        M_tib = F_w_perp * L_t
+
         return dict(
             brg_a=F_brg_a, brg_c=F_brg_c, brg_e=F_brg_e, brg_w=F_brg_w,
-            fem=F_femur, tib=F_tibia, coup=F_coupler)
+            fem=F_femur, tib=F_tibia, coup=F_coupler,
+            M_fem=M_fem, M_tib=M_tib)
 
     i_bat_max      = [0.0]
     _last_stat_t   = [0.0]
@@ -2544,6 +2612,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
              vel, v_cmd, yaw_rate, omega_cmd,
              hip_L, hip_R, hip_cmd_L, hip_cmd_R, roll,
              tau_whl_L, tau_whl_R,
+             tau_cmd_L, tau_cmd_R,
              v_batt, batt_temp, soc,
              I_whl_L, I_whl_R, I_hip_L, I_hip_R, I_total,
              tau_hip_L, tau_hip_R,
@@ -2562,6 +2631,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             hip_cmd_L_buf.append(hip_cmd_L);  hip_cmd_R_buf.append(hip_cmd_R)
             roll_buf.append(roll)
             tau_whl_L_buf.append(tau_whl_L);  tau_whl_R_buf.append(tau_whl_R)
+            tau_cmd_L_buf.append(tau_cmd_L);  tau_cmd_R_buf.append(tau_cmd_R)
             v_batt_buf.append(v_batt);        batt_temp_buf.append(batt_temp)
             soc_buf.append(soc)
             I_whl_L_buf.append(I_whl_L);      I_whl_R_buf.append(I_whl_R)
@@ -2604,6 +2674,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
                 mech_coup_L_buf.append(fl['coup']); mech_coup_R_buf.append(fr['coup'])
                 mech_ihip_L_buf.append(I_hip_L);   mech_ihip_R_buf.append(I_hip_R)
                 mech_iwhl_L_buf.append(I_whl_L);   mech_iwhl_R_buf.append(I_whl_R)
+                mech_mfem_L_buf.append(fl['M_fem']); mech_mfem_R_buf.append(fr['M_fem'])
+                mech_mtib_L_buf.append(fl['M_tib']); mech_mtib_R_buf.append(fr['M_tib'])
 
         if _paused[0]:
             return  # Charts frozen — sim is paused
@@ -2644,6 +2716,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
         ln_roll.setData(xw, _a(roll_buf))
         ln_tau_L.setData(xw, _a(tau_whl_L_buf))
         ln_tau_R.setData(xw, _a(tau_whl_R_buf))
+        ln_tau_cmd_L.setData(xw, _a(tau_cmd_L_buf))
+        ln_tau_cmd_R.setData(xw, _a(tau_cmd_R_buf))
         ln_vbatt.setData(xw, _a(v_batt_buf))
         ln_ibat_batt.setData(xw, _a(I_total_buf))
         ln_iwhl_L.setData(xw, _a(I_whl_L_buf))
@@ -2698,6 +2772,10 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             ln_mi_hip_R.setData(xw, _a(mech_ihip_R_buf))
             ln_mi_whl_L.setData(xw, _a(mech_iwhl_L_buf))
             ln_mi_whl_R.setData(xw, _a(mech_iwhl_R_buf))
+            ln_mfem_L.setData(xw, _a(mech_mfem_L_buf))
+            ln_mfem_R.setData(xw, _a(mech_mfem_R_buf))
+            ln_mtib_L.setData(xw, _a(mech_mtib_L_buf))
+            ln_mtib_R.setData(xw, _a(mech_mtib_R_buf))
 
         # ── Update IMU tab charts ─────────────────────────────────────────────
         if len(az_imu_buf) > 1:
@@ -2810,6 +2888,23 @@ def _robot_geom_dict(params) -> dict:
     """Extract robot geometry + motor params as a plain dict for the plot process."""
     r = params.robot
     m = params.motors
+
+    # ── Tube bending yield moments (6061-T6, σ_y = 276 MPa) ─────────────────
+    # Derived from OD/wall so the Mechanical-tab bending overlays auto-update
+    # when the tube section is changed. Axial F_yield_* below stays hardcoded
+    # because COMPONENTS.md derives those from a different loading model (see
+    # its SF table: 2.29/2.36/5.79), not simple σ_y·A.
+    sigma_y = 276e6  # Pa
+    femur_OD,   femur_wall   = 14e-3, 1.0e-3   # 14×1 (baseline)
+    tibia_OD,   tibia_wall   = 16e-3, 1.0e-3   # 16×1 (baseline)
+
+    def _tube_S(OD, wall):
+        ID = OD - 2.0 * wall
+        return math.pi * (OD**4 - ID**4) / (32.0 * OD)   # section modulus [m³]
+
+    M_yield_femur = sigma_y * _tube_S(femur_OD, femur_wall)
+    M_yield_tibia = sigma_y * _tube_S(tibia_OD, tibia_wall)
+
     return dict(
         L_femur=r.L_femur, L_stub=r.L_stub, L_tibia=r.L_tibia,
         Lc=r.Lc, F_X=r.F_X, F_Z=r.F_Z, A_Z=r.A_Z,
@@ -2823,9 +2918,12 @@ def _robot_geom_dict(params) -> dict:
         C0_608=1370.0, C0_6001=2850.0,
         # Tube yield force [N] — 6061-T6, SF=1.0 at these peak loads
         # (from COMPONENTS.md: femur 920N × SF2.29, tibia 1234N × SF2.36, coupler 1102N × SF5.79)
-        F_yield_femur=920.0 * 2.29,    # ~2107 N
-        F_yield_tibia=1234.0 * 2.36,   # ~2912 N
-        F_yield_coupler=1102.0 * 5.79, # ~6381 N
+        F_yield_femur=2107.0,          # 14×1 (baseline)
+        F_yield_tibia=2912.0,          # 16×1 (baseline)
+        F_yield_coupler=6381.0,        # 10×1 (baseline)
+        # Tube bending yield moment [N·m] — derived from OD/wall above
+        M_yield_femur=M_yield_femur,
+        M_yield_tibia=M_yield_tibia,
     )
 
 
@@ -3178,6 +3276,8 @@ def sandbox(rng_seed: int = 0):
                     math.degrees(tk['roll']),
                     tk['tau_whl_L'],
                     tk['tau_whl_R'],
+                    tk.get('tau_cmd_L', 0.0),
+                    tk.get('tau_cmd_R', 0.0),
                     tk['v_batt'],
                     tk['batt_temp'],
                     tk['batt_soc'],
@@ -3756,6 +3856,8 @@ def run_unified(initial_scenario: str = "sandbox",
                         math.degrees(tk['roll']),
                         tk['tau_whl_L'],
                         tk['tau_whl_R'],
+                        tk.get('tau_cmd_L', 0.0),
+                        tk.get('tau_cmd_R', 0.0),
                         tk['v_batt'],
                         tk['batt_temp'],
                         tk['batt_soc'],

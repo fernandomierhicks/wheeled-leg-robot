@@ -648,6 +648,18 @@ class SimController:
             data.ctrl[self.act_wheel_L] += tau_ff2 / 2.0
             data.ctrl[self.act_wheel_R] += tau_ff2 / 2.0
 
+        # Re-clamp to speed-tapered motor limit: feedforwards were added after
+        # the initial motor_taper call, so the sum can exceed what the motor
+        # can physically deliver. Without this, telemetry and battery current
+        # would read above the true capability (MuJoCo's ctrlrange would still
+        # clamp the physics, but only to the static limit, not the tapered one).
+        data.ctrl[self.act_wheel_L] = motor_taper(
+            float(data.ctrl[self.act_wheel_L]), data.qvel[self.d_whl_L],
+            self.v_batt, params.motors, params.battery)
+        data.ctrl[self.act_wheel_R] = motor_taper(
+            float(data.ctrl[self.act_wheel_R]), data.qvel[self.d_whl_R],
+            self.v_batt, params.motors, params.battery)
+
         # ── Battery step ─────────────────────────────────────────────────────
         self.v_batt = self.battery.step(self.dt_ctrl, motor_currents(
             float(data.ctrl[self.act_wheel_L]),

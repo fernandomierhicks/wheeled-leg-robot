@@ -25,7 +25,7 @@ Structural sizing source: `simulation/mujoco/archive/baseline1_leg_analysis/size
 
 | ID | Part | Qty | Mass ea (g) | Total (g) | Cost ea ($) | Total ($) | Status | Notes |
 |---|---|---|---|---|---|---|---|---|
-| HIP_MOTOR | CubeMars AK45-10 KV75 | 2 | 260 | 520 | 149 | 298 | designed | Φ53×43 mm, 10:1, 7 N·m peak, MIT CAN, CAN id L=1 R=2 |
+| HIP_MOTOR | CubeMars AK45-10 KV75 | 2 | 260 | 520 | 149 | 298 | purchased | Φ53×43 mm, 10:1, 7 N·m peak, MIT CAN, CAN id L=1 R=2 |
 | WHEEL_MOTOR | Maytech MTO5065-70-HA-C | 2 | 450 | 900 | 90 | 180 | purchased | KV70, direct drive, Hall sensors req. for ODESC; Kt=0.1364 Nm/A, T_peak=6.82 Nm @ 50A, ω_noload=175.9 rad/s @ 24V; https://michobby.com/products/maytech-5065-220kv-brushless-outrunner-motor-for-electric-skateboards-e-bike (70KV variant) |
 
 **Subtotal motors:** 1420 g / $478
@@ -40,11 +40,11 @@ Dimensions from winning optimisation; load cases at 2× simulation peak. All SF 
 |---|---|---|---|---|---|---|---|---|---|---|
 | FEMUR_TUBE | Femur (A → C) | 14 × 1.0 mm | 174 mm | 2 | 19.2 | 38.4 | 5 | 10 | 2.29 | 21 |
 | TIBIA_TUBE | Tibia (C → W + stub C → E) | 16 × 1.0 mm | 144 mm | 2 | 18.3 | 36.6 | 5 | 10 | 2.36 | 35 |
-| COUPLER_TUBE | Coupler (F → E) | 10 × 0.8 mm | 151 mm | 2 | 9.4 | 18.8 | 4 | 8 | 5.79 | 7 |
+| COUPLER_TUBE | Coupler (F → E) | 10 × 1.0 mm | 151 mm | 2 | 11.5 | 23.1 | 4 | 8 | 5.79 | 7 |
 
 Peak axial loads (design case = 2× sim peak): femur 920 N, tibia 1234 N, coupler 1102 N.
 
-**Subtotal links:** 93.8 g / $28
+**Subtotal links:** 98.1 g / $28
 
 ---
 
@@ -82,10 +82,10 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 
 | ID | Part | Qty | Mass ea (g) | Total (g) | Cost ea ($) | Total ($) | Status | Notes |
 |---|---|---|---|---|---|---|---|---|
-| BATTERY | 24V battery (TBD) | 1 | 720 | 720 | 35 | 35 | designed | TBD model; 24V nominal, all motors rated ≥ 24V |
+| BATTERY | 6S LiPo 1800 mAh | 1 | 275 | 275 | 35 | 35 | designed | 6S, 22.2V nom / 25.2V full; 50C continuous (90A), 100C burst (180A) |
 | BATT_ADAPTER | XT60 connector + pigtail | 1 | 10 | 10 | 5 | 5 | designed | |
 
-**Subtotal power:** 730 g / $40
+**Subtotal power:** 285 g / $40
 
 ---
 
@@ -107,7 +107,7 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 
 | # | Component | Qty | Each (g) | Total (g) | Category |
 |---|---|---|---|---|---|
-| 1 | Battery (24V) | 1 | 720 | 720 | Power |
+| 1 | Battery (6S LiPo 1800 mAh) | 1 | 275 | 275 | Power |
 | 2 | AK45-10 hip motor | 2 | 260 | 520 | Motors |
 | 3 | Maytech MTO5065 wheel motor | 2 | 450 | 900 | Motors |
 | 4 | Body box + electronics tray (PLA) | 1 | 210 | 210 | Printed |
@@ -123,28 +123,28 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 | 14 | 6001 bearing (E + F pivots) | 4 | 17 | 68 | Bearings |
 | 15 | 608 bearing (A, C, W pivots) | 6 | 12 | 72 | Bearings |
 | 16 | DC-DC buck 24V→5V | 1 | 20 | 20 | Electronics |
-| 17 | Coupler tube (10×0.8 mm Al) | 2 | 9.4 | 18.8 | Links |
+| 17 | Coupler tube (10×1.0 mm Al) | 2 | 11.5 | 23.1 | Links |
 | 18 | FlySky FS-iA6B receiver | 1 | 15 | 15 | Electronics |
 | 19 | Motor connectors (MR30) | 2 | 3 | 6 | Wiring |
 | 20 | BNO086 IMU | 1 | 3 | 3 | Electronics |
 | 21 | SN65HVD230 CAN transceiver | 1 | 1 | 1 | Electronics |
 | | | | | | |
-| | **TOTAL** | | | **3224** | |
-| | **+10% contingency** | | | **~3546 g = 3.5 kg** | |
+| | **TOTAL** | | | **2783** | |
+| | **+10% contingency** | | | **~3061 g = 3.1 kg** | |
 
 ### By category
 
 | Category | Mass (g) | Cost ($) |
 |---|---|---|
-| Power | 730 | 40 |
+| Power | 285 | 40 |
 | Motors | 1420 | 478 |
 | Printed parts | 440 | ~35 |
 | Electronics & Controls | 244 | 111 |
 | Wiring & Fasteners | 156 | 32 |
 | Bearings | 140 | 18 |
-| Links (Al tube) | 94 | 28 |
-| **TOTAL** | **3224** | **742** |
-| **+10% contingency** | **~3546 g = 3.5 kg** | **~$816** |
+| Links (Al tube) | 98 | 28 |
+| **TOTAL** | **2783** | **742** |
+| **+10% contingency** | **~3061 g = 3.1 kg** | **~$816** |
 
 ---
 

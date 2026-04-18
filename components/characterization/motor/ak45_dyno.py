@@ -49,7 +49,7 @@ GEAR_RATIO   = 10.0    # []        planetary reduction
 V_BUS_NOM    = 24.0    # [V]       6S LiPo nominal
 V_BUS_MAX    = 36.0    # [V]       AK45-10 absolute max (from datasheet)
 T_PEAK       = 7.0     # [Nm]      peak output torque (datasheet)
-TAU_ELEC     = 0.002   # [s]       CAN transport + integrated FOC current loop
+TAU_ELEC     = 0.006   # [s]       electrical time constant L/R = 1330µH / 0.22Ω (datasheet)
 B_FRICTION   = 0.02    # [Nm.s/rad] planetary gearbox viscous drag (output shaft)
 
 # Leg+rotor inertia as seen at the output shaft (approximate)

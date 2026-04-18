@@ -21,7 +21,7 @@ m_box = 0.477        # [kg] body + electronics
 m_motor_hip = 0.260  # [kg] AK45-10 each, x2
 m_femur = 0.0192     # [kg] each, x2
 m_tibia = 0.0183     # [kg] each, x2
-m_coupler = 0.0094   # [kg] each, x2
+m_coupler = 0.01153  # [kg] each, x2
 m_bearing = 0.012    # [kg] each, x2
 m_wheel = 0.270      # [kg] wheel assembly each, x2
 

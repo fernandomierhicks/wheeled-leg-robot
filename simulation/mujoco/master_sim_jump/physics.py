@@ -716,7 +716,7 @@ def build_xml(robot: RobotGeometry = None,
       <!-- == {side} LEG ====================================================== -->
       <body name="coupler_{side}" pos="{F_X:.5f} {sy:.5f} {F_Z:.5f}">
         <inertial pos="{coupler_com_x:.5f} 0 0" mass="{coupler_inertial_mass:.4f}" diaginertia="{coupler_Ix:.3e} {coupler_Iyz:.3e} {coupler_Iyz:.3e}"/>
-        <joint name="hinge_F_{side}" type="hinge" axis="0 1 0" damping="0.001"/>
+        <joint name="hinge_F_{side}" type="hinge" axis="0 1 0" damping="0.001" frictionloss="0.06"/>
         <geom type="cylinder" pos="0 0 0" euler="90 0 0"
               size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
               contype="0" conaffinity="0" mass="0"/>
@@ -740,7 +740,7 @@ def build_xml(robot: RobotGeometry = None,
         <body name="tibia_{side}" pos="{-L_f:.5f} 0 0">
           <inertial pos="0 0 {tibia_com_z:.5f}" mass="{tibia_inertial_mass:.4f}" diaginertia="{tibia_Ixy:.3e} {tibia_Ixy:.3e} {tibia_Iz:.3e}"/>
           <joint name="knee_joint_{side}" type="hinge" axis="0 1 0"
-                 range="-60 60" damping="0.001"/>
+                 range="-60 60" damping="0.001" frictionloss="0.06"/>
           <geom name="tibia_geom_{side}" type="cylinder"
                 fromto="0 0 {L_s:.5f} 0 0 {-L_t:.5f}"
                 size="0.008" rgba="0.75 0.45 0.90 0.55"

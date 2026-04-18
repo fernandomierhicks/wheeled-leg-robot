@@ -2201,3 +2201,726 @@
 2026-04-12 22:18:29 [INFO] Control: axis1 -> idle
 2026-04-12 22:18:45 [INFO] presets: saved config to C:/Dropbox/Personal Projects/Robotics/wheeled-leg-robot/components/characterization/odrive/savedPresets/Both axis working.json (11 sections)
 2026-04-12 22:18:45 [INFO] Presets: saved 221 params to C:/Dropbox/Personal Projects/Robotics/wheeled-leg-robot/components/characterization/odrive/savedPresets/Both axis working.json
+2026-04-13 19:42:12 [INFO] No stale ODrive processes found.
+2026-04-13 19:42:14 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-13 19:42:20 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-13 19:42:20 [INFO] Setup: axis0 config read OK
+2026-04-13 19:42:20 [INFO] Control: axis0 gains read OK
+2026-04-13 19:42:20 [INFO] GUI: connect success
+2026-04-13 19:42:22 [INFO] Setup: axis1 config read OK
+2026-04-13 19:42:22 [INFO] Control: axis1 gains read OK
+2026-04-13 19:42:27 [INFO] Control: axis1 -> closed loop (mode=2)
+2026-04-13 19:42:32 [INFO] Control: axis1 -> closed loop (mode=2)
+2026-04-13 19:42:35 [INFO] Control: axis1 -> closed loop (mode=2)
+2026-04-13 19:42:36 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-13 19:42:36 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-13 19:42:36 [INFO] Control: axis1 -> closed loop (mode=3)
+2026-04-13 19:42:37 [INFO] Control: axis1 anticogging = False
+2026-04-13 19:42:40 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-13 19:42:40 [INFO] Control: errors cleared + watchdog fed
+2026-04-13 19:42:40 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-13 19:42:40 [INFO] Control: errors cleared + watchdog fed
+2026-04-13 19:42:41 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-13 19:42:41 [INFO] Control: errors cleared + watchdog fed
+2026-04-13 19:42:42 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-13 19:42:42 [INFO] Control: errors cleared + watchdog fed
+2026-04-13 19:43:20 [INFO] No stale ODrive processes found.
+2026-04-13 19:43:21 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-13 19:43:24 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-13 19:43:24 [INFO] Setup: axis0 config read OK
+2026-04-13 19:43:24 [INFO] Control: axis0 gains read OK
+2026-04-13 19:43:24 [INFO] GUI: connect success
+2026-04-13 19:43:25 [INFO] Setup: axis1 config read OK
+2026-04-13 19:43:25 [INFO] Control: axis1 gains read OK
+2026-04-13 19:43:28 [INFO] Control: axis1 anticogging = False
+2026-04-13 19:43:33 [INFO] flash_config: axis1 flashed + saved, rebooting
+2026-04-13 19:43:33 [INFO] Disconnected
+2026-04-13 19:43:37 [INFO] Disconnected
+2026-04-13 19:43:37 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-13 19:43:37 [INFO] Setup: reconnected after reboot
+2026-04-13 19:43:37 [INFO]   PASS  motor_type: expected=0  got=0
+2026-04-13 19:43:37 [INFO]   PASS  pole_pairs: expected=7  got=7
+2026-04-13 19:43:37 [INFO]   PASS  current_lim: expected=10.0  got=10.0
+2026-04-13 19:43:37 [INFO]   PASS  calibration_current: expected=5.0  got=5.0
+2026-04-13 19:43:37 [INFO]   PASS  resistance_calib_max_voltage: expected=3.5  got=3.5
+2026-04-13 19:43:37 [INFO]   PASS  torque_constant: expected=0.03999999910593033  got=0.03999999910593033
+2026-04-13 19:43:37 [INFO]   PASS  vel_limit: expected=20.0  got=20.0
+2026-04-13 19:43:37 [INFO]   PASS  enable_overspeed_error: expected=False  got=False
+2026-04-13 19:43:37 [INFO]   PASS  enable_brake_resistor: expected=True  got=True
+2026-04-13 19:43:37 [INFO]   PASS  brake_resistance: expected=2.0  got=2.0
+2026-04-13 19:43:37 [INFO]   PASS  dc_max_negative_current: expected=-1.0  got=-1.0
+2026-04-13 19:43:37 [INFO]   PASS  watchdog_timeout: expected=0.0  got=0.0
+2026-04-13 19:43:37 [INFO]   PASS  enable_watchdog: expected=False  got=False
+2026-04-13 19:43:37 [INFO]   PASS  dc_bus_undervoltage_trip_level: expected=20.0  got=20.0
+2026-04-13 19:43:37 [INFO]   PASS  dc_bus_overvoltage_trip_level: expected=28.0  got=28.0
+2026-04-13 19:43:37 [INFO]   PASS  encoder_mode: expected=257  got=257
+2026-04-13 19:43:37 [INFO]   PASS  abs_spi_cs_gpio_pin: expected=4  got=4
+2026-04-13 19:43:37 [INFO]   PASS  cpr: expected=16384  got=16384
+2026-04-13 19:43:37 [INFO]   PASS  startup_motor_calibration: expected=False  got=False
+2026-04-13 19:43:37 [INFO]   PASS  startup_encoder_offset_calibration: expected=False  got=False
+2026-04-13 19:43:37 [INFO]   PASS  startup_encoder_index_search: expected=False  got=False
+2026-04-13 19:43:37 [INFO]   PASS  startup_closed_loop_control: expected=False  got=False
+2026-04-13 19:43:37 [INFO]   PASS  startup_homing: expected=False  got=False
+2026-04-13 19:43:37 [INFO] Control: axis1 gains read OK
+2026-04-13 19:43:37 [INFO] Setup: axis1 config read OK
+2026-04-13 19:43:47 [INFO] Control: sine wave on vel axis1 amp=1.000 period=2.000s
+2026-04-13 19:44:05 [INFO] SET axis0.requested_state = 1
+2026-04-13 19:44:05 [INFO] SET axis1.requested_state = 1
+2026-04-13 19:44:05 [INFO] Control: STOP — both axes to idle
+2026-04-13 19:44:10 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-13 19:44:10 [INFO] Control: errors cleared + watchdog fed
+2026-04-13 19:44:10 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-13 19:44:10 [INFO] Control: errors cleared + watchdog fed
+2026-04-13 19:44:11 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-13 19:44:11 [INFO] Control: errors cleared + watchdog fed
+2026-04-13 19:44:11 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-13 19:44:11 [INFO] Control: errors cleared + watchdog fed
+2026-04-13 19:44:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:44:54 [INFO] No stale ODrive processes found.
+2026-04-13 19:44:55 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms
+2026-04-13 19:44:56 [INFO] Connected: serial=0x386032543135 fw=0.5.6
+2026-04-13 19:44:56 [INFO] Setup: axis0 config read OK
+2026-04-13 19:44:56 [INFO] Control: axis0 gains read OK
+2026-04-13 19:44:56 [INFO] GUI: connect success
+2026-04-13 19:45:00 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-13 19:45:00 [INFO] Control: errors cleared + watchdog fed
+2026-04-13 19:45:12 [INFO] Control: sine wave on vel axis0 amp=1.000 period=1.000s
+2026-04-13 19:45:28 [INFO] SET axis0.requested_state = 1
+2026-04-13 19:45:28 [INFO] SET axis1.requested_state = 1
+2026-04-13 19:45:28 [INFO] Control: STOP — both axes to idle
+2026-04-13 19:45:37 [INFO] Control: axis0 -> closed loop (mode=3)
+2026-04-13 19:45:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] SET axis0.requested_state failed: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] SET axis1.requested_state failed: Device 386032543135 disconnected
+2026-04-13 19:45:40 [ERROR] Control: setpoint write error: Device 386032543135 disconnected
+2026-04-13 19:45:40 [INFO] Control: STOP — both axes to idle
+2026-04-13 19:45:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:41 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:42 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:42 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:42 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:42 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:42 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:42 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:42 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:42 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:42 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:43 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:44 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:44 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:44 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:44 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:44 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:44 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:44 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:44 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:44 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:45 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:45 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:45 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:45 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:45 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:45 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:45 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:45 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:45 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:46 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:46 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:46 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:46 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:46 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:46 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:46 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:46 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:46 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:47 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:47 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:47 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:47 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:47 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:47 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:47 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:47 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:47 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:48 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:48 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:48 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:48 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:48 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:48 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:48 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:48 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:48 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:49 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:49 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:49 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:49 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:49 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:49 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:49 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:49 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:49 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:50 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:51 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:51 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:51 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:51 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:51 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:51 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:51 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:51 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:51 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:52 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:52 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:52 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:52 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:52 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:52 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:52 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:52 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:52 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:53 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:53 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:53 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:53 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:53 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:53 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:53 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:53 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:53 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:54 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:54 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:54 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:54 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:54 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:54 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:54 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:54 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:54 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:55 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:55 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:55 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:55 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:55 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:55 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:55 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:55 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:55 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:56 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:56 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:56 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:56 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:56 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:56 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:56 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:56 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:56 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:57 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:58 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:58 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:58 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:58 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:58 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:58 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:58 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:58 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:58 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:59 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:59 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:59 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:59 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:59 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:59 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:59 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:59 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:45:59 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:00 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:00 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:00 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:00 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:00 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:00 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:00 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:00 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:00 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:01 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:01 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:01 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:01 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:01 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:01 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:01 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:01 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:01 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:02 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:02 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:02 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:02 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:02 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:02 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:02 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:02 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:02 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:03 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:03 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:03 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:03 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:03 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:03 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:03 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:03 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:03 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:04 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:05 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:05 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:05 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:05 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:05 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:05 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:05 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:05 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:05 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:06 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:06 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:06 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:06 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:06 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:06 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:06 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:06 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:06 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:07 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:07 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:07 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:07 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:07 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:07 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:07 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:07 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:07 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:08 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:08 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:08 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:08 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:08 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:08 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:08 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:08 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:08 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:09 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:09 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:09 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:09 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:09 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:09 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:09 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:09 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:09 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:10 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:10 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:10 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:10 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:10 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:10 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:10 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:10 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:10 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:11 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:12 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:12 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:12 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:12 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:12 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:12 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:12 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:12 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:12 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:13 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:13 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:13 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:13 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:13 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:13 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:13 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:13 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:13 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:14 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:14 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:14 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:14 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:14 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:14 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:14 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:14 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:14 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:15 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:15 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:15 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:15 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:15 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:15 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:15 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:15 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:15 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:16 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:16 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:16 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:16 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:16 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:16 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:16 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:16 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:16 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:17 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:17 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:17 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:17 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:17 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:17 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:17 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:17 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:17 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:18 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:19 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:19 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:19 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:19 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:19 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:19 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:19 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:19 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:19 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:20 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:20 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:20 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:20 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:20 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:20 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:20 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:20 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:20 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:21 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:21 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:21 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:21 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:21 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:21 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:21 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:21 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:21 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:22 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:22 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:22 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:22 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:22 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:22 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:22 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:22 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:22 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:23 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:23 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:23 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:23 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:23 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:23 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:23 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:23 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:23 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:24 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:24 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:24 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:24 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:24 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:24 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:24 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:24 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:24 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:25 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:25 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:25 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:25 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:25 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:25 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:25 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:25 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:25 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:26 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:27 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:27 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:27 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:27 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:27 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:27 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:27 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:27 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:27 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:28 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:28 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:28 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:28 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:28 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:28 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:28 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:28 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:28 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:29 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:29 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:29 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:29 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:29 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:29 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:29 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:29 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:29 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:30 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:30 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:30 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:30 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:30 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:30 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:30 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:30 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:30 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:31 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:31 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:31 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:31 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:31 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:31 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:31 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:31 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:31 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:32 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:32 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:32 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:32 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:32 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:32 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:32 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:32 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:32 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:33 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:33 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:33 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:33 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:33 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:33 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:33 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:33 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:33 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:34 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:35 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:36 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:37 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:38 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:39 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:40 [ERROR] Control: read FF flags error: Device 386032543135 disconnected
+2026-04-13 19:46:46 [INFO] No stale ODrive processes found.
+2026-04-13 19:46:46 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\odrive_cmd_inbox.txt every 500 ms

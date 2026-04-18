@@ -392,7 +392,7 @@ class RobotGeometry:
                                      #       + XT60 (10) + MR30 (6)  — see COMPONENTS.MD
     m_femur: float = 0.0192         # [kg] femur Al tube (14×1.0mm, 174mm — scaled by length)
     m_tibia: float = 0.0183         # [kg] tibia Al tube (16×1.0mm, 165mm — scaled by length)
-    m_coupler: float = 0.0094       # [kg] coupler Al tube (10×0.8mm, 151mm — scaled by length)
+    m_coupler: float = 0.01150      # [kg] coupler Al tube (10×1.0mm, 151mm — scaled by length)
     m_bearing: float = 0.0175       # [kg] avg bearing (608=12g, 6001=17g); ×4/side in physics.py → 140g total
     m_wheel: float = 0.510          # [kg] wheel assembly (motor 440g + hub + tyre 70g)
 

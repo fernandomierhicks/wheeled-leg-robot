@@ -1,12 +1,32 @@
 
 ---Fernandos note dont change below
 
+CAn all tubes be 10mm? can all bearings be the same?
+Do analysis on rod ends so you can order. 
 
--Able to move legs up and down and stay in place. 
 
 
 
-MOTOR
+-REtune robot with AK45 as wheel motor?
+
+-Flip?
+Want me to build this as a new scenario (S11)? The sequence would be:
+Settle + drive forward at max speed for ~1.5s
+Brake hard (or just jump without braking — the hip extension alone might be enough)
+Jump
+Retract legs immediately after liftoff
+Land (somehow...)
+
+
+
+-implement the potential odrive firmware improvements in components\characterization\odrive\forkedFirmware
+
+
+
+LEG MOTOR
+-Add can interface
+
+WHEEL MOTOR
 
 Do 30min anticogging run or longer for both motors
 
@@ -24,13 +44,6 @@ Do 30min anticogging run or longer for both motors
 --CAN into ODRIVE to check latencies. 
 
 
--Flip?
-Want me to build this as a new scenario (S11)? The sequence would be:
-Settle + drive forward at max speed for ~1.5s
-Brake hard (or just jump without braking — the hip extension alone might be enough)
-Jump
-Retract legs immediately after liftoff
-Land (somehow...)
 
 
 
