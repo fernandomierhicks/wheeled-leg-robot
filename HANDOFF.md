@@ -180,4 +180,8 @@ pio run -e wifi -t upload
 2. ✅ `pio run -e uno_r4_wifi` → NO_CAN stubs compile cleanly
 3. ✅ `python -c "import struct; print(struct.calcsize('<IB17f'))"` → `73`
 4. ⬜ Flash + open dashboard → all 10 existing plots still live; AK45 tab visible
+   - Flashed `wifi` env successfully (COM5). Dashboard serial mode launched but no telemetry received.
+   - Likely causes: (a) `wifi` env has USE_WIFI=1 — telemetry goes UDP not Serial, so serial dashboard gets nothing; (b) IMU not connected, so Arduino may be stuck in `while(1)` in setup() before CAN/telemetry starts.
+   - Fix A: flash `uno_r4_wifi` env (USE_WIFI=0, serial telemetry) for bench testing without WiFi/IMU.
+   - Fix B: connect IMU or comment out the `while(1)` IMU fatal in setup() for CAN-only testing.
 5. ⬜ Motor configured to MIT ID=0x41: Enable L → motor stiffens; p_des=0.2 rad → motor moves; Disable → goes limp; position plot updates in real time
