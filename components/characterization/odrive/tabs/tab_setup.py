@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QGroupBox, QLabel, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox,
-    QScrollArea, QCheckBox,
+    QScrollArea, QCheckBox, QMessageBox,
 )
 
 from core.constants import (
@@ -264,6 +264,18 @@ class TabSetup(QWidget):
         self.btn_setup_encoder.clicked.connect(self._on_setup_encoder)
         form.addRow("", self.btn_setup_encoder)
 
+        instructions = QLabel(
+            "AS5048A setup order:\n"
+            "1. Set mode 256 → Setup Encoder → DC power cycle\n"
+            "2. Calibrate Motor + Encoder (motor will move)\n"
+            "3. Set mode 257 → Setup Encoder (no errors expected)"
+        )
+        instructions.setStyleSheet(
+            f"color: {CLR_MUTED}; font-size: 10px; font-family: monospace;"
+        )
+        instructions.setWordWrap(True)
+        form.addRow("", instructions)
+
         return box
 
     def _build_brake_resistor_group(self):
@@ -470,7 +482,7 @@ class TabSetup(QWidget):
         except Exception:
             pass  # save triggers reboot — USB exception expected
 
-        self._post_reboot_action = ""
+        self._post_reboot_action = "encoder_setup"
         self._start_reboot_sequence()
 
     # ── Read ──────────────────────────────────────────────────────────────────
@@ -756,6 +768,20 @@ class TabSetup(QWidget):
                 mark = "PASS" if r["ok"] else "FAIL"
                 log.info("  %s  %s: expected=%s  got=%s",
                          mark, r["key"], r["expected"], r["actual"])
+        elif self._post_reboot_action == "encoder_setup":
+            _colored(self.lbl_cal_state, "Encoder config saved", CLR_OK)
+            _colored(self.lbl_cal_msg, "Power cycle required — unplug and replug DC power", CLR_WARN)
+            QMessageBox.warning(
+                self,
+                "Power Cycle Required",
+                "Encoder config saved and ODrive rebooted.\n\n"
+                "You MUST now do a full DC power cycle:\n"
+                "  1. Unplug DC power from the ODrive\n"
+                "  2. Wait 5 seconds\n"
+                "  3. Replug DC power\n"
+                "  4. Reconnect in the GUI\n\n"
+                "A software reboot alone does not fully reset the SPI encoder state.",
+            )
         else:
             _colored(self.lbl_cal_state, "Reconnected", CLR_OK)
             _colored(self.lbl_cal_msg, "Ready", CLR_OK)

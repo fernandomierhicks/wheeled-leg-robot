@@ -1,0 +1,1 @@
+Open SETUP.EXE. The INF file prompted is CH341SER.INF. We don't need to pay attention to it (it's shared by 341 and 340). So just click "Install" directly!!

@@ -1,12 +1,12 @@
 
 ---Fernandos note dont change below
 
-CAn all tubes be 10mm? can all bearings be the same?
-Do analysis on rod ends so you can order. 
 
 
 
 
+
+---------------------------------------------------------SIMULATION
 -REtune robot with AK45 as wheel motor?
 
 -Flip?
@@ -19,14 +19,13 @@ Land (somehow...)
 
 
 
--implement the potential odrive firmware improvements in components\characterization\odrive\forkedFirmware
 
-
-
+-----------------------------------------------------------CUBEMARS
 LEG MOTOR
--Add can interface
+-Add CAN interface Via arduino
 
-WHEEL MOTOR
+---------------------------------------------------------ODRIVE
+-implement the potential odrive firmware improvements in components\characterization\odrive\forkedFirmware
 
 Do 30min anticogging run or longer for both motors
 
