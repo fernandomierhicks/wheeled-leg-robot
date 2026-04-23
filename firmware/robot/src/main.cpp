@@ -64,6 +64,7 @@ static LQRController         lqr;
 static VelocityPI            vel_pi;
 static YawPI                 yaw_pi;
 static SuspensionController  suspension;
+static Mode                  s_prev_mode = Mode::IDLE;
 #endif
 
 static uint32_t loop_overruns = 0;
@@ -92,8 +93,9 @@ void setup() {
 
     // IMU (BNO086 over SPI — blocking, ~1-10s)
     if (!imu_init()) {
-        Serial.println("FATAL: IMU init failed");
-        while (1) { delay(1000); }
+        Serial.println("[IMU] WARNING: IMU not found — imu_ok=false, continuing without IMU");
+        Serial.println("[IMU] Balance control disabled; direct torque via CMD_DRIVE ok");
+        state.imu_ok = false;
     }
 
 #ifndef IMU_ONLY
@@ -103,6 +105,7 @@ void setup() {
         while (1) { delay(1000); }
     }
     ak45_init();
+    commands_init();
 
     // Controllers
     lqr.init();
@@ -134,7 +137,12 @@ void loop() {
         return;
     }
 #else
-    if (!tick_flag) return;
+    if (!tick_flag) {
+#ifndef IMU_ONLY
+        commands_receive(state);  // drain serial command buffer between ticks
+#endif
+        return;
+    }
 #endif
     tick_flag = false;
 
@@ -151,10 +159,30 @@ void loop() {
     // ── CAN RX: parse encoder feedback + heartbeats ──
     odesc_can_poll(state);
 
+    // ── Mode transition: enable/disable ODESC on mode change ──
+    if (state.mode != s_prev_mode) {
+        if (state.mode == Mode::BALANCE || state.mode == Mode::DRIVE) {
+            odesc_can_enable_torque();
+        } else if (state.mode == Mode::IDLE || state.mode == Mode::FAULT) {
+            // Only disable if not in direct ODrive control mode
+            if (state.odrive_ctrl_mode == 0) odesc_can_disable();
+        }
+        s_prev_mode = state.mode;
+    }
+
     // ── Controllers (only in BALANCE or DRIVE mode) ──
     if (state.mode == Mode::BALANCE || state.mode == Mode::DRIVE) {
-        // Safety: check fall angle
-        if (fabsf(state.pitch) > FALL_ANGLE_RAD) {
+        // Without IMU: open-loop — v_cmd is used as symmetric torque [N·m] directly.
+        // This lets the dashboard drive the motor safely for bench testing.
+        if (!state.imu_ok) {
+            static constexpr float SAFE_TAU_MAX = 2.0f;  // N·m cap without IMU
+            float tau_sym = constrain(state.v_cmd,   -SAFE_TAU_MAX, SAFE_TAU_MAX);
+            float tau_yaw = constrain(state.omega_cmd, -SAFE_TAU_MAX, SAFE_TAU_MAX);
+            state.tau_wheel_L = constrain(tau_sym - tau_yaw, -SAFE_TAU_MAX, SAFE_TAU_MAX);
+            state.tau_wheel_R = constrain(tau_sym + tau_yaw, -SAFE_TAU_MAX, SAFE_TAU_MAX);
+        }
+        // Safety: check fall angle (only meaningful with IMU)
+        else if (fabsf(state.pitch) > FALL_ANGLE_RAD) {
             state.mode = Mode::FAULT;
             vel_pi.reset();
             yaw_pi.reset();
@@ -194,7 +222,14 @@ void loop() {
     }
 
     // ── CAN TX: motor commands ──
-    odesc_can_send_torque(state.tau_wheel_L, state.tau_wheel_R);
+    // Direct ODrive mode (velocity/position) takes priority over balance torque.
+    if (state.odrive_ctrl_mode == 2) {
+        odesc_can_send_velocity(state.odrive_vel_cmd, state.odrive_vel_cmd);
+    } else if (state.odrive_ctrl_mode == 3) {
+        odesc_can_send_position(state.odrive_pos_cmd, state.odrive_pos_cmd);
+    } else {
+        odesc_can_send_torque(state.tau_wheel_L, state.tau_wheel_R);
+    }
     if (state.hip_enabled) {
         ak45_send_cmd(CAN_ID_HIP_L, state.hip_q_target, 0.0f,
                       HIP_POS_KP, HIP_POS_KD, state.tau_hip_L);
@@ -254,10 +289,20 @@ void loop() {
         Serial.print(loop_overruns);
         Serial.print("  pitch=");
         Serial.print(state.pitch * 57.2958f, 1);
-        Serial.print("  imu_ok=");
-        Serial.print(state.imu_ok ? "Y" : "N");
-        Serial.print("  mode=");
+        Serial.print("  imu=");
+        Serial.print(state.imu_ok ? "OK" : "NO");
+        Serial.print("  wheel=");
+        Serial.print(state.wheel_ok ? "OK" : "NO");
+        Serial.print("  pos_L=");
+        Serial.print(state.wheel_pos_L / 6.2832f, 3);  // turns
+        Serial.print("t  vel_L=");
+        Serial.print(state.wheel_vel_L / 6.2832f, 3);  // turns/s
+        Serial.print("t/s  mode=");
         Serial.print((uint8_t)state.mode);
+        if (state.odrive_ctrl_mode != 0) {
+            Serial.print("  direct=");
+            Serial.print(state.odrive_ctrl_mode);
+        }
         Serial.println();
         sum_dt = 0;
         max_dt = 0;

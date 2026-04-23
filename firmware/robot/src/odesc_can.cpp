@@ -24,16 +24,25 @@ void odesc_can_estop()                             {}
 #include <Arduino_CAN.h>
 
 // ── ODrive CAN command IDs (5-bit) ─────────────────────────────────────────
-static constexpr uint8_t CMD_HEARTBEAT        = 0x01;
-static constexpr uint8_t CMD_ESTOP            = 0x02;
-static constexpr uint8_t CMD_SET_AXIS_STATE   = 0x07;
-static constexpr uint8_t CMD_ENCODER_ESTIMATE = 0x09;
-static constexpr uint8_t CMD_SET_INPUT_TORQUE = 0x0E;
-static constexpr uint8_t CMD_CLEAR_ERRORS     = 0x12;
+static constexpr uint8_t CMD_HEARTBEAT            = 0x01;
+static constexpr uint8_t CMD_ESTOP                = 0x02;
+static constexpr uint8_t CMD_SET_AXIS_STATE       = 0x07;
+static constexpr uint8_t CMD_ENCODER_ESTIMATE     = 0x09;
+static constexpr uint8_t CMD_SET_CONTROLLER_MODES = 0x0B;
+static constexpr uint8_t CMD_SET_INPUT_POS        = 0x0C;
+static constexpr uint8_t CMD_SET_INPUT_VEL        = 0x0D;
+static constexpr uint8_t CMD_SET_INPUT_TORQUE     = 0x0E;
+static constexpr uint8_t CMD_CLEAR_ERRORS         = 0x12;
 
 // ── ODrive axis states ─────────────────────────────────────────────────────
 static constexpr uint32_t AXIS_STATE_IDLE              = 1;
 static constexpr uint32_t AXIS_STATE_CLOSED_LOOP       = 8;
+
+// ── ODrive control / input modes ───────────────────────────────────────────
+static constexpr uint32_t CTRL_MODE_TORQUE   = 1;
+static constexpr uint32_t CTRL_MODE_VELOCITY = 2;
+static constexpr uint32_t CTRL_MODE_POSITION = 3;
+static constexpr uint32_t INPUT_MODE_PASSTHROUGH = 1;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -73,6 +82,7 @@ static uint32_t s_last_heartbeat_L_ms = 0;
 static uint32_t s_last_heartbeat_R_ms = 0;
 static uint32_t s_last_encoder_L_ms   = 0;
 static uint32_t s_last_encoder_R_ms   = 0;
+static bool     s_encoder_L_seen      = false;  // first-frame diagnostic flag
 
 // ── Send helpers ───────────────────────────────────────────────────────────
 
@@ -127,6 +137,14 @@ void odesc_can_poll(RobotState& state) {
                 state.wheel_pos_L = pos_rad;
                 state.wheel_vel_L = vel_rad;
                 s_last_encoder_L_ms = millis();
+                if (!s_encoder_L_seen) {
+                    s_encoder_L_seen = true;
+                    Serial.print("[ODESC] Encoder L first frame: pos=");
+                    Serial.print(pos_turns, 4);
+                    Serial.print(" turns  vel=");
+                    Serial.print(vel_turns, 4);
+                    Serial.println(" turns/s");
+                }
             } else if (node == ODESC_NODE_R) {
                 state.wheel_pos_R = pos_rad;
                 state.wheel_vel_R = vel_rad;
@@ -168,7 +186,8 @@ void odesc_can_poll(RobotState& state) {
     uint32_t now = millis();
     bool enc_L_ok = (now - s_last_encoder_L_ms) < CAN_TIMEOUT_MS;
     bool enc_R_ok = (now - s_last_encoder_R_ms) < CAN_TIMEOUT_MS;
-    state.wheel_ok = enc_L_ok && enc_R_ok;
+    // wheel_ok requires L always; R only if it has ever responded (single-axis safe)
+    state.wheel_ok = enc_L_ok && (s_last_encoder_R_ms == 0 || enc_R_ok);
     state.wheel_last_ms = max(s_last_encoder_L_ms, s_last_encoder_R_ms);
 }
 
@@ -177,14 +196,58 @@ void odesc_can_send_torque(float tau_L, float tau_R) {
     send_torque(ODESC_NODE_R, tau_R);
 }
 
-void odesc_can_enable() {
-    Serial.println("[ODESC] Enabling closed-loop control");
+void odesc_can_send_velocity(float vel_L_turns_s, float vel_R_turns_s) {
+    uint8_t data[8];
+    float ff = 0.0f;
+    pack_float(data, 0, vel_L_turns_s);
+    pack_float(data, 4, ff);
+    can_send(arb_id(ODESC_NODE_L, CMD_SET_INPUT_VEL), data, 8);
+    pack_float(data, 0, vel_R_turns_s);
+    can_send(arb_id(ODESC_NODE_R, CMD_SET_INPUT_VEL), data, 8);
+}
+
+void odesc_can_send_position(float pos_L_turns, float pos_R_turns) {
+    uint8_t data[8];
+    int16_t vel_ff = 0, tau_ff = 0;
+    pack_float(data, 0, pos_L_turns);
+    memcpy(data + 4, &vel_ff, 2);
+    memcpy(data + 6, &tau_ff, 2);
+    can_send(arb_id(ODESC_NODE_L, CMD_SET_INPUT_POS), data, 8);
+    pack_float(data, 0, pos_R_turns);
+    can_send(arb_id(ODESC_NODE_R, CMD_SET_INPUT_POS), data, 8);
+}
+
+void odesc_can_set_control_mode(uint32_t ctrl_mode, uint32_t input_mode) {
+    uint8_t data[8];
+    memcpy(data,     &ctrl_mode,  4);
+    memcpy(data + 4, &input_mode, 4);
+    can_send(arb_id(ODESC_NODE_L, CMD_SET_CONTROLLER_MODES), data, 8);
+    can_send(arb_id(ODESC_NODE_R, CMD_SET_CONTROLLER_MODES), data, 8);
+}
+
+void odesc_can_enable_velocity() {
+    Serial.println("[ODESC] Enable: velocity mode");
+    odesc_can_set_control_mode(CTRL_MODE_VELOCITY, INPUT_MODE_PASSTHROUGH);
+    set_axis_state(ODESC_NODE_L, AXIS_STATE_CLOSED_LOOP);
+    set_axis_state(ODESC_NODE_R, AXIS_STATE_CLOSED_LOOP);
+}
+
+void odesc_can_enable_position() {
+    Serial.println("[ODESC] Enable: position mode");
+    odesc_can_set_control_mode(CTRL_MODE_POSITION, INPUT_MODE_PASSTHROUGH);
+    set_axis_state(ODESC_NODE_L, AXIS_STATE_CLOSED_LOOP);
+    set_axis_state(ODESC_NODE_R, AXIS_STATE_CLOSED_LOOP);
+}
+
+void odesc_can_enable_torque() {
+    Serial.println("[ODESC] Enable: torque mode");
+    odesc_can_set_control_mode(CTRL_MODE_TORQUE, INPUT_MODE_PASSTHROUGH);
     set_axis_state(ODESC_NODE_L, AXIS_STATE_CLOSED_LOOP);
     set_axis_state(ODESC_NODE_R, AXIS_STATE_CLOSED_LOOP);
 }
 
 void odesc_can_disable() {
-    Serial.println("[ODESC] Disabling — axes to IDLE");
+    Serial.println("[ODESC] Disable — axes to IDLE");
     set_axis_state(ODESC_NODE_L, AXIS_STATE_IDLE);
     set_axis_state(ODESC_NODE_R, AXIS_STATE_IDLE);
 }

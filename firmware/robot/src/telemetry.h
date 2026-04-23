@@ -3,7 +3,7 @@
 
 #include "robot_state.h"
 
-// Packed telemetry struct sent over UDP/Serial (73 bytes, little-endian).
+// Packed telemetry struct sent over UDP/Serial (82 bytes, little-endian).
 struct __attribute__((packed)) TelemetryPacket {
     uint32_t timestamp_ms;    // millis()
     uint8_t  mode;            // Mode enum value
@@ -24,8 +24,12 @@ struct __attribute__((packed)) TelemetryPacket {
     float    hip_q_R;         // [rad] right hip position
     float    dt_us;           // loop dt [µs]
     float    debug_sine;      // noisy sine for rate check
+    // --- encoder feedback (added for ODrive bench testing) ---
+    float    wheel_pos_L;     // [rad] left wheel encoder position
+    float    wheel_vel_L;     // [rad/s] left wheel encoder velocity
+    uint8_t  status_flags;    // bit0=wheel_ok, bit1=imu_ok
 };
-static_assert(sizeof(TelemetryPacket) == 73, "TelemetryPacket must be 73 bytes");
+static_assert(sizeof(TelemetryPacket) == 82, "TelemetryPacket must be 82 bytes");
 
 // Initialise the telemetry UDP socket.  Call once in setup() after wifi_init().
 void telemetry_init();

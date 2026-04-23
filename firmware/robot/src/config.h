@@ -35,10 +35,15 @@
 
 // ── Pin assignments ─────────────────────────────────────────────────────────
 // BNO086 IMU (SPI)
+// TODO: PIN_IMU_CS=10 conflicts with CAN TX (PIN_CAN0_TX=10 on UNO R4 WiFi variant).
+//       IMU will not initialise when CAN is active. Rewire IMU CS to a free pin
+//       (e.g. D9) and update this define before enabling full robot firmware.
 #define PIN_IMU_CS          10
 #define PIN_IMU_INT         2
 #define PIN_IMU_RST         3
 // SPI bus: SCK=13, MOSI=11, MISO=12 (hardware defaults)
+// NOTE: SCK=D13 also conflicts with CAN RX (PIN_CAN0_RX=13 on UNO R4 WiFi).
+//       Rewire IMU SCK to hardware SPI alt pin or use a separate SPI instance.
 
 // Built-in LED for timing verification
 #define PIN_STATUS_LED      LED_BUILTIN

@@ -72,6 +72,12 @@ struct RobotState {
     float tau_hip_L;            // [N·m] left hip torque command
     float tau_hip_R;            // [N·m] right hip torque command
 
+    // Direct ODrive control (bench / troubleshooting mode)
+    // When odrive_ctrl_mode != 0, these override balance controller CAN output.
+    uint8_t odrive_ctrl_mode;   // 0=off(torque from balance), 2=velocity, 3=position
+    float   odrive_vel_cmd;     // [turns/s] velocity setpoint (sent to both axes)
+    float   odrive_pos_cmd;     // [turns]   position setpoint (sent to both axes)
+
     // Overrun tracking
     uint8_t overrun_flash;      // >0 = flash fault bar (decremented each LED update)
 

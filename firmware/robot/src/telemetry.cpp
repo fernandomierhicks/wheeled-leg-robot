@@ -56,6 +56,10 @@ void telemetry_send(const RobotState& state) {
     pkt.hip_q_R       = state.hip_q_R;
     pkt.dt_us         = static_cast<float>(state.dt_us);
     pkt.debug_sine    = state.debug_sine;
+    pkt.wheel_pos_L   = state.wheel_pos_L;
+    pkt.wheel_vel_L   = state.wheel_vel_L;
+    pkt.status_flags  = (state.wheel_ok ? 0x01 : 0x00)
+                      | (state.imu_ok   ? 0x02 : 0x00);
 
 #if USE_WIFI
     // UDP send handled by wifi_fast.cpp in slack time — not here.
