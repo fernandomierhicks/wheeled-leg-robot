@@ -34,6 +34,9 @@ extern bool      g_dashboard_known;
 static constexpr uint8_t SERIAL_SYNC1 = 0xBB;
 static constexpr uint8_t SERIAL_SYNC2 = 0xCC;
 
+static uint32_t s_last_cmd_ms = 0;
+static constexpr uint32_t ODRIVE_WATCHDOG_MS = 2000;
+
 // Command type IDs (must match Python dashboard)
 enum CmdType : uint8_t {
     CMD_DRIVE         = 1,
@@ -45,12 +48,14 @@ enum CmdType : uint8_t {
     CMD_ODRIVE_DISABLE= 8,   // no payload
     CMD_ODRIVE_VEL    = 9,   // 1 float: velocity [turns/s] for both axes
     CMD_ODRIVE_POS    = 10,  // 1 float: position [turns] for both axes
+    CMD_ODRIVE_CLEAR  = 11,  // no payload: send CLEAR_ERRORS via CAN
 };
 
 static uint8_t payload_bytes(uint8_t cmd) {
     switch (cmd) {
         case CMD_PING:           return 0;
         case CMD_ODRIVE_DISABLE: return 0;
+        case CMD_ODRIVE_CLEAR:   return 0;
         case CMD_MODE:           return 1;
         case CMD_ODRIVE_ENABLE:  return 1;  // ctrl_mode byte
         case CMD_DRIVE:          return 12; // 3 × float32
@@ -62,6 +67,7 @@ static uint8_t payload_bytes(uint8_t cmd) {
 
 static void process_cmd(uint8_t cmd, const uint8_t* buf, uint8_t len, RobotState& state) {
     state.host_connected = true;
+    s_last_cmd_ms = millis();
     switch (cmd) {
     case CMD_PING:
         Serial.println("[Cmd]  Ping");
@@ -107,6 +113,10 @@ static void process_cmd(uint8_t cmd, const uint8_t* buf, uint8_t len, RobotState
         odesc_can_disable();
         Serial.println("[Cmd]  ODrive disable");
         break;
+    case CMD_ODRIVE_CLEAR:
+        odesc_can_clear_errors();
+        Serial.println("[Cmd]  ODrive clear errors");
+        break;
     case CMD_ODRIVE_VEL: {
         if (len < 4) break;
         float vel;
@@ -141,6 +151,14 @@ void commands_init() {
 }
 
 void commands_receive(RobotState& state) {
+    // Deadman watchdog: zero ODrive velocity if dashboard goes silent.
+    if (state.odrive_ctrl_mode == 2 && s_last_cmd_ms != 0 &&
+        (millis() - s_last_cmd_ms) > ODRIVE_WATCHDOG_MS) {
+        state.odrive_vel_cmd = 0.0f;
+        Serial.println("[Cmd]  WATCHDOG: no command for 2s — ODrive velocity zeroed");
+        s_last_cmd_ms = millis();  // re-arm so we don't spam the log
+    }
+
     while (Serial.available()) {
         uint8_t b = (uint8_t)Serial.read();
         switch (s_parse_state) {

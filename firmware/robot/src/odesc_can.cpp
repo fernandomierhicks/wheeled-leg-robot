@@ -165,9 +165,14 @@ void odesc_can_poll(RobotState& state) {
 
             if (node == ODESC_NODE_L) {
                 s_last_heartbeat_L_ms = millis();
+                // Always store for telemetry
+                state.odrive_axis_state = axis_state;
+                state.odrive_axis_error = axis_error;
                 if (axis_error != 0) {
                     Serial.print("[ODESC] L error=0x");
-                    Serial.println(axis_error, HEX);
+                    Serial.print(axis_error, HEX);
+                    Serial.print("  state=");
+                    Serial.println(axis_state);
                 }
             } else if (node == ODESC_NODE_R) {
                 s_last_heartbeat_R_ms = millis();
@@ -176,7 +181,6 @@ void odesc_can_poll(RobotState& state) {
                     Serial.println(axis_error, HEX);
                 }
             }
-            (void)axis_state;  // available if needed for state machine
         }
     }
 
@@ -225,18 +229,42 @@ void odesc_can_set_control_mode(uint32_t ctrl_mode, uint32_t input_mode) {
     can_send(arb_id(ODESC_NODE_R, CMD_SET_CONTROLLER_MODES), data, 8);
 }
 
+void odesc_can_clear_errors() {
+    uint8_t empty[1] = {0};
+    bool ok_L = can_send(arb_id(ODESC_NODE_L, CMD_CLEAR_ERRORS), empty, 0);
+    bool ok_R = can_send(arb_id(ODESC_NODE_R, CMD_CLEAR_ERRORS), empty, 0);
+    Serial.print("[ODESC] CLEAR_ERRORS L=");
+    Serial.print(ok_L ? "OK" : "FAIL");
+    Serial.print("  R=");
+    Serial.println(ok_R ? "OK" : "FAIL");
+}
+
+static void _enable_closed_loop(const char* label) {
+    // Clear any latched errors first — ODrive v3.x won't leave IDLE with errors set
+    odesc_can_clear_errors();
+    delay(20);  // give ODrive time to process clear before state change
+    bool ok_L = can_send(arb_id(ODESC_NODE_L, CMD_SET_AXIS_STATE),
+                         (const uint8_t*)&AXIS_STATE_CLOSED_LOOP, 4);
+    bool ok_R = can_send(arb_id(ODESC_NODE_R, CMD_SET_AXIS_STATE),
+                         (const uint8_t*)&AXIS_STATE_CLOSED_LOOP, 4);
+    Serial.print("[ODESC] SET_AXIS_STATE (");
+    Serial.print(label);
+    Serial.print(") L=");
+    Serial.print(ok_L ? "OK" : "FAIL");
+    Serial.print("  R=");
+    Serial.println(ok_R ? "OK" : "FAIL");
+}
+
 void odesc_can_enable_velocity() {
     Serial.println("[ODESC] Enable: velocity mode");
     odesc_can_set_control_mode(CTRL_MODE_VELOCITY, INPUT_MODE_PASSTHROUGH);
-    set_axis_state(ODESC_NODE_L, AXIS_STATE_CLOSED_LOOP);
-    set_axis_state(ODESC_NODE_R, AXIS_STATE_CLOSED_LOOP);
+    _enable_closed_loop("vel");
 }
 
 void odesc_can_enable_position() {
     Serial.println("[ODESC] Enable: position mode");
     odesc_can_set_control_mode(CTRL_MODE_POSITION, INPUT_MODE_PASSTHROUGH);
-    set_axis_state(ODESC_NODE_L, AXIS_STATE_CLOSED_LOOP);
-    set_axis_state(ODESC_NODE_R, AXIS_STATE_CLOSED_LOOP);
+    _enable_closed_loop("pos");
 }
 
 void odesc_can_enable_torque() {

@@ -54,3 +54,6 @@ void odesc_can_disable();
 
 /// Emergency stop — sends estop to both axes.
 void odesc_can_estop();
+
+/// Clear latched errors on axis 0 (required if axis refuses to enter CLOSED_LOOP).
+void odesc_can_clear_errors();

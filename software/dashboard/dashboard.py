@@ -40,17 +40,22 @@ except ImportError:
 TELEMETRY_PORT = 4210
 COMMAND_PORT   = 4211
 
-# Telemetry packet: '<' = little-endian, I=uint32, B=uint8, 17f=17 floats
-TELEM_FMT  = '<IB17f'
-TELEM_SIZE = struct.calcsize(TELEM_FMT)  # 73 bytes
-assert TELEM_SIZE == 73
+# Telemetry packet: uint32 ts | uint8 mode | 17 floats | 2 floats (encoder) | uint8 flags
+TELEM_FMT  = '<IB17f2fB'
+TELEM_SIZE = struct.calcsize(TELEM_FMT)  # 82 bytes
+assert TELEM_SIZE == 82
 
 # Command type IDs
-CMD_DRIVE = 1
-CMD_MODE  = 2
-CMD_GAIN  = 3
-CMD_PING  = 4
-CMD_HIP   = 5
+CMD_DRIVE          = 1
+CMD_MODE           = 2
+CMD_GAIN           = 3
+CMD_PING           = 4
+CMD_HIP            = 5
+CMD_ODRIVE_ENABLE  = 7   # 1 byte: ctrl_mode (2=velocity, 3=position)
+CMD_ODRIVE_DISABLE = 8   # no payload
+CMD_ODRIVE_VEL     = 9   # 1 float: turns/s
+CMD_ODRIVE_POS     = 10  # 1 float: turns
+CMD_ODRIVE_CLEAR   = 11  # no payload: clear errors on axis 0
 
 # ── Style constants (from simulation visualizer) ────────────────────────────
 BG_COLOR   = "#12121e"
@@ -107,7 +112,8 @@ class UDPReceiver(threading.Thread):
             # vals: (timestamp_ms, mode, pitch, pitch_rate, roll, yaw,
             #        wheel_vel_avg, v_cmd, theta_ref, tau_sym, tau_yaw,
             #        tau_wheel_L, tau_wheel_R, hip_q_L, tau_hip_L, tau_hip_R, hip_q_R,
-            #        dt_us, debug_sine)
+            #        dt_us, debug_sine,
+            #        wheel_pos_L, wheel_vel_L, status_flags)
             try:
                 self.data_q.put_nowait(vals)
             except Exception:
@@ -123,7 +129,10 @@ class UDPReceiver(threading.Thread):
 # ═════════════════════════════════════════════════════════════════════════════
 
 SERIAL_SYNC = bytes([0xAA, 0x55])
-SERIAL_FRAME_SIZE = 2 + TELEM_SIZE + 1  # sync(2) + packet(69) + checksum(1) = 72
+SERIAL_FRAME_SIZE = 2 + TELEM_SIZE + 1  # sync(2) + packet + checksum(1)
+
+# Command frame sync bytes (firmware→dashboard direction is 0xAA55; dashboard→firmware is 0xBBCC)
+CMD_SYNC = bytes([0xBB, 0xCC])
 
 
 def _find_serial_port():
@@ -142,7 +151,8 @@ def _find_serial_port():
 
 
 class SerialReceiver(threading.Thread):
-    """Background thread: receives framed telemetry packets from USB-UART."""
+    """Background thread: receives framed telemetry packets from USB-UART.
+    Also supports sending command frames to the firmware via write_cmd()."""
 
     def __init__(self, data_q: Queue, port: str, baud: int = 1000000):
         super().__init__(daemon=True)
@@ -152,21 +162,34 @@ class SerialReceiver(threading.Thread):
         self.running = True
         self.robot_ip = "USB-Serial"   # fake IP for status display compatibility
         self.last_rx_time = 0.0
-        self._ser = None
+        self._lock = threading.Lock()
+        try:
+            self._ser = serial.Serial(port, baud, timeout=0.5)
+            print(f"[Serial] Opened {port} @ {baud} baud")
+        except serial.SerialException as e:
+            print(f"[Serial] Failed to open {port}: {e}")
+            self._ser = None
+
+    def write_cmd(self, data: bytes):
+        """Write raw bytes to serial port (thread-safe). Used by CommandSender."""
+        with self._lock:
+            if self._ser and self._ser.is_open:
+                try:
+                    self._ser.write(data)
+                except serial.SerialException:
+                    pass
 
     def run(self):
-        try:
-            self._ser = serial.Serial(self.port_name, self.baud, timeout=0.5)
-        except serial.SerialException as e:
-            print(f"[Serial] Failed to open {self.port_name}: {e}")
+        if not self._ser:
             return
-
-        print(f"[Serial] Listening on {self.port_name} @ {self.baud} baud")
+        print(f"[Serial] Listening for telemetry on {self.port_name}")
         buf = bytearray()
 
         while self.running:
             try:
-                chunk = self._ser.read(max(1, self._ser.in_waiting))
+                with self._lock:
+                    waiting = self._ser.in_waiting
+                chunk = self._ser.read(max(1, waiting))
             except serial.SerialException:
                 break
             if not chunk:
@@ -178,30 +201,24 @@ class SerialReceiver(threading.Thread):
             while len(buf) >= SERIAL_FRAME_SIZE:
                 idx = buf.find(SERIAL_SYNC)
                 if idx < 0:
-                    # No sync found — keep last byte (could be partial 0xAA)
                     buf = buf[-1:]
                     break
                 if idx > 0:
-                    # Discard bytes before sync
                     del buf[:idx]
                 if len(buf) < SERIAL_FRAME_SIZE:
-                    break  # wait for more data
+                    break
 
-                # Extract packet and checksum
                 pkt_bytes = bytes(buf[2:2 + TELEM_SIZE])
                 rx_ck = buf[2 + TELEM_SIZE]
 
-                # Verify XOR checksum
                 xor_ck = 0
                 for b in pkt_bytes:
                     xor_ck ^= b
 
                 if xor_ck != rx_ck:
-                    # Bad checksum — skip this sync and search for next
                     del buf[:1]
                     continue
 
-                # Valid frame — consume it
                 del buf[:SERIAL_FRAME_SIZE]
                 self.last_rx_time = time.monotonic()
 
@@ -209,7 +226,7 @@ class SerialReceiver(threading.Thread):
                 try:
                     self.data_q.put_nowait(vals)
                 except Exception:
-                    pass  # drop if queue full
+                    pass
 
     def stop(self):
         self.running = False
@@ -222,37 +239,99 @@ class SerialReceiver(threading.Thread):
 # ═════════════════════════════════════════════════════════════════════════════
 
 class CommandSender:
-    """Sends UDP command packets to the robot."""
+    """Sends command packets to the robot via UDP (WiFi) or serial (USB).
 
-    def __init__(self, robot_ip: str = None):
+    In serial mode, pass serial_rx=<SerialReceiver instance>.  Commands are
+    framed as: [0xBB][0xCC][cmd_type][payload...][XOR checksum].
+    """
+
+    def __init__(self, robot_ip: str = None, serial_rx=None):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.robot_ip = robot_ip
+        self.serial_rx = serial_rx  # SerialReceiver, if in serial mode
+
+    # ── Internal helpers ────────────────────────────────────────────────────
+
+    def _send_serial(self, cmd_type: int, payload: bytes = b''):
+        if not self.serial_rx:
+            return
+        xor = cmd_type
+        for b in payload:
+            xor ^= b
+        frame = CMD_SYNC + bytes([cmd_type]) + payload + bytes([xor])
+        self.serial_rx.write_cmd(frame)
+
+    def _send_udp(self, data: bytes):
+        if self.robot_ip:
+            self.sock.sendto(data, (self.robot_ip, COMMAND_PORT))
+
+    # ── Public API ──────────────────────────────────────────────────────────
 
     def send_ping(self, ip: str = None):
-        target = ip or self.robot_ip
-        if target:
-            self.sock.sendto(struct.pack('<B', CMD_PING), (target, COMMAND_PORT))
+        if self.serial_rx:
+            self._send_serial(CMD_PING)
+        else:
+            target = ip or self.robot_ip
+            if target:
+                self.sock.sendto(struct.pack('<B', CMD_PING), (target, COMMAND_PORT))
 
     def send_drive(self, v_cmd: float, omega_cmd: float, hip_target: float):
-        if not self.robot_ip:
-            return
-        pkt = struct.pack('<Bfff', CMD_DRIVE, v_cmd, omega_cmd, hip_target)
-        self.sock.sendto(pkt, (self.robot_ip, COMMAND_PORT))
+        payload = struct.pack('<fff', v_cmd, omega_cmd, hip_target)
+        if self.serial_rx:
+            self._send_serial(CMD_DRIVE, payload)
+        else:
+            self._send_udp(struct.pack('<B', CMD_DRIVE) + payload)
 
     def send_mode(self, mode: int):
-        if not self.robot_ip:
-            return
-        pkt = struct.pack('<BB', CMD_MODE, mode)
-        self.sock.sendto(pkt, (self.robot_ip, COMMAND_PORT))
+        if self.serial_rx:
+            self._send_serial(CMD_MODE, bytes([mode]))
+        else:
+            self._send_udp(struct.pack('<BB', CMD_MODE, mode))
 
     def send_hip(self, motor_id: int, hip_cmd: int,
                  p_des: float = 0.0, v_des: float = 0.0,
                  kp: float = 0.0, kd: float = 0.0, t_ff: float = 0.0):
+        # HIP command is WiFi-only (AK45 not on single-axis ODrive bench)
         if not self.robot_ip:
             return
         pkt = struct.pack('<BBBfffff', CMD_HIP, motor_id, hip_cmd,
                           p_des, v_des, kp, kd, t_ff)
-        self.sock.sendto(pkt, (self.robot_ip, COMMAND_PORT))
+        self._send_udp(pkt)
+
+    def send_odrive_enable(self, ctrl_mode: int):
+        """Enable ODrive in velocity (2) or position (3) mode."""
+        if self.serial_rx:
+            self._send_serial(CMD_ODRIVE_ENABLE, bytes([ctrl_mode]))
+        else:
+            self._send_udp(struct.pack('<BB', CMD_ODRIVE_ENABLE, ctrl_mode))
+
+    def send_odrive_disable(self):
+        if self.serial_rx:
+            self._send_serial(CMD_ODRIVE_DISABLE)
+        else:
+            self._send_udp(struct.pack('<B', CMD_ODRIVE_DISABLE))
+
+    def send_odrive_clear_errors(self):
+        if self.serial_rx:
+            self._send_serial(CMD_ODRIVE_CLEAR)
+        else:
+            self._send_udp(struct.pack('<B', CMD_ODRIVE_CLEAR))
+
+    def send_odrive_velocity(self, vel_turns_s: float):
+        """Set ODrive velocity setpoint [turns/s]."""
+        payload = struct.pack('<f', vel_turns_s)
+        if self.serial_rx:
+            self._send_serial(CMD_ODRIVE_VEL, payload)
+        else:
+            self._send_udp(struct.pack('<B', CMD_ODRIVE_VEL) + payload)
+
+    def send_odrive_position(self, pos_turns: float):
+        """Set ODrive position setpoint [turns]."""
+        payload = struct.pack('<f', pos_turns)
+        if self.serial_rx:
+            self._send_serial(CMD_ODRIVE_POS, payload)
+        else:
+            self._send_udp(struct.pack('<B', CMD_ODRIVE_POS) + payload)
 
     def send_broadcast_ping(self):
         """Send ping to broadcast address to discover robot."""
@@ -282,7 +361,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
                 sys.exit(1)
             print(f"[Dashboard] Auto-detected serial port: {serial_port}")
         receiver = SerialReceiver(data_q, serial_port)
-        cmd = CommandSender(None)  # no commands over serial (read-only)
+        cmd = CommandSender(serial_rx=receiver)  # commands enabled via serial
     else:
         receiver = UDPReceiver(data_q)
         cmd = CommandSender(robot_ip)
@@ -457,6 +536,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             _transport[0] = "wifi"
             new_rx = UDPReceiver(data_q)
             cmd.robot_ip = None  # will be discovered
+            cmd.serial_rx = None
             print("[Dashboard] Switched to WiFi (UDP) transport")
         else:
             # Switch to USB-UART
@@ -470,6 +550,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             _transport[0] = "serial"
             new_rx = SerialReceiver(data_q, port)
             cmd.robot_ip = None
+            cmd.serial_rx = new_rx
             print(f"[Dashboard] Switched to USB-UART on {port}")
 
         receiver = new_rx
@@ -505,6 +586,132 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
         "font-size:10px;padding:4px 14px;border-radius:3px 3px 0 0}"
         "QTabBar::tab:selected{background:#3a3a6e;color:white}")
     tab_widget.setMaximumHeight(280)
+
+    # ── ODrive tab (single-axis bench test — velocity / position native modes) ──
+    odrive_tab = QtWidgets.QWidget()
+    odrive_tab.setStyleSheet(f"background:{BG_COLOR};")
+    tab_widget.addTab(odrive_tab, "ODrive Axis 0")
+
+    odrive_hbox = QtWidgets.QHBoxLayout(odrive_tab)
+    odrive_hbox.setContentsMargins(10, 8, 10, 8)
+    odrive_hbox.setSpacing(12)
+
+    def _od_spin(lo, hi, step, val, dec=3, w=90):
+        s = QtWidgets.QDoubleSpinBox()
+        s.setRange(lo, hi); s.setSingleStep(step)
+        s.setValue(val); s.setDecimals(dec)
+        s.setStyleSheet(_SPIN_STYLE); s.setFixedWidth(w)
+        return s
+
+    def _od_lbl(txt, dim=False):
+        l = QtWidgets.QLabel(txt)
+        l.setStyleSheet(
+            "color:#888;font-family:Consolas;font-size:10px;" if dim
+            else "color:#c8c8c8;font-family:Consolas;font-size:10px;")
+        return l
+
+    # ── Left panel: enable / velocity / position controls ────────────────
+    od_ctrl = QtWidgets.QWidget()
+    od_ctrl.setStyleSheet(f"background:{BAR_COLOR};border-radius:4px;")
+    od_ctrl_vb = QtWidgets.QVBoxLayout(od_ctrl)
+    od_ctrl_vb.setContentsMargins(10, 8, 10, 8)
+    od_ctrl_vb.setSpacing(6)
+
+    od_title = QtWidgets.QLabel("ODrive v3.6  —  Axis 0 (CAN node 0)")
+    od_title.setStyleSheet("color:white;font-family:Consolas;font-size:11px;font-weight:bold;")
+    od_ctrl_vb.addWidget(od_title)
+
+    od_status_lbl = QtWidgets.QLabel("Wheel vel: --  rad/s  (-- turns/s)")
+    od_status_lbl.setStyleSheet("color:#80ff80;font-family:Consolas;font-size:11px;")
+    od_ctrl_vb.addWidget(od_status_lbl)
+
+    od_ctrl_vb.addSpacing(4)
+
+    # Enable row
+    od_enable_row = QtWidgets.QHBoxLayout()
+    od_enable_row.setSpacing(6)
+    for label, ctrl_mode, col in [
+            ("Enable Vel", 2, "#1e6e3e"),
+            ("Enable Pos", 3, "#1e3e6e"),
+            ("Disable",    0, "#7d2e2e"),
+            ("Clear Errors", -1, "#6e5e1e")]:
+        b = QtWidgets.QPushButton(label)
+        b.setStyleSheet(
+            f"QPushButton{{background:{col};color:white;font-family:Consolas;"
+            f"font-size:10px;border-radius:3px;padding:5px 10px}}"
+            f"QPushButton:hover{{background:{col}bb}}")
+        _cm = ctrl_mode
+        if _cm == 0:
+            b.clicked.connect(lambda: cmd.send_odrive_disable())
+        elif _cm == -1:
+            b.clicked.connect(lambda: cmd.send_odrive_clear_errors())
+        else:
+            b.clicked.connect(lambda _, m=_cm: cmd.send_odrive_enable(m))
+        od_enable_row.addWidget(b)
+    od_enable_row.addStretch()
+    od_ctrl_vb.addLayout(od_enable_row)
+
+    od_ctrl_vb.addSpacing(6)
+
+    # Velocity control
+    od_ctrl_vb.addWidget(_od_lbl("Velocity control  [turns/s]", dim=True))
+    od_vel_row = QtWidgets.QHBoxLayout()
+    od_vel_row.setSpacing(6)
+    od_vel_spin = _od_spin(-5.0, 5.0, 0.25, 0.0, dec=2)
+    od_vel_row.addWidget(_od_lbl("vel (t/s)"))
+    od_vel_row.addWidget(od_vel_spin)
+
+    od_vel_send = QtWidgets.QPushButton("Send")
+    od_vel_send.setStyleSheet(_BTN_STYLE)
+    od_vel_send.clicked.connect(lambda: cmd.send_odrive_velocity(od_vel_spin.value()))
+    od_vel_row.addWidget(od_vel_send)
+
+    od_vel_stop = QtWidgets.QPushButton("Stop (0)")
+    od_vel_stop.setStyleSheet(_BTN_STYLE)
+    od_vel_stop.clicked.connect(lambda: (od_vel_spin.setValue(0.0),
+                                         cmd.send_odrive_velocity(0.0)))
+    od_vel_row.addWidget(od_vel_stop)
+    od_vel_row.addStretch()
+    od_ctrl_vb.addLayout(od_vel_row)
+
+    od_ctrl_vb.addSpacing(6)
+
+    # Position control
+    od_ctrl_vb.addWidget(_od_lbl("Position control  [turns from zero]", dim=True))
+    od_pos_row = QtWidgets.QHBoxLayout()
+    od_pos_row.setSpacing(6)
+    od_pos_spin = _od_spin(-50.0, 50.0, 0.25, 0.0, dec=3)
+    od_pos_row.addWidget(_od_lbl("pos (turns)"))
+    od_pos_row.addWidget(od_pos_spin)
+
+    od_pos_send = QtWidgets.QPushButton("Send")
+    od_pos_send.setStyleSheet(_BTN_STYLE)
+    od_pos_send.clicked.connect(lambda: cmd.send_odrive_position(od_pos_spin.value()))
+    od_pos_row.addWidget(od_pos_send)
+
+    od_pos_zero = QtWidgets.QPushButton("Go to 0")
+    od_pos_zero.setStyleSheet(_BTN_STYLE)
+    od_pos_zero.clicked.connect(lambda: (od_pos_spin.setValue(0.0),
+                                          cmd.send_odrive_position(0.0)))
+    od_pos_row.addWidget(od_pos_zero)
+    od_pos_row.addStretch()
+    od_ctrl_vb.addLayout(od_pos_row)
+
+    od_ctrl_vb.addStretch()
+    odrive_hbox.addWidget(od_ctrl, stretch=1)
+
+    # ── Right panel: velocity time-series plot ────────────────────────────
+    od_plot_w = pg.GraphicsLayoutWidget()
+    od_plot_w.setBackground(BG_COLOR)
+    od_plot_w.setMaximumWidth(420)
+    od_pl = od_plot_w.addPlot()
+    od_pl.setTitle('<span style="color:#e0e0e0;font-size:9pt">Wheel Position — Axis 0</span>')
+    od_pl.setLabel("left", '<span style="color:#c8c8c8;font-size:9pt">turns</span>')
+    od_pl.showGrid(x=True, y=True, alpha=0.20)
+    od_pl.setXRange(-WINDOW_S, 0, padding=0.02)
+    od_pl.disableAutoRange()
+    od_ln_vel = od_pl.plot(pen=pg.mkPen('#60d0ff', width=1.4), name="wheel_vel_avg")
+    odrive_hbox.addWidget(od_plot_w, stretch=1)
 
     ak45_tab = QtWidgets.QWidget()
     ak45_tab.setStyleSheet(f"background:{BG_COLOR};")
@@ -784,11 +991,17 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     tau_hR_buf    = deque(maxlen=MAXLEN)
     dt_buf        = deque(maxlen=MAXLEN)
     sine_buf      = deque(maxlen=MAXLEN)
+    wpos_L_buf    = deque(maxlen=MAXLEN)   # wheel_pos_L [turns]
+    wvel_L_buf    = deque(maxlen=MAXLEN)   # wheel_vel_L [turns/s]
+    wheel_ok_buf  = deque(maxlen=MAXLEN)   # bool as 0/1
+    odrive_state_buf = deque(maxlen=MAXLEN)  # axis_state from heartbeat
+    odrive_error_buf = deque(maxlen=MAXLEN)  # has_error flag from heartbeat
 
     all_bufs = [t_buf, pitch_buf, pitch_ref_buf, prate_buf, vel_buf, vcmd_buf,
                 tau_sym_buf, tau_yaw_buf, theta_buf,
                 hip_q_L_buf, hip_q_R_buf, roll_buf, yaw_buf,
-                tau_wL_buf, tau_wR_buf, tau_hL_buf, tau_hR_buf, dt_buf, sine_buf]
+                tau_wL_buf, tau_wR_buf, tau_hL_buf, tau_hR_buf, dt_buf, sine_buf,
+                wpos_L_buf, wvel_L_buf, wheel_ok_buf]
 
     _pkt_count = [0]
     _last_stat = [0.0]
@@ -812,7 +1025,12 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
              tau_sym, tau_yaw,
              tau_wheel_L, tau_wheel_R,
              hip_q_L, tau_hip_L, tau_hip_R, hip_q_R,
-             dt_us, debug_sine) = item
+             dt_us, debug_sine,
+             wheel_pos_L, wheel_vel_L, status_flags) = item
+            wheel_ok          = bool(status_flags & 0x01)
+            imu_ok            = bool(status_flags & 0x02)
+            odrive_axis_state = (status_flags >> 2) & 0x0F
+            odrive_has_error  = bool(status_flags & 0x40)
 
             # Convert timestamp to seconds
             t_s = ts_ms / 1000.0
@@ -838,6 +1056,11 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             tau_hR_buf.append(tau_hip_R)
             dt_buf.append(dt_us)
             sine_buf.append(debug_sine)
+            wpos_L_buf.append(wheel_pos_L / (2 * math.pi))   # rad → turns
+            wvel_L_buf.append(wheel_vel_L / (2 * math.pi))   # rad/s → turns/s
+            wheel_ok_buf.append(1.0 if wheel_ok else 0.0)
+            odrive_state_buf.append(odrive_axis_state)
+            odrive_error_buf.append(1.0 if odrive_has_error else 0.0)
 
             _last_mode[0] = mode
             _pkt_count[0] += 1
@@ -894,6 +1117,37 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
         ln_htau_R.setData(xw, _a(tau_hR_buf))
         ln_dt.setData(xw, _a(dt_buf))
         ln_sine.setData(xw, _a(sine_buf))
+
+        # ── ODrive tab live status ──
+        _ODRIVE_AXIS_STATES = {
+            0: "UNDEFINED", 1: "IDLE", 3: "FULL_CALIB",
+            4: "MOTOR_CALIB", 6: "ENC_INDEX_SEARCH",
+            7: "ENC_OFFSET_CALIB", 8: "CLOSED_LOOP", 11: "ENC_DIR_FIND",
+        }
+        if wpos_L_buf:
+            pos_t    = wpos_L_buf[-1]
+            vel_t    = wvel_L_buf[-1]
+            ok       = bool(wheel_ok_buf[-1]) if wheel_ok_buf else False
+            ax_st    = int(odrive_state_buf[-1]) if odrive_state_buf else 0
+            has_err  = bool(odrive_error_buf[-1]) if odrive_error_buf else False
+            ax_str   = _ODRIVE_AXIS_STATES.get(ax_st, f"STATE_{ax_st}")
+            err_str  = "  ⚠ ERROR" if has_err else ""
+            enc_str  = "OK" if ok else "NO SIGNAL"
+            # colour: green=closed loop, amber=idle+no error, red=error or unknown
+            ax_col = "#80ff80" if ax_st == 8 else ("#ff6060" if has_err else ("#ffa040" if ax_st == 1 else "#ff6060"))
+            od_status_lbl.setStyleSheet(f"color:{ax_col};font-family:Consolas;font-size:11px;")
+            od_status_lbl.setText(
+                f"Axis: {ax_str}{err_str}   Enc: {enc_str}   "
+                f"pos={pos_t:+.4f} t   vel={vel_t:+.4f} t/s")
+
+        od_ln_vel.setData(xw, _a(wpos_L_buf))
+        pos_arr = _a(wpos_L_buf)
+        if len(pos_arr) > 0:
+            lo, hi = float(np.min(pos_arr)), float(np.max(pos_arr))
+            span = max(hi - lo, 0.5)
+            mid  = (lo + hi) / 2
+            od_pl.setYRange(mid - span * 0.6, mid + span * 0.6, padding=0.05)
+        od_pl.setLabel("left", '<span style="color:#c8c8c8;font-size:9pt">turns</span>')
 
         # ── AK45 tab live labels + mini plots ──
         for motor_id, pos_buf, tau_buf in [
@@ -973,7 +1227,8 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
 
     if serial_port:
         print(f"[Dashboard] Listening for telemetry on Serial: {receiver.port_name}")
-        print("[Dashboard] Commands: disabled (serial is read-only)")
+        print("[Dashboard] Commands: enabled via serial (0xBBCC framing)")
+        print("[Dashboard] ODrive tab: Enable=Mode1, Disable=Mode0, τ sends CMD_DRIVE")
     else:
         print(f"[Dashboard] Listening for telemetry on UDP :{TELEMETRY_PORT}")
         print(f"[Dashboard] Sending commands to UDP :{COMMAND_PORT}")
