@@ -2,7 +2,14 @@
 ---Fernandos note dont change below
 
 
+Priorities:
+-Add second wheel motor
+-Get CAD going
 
+
+
+
+-------------------------------------------------------CAD
 
 
 
@@ -25,13 +32,11 @@ LEG MOTOR
 -Add CAN interface Via arduino
 
 ---------------------------------------------------------ODRIVE
+
 -implement the potential odrive firmware improvements in components\characterization\odrive\forkedFirmware
-
 Do 30min anticogging run or longer for both motors
-
 -Fix encoder parity issue in README.MD
---Check the firmware for the 3.5.6 and the GUI folder in it https://github.com/odriverobotics/ODrive
------Ensure you can flash it to dual board?
+
 
 
 --MOtor

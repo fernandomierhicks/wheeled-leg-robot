@@ -931,8 +931,11 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     ln_htau_R = p_htau.plot(pen=pg.mkPen('#80ff80', width=W), name="R")
 
     # ── Row 4: Loop Timing | (reserved) ─────────────────────────────────────
-    p_dt = _p(4, 0, "Loop dt", "µs")
+    p_dt = _p(4, 0, "Loop Execution Time", "µs")
     _leg(p_dt)
+    p_dt.getViewBox().setRange(yRange=(0, 2100), padding=0, disableAutoRange=True)
+    p_dt.addItem(pg.InfiniteLine(pos=2000, angle=0,
+                                 pen=pg.mkPen('#ff4040', width=1, style=_DASH)))
     ln_dt = p_dt.plot(pen=pg.mkPen('#60d0ff', width=W), name="dt_us")
 
     p_sine = _p(4, 1, "Debug Sine (rate check)", "—")
@@ -1007,6 +1010,7 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     _last_stat = [0.0]
     _start_time = [None]  # first packet monotonic time
     _last_mode = [0]
+    _max_dt = [0.0]
 
     # ── 60 Hz update ─────────────────────────────────────────────────────────
     _MIN_Y_SPAN = 2.0
@@ -1055,6 +1059,8 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             tau_hL_buf.append(tau_hip_L)
             tau_hR_buf.append(tau_hip_R)
             dt_buf.append(dt_us)
+            if dt_us > _max_dt[0]:
+                _max_dt[0] = dt_us
             sine_buf.append(debug_sine)
             wpos_L_buf.append(wheel_pos_L / (2 * math.pi))   # rad → turns
             wvel_L_buf.append(wheel_vel_L / (2 * math.pi))   # rad/s → turns/s

@@ -4,7 +4,8 @@
     "allow": [
       "Bash(*)",
       "WebFetch(*)",
-      "WebSearch(*)"
+      "WebSearch(*)",
+      "PowerShell(*)"
     ]
   }
 }

@@ -31,6 +31,7 @@ from tabs.tab_inspector import TabInspector
 from tabs.tab_terminal import TabTerminal
 from tabs.tab_presets import TabPresets
 from tabs.tab_characterization import TabCharacterization
+from tabs.tab_can import TabCan
 from ui.theme import (
     DARK_STYLE, CLR_OK, CLR_WARN, CLR_ERR, CLR_INFO, CLR_MUTED,
 )
@@ -124,6 +125,7 @@ class MainWindow(QMainWindow):
         self._tab_anticog.reconnected.connect(self._on_setup_reconnected)
         self._tab_presets.reconnected.connect(self._on_setup_reconnected)
         self._tab_char.reconnected.connect(self._on_setup_reconnected)
+        self._tab_can.reconnected.connect(self._on_setup_reconnected)
 
     # ── UI build ──────────────────────────────────────────────────────────────
 
@@ -227,6 +229,10 @@ class MainWindow(QMainWindow):
         self._tab_char = TabCharacterization(self._mgr, self._ax_idx)
         self.tabs.addTab(self._tab_char, "Characterization")
 
+        # CAN setup tab
+        self._tab_can = TabCan(self._mgr, self._ax_idx)
+        self.tabs.addTab(self._tab_can, "Setup CAN")
+
         # Real Terminal tab (Step 2)
         self._tab_terminal = TabTerminal(self._cmd)
         self.tabs.addTab(self._tab_terminal, "Terminal")
@@ -280,6 +286,7 @@ class MainWindow(QMainWindow):
         """Read config from ODrive into all tab forms."""
         self._tab_setup.on_connected()
         self._tab_control.on_connected()
+        self._tab_can.on_connected()
 
     def _on_connect_fail(self, msg):
         self._set_status(f"Connect failed: {msg}", CLR_ERR)
@@ -399,6 +406,7 @@ class MainWindow(QMainWindow):
         self._tab_control.poll_update()
         self._tab_anticog.poll_update()
         self._tab_char.poll_update()
+        self._tab_can.poll_update()
 
         if not self._mgr.connected:
             return
