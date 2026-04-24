@@ -77,8 +77,10 @@ struct RobotState {
     uint8_t  odrive_ctrl_mode;   // 0=off(torque from balance), 2=velocity, 3=position
     float    odrive_vel_cmd;     // [turns/s] velocity setpoint (sent to both axes)
     float    odrive_pos_cmd;     // [turns]   position setpoint (sent to both axes)
-    uint8_t  odrive_axis_state;  // axis0 state from last heartbeat (1=IDLE, 8=CLOSED_LOOP)
-    uint32_t odrive_axis_error;  // axis0 error from last heartbeat (0=none)
+    uint8_t  odrive_axis_state;    // axis0 state from last heartbeat (1=IDLE, 8=CLOSED_LOOP)
+    uint32_t odrive_axis_error;    // axis0 error from last heartbeat (0=none)
+    uint8_t  odrive_axis_state_R;  // axis1 state from last heartbeat
+    uint32_t odrive_axis_error_R;  // axis1 error from last heartbeat (0=none)
 
     // Overrun tracking
     uint8_t overrun_flash;      // >0 = flash fault bar (decremented each LED update)

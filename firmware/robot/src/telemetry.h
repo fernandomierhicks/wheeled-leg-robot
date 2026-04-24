@@ -27,9 +27,12 @@ struct __attribute__((packed)) TelemetryPacket {
     // --- encoder feedback (added for ODrive bench testing) ---
     float    wheel_pos_L;     // [rad] left wheel encoder position
     float    wheel_vel_L;     // [rad/s] left wheel encoder velocity
-    uint8_t  status_flags;    // bit0=wheel_ok, bit1=imu_ok
+    float    wheel_pos_R;     // [rad] right wheel encoder position
+    float    wheel_vel_R;     // [rad/s] right wheel encoder velocity
+    uint8_t  status_flags;    // bit0=wheel_ok, bit1=imu_ok, bits[5:2]=axis0_state, bit6=axis0_err
+    uint8_t  odrive_flags_R;  // bits[3:0]=axis1_state, bit4=axis1_has_error
 };
-static_assert(sizeof(TelemetryPacket) == 82, "TelemetryPacket must be 82 bytes");
+static_assert(sizeof(TelemetryPacket) == 91, "TelemetryPacket must be 91 bytes");
 
 // Initialise the telemetry UDP socket.  Call once in setup() after wifi_init().
 void telemetry_init();

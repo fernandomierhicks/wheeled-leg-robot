@@ -32,7 +32,7 @@ static constexpr uint8_t CMD_SET_CONTROLLER_MODES = 0x0B;
 static constexpr uint8_t CMD_SET_INPUT_POS        = 0x0C;
 static constexpr uint8_t CMD_SET_INPUT_VEL        = 0x0D;
 static constexpr uint8_t CMD_SET_INPUT_TORQUE     = 0x0E;
-static constexpr uint8_t CMD_CLEAR_ERRORS         = 0x12;
+static constexpr uint8_t CMD_CLEAR_ERRORS         = 0x18;
 
 // ── ODrive axis states ─────────────────────────────────────────────────────
 static constexpr uint32_t AXIS_STATE_IDLE              = 1;
@@ -83,6 +83,37 @@ static uint32_t s_last_heartbeat_R_ms = 0;
 static uint32_t s_last_encoder_L_ms   = 0;
 static uint32_t s_last_encoder_R_ms   = 0;
 static bool     s_encoder_L_seen      = false;  // first-frame diagnostic flag
+static bool     s_encoder_R_seen      = false;
+
+// ── Error decoder ──────────────────────────────────────────────────────────
+
+static void print_axis_error(const char* axis_label, uint32_t err) {
+    if (err == 0) return;
+    Serial.print("[ODESC] ");
+    Serial.print(axis_label);
+    Serial.print(" axis_error=0x");
+    Serial.print(err, HEX);
+    Serial.print(" :");
+    if (err & 0x00000001) Serial.print(" INVALID_STATE");
+    if (err & 0x00000002) Serial.print(" DC_BUS_UNDER_VOLTAGE");
+    if (err & 0x00000004) Serial.print(" DC_BUS_OVER_VOLTAGE");
+    if (err & 0x00000008) Serial.print(" CURRENT_MEASUREMENT_TIMEOUT");
+    if (err & 0x00000010) Serial.print(" BRAKE_RESISTOR_DISARMED");
+    if (err & 0x00000020) Serial.print(" MOTOR_DISARMED");
+    if (err & 0x00000040) Serial.print(" MOTOR_FAILED");
+    if (err & 0x00000080) Serial.print(" SENSORLESS_ESTIMATOR_FAILED");
+    if (err & 0x00000100) Serial.print(" ENCODER_FAILED");
+    if (err & 0x00000200) Serial.print(" CONTROLLER_FAILED");
+    if (err & 0x00000400) Serial.print(" POS_CTRL_DURING_SENSORLESS");
+    if (err & 0x00000800) Serial.print(" WATCHDOG_TIMER_EXPIRED");
+    if (err & 0x00001000) Serial.print(" MIN_ENDSTOP_PRESSED");
+    if (err & 0x00002000) Serial.print(" MAX_ENDSTOP_PRESSED");
+    if (err & 0x00004000) Serial.print(" ESTOP_REQUESTED");
+    if (err & 0x00020000) Serial.print(" HOMING_WITHOUT_ENDSTOP");
+    if (err & 0x00040000) Serial.print(" OVER_TEMP");
+    if (err & 0x00080000) Serial.print(" UNKNOWN_POSITION");
+    Serial.println();
+}
 
 // ── Send helpers ───────────────────────────────────────────────────────────
 
@@ -114,7 +145,15 @@ bool odesc_can_init() {
         return false;
     }
     Serial.println("[ODESC] CAN bus 1 Mbps OK");
+    // Pet watchdogs immediately so axes don't fault before the first tick fires.
+    odesc_can_pet_watchdog();
     return true;
+}
+
+void odesc_can_pet_watchdog() {
+    uint8_t data[8] = {0};  // vel=0.0, torque_ff=0.0
+    can_send(arb_id(ODESC_NODE_L, CMD_SET_INPUT_VEL), data, 8);
+    can_send(arb_id(ODESC_NODE_R, CMD_SET_INPUT_VEL), data, 8);
 }
 
 void odesc_can_poll(RobotState& state) {
@@ -149,6 +188,14 @@ void odesc_can_poll(RobotState& state) {
                 state.wheel_pos_R = pos_rad;
                 state.wheel_vel_R = vel_rad;
                 s_last_encoder_R_ms = millis();
+                if (!s_encoder_R_seen) {
+                    s_encoder_R_seen = true;
+                    Serial.print("[ODESC] Encoder R first frame: pos=");
+                    Serial.print(pos_turns, 4);
+                    Serial.print(" turns  vel=");
+                    Serial.print(vel_turns, 4);
+                    Serial.println(" turns/s");
+                }
             }
         }
 
@@ -165,20 +212,17 @@ void odesc_can_poll(RobotState& state) {
 
             if (node == ODESC_NODE_L) {
                 s_last_heartbeat_L_ms = millis();
-                // Always store for telemetry
                 state.odrive_axis_state = axis_state;
-                state.odrive_axis_error = axis_error;
-                if (axis_error != 0) {
-                    Serial.print("[ODESC] L error=0x");
-                    Serial.print(axis_error, HEX);
-                    Serial.print("  state=");
-                    Serial.println(axis_state);
+                if (axis_error != state.odrive_axis_error) {
+                    state.odrive_axis_error = axis_error;
+                    print_axis_error("L", axis_error);
                 }
             } else if (node == ODESC_NODE_R) {
                 s_last_heartbeat_R_ms = millis();
-                if (axis_error != 0) {
-                    Serial.print("[ODESC] R error=0x");
-                    Serial.println(axis_error, HEX);
+                state.odrive_axis_state_R = axis_state;
+                if (axis_error != state.odrive_axis_error_R) {
+                    state.odrive_axis_error_R = axis_error;
+                    print_axis_error("R", axis_error);
                 }
             }
         }
@@ -239,32 +283,69 @@ void odesc_can_clear_errors() {
     Serial.println(ok_R ? "OK" : "FAIL");
 }
 
-static void _enable_closed_loop(const char* label) {
-    // Clear any latched errors first — ODrive v3.x won't leave IDLE with errors set
-    odesc_can_clear_errors();
-    delay(20);  // give ODrive time to process clear before state change
-    bool ok_L = can_send(arb_id(ODESC_NODE_L, CMD_SET_AXIS_STATE),
-                         (const uint8_t*)&AXIS_STATE_CLOSED_LOOP, 4);
-    bool ok_R = can_send(arb_id(ODESC_NODE_R, CMD_SET_AXIS_STATE),
-                         (const uint8_t*)&AXIS_STATE_CLOSED_LOOP, 4);
-    Serial.print("[ODESC] SET_AXIS_STATE (");
+// Pet both watchdogs + drain RX for up to ms milliseconds.
+// Returns true if both axes confirmed CLOSED_LOOP within the window.
+static bool _pet_and_wait(bool& ok_L, bool& ok_R, uint32_t ms) {
+    uint8_t vel_data[8] = {0};  // 0.0f vel, 0.0f ff
+    uint32_t t0 = millis();
+    while ((millis() - t0) < ms) {
+        can_send(arb_id(ODESC_NODE_L, CMD_SET_INPUT_VEL), vel_data, 8);
+        can_send(arb_id(ODESC_NODE_R, CMD_SET_INPUT_VEL), vel_data, 8);
+        while (CAN.available()) {
+            CanMsg msg = CAN.read();
+            uint8_t node = node_from_id(msg.getStandardId());
+            uint8_t cmd  = cmd_from_id(msg.getStandardId());
+            if (cmd == CMD_HEARTBEAT && msg.data_length >= 5) {
+                if (node == ODESC_NODE_L && msg.data[4] == AXIS_STATE_CLOSED_LOOP) ok_L = true;
+                if (node == ODESC_NODE_R && msg.data[4] == AXIS_STATE_CLOSED_LOOP) ok_R = true;
+            }
+        }
+        delay(10);
+    }
+    return ok_L && ok_R;
+}
+
+static void _enable_closed_loop(uint32_t ctrl_mode, const char* label) {
+    uint8_t mode_data[8];
+    memcpy(mode_data,     &ctrl_mode,            4);
+    memcpy(mode_data + 4, &INPUT_MODE_PASSTHROUGH, 4);
+    uint8_t empty[1] = {0};
+    bool ok_L = false, ok_R = false;
+
+    // Every delay is replaced with _pet_and_wait so watchdogs are fed
+    // continuously throughout the enable sequence.
+    can_send(arb_id(ODESC_NODE_L, CMD_CLEAR_ERRORS), empty, 0);
+    can_send(arb_id(ODESC_NODE_R, CMD_CLEAR_ERRORS), empty, 0);
+    _pet_and_wait(ok_L, ok_R, 50);
+
+    ok_L = ok_R = false;  // reset — CLOSED_LOOP not requested yet
+    can_send(arb_id(ODESC_NODE_L, CMD_SET_CONTROLLER_MODES), mode_data, 8);
+    can_send(arb_id(ODESC_NODE_R, CMD_SET_CONTROLLER_MODES), mode_data, 8);
+    _pet_and_wait(ok_L, ok_R, 30);
+
+    ok_L = ok_R = false;
+    can_send(arb_id(ODESC_NODE_L, CMD_SET_AXIS_STATE),
+             (const uint8_t*)&AXIS_STATE_CLOSED_LOOP, 4);
+    can_send(arb_id(ODESC_NODE_R, CMD_SET_AXIS_STATE),
+             (const uint8_t*)&AXIS_STATE_CLOSED_LOOP, 4);
+    _pet_and_wait(ok_L, ok_R, 2000);  // wait up to 2 s for both to confirm
+
+    Serial.print("[ODESC] enable (");
     Serial.print(label);
     Serial.print(") L=");
-    Serial.print(ok_L ? "OK" : "FAIL");
+    Serial.print(ok_L ? "CLOSED_LOOP" : "TIMEOUT");
     Serial.print("  R=");
-    Serial.println(ok_R ? "OK" : "FAIL");
+    Serial.println(ok_R ? "CLOSED_LOOP" : "TIMEOUT");
 }
 
 void odesc_can_enable_velocity() {
     Serial.println("[ODESC] Enable: velocity mode");
-    odesc_can_set_control_mode(CTRL_MODE_VELOCITY, INPUT_MODE_PASSTHROUGH);
-    _enable_closed_loop("vel");
+    _enable_closed_loop(CTRL_MODE_VELOCITY, "vel");
 }
 
 void odesc_can_enable_position() {
     Serial.println("[ODESC] Enable: position mode");
-    odesc_can_set_control_mode(CTRL_MODE_POSITION, INPUT_MODE_PASSTHROUGH);
-    _enable_closed_loop("pos");
+    _enable_closed_loop(CTRL_MODE_POSITION, "pos");
 }
 
 void odesc_can_enable_torque() {

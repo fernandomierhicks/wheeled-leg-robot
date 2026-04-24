@@ -41,9 +41,9 @@ TELEMETRY_PORT = 4210
 COMMAND_PORT   = 4211
 
 # Telemetry packet: uint32 ts | uint8 mode | 17 floats | 2 floats (encoder) | uint8 flags
-TELEM_FMT  = '<IB17f2fB'
-TELEM_SIZE = struct.calcsize(TELEM_FMT)  # 82 bytes
-assert TELEM_SIZE == 82
+TELEM_FMT  = '<IB17f4fBB'
+TELEM_SIZE = struct.calcsize(TELEM_FMT)  # 91 bytes
+assert TELEM_SIZE == 91
 
 # Command type IDs
 CMD_DRIVE          = 1
@@ -113,7 +113,7 @@ class UDPReceiver(threading.Thread):
             #        wheel_vel_avg, v_cmd, theta_ref, tau_sym, tau_yaw,
             #        tau_wheel_L, tau_wheel_R, hip_q_L, tau_hip_L, tau_hip_R, hip_q_R,
             #        dt_us, debug_sine,
-            #        wheel_pos_L, wheel_vel_L, status_flags)
+            #        wheel_pos_L, wheel_vel_L, wheel_pos_R, wheel_vel_R, status_flags, odrive_flags_R)
             try:
                 self.data_q.put_nowait(vals)
             except Exception:
@@ -621,9 +621,13 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     od_title.setStyleSheet("color:white;font-family:Consolas;font-size:11px;font-weight:bold;")
     od_ctrl_vb.addWidget(od_title)
 
-    od_status_lbl = QtWidgets.QLabel("Wheel vel: --  rad/s  (-- turns/s)")
-    od_status_lbl.setStyleSheet("color:#80ff80;font-family:Consolas;font-size:11px;")
+    od_status_lbl = QtWidgets.QLabel("M0: --")
+    od_status_lbl.setStyleSheet("color:#ffa040;font-family:Consolas;font-size:11px;")
     od_ctrl_vb.addWidget(od_status_lbl)
+
+    od_status_lbl_R = QtWidgets.QLabel("M1: --")
+    od_status_lbl_R.setStyleSheet("color:#ffa040;font-family:Consolas;font-size:11px;")
+    od_ctrl_vb.addWidget(od_status_lbl_R)
 
     od_ctrl_vb.addSpacing(4)
 
@@ -705,12 +709,17 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     od_plot_w.setBackground(BG_COLOR)
     od_plot_w.setMaximumWidth(420)
     od_pl = od_plot_w.addPlot()
-    od_pl.setTitle('<span style="color:#e0e0e0;font-size:9pt">Wheel Position — Axis 0</span>')
+    od_pl.setTitle('<span style="color:#e0e0e0;font-size:9pt">Wheel Position (L / R)</span>')
     od_pl.setLabel("left", '<span style="color:#c8c8c8;font-size:9pt">turns</span>')
     od_pl.showGrid(x=True, y=True, alpha=0.20)
     od_pl.setXRange(-WINDOW_S, 0, padding=0.02)
     od_pl.disableAutoRange()
-    od_ln_vel = od_pl.plot(pen=pg.mkPen('#60d0ff', width=1.4), name="wheel_vel_avg")
+    od_leg = od_pl.addLegend(offset=(6, 6), verSpacing=-4)
+    od_leg.setBrush(pg.mkBrush(18, 18, 36, 210))
+    od_leg.setPen(pg.mkPen('#444'))
+    od_leg.setLabelTextColor(pg.mkColor('#cccccc'))
+    od_ln_vel   = od_pl.plot(pen=pg.mkPen('#60d0ff', width=1.4), name="L")
+    od_ln_vel_R = od_pl.plot(pen=pg.mkPen('#80ff80', width=1.4), name="R")
     odrive_hbox.addWidget(od_plot_w, stretch=1)
 
     ak45_tab = QtWidgets.QWidget()
@@ -996,15 +1005,19 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     sine_buf      = deque(maxlen=MAXLEN)
     wpos_L_buf    = deque(maxlen=MAXLEN)   # wheel_pos_L [turns]
     wvel_L_buf    = deque(maxlen=MAXLEN)   # wheel_vel_L [turns/s]
+    wpos_R_buf    = deque(maxlen=MAXLEN)   # wheel_pos_R [turns]
+    wvel_R_buf    = deque(maxlen=MAXLEN)   # wheel_vel_R [turns/s]
     wheel_ok_buf  = deque(maxlen=MAXLEN)   # bool as 0/1
-    odrive_state_buf = deque(maxlen=MAXLEN)  # axis_state from heartbeat
-    odrive_error_buf = deque(maxlen=MAXLEN)  # has_error flag from heartbeat
+    odrive_state_buf   = deque(maxlen=MAXLEN)  # axis0 state from heartbeat
+    odrive_error_buf   = deque(maxlen=MAXLEN)  # axis0 has_error flag
+    odrive_state_R_buf = deque(maxlen=MAXLEN)  # axis1 state from heartbeat
+    odrive_error_R_buf = deque(maxlen=MAXLEN)  # axis1 has_error flag
 
     all_bufs = [t_buf, pitch_buf, pitch_ref_buf, prate_buf, vel_buf, vcmd_buf,
                 tau_sym_buf, tau_yaw_buf, theta_buf,
                 hip_q_L_buf, hip_q_R_buf, roll_buf, yaw_buf,
                 tau_wL_buf, tau_wR_buf, tau_hL_buf, tau_hR_buf, dt_buf, sine_buf,
-                wpos_L_buf, wvel_L_buf, wheel_ok_buf]
+                wpos_L_buf, wvel_L_buf, wpos_R_buf, wvel_R_buf, wheel_ok_buf]
 
     _pkt_count = [0]
     _last_stat = [0.0]
@@ -1030,11 +1043,14 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
              tau_wheel_L, tau_wheel_R,
              hip_q_L, tau_hip_L, tau_hip_R, hip_q_R,
              dt_us, debug_sine,
-             wheel_pos_L, wheel_vel_L, status_flags) = item
-            wheel_ok          = bool(status_flags & 0x01)
-            imu_ok            = bool(status_flags & 0x02)
-            odrive_axis_state = (status_flags >> 2) & 0x0F
-            odrive_has_error  = bool(status_flags & 0x40)
+             wheel_pos_L, wheel_vel_L, wheel_pos_R, wheel_vel_R,
+             status_flags, odrive_flags_R) = item
+            wheel_ok            = bool(status_flags & 0x01)
+            imu_ok              = bool(status_flags & 0x02)
+            odrive_axis_state   = (status_flags >> 2) & 0x0F
+            odrive_has_error    = bool(status_flags & 0x40)
+            odrive_axis_state_R = odrive_flags_R & 0x0F
+            odrive_has_error_R  = bool(odrive_flags_R & 0x10)
 
             # Convert timestamp to seconds
             t_s = ts_ms / 1000.0
@@ -1064,9 +1080,13 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             sine_buf.append(debug_sine)
             wpos_L_buf.append(wheel_pos_L / (2 * math.pi))   # rad → turns
             wvel_L_buf.append(wheel_vel_L / (2 * math.pi))   # rad/s → turns/s
+            wpos_R_buf.append(wheel_pos_R / (2 * math.pi))
+            wvel_R_buf.append(wheel_vel_R / (2 * math.pi))
             wheel_ok_buf.append(1.0 if wheel_ok else 0.0)
             odrive_state_buf.append(odrive_axis_state)
             odrive_error_buf.append(1.0 if odrive_has_error else 0.0)
+            odrive_state_R_buf.append(odrive_axis_state_R)
+            odrive_error_R_buf.append(1.0 if odrive_has_error_R else 0.0)
 
             _last_mode[0] = mode
             _pkt_count[0] += 1
@@ -1131,25 +1151,43 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
             7: "ENC_OFFSET_CALIB", 8: "CLOSED_LOOP", 11: "ENC_DIR_FIND",
         }
         if wpos_L_buf:
-            pos_t    = wpos_L_buf[-1]
-            vel_t    = wvel_L_buf[-1]
-            ok       = bool(wheel_ok_buf[-1]) if wheel_ok_buf else False
-            ax_st    = int(odrive_state_buf[-1]) if odrive_state_buf else 0
-            has_err  = bool(odrive_error_buf[-1]) if odrive_error_buf else False
-            ax_str   = _ODRIVE_AXIS_STATES.get(ax_st, f"STATE_{ax_st}")
-            err_str  = "  ⚠ ERROR" if has_err else ""
-            enc_str  = "OK" if ok else "NO SIGNAL"
-            # colour: green=closed loop, amber=idle+no error, red=error or unknown
-            ax_col = "#80ff80" if ax_st == 8 else ("#ff6060" if has_err else ("#ffa040" if ax_st == 1 else "#ff6060"))
-            od_status_lbl.setStyleSheet(f"color:{ax_col};font-family:Consolas;font-size:11px;")
+            pos_t      = wpos_L_buf[-1]
+            pos_R_t    = wpos_R_buf[-1] if wpos_R_buf else 0.0
+            ok         = bool(wheel_ok_buf[-1]) if wheel_ok_buf else False
+            ax_st      = int(odrive_state_buf[-1])   if odrive_state_buf   else 0
+            has_err    = bool(odrive_error_buf[-1])  if odrive_error_buf   else False
+            ax_st_R    = int(odrive_state_R_buf[-1]) if odrive_state_R_buf else 0
+            has_err_R  = bool(odrive_error_R_buf[-1])if odrive_error_R_buf else False
+            ax_str   = _ODRIVE_AXIS_STATES.get(ax_st,   f"STATE_{ax_st}")
+            ax_str_R = _ODRIVE_AXIS_STATES.get(ax_st_R, f"STATE_{ax_st_R}")
+            enc_ok_L = ok  # wheel_ok requires both, use pos freshness as proxy
+            enc_ok_R = bool(wpos_R_buf and wpos_R_buf[-1] != 0.0 or wvel_R_buf)
+
+            def _axis_col(st, err):
+                return "#80ff80" if st == 8 and not err else ("#ff6060" if err else "#ffa040")
+
+            col_L = _axis_col(ax_st,   has_err)
+            col_R = _axis_col(ax_st_R, has_err_R)
+            err_tag   = "  ⚠ ERROR" if has_err   else ""
+            err_tag_R = "  ⚠ ERROR" if has_err_R else ""
+            enc_str_L = "Enc: OK" if ok          else "Enc: NO SIGNAL"
+            enc_str_R = "Enc: OK" if enc_ok_R    else "Enc: NO SIGNAL"
+
+            od_status_lbl.setStyleSheet(f"color:{col_L};font-family:Consolas;font-size:11px;")
             od_status_lbl.setText(
-                f"Axis: {ax_str}{err_str}   Enc: {enc_str}   "
-                f"pos={pos_t:+.4f} t   vel={vel_t:+.4f} t/s")
+                f"M0: {ax_str}{err_tag}   {enc_str_L}   pos={pos_t:+.4f} t")
+
+            od_status_lbl_R.setStyleSheet(f"color:{col_R};font-family:Consolas;font-size:11px;")
+            od_status_lbl_R.setText(
+                f"M1: {ax_str_R}{err_tag_R}   {enc_str_R}   pos={pos_R_t:+.4f} t")
 
         od_ln_vel.setData(xw, _a(wpos_L_buf))
-        pos_arr = _a(wpos_L_buf)
-        if len(pos_arr) > 0:
-            lo, hi = float(np.min(pos_arr)), float(np.max(pos_arr))
+        od_ln_vel_R.setData(xw, _a(wpos_R_buf))
+        pos_arr_L = _a(wpos_L_buf)
+        pos_arr_R = _a(wpos_R_buf)
+        pos_all = np.concatenate([pos_arr_L, pos_arr_R]) if len(pos_arr_L) > 0 or len(pos_arr_R) > 0 else np.array([])
+        if len(pos_all) > 0:
+            lo, hi = float(np.min(pos_all)), float(np.max(pos_all))
             span = max(hi - lo, 0.5)
             mid  = (lo + hi) / 2
             od_pl.setYRange(mid - span * 0.6, mid + span * 0.6, padding=0.05)

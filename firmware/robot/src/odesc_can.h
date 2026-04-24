@@ -57,3 +57,7 @@ void odesc_can_estop();
 
 /// Clear latched errors on axis 0 (required if axis refuses to enter CLOSED_LOOP).
 void odesc_can_clear_errors();
+
+/// Feed both axis watchdogs. Call every tick so the ODrive stops motors if
+/// the Arduino freezes. Sends zero-velocity to both axes (safe no-op when idle).
+void odesc_can_pet_watchdog();

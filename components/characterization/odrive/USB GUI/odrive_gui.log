@@ -3560,3 +3560,303 @@
 2026-04-23 18:05:38 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
 2026-04-23 18:05:38 [INFO] GUI: connect success
 2026-04-23 18:05:40 [INFO] Control: axis0 -> idle
+2026-04-24 12:15:23 [INFO] No stale ODrive processes found.
+2026-04-24 12:15:24 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 12:15:26 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 12:15:26 [INFO] Setup: axis0 config read OK
+2026-04-24 12:15:26 [INFO] Control: axis0 gains read OK
+2026-04-24 12:15:26 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:15:26 [INFO] GUI: connect success
+2026-04-24 12:15:35 [INFO] Setup: axis1 config read OK
+2026-04-24 12:15:35 [INFO] Control: axis1 gains read OK
+2026-04-24 12:15:35 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:16:06 [INFO] No stale ODrive processes found.
+2026-04-24 12:16:07 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 12:16:09 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 12:16:09 [INFO] Setup: axis1 config read OK
+2026-04-24 12:16:09 [INFO] Control: axis1 gains read OK
+2026-04-24 12:16:09 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:16:09 [INFO] GUI: connect success
+2026-04-24 12:16:15 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=-0.0461 turns)
+2026-04-24 12:16:27 [INFO] Control: axis1 -> idle
+2026-04-24 12:16:34 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=0.3057 turns)
+2026-04-24 12:16:37 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 12:16:37 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 12:16:38 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 12:16:38 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 12:16:48 [INFO] Setup: axis1 encoder configured — mode=256 CPR=16384 CS=4  gpio3/4/5=DIGITAL
+2026-04-24 12:16:49 [INFO] Disconnected
+2026-04-24 12:16:53 [INFO] Disconnected
+2026-04-24 12:16:53 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 12:16:53 [INFO] Setup: reconnected after reboot
+2026-04-24 12:16:59 [INFO] Control: axis1 gains read OK
+2026-04-24 12:16:59 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:16:59 [INFO] Setup: axis1 config read OK
+2026-04-24 12:17:12 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-04-24 12:17:13 [ERROR] Setup: read failed: Device 3869324F3135 disconnected
+2026-04-24 12:17:13 [ERROR] Control: read gains error: Device 3869324F3135 disconnected
+2026-04-24 12:17:13 [ERROR] Control: read FF flags error: Device 3869324F3135 disconnected
+2026-04-24 12:17:13 [ERROR] Control: read safety limits error: Device 3869324F3135 disconnected
+2026-04-24 12:17:13 [WARNING] CAN tab read error: Device 3869324F3135 disconnected
+2026-04-24 12:17:13 [INFO] Disconnected
+2026-04-24 12:17:15 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 12:17:15 [INFO] Setup: axis1 config read OK
+2026-04-24 12:17:15 [INFO] Control: axis1 gains read OK
+2026-04-24 12:17:15 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:17:15 [INFO] GUI: connect success
+2026-04-24 12:17:21 [INFO] Setup: error suppressor started for calibration
+2026-04-24 12:17:21 [INFO] Setup: axis1 motor calibration started (split cal phase 1)
+2026-04-24 12:17:26 [INFO] Setup: axis1 motor cal OK — R=0.3205 L=0.000255
+2026-04-24 12:17:26 [INFO] Setup: axis1 encoder offset cal started (split cal phase 2)
+2026-04-24 12:17:35 [INFO] Setup: error suppressor stopped (cleared 3486 times)
+2026-04-24 12:17:35 [INFO] auto_tune: axis1 vel_gain=0.0624 vel_int=0.0312 R=0.3205 kT=0.0400
+2026-04-24 12:17:36 [INFO] Setup: axis1 calibration + auto-tune complete
+2026-04-24 12:17:36 [INFO] Disconnected
+2026-04-24 12:17:40 [INFO] Disconnected
+2026-04-24 12:17:40 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 12:17:40 [INFO] Setup: reconnected after reboot
+2026-04-24 12:17:40 [INFO] Control: axis1 gains read OK
+2026-04-24 12:17:40 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:17:40 [INFO] Setup: axis1 config read OK
+2026-04-24 12:17:46 [INFO] Setup: axis1 encoder configured — mode=257 CPR=16384 CS=4  gpio3/4/5=DIGITAL
+2026-04-24 12:17:47 [INFO] Disconnected
+2026-04-24 12:17:51 [INFO] Disconnected
+2026-04-24 12:17:51 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 12:17:51 [INFO] Setup: reconnected after reboot
+2026-04-24 12:17:57 [INFO] Control: axis1 gains read OK
+2026-04-24 12:17:57 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:17:57 [INFO] Setup: axis1 config read OK
+2026-04-24 12:17:58 [INFO] Disconnected
+2026-04-24 12:18:04 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 12:18:04 [INFO] Setup: axis1 config read OK
+2026-04-24 12:18:04 [INFO] Control: axis1 gains read OK
+2026-04-24 12:18:04 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:18:04 [INFO] GUI: connect success
+2026-04-24 12:18:08 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=0.3799 turns)
+2026-04-24 12:18:17 [INFO] Control: axis1 -> idle
+2026-04-24 12:18:20 [INFO] Setup: axis0 config read OK
+2026-04-24 12:18:20 [INFO] Control: axis0 gains read OK
+2026-04-24 12:18:20 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:18:21 [INFO] Control: axis0 -> closed loop (mode=2, seeded input_pos=-0.2794 turns)
+2026-04-24 12:18:25 [INFO] Setup: axis1 config read OK
+2026-04-24 12:18:25 [INFO] Control: axis1 gains read OK
+2026-04-24 12:18:25 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:18:31 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=34.2397 turns)
+2026-04-24 12:18:40 [INFO] Control: axis1 -> idle
+2026-04-24 12:18:41 [INFO] Setup: axis0 config read OK
+2026-04-24 12:18:41 [INFO] Control: axis0 gains read OK
+2026-04-24 12:18:41 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 12:18:42 [INFO] Control: axis0 -> idle
+2026-04-24 15:52:24 [INFO] No stale ODrive processes found.
+2026-04-24 15:52:24 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 15:52:45 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 15:52:45 [INFO] Setup: axis0 config read OK
+2026-04-24 15:52:45 [INFO] Control: axis0 gains read OK
+2026-04-24 15:52:45 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:52:45 [INFO] GUI: connect success
+2026-04-24 15:52:46 [INFO] Setup: axis1 config read OK
+2026-04-24 15:52:46 [INFO] Control: axis1 gains read OK
+2026-04-24 15:52:46 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:52:49 [INFO] Setup: axis0 config read OK
+2026-04-24 15:52:49 [INFO] Control: axis0 gains read OK
+2026-04-24 15:52:49 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:52:50 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:50 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:50 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:50 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:50 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:50 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:50 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:50 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:51 [INFO] Setup: axis1 config read OK
+2026-04-24 15:52:51 [INFO] Control: axis1 gains read OK
+2026-04-24 15:52:51 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:52:52 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:52 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:52 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:52 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:52 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:52 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:53 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:53 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:53 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:53 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:54 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:54 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:54 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:54 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:54 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:54 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:52:55 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:52:55 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:53:07 [INFO] No stale ODrive processes found.
+2026-04-24 15:53:07 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 15:53:10 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 15:53:10 [INFO] Setup: axis0 config read OK
+2026-04-24 15:53:10 [INFO] Control: axis0 gains read OK
+2026-04-24 15:53:10 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:10 [INFO] GUI: connect success
+2026-04-24 15:53:11 [INFO] Setup: axis1 config read OK
+2026-04-24 15:53:11 [INFO] Control: axis1 gains read OK
+2026-04-24 15:53:11 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:12 [INFO] Setup: axis0 config read OK
+2026-04-24 15:53:12 [INFO] Control: axis0 gains read OK
+2026-04-24 15:53:12 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:14 [INFO] Setup: axis1 config read OK
+2026-04-24 15:53:14 [INFO] Control: axis1 gains read OK
+2026-04-24 15:53:14 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:15 [INFO] Setup: axis0 config read OK
+2026-04-24 15:53:15 [INFO] Control: axis0 gains read OK
+2026-04-24 15:53:15 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:16 [INFO] Setup: axis1 config read OK
+2026-04-24 15:53:16 [INFO] Control: axis1 gains read OK
+2026-04-24 15:53:16 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:18 [INFO] Setup: axis0 config read OK
+2026-04-24 15:53:18 [INFO] Control: axis0 gains read OK
+2026-04-24 15:53:18 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:20 [INFO] Setup: axis1 config read OK
+2026-04-24 15:53:20 [INFO] Control: axis1 gains read OK
+2026-04-24 15:53:20 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:20 [INFO] Setup: axis0 config read OK
+2026-04-24 15:53:20 [INFO] Control: axis0 gains read OK
+2026-04-24 15:53:20 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:22 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 15:53:22 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 15:53:22 [INFO] Setup: axis1 config read OK
+2026-04-24 15:53:22 [INFO] Control: axis1 gains read OK
+2026-04-24 15:53:22 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 15:53:27 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=-0.3303 turns)
+2026-04-24 15:53:32 [INFO] Control: axis1 -> idle
+2026-04-24 16:13:43 [INFO] No stale ODrive processes found.
+2026-04-24 16:13:44 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 16:13:50 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 16:13:50 [INFO] Setup: axis0 config read OK
+2026-04-24 16:13:50 [INFO] Control: axis0 gains read OK
+2026-04-24 16:13:50 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:13:50 [INFO] GUI: connect success
+2026-04-24 16:13:55 [INFO] No stale ODrive processes found.
+2026-04-24 16:13:55 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 16:13:58 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 16:13:58 [INFO] Setup: axis0 config read OK
+2026-04-24 16:13:58 [INFO] Control: axis0 gains read OK
+2026-04-24 16:13:58 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:13:58 [INFO] GUI: connect success
+2026-04-24 16:13:59 [INFO] Setup: axis1 config read OK
+2026-04-24 16:13:59 [INFO] Control: axis1 gains read OK
+2026-04-24 16:13:59 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:14:01 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:01 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:01 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:01 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:02 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:02 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:02 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:02 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:02 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:02 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:03 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:03 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:10 [INFO] No stale ODrive processes found.
+2026-04-24 16:14:10 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 16:14:16 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 16:14:16 [INFO] Setup: axis0 config read OK
+2026-04-24 16:14:16 [INFO] Control: axis0 gains read OK
+2026-04-24 16:14:16 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:14:16 [INFO] GUI: connect success
+2026-04-24 16:14:20 [INFO] Setup: axis1 config read OK
+2026-04-24 16:14:20 [INFO] Control: axis1 gains read OK
+2026-04-24 16:14:20 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:14:21 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:21 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:21 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:21 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:21 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:21 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:22 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:22 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:22 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:22 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:23 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:23 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:23 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:23 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:23 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:23 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:23 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:23 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:35 [INFO] No stale ODrive processes found.
+2026-04-24 16:14:36 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 16:14:40 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 16:14:40 [INFO] Setup: axis0 config read OK
+2026-04-24 16:14:40 [INFO] Control: axis0 gains read OK
+2026-04-24 16:14:40 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:14:40 [INFO] GUI: connect success
+2026-04-24 16:14:41 [INFO] Setup: axis1 config read OK
+2026-04-24 16:14:41 [INFO] Control: axis1 gains read OK
+2026-04-24 16:14:41 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:14:43 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:43 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:43 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:43 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:44 [INFO] Setup: axis0 config read OK
+2026-04-24 16:14:44 [INFO] Control: axis0 gains read OK
+2026-04-24 16:14:44 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:14:45 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:45 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:45 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:14:45 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:14:46 [INFO] Setup: axis1 config read OK
+2026-04-24 16:14:46 [INFO] Control: axis1 gains read OK
+2026-04-24 16:14:46 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:14:48 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=0.3800 turns)
+2026-04-24 16:14:51 [INFO] Control: axis1 -> idle
+2026-04-24 16:14:52 [INFO] Setup: axis0 config read OK
+2026-04-24 16:14:52 [INFO] Control: axis0 gains read OK
+2026-04-24 16:14:52 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:14:53 [INFO] Control: axis0 -> closed loop (mode=2, seeded input_pos=-0.1366 turns)
+2026-04-24 16:14:57 [INFO] Control: axis0 -> idle
+2026-04-24 16:20:09 [INFO] No stale ODrive processes found.
+2026-04-24 16:20:09 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 16:20:11 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 16:20:11 [INFO] Setup: axis0 config read OK
+2026-04-24 16:20:11 [INFO] Control: axis0 gains read OK
+2026-04-24 16:20:11 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:20:11 [INFO] GUI: connect success
+2026-04-24 16:20:13 [INFO] Setup: axis1 config read OK
+2026-04-24 16:20:13 [INFO] Control: axis1 gains read OK
+2026-04-24 16:20:13 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:20:14 [INFO] Setup: axis0 config read OK
+2026-04-24 16:20:14 [INFO] Control: axis0 gains read OK
+2026-04-24 16:20:14 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:25:20 [INFO] No stale ODrive processes found.
+2026-04-24 16:25:21 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 16:25:23 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 16:25:23 [INFO] Setup: axis0 config read OK
+2026-04-24 16:25:23 [INFO] Control: axis0 gains read OK
+2026-04-24 16:25:23 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:25:23 [INFO] GUI: connect success
+2026-04-24 16:25:23 [INFO] Setup: axis1 config read OK
+2026-04-24 16:25:23 [INFO] Control: axis1 gains read OK
+2026-04-24 16:25:23 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:25:27 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:25:27 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:25:27 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:25:27 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:25:28 [INFO] EXEC clear_errors(() {}) -> None
+2026-04-24 16:25:28 [INFO] Control: errors cleared + watchdog fed
+2026-04-24 16:45:25 [INFO] No stale ODrive processes found.
+2026-04-24 16:45:26 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-04-24 16:45:27 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-04-24 16:45:27 [INFO] Setup: axis0 config read OK
+2026-04-24 16:45:27 [INFO] Control: axis0 gains read OK
+2026-04-24 16:45:27 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:45:27 [INFO] GUI: connect success
+2026-04-24 16:45:28 [INFO] Setup: axis1 config read OK
+2026-04-24 16:45:28 [INFO] Control: axis1 gains read OK
+2026-04-24 16:45:28 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:45:29 [INFO] Setup: axis0 config read OK
+2026-04-24 16:45:29 [INFO] Control: axis0 gains read OK
+2026-04-24 16:45:29 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-04-24 16:45:30 [INFO] Setup: axis1 config read OK
+2026-04-24 16:45:30 [INFO] Control: axis1 gains read OK
+2026-04-24 16:45:30 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)

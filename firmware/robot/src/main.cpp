@@ -222,6 +222,9 @@ void loop() {
     }
 
     // ── CAN TX: motor commands ──
+    // Watchdog is fed every tick regardless of mode. If this tick is overrun or
+    // the Arduino freezes, the ODrive will fault and stop both motors.
+    odesc_can_pet_watchdog();
     // Direct ODrive mode (velocity/position) takes priority over balance torque.
     if (state.odrive_ctrl_mode == 2) {
         odesc_can_send_velocity(state.odrive_vel_cmd, state.odrive_vel_cmd);
