@@ -11,6 +11,7 @@
 #include "config.h"
 #include "telemetry.h"    // TelemetryPacket struct
 #include "ak45_can.h"
+#include "wheel_motors.h"
 #include <Arduino.h>
 #include <WiFiS3.h>
 #include <WiFiUdp.h>
@@ -111,6 +112,16 @@ void wifi_fast_fill_telemetry(const RobotState& state) {
     pkt.hip_q_R       = state.hip_q_R;
     pkt.dt_us         = static_cast<float>(state.dt_us);
     pkt.debug_sine    = state.debug_sine;
+    pkt.wheel_pos_L   = state.wheel_pos_L;
+    pkt.wheel_vel_L   = state.wheel_vel_L;
+    pkt.wheel_pos_R   = state.wheel_pos_R;
+    pkt.wheel_vel_R   = state.wheel_vel_R;
+    pkt.status_flags  = (state.wheel_ok ? 0x01 : 0x00)
+                      | (state.imu_ok   ? 0x02 : 0x00)
+                      | ((state.odrive_axis_state & 0x0F) << 2)
+                      | (state.odrive_axis_error ? 0x40 : 0x00);
+    pkt.odrive_flags_R = (state.odrive_axis_state_R & 0x0F)
+                       | (state.odrive_axis_error_R ? 0x10 : 0x00);
 
     // Swap: next fill goes to other buffer; this one is ready to send
     s_write_idx ^= 1;
@@ -173,7 +184,13 @@ bool wifi_try_receive(RobotState& state, uint32_t tick, uint32_t tick_start_us) 
     state.host_connected = true;
 
     // Command type IDs (must match Python dashboard)
-    enum : uint8_t { CMD_DRIVE = 1, CMD_MODE = 2, CMD_GAIN = 3, CMD_PING = 4, CMD_HIP = 5 };
+    enum : uint8_t {
+        CMD_DRIVE = 1, CMD_MODE = 2, CMD_GAIN = 3, CMD_PING = 4, CMD_HIP = 5,
+        CMD_ODRIVE_ENABLE = 7, CMD_ODRIVE_DISABLE = 8,
+        CMD_ODRIVE_VEL = 9, CMD_ODRIVE_POS = 10, CMD_ODRIVE_CLEAR = 11,
+        CMD_ODRIVE_TORQUE = 12,
+        CMD_ODRIVE_VEL_M = 13, CMD_ODRIVE_POS_M = 14, CMD_ODRIVE_TORQUE_M = 15
+    };
 
     switch (buf[0]) {
     case CMD_DRIVE: {
@@ -211,6 +228,57 @@ bool wifi_try_receive(RobotState& state, uint32_t tick, uint32_t tick_start_us) 
     }
     case CMD_PING:
         Serial.println("[Cmd]  Ping from dashboard");
+        break;
+    case CMD_ODRIVE_ENABLE: {
+        if (n < 2) break;
+        uint8_t ctrl_mode = buf[1]; // 1=torque, 2=velocity, 3=position
+        state.odrive_ctrl_mode = ctrl_mode;
+        state.odrive_vel_L = state.odrive_vel_R = 0.0f;
+        state.odrive_pos_L = state.odrive_pos_R = 0.0f;
+        state.odrive_tau_L = state.odrive_tau_R = 0.0f;
+        if      (ctrl_mode == 1) wheel_motors_set_mode(WheelMode::TORQUE);
+        else if (ctrl_mode == 2) wheel_motors_set_mode(WheelMode::VELOCITY);
+        else if (ctrl_mode == 3) wheel_motors_set_mode(WheelMode::POSITION);
+        Serial.print("[Cmd]  WheelMode enable ctrl="); Serial.println(ctrl_mode);
+        break;
+    }
+    case CMD_ODRIVE_DISABLE:
+        state.odrive_ctrl_mode = 0;
+        state.odrive_vel_L = state.odrive_vel_R = 0.0f;
+        state.odrive_pos_L = state.odrive_pos_R = 0.0f;
+        state.odrive_tau_L = state.odrive_tau_R = 0.0f;
+        wheel_motors_set_mode(WheelMode::IDLE);
+        Serial.println("[Cmd]  WheelMode disable");
+        break;
+    case CMD_ODRIVE_VEL:
+        if (n < 5) break;
+        { float v; memcpy(&v, &buf[1], 4); state.odrive_vel_L = state.odrive_vel_R = v; }
+        break;
+    case CMD_ODRIVE_POS:
+        if (n < 5) break;
+        { float p; memcpy(&p, &buf[1], 4); state.odrive_pos_L = state.odrive_pos_R = p; }
+        break;
+    case CMD_ODRIVE_TORQUE:
+        if (n < 5) break;
+        { float t; memcpy(&t, &buf[1], 4); state.odrive_tau_L = state.odrive_tau_R = t; }
+        break;
+    case CMD_ODRIVE_VEL_M:
+        if (n < 6) break;
+        { float v; memcpy(&v, &buf[2], 4);
+          if (buf[1] == 0) state.odrive_vel_L = v; else state.odrive_vel_R = v; }
+        break;
+    case CMD_ODRIVE_POS_M:
+        if (n < 6) break;
+        { float p; memcpy(&p, &buf[2], 4);
+          if (buf[1] == 0) state.odrive_pos_L = p; else state.odrive_pos_R = p; }
+        break;
+    case CMD_ODRIVE_TORQUE_M:
+        if (n < 6) break;
+        { float t; memcpy(&t, &buf[2], 4);
+          if (buf[1] == 0) state.odrive_tau_L = t; else state.odrive_tau_R = t; }
+        break;
+    case CMD_ODRIVE_CLEAR:
+        wheel_motors_clear_errors();
         break;
     case CMD_HIP: {
         // [CMD_HIP u8][motor_id u8][cmd u8][p_des f32][v_des f32][kp f32][kd f32][t_ff f32]

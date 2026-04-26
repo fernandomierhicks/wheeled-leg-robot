@@ -5,7 +5,7 @@
 
 #include "commands.h"
 #include "config.h"
-#include "odesc_can.h"
+#include "wheel_motors.h"
 #include <Arduino.h>
 
 #if USE_WIFI
@@ -39,29 +39,37 @@ static constexpr uint32_t ODRIVE_WATCHDOG_MS = 2000;
 
 // Command type IDs (must match Python dashboard)
 enum CmdType : uint8_t {
-    CMD_DRIVE         = 1,
-    CMD_MODE          = 2,
-    CMD_GAIN          = 3,
-    CMD_PING          = 4,
-    CMD_HIP           = 5,
-    CMD_ODRIVE_ENABLE = 7,   // 1 byte: ctrl_mode (2=velocity, 3=position)
-    CMD_ODRIVE_DISABLE= 8,   // no payload
-    CMD_ODRIVE_VEL    = 9,   // 1 float: velocity [turns/s] for both axes
-    CMD_ODRIVE_POS    = 10,  // 1 float: position [turns] for both axes
-    CMD_ODRIVE_CLEAR  = 11,  // no payload: send CLEAR_ERRORS via CAN
+    CMD_DRIVE           = 1,
+    CMD_MODE            = 2,
+    CMD_GAIN            = 3,
+    CMD_PING            = 4,
+    CMD_HIP             = 5,
+    CMD_ODRIVE_ENABLE   = 7,   // 1 byte: ctrl_mode (1=torque, 2=velocity, 3=position)
+    CMD_ODRIVE_DISABLE  = 8,   // no payload
+    CMD_ODRIVE_VEL      = 9,   // 1 float: velocity [turns/s] — both axes
+    CMD_ODRIVE_POS      = 10,  // 1 float: position [turns]   — both axes
+    CMD_ODRIVE_CLEAR    = 11,  // no payload: send CLEAR_ERRORS via CAN
+    CMD_ODRIVE_TORQUE   = 12,  // 1 float: torque  [N·m]     — both axes
+    CMD_ODRIVE_VEL_M    = 13,  // 1 byte motor_id + 1 float: velocity [turns/s] — per motor
+    CMD_ODRIVE_POS_M    = 14,  // 1 byte motor_id + 1 float: position [turns]   — per motor
+    CMD_ODRIVE_TORQUE_M = 15,  // 1 byte motor_id + 1 float: torque  [N·m]     — per motor
 };
 
 static uint8_t payload_bytes(uint8_t cmd) {
     switch (cmd) {
-        case CMD_PING:           return 0;
-        case CMD_ODRIVE_DISABLE: return 0;
-        case CMD_ODRIVE_CLEAR:   return 0;
-        case CMD_MODE:           return 1;
-        case CMD_ODRIVE_ENABLE:  return 1;  // ctrl_mode byte
-        case CMD_DRIVE:          return 12; // 3 × float32
-        case CMD_ODRIVE_VEL:     return 4;  // 1 × float32
-        case CMD_ODRIVE_POS:     return 4;  // 1 × float32
-        default:                 return 0xFF; // unknown — discard
+        case CMD_PING:            return 0;
+        case CMD_ODRIVE_DISABLE:  return 0;
+        case CMD_ODRIVE_CLEAR:    return 0;
+        case CMD_MODE:            return 1;
+        case CMD_ODRIVE_ENABLE:   return 1;  // ctrl_mode byte
+        case CMD_DRIVE:           return 12; // 3 × float32
+        case CMD_ODRIVE_VEL:      return 4;  // 1 × float32
+        case CMD_ODRIVE_POS:      return 4;  // 1 × float32
+        case CMD_ODRIVE_TORQUE:   return 4;  // 1 × float32
+        case CMD_ODRIVE_VEL_M:    return 5;  // 1 byte motor_id + 1 × float32
+        case CMD_ODRIVE_POS_M:    return 5;
+        case CMD_ODRIVE_TORQUE_M: return 5;
+        default:                  return 0xFF; // unknown — discard
     }
 }
 
@@ -93,46 +101,69 @@ static void process_cmd(uint8_t cmd, const uint8_t* buf, uint8_t len, RobotState
         break;
     }
     case CMD_ODRIVE_ENABLE: {
-        uint8_t ctrl_mode = buf[0]; // 2=velocity, 3=position
+        uint8_t ctrl_mode = buf[0]; // 1=torque, 2=velocity, 3=position
         state.odrive_ctrl_mode = ctrl_mode;
-        state.odrive_vel_cmd   = 0.0f;
-        state.odrive_pos_cmd   = 0.0f;
-        if (ctrl_mode == 2) {
-            odesc_can_enable_velocity();
-        } else if (ctrl_mode == 3) {
-            odesc_can_enable_position();
-        }
+        state.odrive_vel_L = state.odrive_vel_R = 0.0f;
+        state.odrive_pos_L = state.odrive_pos_R = 0.0f;
+        state.odrive_tau_L = state.odrive_tau_R = 0.0f;
+        if      (ctrl_mode == 1) wheel_motors_set_mode(WheelMode::TORQUE);
+        else if (ctrl_mode == 2) wheel_motors_set_mode(WheelMode::VELOCITY);
+        else if (ctrl_mode == 3) wheel_motors_set_mode(WheelMode::POSITION);
         Serial.print("[Cmd]  ODrive enable ctrl_mode=");
         Serial.println(ctrl_mode);
         break;
     }
     case CMD_ODRIVE_DISABLE:
         state.odrive_ctrl_mode = 0;
-        state.odrive_vel_cmd   = 0.0f;
-        state.odrive_pos_cmd   = 0.0f;
-        odesc_can_disable();
+        state.odrive_vel_L = state.odrive_vel_R = 0.0f;
+        state.odrive_pos_L = state.odrive_pos_R = 0.0f;
+        state.odrive_tau_L = state.odrive_tau_R = 0.0f;
+        wheel_motors_set_mode(WheelMode::IDLE);
         Serial.println("[Cmd]  ODrive disable");
         break;
     case CMD_ODRIVE_CLEAR:
-        odesc_can_clear_errors();
-        Serial.println("[Cmd]  ODrive clear errors");
+        wheel_motors_clear_errors();
         break;
     case CMD_ODRIVE_VEL: {
         if (len < 4) break;
-        float vel;
-        memcpy(&vel, buf, 4);
-        state.odrive_vel_cmd = vel;
-        Serial.print("[Cmd]  ODrive vel=");
-        Serial.println(vel, 3);
+        float vel; memcpy(&vel, buf, 4);
+        state.odrive_vel_L = state.odrive_vel_R = vel;
+        Serial.print("[Cmd]  ODrive vel="); Serial.println(vel, 3);
         break;
     }
     case CMD_ODRIVE_POS: {
         if (len < 4) break;
-        float pos;
-        memcpy(&pos, buf, 4);
-        state.odrive_pos_cmd = pos;
-        Serial.print("[Cmd]  ODrive pos=");
-        Serial.println(pos, 3);
+        float pos; memcpy(&pos, buf, 4);
+        state.odrive_pos_L = state.odrive_pos_R = pos;
+        Serial.print("[Cmd]  ODrive pos="); Serial.println(pos, 3);
+        break;
+    }
+    case CMD_ODRIVE_TORQUE: {
+        if (len < 4) break;
+        float tau; memcpy(&tau, buf, 4);
+        state.odrive_tau_L = state.odrive_tau_R = tau;
+        Serial.print("[Cmd]  ODrive tau="); Serial.println(tau, 3);
+        break;
+    }
+    case CMD_ODRIVE_VEL_M: {
+        if (len < 5) break;
+        float vel; memcpy(&vel, buf + 1, 4);
+        if (buf[0] == 0) state.odrive_vel_L = vel;
+        else             state.odrive_vel_R = vel;
+        break;
+    }
+    case CMD_ODRIVE_POS_M: {
+        if (len < 5) break;
+        float pos; memcpy(&pos, buf + 1, 4);
+        if (buf[0] == 0) state.odrive_pos_L = pos;
+        else             state.odrive_pos_R = pos;
+        break;
+    }
+    case CMD_ODRIVE_TORQUE_M: {
+        if (len < 5) break;
+        float tau; memcpy(&tau, buf + 1, 4);
+        if (buf[0] == 0) state.odrive_tau_L = tau;
+        else             state.odrive_tau_R = tau;
         break;
     }
     default:
@@ -154,7 +185,7 @@ void commands_receive(RobotState& state) {
     // Deadman watchdog: zero ODrive velocity if dashboard goes silent.
     if (state.odrive_ctrl_mode == 2 && s_last_cmd_ms != 0 &&
         (millis() - s_last_cmd_ms) > ODRIVE_WATCHDOG_MS) {
-        state.odrive_vel_cmd = 0.0f;
+        state.odrive_vel_L = state.odrive_vel_R = 0.0f;
         Serial.println("[Cmd]  WATCHDOG: no command for 2s — ODrive velocity zeroed");
         s_last_cmd_ms = millis();  // re-arm so we don't spam the log
     }

@@ -74,9 +74,13 @@ struct RobotState {
 
     // Direct ODrive control (bench / troubleshooting mode)
     // When odrive_ctrl_mode != 0, these override balance controller CAN output.
-    uint8_t  odrive_ctrl_mode;   // 0=off(torque from balance), 2=velocity, 3=position
-    float    odrive_vel_cmd;     // [turns/s] velocity setpoint (sent to both axes)
-    float    odrive_pos_cmd;     // [turns]   position setpoint (sent to both axes)
+    uint8_t  odrive_ctrl_mode;   // 0=off(torque from balance), 1=torque, 2=velocity, 3=position
+    float    odrive_vel_L;       // [turns/s] velocity setpoint — left  axis
+    float    odrive_vel_R;       // [turns/s] velocity setpoint — right axis
+    float    odrive_pos_L;       // [turns]   position setpoint — left  axis
+    float    odrive_pos_R;       // [turns]   position setpoint — right axis
+    float    odrive_tau_L;       // [N·m]     torque setpoint  — left  axis
+    float    odrive_tau_R;       // [N·m]     torque setpoint  — right axis
     uint8_t  odrive_axis_state;    // axis0 state from last heartbeat (1=IDLE, 8=CLOSED_LOOP)
     uint32_t odrive_axis_error;    // axis0 error from last heartbeat (0=none)
     uint8_t  odrive_axis_state_R;  // axis1 state from last heartbeat

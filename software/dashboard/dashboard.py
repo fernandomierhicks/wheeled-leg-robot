@@ -51,11 +51,15 @@ CMD_MODE           = 2
 CMD_GAIN           = 3
 CMD_PING           = 4
 CMD_HIP            = 5
-CMD_ODRIVE_ENABLE  = 7   # 1 byte: ctrl_mode (2=velocity, 3=position)
-CMD_ODRIVE_DISABLE = 8   # no payload
-CMD_ODRIVE_VEL     = 9   # 1 float: turns/s
-CMD_ODRIVE_POS     = 10  # 1 float: turns
-CMD_ODRIVE_CLEAR   = 11  # no payload: clear errors on axis 0
+CMD_ODRIVE_ENABLE   = 7   # 1 byte: ctrl_mode (1=torque, 2=velocity, 3=position)
+CMD_ODRIVE_DISABLE  = 8   # no payload
+CMD_ODRIVE_VEL      = 9   # 1 float: turns/s  (both motors)
+CMD_ODRIVE_POS      = 10  # 1 float: turns    (both motors)
+CMD_ODRIVE_CLEAR    = 11  # no payload: clear errors on axis 0
+CMD_ODRIVE_TORQUE   = 12  # 1 float: N·m      (both motors)
+CMD_ODRIVE_VEL_M    = 13  # 1 byte motor_id + 1 float: turns/s  (per-motor)
+CMD_ODRIVE_POS_M    = 14  # 1 byte motor_id + 1 float: turns    (per-motor)
+CMD_ODRIVE_TORQUE_M = 15  # 1 byte motor_id + 1 float: N·m      (per-motor)
 
 # ── Style constants (from simulation visualizer) ────────────────────────────
 BG_COLOR   = "#12121e"
@@ -326,12 +330,44 @@ class CommandSender:
             self._send_udp(struct.pack('<B', CMD_ODRIVE_VEL) + payload)
 
     def send_odrive_position(self, pos_turns: float):
-        """Set ODrive position setpoint [turns]."""
+        """Set ODrive position setpoint [turns] on both motors."""
         payload = struct.pack('<f', pos_turns)
         if self.serial_rx:
             self._send_serial(CMD_ODRIVE_POS, payload)
         else:
             self._send_udp(struct.pack('<B', CMD_ODRIVE_POS) + payload)
+
+    def send_odrive_torque(self, torque_nm: float):
+        """Set ODrive torque setpoint [N·m] on both motors."""
+        payload = struct.pack('<f', torque_nm)
+        if self.serial_rx:
+            self._send_serial(CMD_ODRIVE_TORQUE, payload)
+        else:
+            self._send_udp(struct.pack('<B', CMD_ODRIVE_TORQUE) + payload)
+
+    def send_odrive_velocity_motor(self, motor_id: int, vel_turns_s: float):
+        """Set velocity [turns/s] on a single motor (motor_id 0=L, 1=R)."""
+        payload = struct.pack('<Bf', motor_id, vel_turns_s)
+        if self.serial_rx:
+            self._send_serial(CMD_ODRIVE_VEL_M, payload)
+        else:
+            self._send_udp(struct.pack('<B', CMD_ODRIVE_VEL_M) + payload)
+
+    def send_odrive_position_motor(self, motor_id: int, pos_turns: float):
+        """Set position [turns] on a single motor (motor_id 0=L, 1=R)."""
+        payload = struct.pack('<Bf', motor_id, pos_turns)
+        if self.serial_rx:
+            self._send_serial(CMD_ODRIVE_POS_M, payload)
+        else:
+            self._send_udp(struct.pack('<B', CMD_ODRIVE_POS_M) + payload)
+
+    def send_odrive_torque_motor(self, motor_id: int, torque_nm: float):
+        """Set torque [N·m] on a single motor (motor_id 0=L, 1=R)."""
+        payload = struct.pack('<Bf', motor_id, torque_nm)
+        if self.serial_rx:
+            self._send_serial(CMD_ODRIVE_TORQUE_M, payload)
+        else:
+            self._send_udp(struct.pack('<B', CMD_ODRIVE_TORQUE_M) + payload)
 
     def send_broadcast_ping(self):
         """Send ping to broadcast address to discover robot."""
@@ -587,39 +623,43 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
         "QTabBar::tab:selected{background:#3a3a6e;color:white}")
     tab_widget.setMaximumHeight(280)
 
-    # ── ODrive tab (single-axis bench test — velocity / position native modes) ──
+    # ── Wheel Motors tab (both axes — velocity / position / torque) ──
     odrive_tab = QtWidgets.QWidget()
     odrive_tab.setStyleSheet(f"background:{BG_COLOR};")
-    tab_widget.addTab(odrive_tab, "ODrive Axis 0")
+    tab_widget.addTab(odrive_tab, "Wheel Motors")
 
     odrive_hbox = QtWidgets.QHBoxLayout(odrive_tab)
     odrive_hbox.setContentsMargins(10, 8, 10, 8)
     odrive_hbox.setSpacing(12)
 
-    def _od_spin(lo, hi, step, val, dec=3, w=90):
-        s = QtWidgets.QDoubleSpinBox()
-        s.setRange(lo, hi); s.setSingleStep(step)
-        s.setValue(val); s.setDecimals(dec)
-        s.setStyleSheet(_SPIN_STYLE); s.setFixedWidth(w)
-        return s
-
-    def _od_lbl(txt, dim=False):
-        l = QtWidgets.QLabel(txt)
-        l.setStyleSheet(
-            "color:#888;font-family:Consolas;font-size:10px;" if dim
-            else "color:#c8c8c8;font-family:Consolas;font-size:10px;")
-        return l
-
-    # ── Left panel: enable / velocity / position controls ────────────────
+    # ── Left panel: status + all mode controls ────────────────────────────
     od_ctrl = QtWidgets.QWidget()
     od_ctrl.setStyleSheet(f"background:{BAR_COLOR};border-radius:4px;")
     od_ctrl_vb = QtWidgets.QVBoxLayout(od_ctrl)
     od_ctrl_vb.setContentsMargins(10, 8, 10, 8)
     od_ctrl_vb.setSpacing(6)
 
-    od_title = QtWidgets.QLabel("ODrive v3.6  —  Axis 0 (CAN node 0)")
+    # Title + target motor selector
+    od_title_row = QtWidgets.QHBoxLayout()
+    od_title_row.setSpacing(8)
+    od_title = QtWidgets.QLabel("Wheel Motors  —  L = node 0  /  R = node 1")
     od_title.setStyleSheet("color:white;font-family:Consolas;font-size:11px;font-weight:bold;")
-    od_ctrl_vb.addWidget(od_title)
+    od_title_row.addWidget(od_title)
+    od_title_row.addStretch()
+
+    od_target_lbl = QtWidgets.QLabel("Target:")
+    od_target_lbl.setStyleSheet(_LBL_DIM)
+    od_title_row.addWidget(od_target_lbl)
+
+    od_target_combo = QtWidgets.QComboBox()
+    od_target_combo.addItems(["Both", "Left (M0)", "Right (M1)"])
+    od_target_combo.setStyleSheet(
+        "QComboBox{background:#1e1e3a;color:white;font-family:Consolas;font-size:10px;"
+        "border:1px solid #444;border-radius:3px;padding:2px 6px;min-width:90px}"
+        "QComboBox::drop-down{border:none}"
+        "QComboBox QAbstractItemView{background:#1e1e3a;color:white;selection-background-color:#3a3a6e;}")
+    od_title_row.addWidget(od_target_combo)
+    od_ctrl_vb.addLayout(od_title_row)
 
     od_status_lbl = QtWidgets.QLabel("M0: --")
     od_status_lbl.setStyleSheet("color:#ffa040;font-family:Consolas;font-size:11px;")
@@ -629,77 +669,163 @@ def run_dashboard(robot_ip: str = None, serial_port: str = None):
     od_status_lbl_R.setStyleSheet("color:#ffa040;font-family:Consolas;font-size:11px;")
     od_ctrl_vb.addWidget(od_status_lbl_R)
 
-    od_ctrl_vb.addSpacing(4)
+    # Idle / Clear buttons
+    od_btn_row = QtWidgets.QHBoxLayout()
+    od_btn_row.setSpacing(6)
+    for _lbl, _col, _fn in [
+            ("Idle Both",    "#7d2e2e", lambda: cmd.send_odrive_disable()),
+            ("Clear Errors", "#4a4a2e", lambda: cmd.send_odrive_clear_errors()),
+    ]:
+        _b = QtWidgets.QPushButton(_lbl)
+        _b.setStyleSheet(
+            f"QPushButton{{background:{_col};color:white;font-family:Consolas;"
+            f"font-size:10px;border-radius:3px;padding:3px 8px}}"
+            f"QPushButton:hover{{background:{_col}cc}}")
+        _b.clicked.connect(_fn)
+        od_btn_row.addWidget(_b)
+    od_btn_row.addStretch()
+    od_ctrl_vb.addLayout(od_btn_row)
 
-    # Enable row
-    od_enable_row = QtWidgets.QHBoxLayout()
-    od_enable_row.setSpacing(6)
-    for label, ctrl_mode, col in [
-            ("Enable Vel", 2, "#1e6e3e"),
-            ("Enable Pos", 3, "#1e3e6e"),
-            ("Disable",    0, "#7d2e2e"),
-            ("Clear Errors", -1, "#6e5e1e")]:
-        b = QtWidgets.QPushButton(label)
-        b.setStyleSheet(
-            f"QPushButton{{background:{col};color:white;font-family:Consolas;"
-            f"font-size:10px;border-radius:3px;padding:5px 10px}}"
-            f"QPushButton:hover{{background:{col}bb}}")
-        _cm = ctrl_mode
-        if _cm == 0:
-            b.clicked.connect(lambda: cmd.send_odrive_disable())
-        elif _cm == -1:
-            b.clicked.connect(lambda: cmd.send_odrive_clear_errors())
-        else:
-            b.clicked.connect(lambda _, m=_cm: cmd.send_odrive_enable(m))
-        od_enable_row.addWidget(b)
-    od_enable_row.addStretch()
-    od_ctrl_vb.addLayout(od_enable_row)
+    # ── Shared helpers ────────────────────────────────────────────────────
+    _LBL_BTN = (
+        "QPushButton{background:#2a2a4a;color:white;font-family:Consolas;"
+        "font-size:12px;border-radius:3px;padding:2px 8px}"
+        "QPushButton:hover{background:#3a3a6a}")
+    _SEND_BTN = (
+        "QPushButton{background:#1a4a7a;color:white;font-family:Consolas;"
+        "font-size:10px;border-radius:3px;padding:3px 8px}"
+        "QPushButton:hover{background:#2a5a8a}")
+    _ENBL_BTN = (
+        "QPushButton{{background:{col};color:white;font-family:Consolas;"
+        "font-size:10px;border-radius:3px;padding:3px 8px}}"
+        "QPushButton:hover{{background:{col}cc}}")
+    _VAL_LBL = (
+        "color:white;font-family:Consolas;font-size:11px;"
+        "background:#1e1e3a;border:1px solid #444;padding:2px 6px;border-radius:3px;")
 
-    od_ctrl_vb.addSpacing(6)
+    def _get_motor_target():
+        """Return list of motor IDs to send to: [] means both (broadcast cmd)."""
+        idx = od_target_combo.currentIndex()
+        if idx == 1:
+            return [0]   # Left only
+        if idx == 2:
+            return [1]   # Right only
+        return []        # Both
 
-    # Velocity control
-    od_ctrl_vb.addWidget(_od_lbl("Velocity control  [turns/s]", dim=True))
-    od_vel_row = QtWidgets.QHBoxLayout()
-    od_vel_row.setSpacing(6)
-    od_vel_spin = _od_spin(-5.0, 5.0, 0.25, 0.0, dec=2)
-    od_vel_row.addWidget(_od_lbl("vel (t/s)"))
-    od_vel_row.addWidget(od_vel_spin)
+    def _stepper_row(label_txt, unit, init, step, lo, hi, fmt, enable_mode):
+        """Build [Enable Mode] [-][value][+] [Send] row. Returns (hbox, get_value_fn)."""
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(4)
 
+        # Section label
+        sec = QtWidgets.QLabel(label_txt)
+        sec.setStyleSheet("color:#aaaaaa;font-family:Consolas;font-size:10px;min-width:50px;")
+        row.addWidget(sec)
+
+        btn_en = QtWidgets.QPushButton(f"Enable")
+        btn_en.setStyleSheet(
+            "QPushButton{background:#1e5e2e;color:white;font-family:Consolas;"
+            "font-size:10px;border-radius:3px;padding:3px 8px}"
+            "QPushButton:hover{background:#2e7e3e}")
+        btn_en.clicked.connect(lambda: cmd.send_odrive_enable(enable_mode))
+        row.addWidget(btn_en)
+
+        val = [init]
+        btn_minus = QtWidgets.QPushButton("−")
+        btn_minus.setStyleSheet(_LBL_BTN)
+        btn_minus.setFixedWidth(26)
+        val_lbl = QtWidgets.QLabel(f"{init:{fmt}} {unit}")
+        val_lbl.setStyleSheet(_VAL_LBL)
+        val_lbl.setFixedWidth(90)
+        val_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        btn_plus = QtWidgets.QPushButton("+")
+        btn_plus.setStyleSheet(_LBL_BTN)
+        btn_plus.setFixedWidth(26)
+
+        def _adj(delta, _val=val, _lbl=val_lbl):
+            _val[0] = max(lo, min(hi, _val[0] + delta))
+            _lbl.setText(f"{_val[0]:{fmt}} {unit}")
+
+        btn_minus.clicked.connect(lambda: _adj(-step))
+        btn_plus.clicked.connect(lambda: _adj(+step))
+
+        row.addWidget(btn_minus)
+        row.addWidget(val_lbl)
+        row.addWidget(btn_plus)
+
+        return row, val
+
+    # ── Velocity mode row ─────────────────────────────────────────────────
+    od_sep0 = QtWidgets.QFrame()
+    od_sep0.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+    od_sep0.setStyleSheet("color:#444;")
+    od_ctrl_vb.addWidget(od_sep0)
+
+    vel_row, _od_vel_value = _stepper_row("Velocity", "t/s", 0.0, 1.0, -50.0, 50.0, ".1f", 2)
     od_vel_send = QtWidgets.QPushButton("Send")
-    od_vel_send.setStyleSheet(_BTN_STYLE)
-    od_vel_send.clicked.connect(lambda: cmd.send_odrive_velocity(od_vel_spin.value()))
-    od_vel_row.addWidget(od_vel_send)
+    od_vel_send.setStyleSheet(_SEND_BTN)
 
-    od_vel_stop = QtWidgets.QPushButton("Stop (0)")
-    od_vel_stop.setStyleSheet(_BTN_STYLE)
-    od_vel_stop.clicked.connect(lambda: (od_vel_spin.setValue(0.0),
-                                         cmd.send_odrive_velocity(0.0)))
-    od_vel_row.addWidget(od_vel_stop)
-    od_vel_row.addStretch()
-    od_ctrl_vb.addLayout(od_vel_row)
+    def _send_vel():
+        motors = _get_motor_target()
+        v = _od_vel_value[0]
+        if motors:
+            for m in motors:
+                cmd.send_odrive_velocity_motor(m, v)
+        else:
+            cmd.send_odrive_velocity(v)
 
-    od_ctrl_vb.addSpacing(6)
+    od_vel_send.clicked.connect(_send_vel)
+    vel_row.addWidget(od_vel_send)
+    vel_row.addStretch()
+    od_ctrl_vb.addLayout(vel_row)
 
-    # Position control
-    od_ctrl_vb.addWidget(_od_lbl("Position control  [turns from zero]", dim=True))
-    od_pos_row = QtWidgets.QHBoxLayout()
-    od_pos_row.setSpacing(6)
-    od_pos_spin = _od_spin(-50.0, 50.0, 0.25, 0.0, dec=3)
-    od_pos_row.addWidget(_od_lbl("pos (turns)"))
-    od_pos_row.addWidget(od_pos_spin)
+    # ── Position mode row ─────────────────────────────────────────────────
+    od_sep1 = QtWidgets.QFrame()
+    od_sep1.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+    od_sep1.setStyleSheet("color:#444;")
+    od_ctrl_vb.addWidget(od_sep1)
 
+    pos_row, _od_pos_value = _stepper_row("Position", "t", 0.0, 0.5, -1000.0, 1000.0, ".2f", 3)
     od_pos_send = QtWidgets.QPushButton("Send")
-    od_pos_send.setStyleSheet(_BTN_STYLE)
-    od_pos_send.clicked.connect(lambda: cmd.send_odrive_position(od_pos_spin.value()))
-    od_pos_row.addWidget(od_pos_send)
+    od_pos_send.setStyleSheet(_SEND_BTN)
 
-    od_pos_zero = QtWidgets.QPushButton("Go to 0")
-    od_pos_zero.setStyleSheet(_BTN_STYLE)
-    od_pos_zero.clicked.connect(lambda: (od_pos_spin.setValue(0.0),
-                                          cmd.send_odrive_position(0.0)))
-    od_pos_row.addWidget(od_pos_zero)
-    od_pos_row.addStretch()
-    od_ctrl_vb.addLayout(od_pos_row)
+    def _send_pos():
+        motors = _get_motor_target()
+        p = _od_pos_value[0]
+        if motors:
+            for m in motors:
+                cmd.send_odrive_position_motor(m, p)
+        else:
+            cmd.send_odrive_position(p)
+
+    od_pos_send.clicked.connect(_send_pos)
+    pos_row.addWidget(od_pos_send)
+    pos_row.addStretch()
+    od_ctrl_vb.addLayout(pos_row)
+
+    # ── Torque mode row ───────────────────────────────────────────────────
+    od_sep2 = QtWidgets.QFrame()
+    od_sep2.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+    od_sep2.setStyleSheet("color:#444;")
+    od_ctrl_vb.addWidget(od_sep2)
+
+    tau_row, _od_tau_value = _stepper_row("Torque", "N·m", 0.0, 0.1, -10.0, 10.0, ".2f", 1)
+    od_tau_send = QtWidgets.QPushButton("Send")
+    od_tau_send.setStyleSheet(_SEND_BTN)
+
+    def _send_tau():
+        motors = _get_motor_target()
+        t = _od_tau_value[0]
+        if motors:
+            for m in motors:
+                cmd.send_odrive_torque_motor(m, t)
+        else:
+            cmd.send_odrive_torque(t)
+
+    od_tau_send.clicked.connect(_send_tau)
+    tau_row.addWidget(od_tau_send)
+    tau_row.addStretch()
+    od_ctrl_vb.addLayout(tau_row)
 
     od_ctrl_vb.addStretch()
     odrive_hbox.addWidget(od_ctrl, stretch=1)
