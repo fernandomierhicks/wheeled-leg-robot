@@ -53,6 +53,8 @@
 #define CAN_BAUD            1000000   // 1 Mbps
 #endif
 
+#define CAN_INTER_FRAME_US  500       // [µs] gap between consecutive CAN TX frames to different nodes
+
 // CAN node IDs — each axis is a separate CAN node.
 // Set on ODESC via odrivetool: odrv0.axisN.config.can.node_id = <value>
 #define CAN_ID_HIP_L        0x41      // AK45-10 left hip (MIT CAN) — avoids ODESC collision

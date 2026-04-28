@@ -147,6 +147,32 @@ incremental mode is not an option either.
 
 ---
 
+## Known issue: encoder fails when enabling closed-loop control
+
+### Symptom
+
+Encoder reads position correctly in open loop, but enabling closed-loop control
+(`AXIS_STATE_CLOSED_LOOP_CONTROL`, state 8) causes an immediate `ENCODER_FAILED`
+error and the axis faults out.
+
+### Likely cause: SPI noise from motor switching
+
+When the motor phases are energised, the PWM switching induces electrical noise
+on the SPI lines shared with the encoder. If the SPI clock, MOSI, or CS lines
+pick up this noise, the encoder MCU misinterprets a transaction and the ODrive
+marks communication as failed (`ABS_SPI_COM_FAIL`).
+
+Common fixes:
+1. **Add bypass capacitors** (100 nF ceramic) close to the encoder VCC and GND
+   pins, and 33–100 pF on each SPI signal line.
+2. **Shorten and shield SPI wiring** — keep encoder cables away from motor phase
+   wires; twisted-pair or shielded cable helps significantly.
+3. **Add series resistors** (22–33 Ω) on each SPI line to dampen ringing.
+4. **Reduce SPI clock speed** in firmware if configurable — a slower clock is
+   less susceptible to coupled noise.
+
+---
+
 ## Files
 
 - `odrive_gui.py` — main window, connection/poll loop, status bar.

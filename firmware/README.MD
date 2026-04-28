@@ -126,6 +126,28 @@ Poll these at a slow divisor (e.g. every 10 control ticks = 50 Hz). Each poll co
 
 ---
 
+## Gotchas
+
+### AK45-10 mode is set in flash — cannot switch via CAN
+
+The AK45-10 operating mode (servo vs MIT) is a persistent firmware setting configured via the CubeMars PC tool (R-Link). Sending the MIT enter command (`FF FF FF FF FF FF FF FC`) to a motor running in servo mode has no effect — the servo broadcast continues unchanged. Verified experimentally: 1000 servo frames received post-command, zero MIT replies.
+
+**Consequence:** set both hip motors to MIT mode once via the PC tool before deploying. The MIT enter/exit commands (`0xFC` / `0xFD`) then work over CAN to enable and disable the torque controller within that session, but do not change the persistent mode.
+
+---
+
+### Delay required between consecutive CAN velocity commands
+
+Sending `setVelocity()` to two axes back-to-back with no delay causes the second command to be silently ignored — the motor does not respond. A `delay(1)` between the two calls is sufficient. Root cause is likely the UNO R4's TX FIFO or the ODrive's bus arbitration needing a brief inter-frame gap.
+
+```cpp
+odrv1.setVelocity(vel);
+delay(1);              // required — 0 ms causes second command to be dropped
+odrv0.setVelocity(-vel);
+```
+
+---
+
 ## Characterization Sketch
 
 `components/characterization/CAN/` — standalone PlatformIO project for measuring:

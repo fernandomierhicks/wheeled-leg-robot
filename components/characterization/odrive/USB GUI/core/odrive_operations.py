@@ -248,10 +248,6 @@ def auto_tune_after_cal(mgr, axis_idx: int) -> dict:
     except Exception:
         pass
 
-    # Brake resistor + regen
-    odrv.config.enable_brake_resistor = True
-    odrv.config.dc_max_negative_current = -5.0
-
     tuned = {
         "vel_gain": vel_gain,
         "vel_integrator_gain": vel_int,

@@ -189,7 +189,11 @@ bool wifi_try_receive(RobotState& state, uint32_t tick, uint32_t tick_start_us) 
         CMD_ODRIVE_ENABLE = 7, CMD_ODRIVE_DISABLE = 8,
         CMD_ODRIVE_VEL = 9, CMD_ODRIVE_POS = 10, CMD_ODRIVE_CLEAR = 11,
         CMD_ODRIVE_TORQUE = 12,
-        CMD_ODRIVE_VEL_M = 13, CMD_ODRIVE_POS_M = 14, CMD_ODRIVE_TORQUE_M = 15
+        CMD_ODRIVE_VEL_M = 13, CMD_ODRIVE_POS_M = 14, CMD_ODRIVE_TORQUE_M = 15,
+        // AK45 flat commands (motor_id in buf[1], payload from buf[2])
+        CMD_HIP_VEL = 16,  // motor_id + vel_f32 [rad/s] + kd_f32
+        CMD_HIP_POS = 17,  // motor_id + pos_f32 [rad] + kp_f32 + kd_f32
+        CMD_HIP_MIT = 18,  // motor_id + p_f32 + v_f32 + kp_f32 + kd_f32 + t_ff_f32
     };
 
     switch (buf[0]) {
@@ -281,40 +285,96 @@ bool wifi_try_receive(RobotState& state, uint32_t tick, uint32_t tick_start_us) 
         wheel_motors_clear_errors();
         break;
     case CMD_HIP: {
-        // [CMD_HIP u8][motor_id u8][cmd u8][p_des f32][v_des f32][kp f32][kd f32][t_ff f32]
-        // motor_id: 1=Hip L, 2=Hip R, 3=Both   cmd: 0=Disable,1=Enable,2=SetZero,3=MITcmd
+        // [CMD_HIP][motor_id][sub_cmd][...payload...]
+        // motor_id: 1=L, 2=R, 3=Both
+        // sub_cmd:  0=disable, 1=enable, 2=set_zero, 3=mit_raw, 4=velocity, 5=position
         if (n < 3) break;
-        uint8_t motor_id = buf[1];
-        uint8_t hip_cmd  = buf[2];
-
-        // Helper lambdas capture nothing — plain per-motor dispatch
-        auto do_enable  = [&](uint8_t id) { ak45_enable(id);   state.hip_enabled = true; };
-        auto do_disable = [&](uint8_t id) { ak45_disable(id);  };
-        auto do_zero    = [&](uint8_t id) { ak45_set_zero(id); };
-
-        if (hip_cmd == 0) {  // Disable
-            if (motor_id == 1 || motor_id == 3) do_disable(CAN_ID_HIP_L);
-            if (motor_id == 2 || motor_id == 3) do_disable(CAN_ID_HIP_R);
-            if (motor_id == 3) state.hip_enabled = false;
-        } else if (hip_cmd == 1) {  // Enable
-            if (motor_id == 1 || motor_id == 3) do_enable(CAN_ID_HIP_L);
-            if (motor_id == 2 || motor_id == 3) do_enable(CAN_ID_HIP_R);
-        } else if (hip_cmd == 2) {  // Set Zero
-            if (motor_id == 1 || motor_id == 3) do_zero(CAN_ID_HIP_L);
-            if (motor_id == 2 || motor_id == 3) do_zero(CAN_ID_HIP_R);
-        } else if (hip_cmd == 3) {  // MIT cmd
+        uint8_t mid = buf[1];
+        uint8_t sub = buf[2];
+        if (sub == 0) {  // disable
+            if (mid == 1 || mid == 3) ak45_disable(CAN_ID_HIP_L);
+            if (mid == 2 || mid == 3) ak45_disable(CAN_ID_HIP_R);
+            state.hip_enabled     = false;
+            state.hip_direct_mode = 0;
+        } else if (sub == 1) {  // enable
+            if (mid == 1 || mid == 3) ak45_enable(CAN_ID_HIP_L);
+            if (mid == 2 || mid == 3) ak45_enable(CAN_ID_HIP_R);
+            state.hip_enabled = true;
+        } else if (sub == 2) {  // set zero
+            if (mid == 1 || mid == 3) ak45_set_zero(CAN_ID_HIP_L);
+            if (mid == 2 || mid == 3) ak45_set_zero(CAN_ID_HIP_R);
+        } else if (sub == 3) {  // MIT raw → write state, main.cpp repeats every tick
             if (n < 23) break;
-            float p_des, v_des, kp, kd, t_ff;
-            memcpy(&p_des, &buf[3],  4);
-            memcpy(&v_des, &buf[7],  4);
-            memcpy(&kp,    &buf[11], 4);
-            memcpy(&kd,    &buf[15], 4);
-            memcpy(&t_ff,  &buf[19], 4);
-            if (motor_id == 1 || motor_id == 3)
-                ak45_send_cmd(CAN_ID_HIP_L, p_des, v_des, kp, kd, t_ff);
-            if (motor_id == 2 || motor_id == 3)
-                ak45_send_cmd(CAN_ID_HIP_R, p_des, v_des, kp, kd, t_ff);
+            float p, v, kp, kd, t_ff;
+            memcpy(&p,    &buf[3],  4);
+            memcpy(&v,    &buf[7],  4);
+            memcpy(&kp,   &buf[11], 4);
+            memcpy(&kd,   &buf[15], 4);
+            memcpy(&t_ff, &buf[19], 4);
+            state.hip_kp = kp; state.hip_kd = kd;
+            state.hip_direct_mode = 3;
+            if (mid == 1 || mid == 3) { state.hip_pos_L = p; state.hip_vel_L = v; state.hip_t_ff_L = t_ff; }
+            if (mid == 2 || mid == 3) { state.hip_pos_R = p; state.hip_vel_R = v; state.hip_t_ff_R = t_ff; }
+        } else if (sub == 4) {  // velocity mode
+            if (n < 11) break;
+            float vel, kd;
+            memcpy(&vel, &buf[3], 4);
+            memcpy(&kd,  &buf[7], 4);
+            state.hip_kd = kd;
+            state.hip_direct_mode = 1;
+            if (mid == 1 || mid == 3) state.hip_vel_L = vel;
+            if (mid == 2 || mid == 3) state.hip_vel_R = vel;
+        } else if (sub == 5) {  // position mode
+            if (n < 15) break;
+            float pos, kp, kd;
+            memcpy(&pos, &buf[3],  4);
+            memcpy(&kp,  &buf[7],  4);
+            memcpy(&kd,  &buf[11], 4);
+            state.hip_kp = kp; state.hip_kd = kd;
+            state.hip_direct_mode = 2;
+            if (mid == 1 || mid == 3) state.hip_pos_L = pos;
+            if (mid == 2 || mid == 3) state.hip_pos_R = pos;
         }
+        break;
+    }
+    case CMD_HIP_VEL: {
+        // [CMD_HIP_VEL][motor_id][vel_f32][kd_f32]
+        if (n < 10) break;
+        float vel, kd;
+        memcpy(&vel, &buf[2], 4);
+        memcpy(&kd,  &buf[6], 4);
+        state.hip_kd = kd;
+        state.hip_direct_mode = 1;
+        if (buf[1] == 1 || buf[1] == 3) state.hip_vel_L = vel;
+        if (buf[1] == 2 || buf[1] == 3) state.hip_vel_R = vel;
+        break;
+    }
+    case CMD_HIP_POS: {
+        // [CMD_HIP_POS][motor_id][pos_f32][kp_f32][kd_f32]
+        if (n < 14) break;
+        float pos, kp, kd;
+        memcpy(&pos, &buf[2], 4);
+        memcpy(&kp,  &buf[6], 4);
+        memcpy(&kd,  &buf[10], 4);
+        state.hip_kp = kp; state.hip_kd = kd;
+        state.hip_direct_mode = 2;
+        if (buf[1] == 1 || buf[1] == 3) state.hip_pos_L = pos;
+        if (buf[1] == 2 || buf[1] == 3) state.hip_pos_R = pos;
+        break;
+    }
+    case CMD_HIP_MIT: {
+        // [CMD_HIP_MIT][motor_id][p_f32][v_f32][kp_f32][kd_f32][t_ff_f32]
+        if (n < 22) break;
+        float p, v, kp, kd, t_ff;
+        memcpy(&p,    &buf[2],  4);
+        memcpy(&v,    &buf[6],  4);
+        memcpy(&kp,   &buf[10], 4);
+        memcpy(&kd,   &buf[14], 4);
+        memcpy(&t_ff, &buf[18], 4);
+        state.hip_kp = kp; state.hip_kd = kd;
+        state.hip_direct_mode = 3;
+        if (buf[1] == 1 || buf[1] == 3) { state.hip_pos_L = p; state.hip_vel_L = v; state.hip_t_ff_L = t_ff; }
+        if (buf[1] == 2 || buf[1] == 3) { state.hip_pos_R = p; state.hip_vel_R = v; state.hip_t_ff_R = t_ff; }
         break;
     }
     }

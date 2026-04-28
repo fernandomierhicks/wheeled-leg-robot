@@ -3,8 +3,8 @@
 
 
 Priorities:
--Add second wheel motor
 -Get CAD going
+-Ak45 working on CAN bus. Instructions on how to flash them
 
 
 

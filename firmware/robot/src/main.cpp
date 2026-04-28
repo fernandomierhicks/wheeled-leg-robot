@@ -29,6 +29,7 @@
 #include "wifi_fast.h"
 #include "commands.h"
 #include "wheel_motors.h"
+#include "ak45_can.h"
 #endif
 
 // ── 500 Hz hardware timer ───────────────────────────────────────────────────
@@ -243,6 +244,33 @@ void loop() {
         wheel_motors_send(state.tau_wheel_L, state.tau_wheel_R);
     }
     wheel_motors_pet_watchdog();
+
+    // ── CAN TX: AK45 hip motors (direct bench / characterization mode) ──
+    // Sends MIT command every tick when hip is enabled and a direct mode is active.
+    // Velocity: kp=0, p_des=current feedback — motor acts as damped velocity servo.
+    // Position: kp/kd from state, v_des=0.
+    // MIT raw:  all fields forwarded as-is from state.
+    if (state.hip_enabled && state.hip_direct_mode != 0) {
+        if (state.hip_direct_mode == 1) {  // velocity
+            ak45_send_cmd(CAN_ID_HIP_L, state.hip_q_L, state.hip_vel_L,
+                          0.0f, state.hip_kd, 0.0f);
+            delayMicroseconds(CAN_INTER_FRAME_US);
+            ak45_send_cmd(CAN_ID_HIP_R, state.hip_q_R, state.hip_vel_R,
+                          0.0f, state.hip_kd, 0.0f);
+        } else if (state.hip_direct_mode == 2) {  // position
+            ak45_send_cmd(CAN_ID_HIP_L, state.hip_pos_L, 0.0f,
+                          state.hip_kp, state.hip_kd, state.hip_t_ff_L);
+            delayMicroseconds(CAN_INTER_FRAME_US);
+            ak45_send_cmd(CAN_ID_HIP_R, state.hip_pos_R, 0.0f,
+                          state.hip_kp, state.hip_kd, state.hip_t_ff_R);
+        } else if (state.hip_direct_mode == 3) {  // MIT raw
+            ak45_send_cmd(CAN_ID_HIP_L, state.hip_pos_L, state.hip_vel_L,
+                          state.hip_kp, state.hip_kd, state.hip_t_ff_L);
+            delayMicroseconds(CAN_INTER_FRAME_US);
+            ak45_send_cmd(CAN_ID_HIP_R, state.hip_pos_R, state.hip_vel_R,
+                          state.hip_kp, state.hip_kd, state.hip_t_ff_R);
+        }
+    }
 #endif // !IMU_ONLY
 
     state.tick++;

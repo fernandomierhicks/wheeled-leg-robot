@@ -54,6 +54,21 @@ struct RobotState {
     float   hip_temp;           // [°C] motor temperature (last RX)
     uint8_t hip_error;          // motor error code (last RX)
 
+    // Direct AK45 hip control (bench / characterization mode).
+    // When hip_enabled=true and hip_direct_mode != 0, main.cpp sends MIT CAN every tick.
+    // Velocity mode: kp=0, v_des=hip_vel_L/R, kd=hip_kd, p_des=current feedback pos.
+    // Position mode: kp=hip_kp, kd=hip_kd, p_des=hip_pos_L/R, v_des=0.
+    // MIT raw mode:  all fields forwarded as-is (hip_pos=p_des, hip_vel=v_des).
+    uint8_t hip_direct_mode;    // 0=off, 1=velocity, 2=position, 3=mit_raw
+    float   hip_vel_L;          // [rad/s] velocity setpoint
+    float   hip_vel_R;
+    float   hip_pos_L;          // [rad] position setpoint (also p_des in MIT raw)
+    float   hip_pos_R;
+    float   hip_kp;             // [N·m/rad] position gain (pos + mit modes)
+    float   hip_kd;             // [N·m·s/rad] damping gain (all modes)
+    float   hip_t_ff_L;         // [N·m] feedforward torque (pos + mit modes)
+    float   hip_t_ff_R;
+
     // Computed averages
     float wheel_vel_avg;        // (L + R) / 2
     float hip_q_avg;            // (L + R) / 2

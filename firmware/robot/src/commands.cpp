@@ -6,6 +6,7 @@
 #include "commands.h"
 #include "config.h"
 #include "wheel_motors.h"
+#include "ak45_can.h"
 #include <Arduino.h>
 
 #if USE_WIFI
@@ -43,7 +44,7 @@ enum CmdType : uint8_t {
     CMD_MODE            = 2,
     CMD_GAIN            = 3,
     CMD_PING            = 4,
-    CMD_HIP             = 5,
+    CMD_HIP             = 5,   // 2 bytes: motor_id + sub_cmd (0=disable,1=enable,2=set_zero)
     CMD_ODRIVE_ENABLE   = 7,   // 1 byte: ctrl_mode (1=torque, 2=velocity, 3=position)
     CMD_ODRIVE_DISABLE  = 8,   // no payload
     CMD_ODRIVE_VEL      = 9,   // 1 float: velocity [turns/s] — both axes
@@ -53,6 +54,11 @@ enum CmdType : uint8_t {
     CMD_ODRIVE_VEL_M    = 13,  // 1 byte motor_id + 1 float: velocity [turns/s] — per motor
     CMD_ODRIVE_POS_M    = 14,  // 1 byte motor_id + 1 float: position [turns]   — per motor
     CMD_ODRIVE_TORQUE_M = 15,  // 1 byte motor_id + 1 float: torque  [N·m]     — per motor
+    // AK45 hip motor direct commands (motor_id: 1=L, 2=R, 3=Both)
+    // CMD_HIP=5 already declared above; sub_cmd payload = motor_id + sub_cmd (2 bytes)
+    CMD_HIP_VEL         = 16,  // 9 bytes: motor_id + vel_f32 [rad/s] + kd_f32 [N·m·s/rad]
+    CMD_HIP_POS         = 17,  // 13 bytes: motor_id + pos_f32 [rad] + kp_f32 + kd_f32
+    CMD_HIP_MIT         = 18,  // 21 bytes: motor_id + p_f32 + v_f32 + kp_f32 + kd_f32 + t_ff_f32
 };
 
 static uint8_t payload_bytes(uint8_t cmd) {
@@ -69,6 +75,10 @@ static uint8_t payload_bytes(uint8_t cmd) {
         case CMD_ODRIVE_VEL_M:    return 5;  // 1 byte motor_id + 1 × float32
         case CMD_ODRIVE_POS_M:    return 5;
         case CMD_ODRIVE_TORQUE_M: return 5;
+        case CMD_HIP:             return 2;   // motor_id + sub_cmd
+        case CMD_HIP_VEL:         return 9;   // motor_id + vel + kd
+        case CMD_HIP_POS:         return 13;  // motor_id + pos + kp + kd
+        case CMD_HIP_MIT:         return 21;  // motor_id + p + v + kp + kd + t_ff
         default:                  return 0xFF; // unknown — discard
     }
 }
@@ -164,6 +174,75 @@ static void process_cmd(uint8_t cmd, const uint8_t* buf, uint8_t len, RobotState
         float tau; memcpy(&tau, buf + 1, 4);
         if (buf[0] == 0) state.odrive_tau_L = tau;
         else             state.odrive_tau_R = tau;
+        break;
+    }
+    case CMD_HIP: {
+        // buf[0]=motor_id (1=L,2=R,3=Both), buf[1]=sub_cmd (0=disable,1=enable,2=set_zero)
+        if (len < 2) break;
+        uint8_t mid = buf[0], sub = buf[1];
+        if (sub == 0) {  // disable
+            if (mid == 1 || mid == 3) ak45_disable(CAN_ID_HIP_L);
+            if (mid == 2 || mid == 3) ak45_disable(CAN_ID_HIP_R);
+            state.hip_enabled     = false;
+            state.hip_direct_mode = 0;
+            Serial.println("[Cmd]  AK45 disable");
+        } else if (sub == 1) {  // enable
+            if (mid == 1 || mid == 3) ak45_enable(CAN_ID_HIP_L);
+            if (mid == 2 || mid == 3) ak45_enable(CAN_ID_HIP_R);
+            state.hip_enabled = true;
+            Serial.println("[Cmd]  AK45 enable");
+        } else if (sub == 2) {  // set zero
+            if (mid == 1 || mid == 3) ak45_set_zero(CAN_ID_HIP_L);
+            if (mid == 2 || mid == 3) ak45_set_zero(CAN_ID_HIP_R);
+            Serial.println("[Cmd]  AK45 set_zero");
+        }
+        break;
+    }
+    case CMD_HIP_VEL: {
+        // buf[0]=motor_id, buf[1-4]=vel [rad/s], buf[5-8]=kd [N·m·s/rad]
+        if (len < 9) break;
+        float vel, kd;
+        memcpy(&vel, buf + 1, 4);
+        memcpy(&kd,  buf + 5, 4);
+        state.hip_kd          = kd;
+        state.hip_direct_mode = 1;
+        if (buf[0] == 1 || buf[0] == 3) state.hip_vel_L = vel;
+        if (buf[0] == 2 || buf[0] == 3) state.hip_vel_R = vel;
+        Serial.print("[Cmd]  AK45 vel="); Serial.print(vel, 3);
+        Serial.print("  kd="); Serial.println(kd, 3);
+        break;
+    }
+    case CMD_HIP_POS: {
+        // buf[0]=motor_id, buf[1-4]=pos [rad], buf[5-8]=kp, buf[9-12]=kd
+        if (len < 13) break;
+        float pos, kp, kd;
+        memcpy(&pos, buf + 1, 4);
+        memcpy(&kp,  buf + 5, 4);
+        memcpy(&kd,  buf + 9, 4);
+        state.hip_kp          = kp;
+        state.hip_kd          = kd;
+        state.hip_direct_mode = 2;
+        if (buf[0] == 1 || buf[0] == 3) state.hip_pos_L = pos;
+        if (buf[0] == 2 || buf[0] == 3) state.hip_pos_R = pos;
+        Serial.print("[Cmd]  AK45 pos="); Serial.print(pos, 3);
+        Serial.print("  kp="); Serial.print(kp, 2);
+        Serial.print("  kd="); Serial.println(kd, 2);
+        break;
+    }
+    case CMD_HIP_MIT: {
+        // buf[0]=motor_id, buf[1-4]=p, buf[5-8]=v, buf[9-12]=kp, buf[13-16]=kd, buf[17-20]=t_ff
+        if (len < 21) break;
+        float p, v, kp, kd, t_ff;
+        memcpy(&p,    buf + 1,  4);
+        memcpy(&v,    buf + 5,  4);
+        memcpy(&kp,   buf + 9,  4);
+        memcpy(&kd,   buf + 13, 4);
+        memcpy(&t_ff, buf + 17, 4);
+        state.hip_kp          = kp;
+        state.hip_kd          = kd;
+        state.hip_direct_mode = 3;
+        if (buf[0] == 1 || buf[0] == 3) { state.hip_pos_L = p; state.hip_vel_L = v; state.hip_t_ff_L = t_ff; }
+        if (buf[0] == 2 || buf[0] == 3) { state.hip_pos_R = p; state.hip_vel_R = v; state.hip_t_ff_R = t_ff; }
         break;
     }
     default:

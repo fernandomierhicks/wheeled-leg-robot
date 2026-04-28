@@ -286,9 +286,6 @@ class TabAnticogging(QWidget):
             # Disable stale anticogging map (fights itself during calibration)
             axis.controller.config.anticogging.anticogging_enabled = False
 
-            # Allow reasonable regen current
-            odrv.config.dc_max_negative_current = -5.0
-
             # Set calibration thresholds
             axis.controller.config.anticogging.calib_vel_threshold = threshold
             axis.controller.config.anticogging.calib_pos_threshold = threshold

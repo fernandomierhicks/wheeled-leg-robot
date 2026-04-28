@@ -1,7 +1,7 @@
 {
     "python-envs.pythonProjects": [
         {
-            "path": "firmware/can_bridge",
+            "path": "firmware/can_bridge_odrive",
             "envManager": "ms-python.python:venv",
             "packageManager": "ms-python.python:pip"
         }
