@@ -37,16 +37,26 @@ void pack_mit_frame(uint8_t buf[8], float pos, float vel, float kp, float kd, fl
 
 static const uint8_t ENTER_CMD[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC};
 
-static bool     forward      = true;
-static uint32_t lastPollUs   = 0;   // 500 Hz CAN poll
-static uint32_t lastDirMs    = 0;   // 2 s direction flip
-static uint32_t lastPrintMs  = 0;   // throttle Serial to 10 Hz
+// --- Spring demo tuning ---
+// Reduce KP for a softer spring (more compliant / easier to push against).
+// Reduce KD for less damping (bouncier). Increase for critically damped.
+// TARGET_AMP sets how far apart the two alternating set-points are (rad).
+static const float KP         =  0.5f;   // N·m/rad  — spring stiffness
+static const float KD         =  0.1f;   // N·m·s/rad — damping
+static const float TARGET_AMP =  2.0f;   // rad      — ±set-point
+// -------------------------
+
+static bool     posPhase    = true;   // true → +TARGET_AMP, false → −TARGET_AMP
+static uint32_t lastPollUs  = 0;
+static uint32_t lastPhaseMs = 0;      // 2 s set-point alternation
+static uint32_t lastPrintMs = 0;
 static float    lastPos = 0, lastVel = 0, lastCur = 0;
 
-void send_speed() {
-    float vel = forward ? 4.0f * 3.14159f : -4.0f * 3.14159f;
+void send_spring() {
+    float target = posPhase ? TARGET_AMP : -TARGET_AMP;
     uint8_t buf[8];
-    pack_mit_frame(buf, 0.0f, vel, 0.0f, 1.0f, 0.0f);
+    // vel=0: pure spring/damper, no velocity feedforward
+    pack_mit_frame(buf, target, 0.0f, KP, KD, 0.0f);
     CanMsg cmd(CanStandardId(0x01), 8, buf);
     CAN.write(cmd);
 }
@@ -60,11 +70,11 @@ void setup() {
     CanMsg enter_msg(CanStandardId(0x01), 8, (uint8_t*)ENTER_CMD);
     CAN.write(enter_msg);
     delay(10);
-    send_speed();
-    Serial.println("MIT mode entered, running FWD");
+    send_spring();
+    Serial.println("MIT spring mode — kp=20 kd=0.5 target=+2 rad");
 
     lastPollUs  = micros();
-    lastDirMs   = millis();
+    lastPhaseMs = millis();
     lastPrintMs = millis();
 }
 
@@ -72,20 +82,21 @@ void loop() {
     uint32_t nowUs = micros();
     uint32_t nowMs = millis();
 
-    // Flip direction every 2 seconds
-    if (nowMs - lastDirMs >= 2000) {
-        forward   = !forward;
-        lastDirMs = nowMs;
+    // Alternate set-point every 2 seconds
+    if (nowMs - lastPhaseMs >= 2000) {
+        posPhase    = !posPhase;
+        lastPhaseMs = nowMs;
         CanMsg enter_msg(CanStandardId(0x01), 8, (uint8_t*)ENTER_CMD);
         CAN.write(enter_msg);
         delay(10);
-        send_speed();
+        send_spring();
+        Serial.print("Set-point -> "); Serial.println(posPhase ? TARGET_AMP : -TARGET_AMP, 2);
     }
 
-    // Poll telemetry at 500 Hz by re-sending the current speed command
+    // Poll telemetry at 500 Hz
     if (nowUs - lastPollUs >= 2000) {
         lastPollUs = nowUs;
-        send_speed();
+        send_spring();
         if (CAN.available()) {
             CanMsg reply = CAN.read();
             if (reply.data_length >= 6) {
@@ -102,7 +113,7 @@ void loop() {
     // Print at 10 Hz
     if (nowMs - lastPrintMs >= 100) {
         lastPrintMs = nowMs;
-        Serial.print(forward ? "FWD" : "REV");
+        Serial.print("tgt="); Serial.print(posPhase ? TARGET_AMP : -TARGET_AMP, 2);
         Serial.print("  pos="); Serial.print(lastPos, 3);
         Serial.print("  vel="); Serial.print(lastVel, 3);
         Serial.print("  cur="); Serial.println(lastCur, 3);
