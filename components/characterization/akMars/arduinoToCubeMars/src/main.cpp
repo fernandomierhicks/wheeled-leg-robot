@@ -1,6 +1,8 @@
-// CubeMars AK45-10 — MIT mode control
+// CubeMars AK45-10 — MIT mode control, dual motor
 // Hardware: Arduino UNO R4 WiFi
 // CAN wiring: CANTX → D4, CANRX → D5, common GND with motor driver
+// Motor 1: CAN ID 1  — alternates ±TARGET_AMP every 2 s
+// Motor 2: CAN ID 64 — alternates ∓TARGET_AMP (opposite phase to M1)
 
 #include <Arduino.h>
 #include <Arduino_CAN.h>
@@ -37,28 +39,51 @@ void pack_mit_frame(uint8_t buf[8], float pos, float vel, float kp, float kd, fl
 
 static const uint8_t ENTER_CMD[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC};
 
-// --- Spring demo tuning ---
-// Reduce KP for a softer spring (more compliant / easier to push against).
-// Reduce KD for less damping (bouncier). Increase for critically damped.
-// TARGET_AMP sets how far apart the two alternating set-points are (rad).
-static const float KP         =  0.5f;   // N·m/rad  — spring stiffness
-static const float KD         =  0.1f;   // N·m·s/rad — damping
-static const float TARGET_AMP =  2.0f;   // rad      — ±set-point
-// -------------------------
+// --- Tuning ---
+static const float KP         =  0.5f;  // N·m/rad   spring stiffness (both motors)
+static const float KD         =  0.1f;  // N·m·s/rad damping (both motors)
+static const float TARGET_AMP =  2.0f;  // rad       both motors alternate ±this
+// --------------
 
-static bool     posPhase    = true;   // true → +TARGET_AMP, false → −TARGET_AMP
-static uint32_t lastPollUs  = 0;
-static uint32_t lastPhaseMs = 0;      // 2 s set-point alternation
+static const uint8_t M1_ID = 64;
+static const uint8_t M2_ID = 1;
+
+// Each motor has its own target; only one flips per 2 s turn
+static float    m1Tgt       =  TARGET_AMP;
+static float    m2Tgt       = -TARGET_AMP;
+static bool     m1Turn      = true;   // whose turn to move next
+
+static uint32_t lastPollUs  = 0;    // alternates M1/M2 every 1 ms → 500 Hz each
+static bool     pollM1      = true;
+static uint32_t lastPhaseMs = 0;
 static uint32_t lastPrintMs = 0;
-static float    lastPos = 0, lastVel = 0, lastCur = 0;
 
-void send_spring() {
-    float target = posPhase ? TARGET_AMP : -TARGET_AMP;
+static float m1Pos = 0, m1Vel = 0, m1Cur = 0;
+static float m2Pos = 0, m2Vel = 0, m2Cur = 0;
+
+void enter_mit(uint8_t id) {
+    CanMsg msg(CanStandardId(id), 8, (uint8_t*)ENTER_CMD);
+    CAN.write(msg);
+}
+
+void send_spring(uint8_t id, float target) {
     uint8_t buf[8];
-    // vel=0: pure spring/damper, no velocity feedforward
     pack_mit_frame(buf, target, 0.0f, KP, KD, 0.0f);
-    CanMsg cmd(CanStandardId(0x01), 8, buf);
+    CanMsg cmd(CanStandardId(id), 8, buf);
     CAN.write(cmd);
+}
+
+void decode_reply(const CanMsg& msg) {
+    if (msg.data_length < 6) return;
+    uint8_t  id      = msg.data[0];
+    uint16_t raw_pos = ((uint16_t)msg.data[1] << 8) | msg.data[2];
+    uint16_t raw_vel = ((uint16_t)msg.data[3] << 4) | (msg.data[4] >> 4);
+    uint16_t raw_cur = ((uint16_t)(msg.data[4] & 0xF) << 8) | msg.data[5];
+    float pos = raw_pos / 65535.0f * (P_MAX - P_MIN) + P_MIN;
+    float vel = raw_vel /  4095.0f * (V_MAX - V_MIN) + V_MIN;
+    float cur = raw_cur /  4095.0f * 40.0f - 20.0f;
+    if (id == M1_ID) { m1Pos = pos; m1Vel = vel; m1Cur = cur; }
+    else              { m2Pos = pos; m2Vel = vel; m2Cur = cur; }
 }
 
 void setup() {
@@ -67,11 +92,11 @@ void setup() {
     CAN.begin(CanBitRate::BR_1000k);
     delay(50);
 
-    CanMsg enter_msg(CanStandardId(0x01), 8, (uint8_t*)ENTER_CMD);
-    CAN.write(enter_msg);
-    delay(10);
-    send_spring();
-    Serial.println("MIT spring mode — kp=20 kd=0.5 target=+2 rad");
+    enter_mit(M1_ID); delay(10);
+    enter_mit(M2_ID); delay(10);
+    send_spring(M1_ID, m1Tgt); delay(5);
+    send_spring(M2_ID, m2Tgt); delay(5);
+    Serial.println("Dual MIT spring — motors move one at a time");
 
     lastPollUs  = micros();
     lastPhaseMs = millis();
@@ -82,40 +107,44 @@ void loop() {
     uint32_t nowUs = micros();
     uint32_t nowMs = millis();
 
-    // Alternate set-point every 2 seconds
+    // Every 2 s, flip only the motor whose turn it is; the other keeps holding
     if (nowMs - lastPhaseMs >= 2000) {
-        posPhase    = !posPhase;
         lastPhaseMs = nowMs;
-        CanMsg enter_msg(CanStandardId(0x01), 8, (uint8_t*)ENTER_CMD);
-        CAN.write(enter_msg);
-        delay(10);
-        send_spring();
-        Serial.print("Set-point -> "); Serial.println(posPhase ? TARGET_AMP : -TARGET_AMP, 2);
+        if (m1Turn) {
+            m1Tgt = -m1Tgt;
+            enter_mit(M1_ID); delay(5);
+            send_spring(M1_ID, m1Tgt);
+            Serial.print("M1 moves -> "); Serial.print(m1Tgt, 1);
+            Serial.print("  M2 holds "); Serial.println(m2Tgt, 1);
+        } else {
+            m2Tgt = -m2Tgt;
+            enter_mit(M2_ID); delay(5);
+            send_spring(M2_ID, m2Tgt);
+            Serial.print("M1 holds "); Serial.print(m1Tgt, 1);
+            Serial.print("  M2 moves -> "); Serial.println(m2Tgt, 1);
+        }
+        m1Turn = !m1Turn;
     }
 
-    // Poll telemetry at 500 Hz
-    if (nowUs - lastPollUs >= 2000) {
+    // Drain RX every tick — replies arrive asynchronously
+    while (CAN.available()) decode_reply(CAN.read());
+
+    // Alternate M1/M2 every 1 ms — each motor gets 500 Hz, never simultaneous
+    if (nowUs - lastPollUs >= 1000) {
         lastPollUs = nowUs;
-        send_spring();
-        if (CAN.available()) {
-            CanMsg reply = CAN.read();
-            if (reply.data_length >= 6) {
-                uint16_t raw_pos = ((uint16_t)reply.data[1] << 8) | reply.data[2];
-                uint16_t raw_vel = ((uint16_t)reply.data[3] << 4) | (reply.data[4] >> 4);
-                uint16_t raw_cur = ((uint16_t)(reply.data[4] & 0xF) << 8) | reply.data[5];
-                lastPos = raw_pos / 65535.0f * (P_MAX - P_MIN) + P_MIN;
-                lastVel = raw_vel /  4095.0f * (V_MAX - V_MIN) + V_MIN;
-                lastCur = raw_cur /  4095.0f * 40.0f - 20.0f;
-            }
-        }
+        if (pollM1) send_spring(M1_ID, m1Tgt);
+        else        send_spring(M2_ID, m2Tgt);
+        pollM1 = !pollM1;
     }
 
     // Print at 10 Hz
     if (nowMs - lastPrintMs >= 100) {
         lastPrintMs = nowMs;
-        Serial.print("tgt="); Serial.print(posPhase ? TARGET_AMP : -TARGET_AMP, 2);
-        Serial.print("  pos="); Serial.print(lastPos, 3);
-        Serial.print("  vel="); Serial.print(lastVel, 3);
-        Serial.print("  cur="); Serial.println(lastCur, 3);
+        Serial.print("M1 tgt="); Serial.print(m1Tgt, 1);
+        Serial.print(" pos=");   Serial.print(m1Pos, 3);
+        Serial.print(" cur=");   Serial.print(m1Cur, 2);
+        Serial.print("  |  M2 tgt="); Serial.print(m2Tgt, 1);
+        Serial.print(" pos=");        Serial.print(m2Pos, 3);
+        Serial.print(" cur=");        Serial.println(m2Cur, 2);
     }
 }
