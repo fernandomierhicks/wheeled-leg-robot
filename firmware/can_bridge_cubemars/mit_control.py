@@ -15,8 +15,9 @@ import sys
 import time
 import serial
 
-MOTOR_ID = 65          # 0x41
-BAUD     = 1_000_000
+MOTOR_ID  = 65         # 0x41 — motor listens on this ID
+MASTER_ID = 64         # 0x40 — motor replies using this ID
+BAUD      = 1_000_000
 PORT     = sys.argv[1] if len(sys.argv) > 1 else "COM5"
 
 # Velocity steps: (v_des rad/s, duration_s)
@@ -101,7 +102,7 @@ def recv_latest(ser, window):
                     can_id = int(line[1:4], 16)
                     dlc    = int(line[4], 16)
                     data   = bytes.fromhex(line[5:5 + dlc * 2])
-                    if can_id == MOTOR_ID and dlc == 8:
+                    if can_id == MASTER_ID and dlc == 8:
                         latest = decode_rx(data)
                 except Exception:
                     pass

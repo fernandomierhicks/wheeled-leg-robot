@@ -20,7 +20,7 @@ import struct
 import serial
 
 # ── Config ───────────────────────────────────────────────────────────────────
-MOTOR_ID = 65          # 0x41
+MOTOR_ID = 69          # 0x41
 
 # Positions to step through (degrees, absolute).  Edit as needed.
 TARGET_POSITIONS_DEG = [120.0, 100.0, 160.0, 140.0]

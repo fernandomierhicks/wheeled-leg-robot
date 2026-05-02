@@ -5,12 +5,16 @@
 Priorities:
 -Get CAD going
 -Ak45 working on CAN bus. Instructions on how to flash them
+---------For very sproadic instances got it working with code in components\characterization\akMars\arduinoToCubeMars
+---------AKMARS GUI seems to enable something thast we cant from CAN?
 
 
 
+------------------------------------------------------firmware
+-HOw to find zero angle of ak45 on boot up?
 
 -------------------------------------------------------CAD
-
+Square tube
 
 
 ---------------------------------------------------------SIMULATION
