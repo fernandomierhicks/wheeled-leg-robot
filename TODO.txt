@@ -12,6 +12,7 @@ Priorities:
 
 ------------------------------------------------------firmware
 -HOw to find zero angle of ak45 on boot up? find mechanical hardstop while ni low current mode
+-Fiincky AK45 CAN, grounding?
 
 -------------------------------------------------------CAD
 Square tube

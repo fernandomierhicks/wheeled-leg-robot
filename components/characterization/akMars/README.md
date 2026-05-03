@@ -16,3 +16,22 @@ The GUI reports output speed in deg/s with a large scaling error (~4.7× too low
 **Use ERPM as the ground truth** (25,200 ERPM = 180 rpm = 1,080 deg/s at no load, 24 V).
 
 The bug is likely a wrong gear ratio or pole-pair count in the GUI's unit conversion — do not trust the deg/s readout.
+
+## MIT Mode: Periodic `enter_mit` is Required
+
+Sending `enter_mit` once in `setup()` is **not enough**. The motor drops out of MIT mode after a few seconds if it does not receive a periodic re-entry command.
+
+**Rule:** re-send `enter_mit` (followed immediately by a motion command) every few seconds in the main loop. The working cadence found in `springness` is every **4 seconds**. Without this, the motor silently stops responding to position/torque commands even though CAN traffic continues — it will not move and gives no error indication.
+
+```cpp
+if (nowMs - lastEnterMs >= 4000) {
+    lastEnterMs = nowMs;
+    enter_mit(M1_ID);
+    delayMicroseconds(INTER_FRAME_US);
+    enter_mit(M2_ID);
+    delay(5);
+    send_command(M1_ID);   // must follow enter_mit immediately
+    delayMicroseconds(INTER_FRAME_US);
+    send_command(M2_ID);
+}
+```
