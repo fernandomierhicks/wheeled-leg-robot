@@ -17,6 +17,12 @@ The GUI reports output speed in deg/s with a large scaling error (~4.7× too low
 
 The bug is likely a wrong gear ratio or pole-pair count in the GUI's unit conversion — do not trust the deg/s readout.
 
+## CAN Wiring: Ground Required
+
+CAN communication to the AK45 **requires a common ground** between the Arduino and the motor driver. Without it, CAN frames are never received by the motor despite correct CANH/CANL wiring.
+
+**Use the GND pin exposed on the motor's UART connector** — it is the most accessible ground point on the motor side.
+
 ## MIT Mode: Periodic `enter_mit` is Required
 
 Sending `enter_mit` once in `setup()` is **not enough**. The motor drops out of MIT mode after a few seconds if it does not receive a periodic re-entry command.

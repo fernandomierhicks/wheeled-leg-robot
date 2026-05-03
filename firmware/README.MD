@@ -128,6 +128,14 @@ Poll these at a slow divisor (e.g. every 10 control ticks = 50 Hz). Each poll co
 
 ## Gotchas
 
+### AK45-10 CAN requires a common ground
+
+CAN communication to the AK45 **requires a common ground** between the Arduino and the motor. Without it, CAN frames are never received despite correct CANH/CANL wiring — the motor will not respond to any command.
+
+**Use the GND pin exposed on the motor's UART connector** — it is the most accessible ground point on the motor side.
+
+---
+
 ### AK45-10 mode is set in flash — cannot switch via CAN
 
 The AK45-10 operating mode (servo vs MIT) is a persistent firmware setting configured via the CubeMars PC tool (R-Link). Sending the MIT enter command (`FF FF FF FF FF FF FF FC`) to a motor running in servo mode has no effect — the servo broadcast continues unchanged. Verified experimentally: 1000 servo frames received post-command, zero MIT replies.
