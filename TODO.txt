@@ -3,16 +3,40 @@
 
 
 Priorities:
--Get CAD going
--Ak45 working on CAN bus. Instructions on how to flash them
----------For very sproadic instances got it working with code in components\characterization\akMars\arduinoToCubeMars
----------AKMARS GUI seems to enable something thast we cant from CAN?
+-----------------------------------------------------FLATSAT
+1. Demo world each interface. 
+2. Once each is working port onto proto board if enough time. 
+3. Based on proto design, design flat plate in CAD for printing
+
+IMU
+CAN x2
+LASER?
+RGB
+ESP32→Teensy
+-RX receiver
+-OLED
+-Laser
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 ------------------------------------------------------firmware
--HOw to find zero angle of ak45 on boot up? find mechanical hardstop while ni low current mode
--Fiincky AK45 CAN, grounding?
+
 
 -------------------------------------------------------CAD
 Square tube

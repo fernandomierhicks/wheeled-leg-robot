@@ -4,6 +4,11 @@
             "path": "firmware/can_bridge_odrive",
             "envManager": "ms-python.python:venv",
             "packageManager": "ms-python.python:pip"
+        },
+        {
+            "path": "software/gui/__pycache__",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
         }
     ]
 }
