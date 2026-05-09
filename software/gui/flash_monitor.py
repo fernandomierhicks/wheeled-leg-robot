@@ -45,8 +45,10 @@ FLASH_ACTIONS: dict[str, dict] = {
     "esp32": {
         "main":  [("Flash Main",         ["run",  "-e", "esp32s3",    "-t", "upload"])],
         "tests": [
-            ("Flash Teensy-ESP32 Interface Test", ["test", "-e", "test_esp32", "-f", "test_telemetry"]),
-            ("Flash UART HW Test",                ["test", "-e", "test_esp32",  "-f", "test_uart_hw"]),
+            ("Flash OLED Test",                   ["run",  "-e", "esp32dev",     "-t", "upload"]),
+            ("Flash Laser Test",                  ["run",  "-e", "vl53l1x_demo", "-t", "upload"]),
+            ("Flash Teensy-ESP32 Interface Test", ["test", "-e", "test_esp32",   "-f", "test_telemetry"]),
+            ("Flash UART HW Test",                ["test", "-e", "test_esp32",   "-f", "test_uart_hw"]),
         ],
     },
 }
