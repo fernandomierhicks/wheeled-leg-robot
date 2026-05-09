@@ -1,4 +1,17 @@
 import sys
+import os
+import psutil
+
+def _kill_other_instances():
+    current_pid = os.getpid()
+    current_script = os.path.abspath(__file__)
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        if proc.info['pid'] == current_pid:
+            continue
+        cmdline = proc.info.get('cmdline') or []
+        if any(os.path.abspath(arg) == current_script for arg in cmdline if arg):
+            proc.kill()
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget,
     QLabel, QVBoxLayout, QFrame,
@@ -91,6 +104,7 @@ class MainWindow(QMainWindow):
 # ── Entry ─────────────────────────────────────────────────────────────────────
 
 def main():
+    _kill_other_instances()
     app = QApplication(sys.argv)
     app.setStyleSheet(APP_STYLE)
     win = MainWindow()

@@ -18,11 +18,13 @@ Arduino UNO R4 WiFi firmware for the wheeled-leg balancing robot.
 ```
 Node 0  — ODrive axis 0 (wheel L)    arb_id = (0 << 5) | cmd   → 0x000–0x01F
 Node 1  — ODrive axis 1 (wheel R)    arb_id = (1 << 5) | cmd   → 0x020–0x03F
-0x41    — AK45-10 hip L              MIT CAN protocol
-0x42    — AK45-10 hip R              MIT CAN protocol
+ID 11   — AK45-10 hip L              MIT CAN protocol  (decimal 11 = 0x0B)
+ID 12   — AK45-10 hip R              MIT CAN protocol  (decimal 12 = 0x0C)
 ```
 
-AK45-10 IDs (≥ 0x41) never overlap with ODrive node-0/1 IDs (≤ 0x3F) — all four motors coexist safely on one bus.
+> **All CAN IDs are decimal throughout the codebase.** ODrive node IDs are 0 and 1;
+> AK45 motor IDs are **11 and 12** (configured via CubeMars PC tool). 0x0B/0x0C never
+> overlap with ODrive IDs (≤ 0x03F) — all four motors coexist safely on one bus.
 
 ### Bus Load Budget (500 Hz control rate, all 4 motors)
 

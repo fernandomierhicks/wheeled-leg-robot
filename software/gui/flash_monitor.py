@@ -30,23 +30,29 @@ PIO_DIR = {
     "esp32":  str((_FW_ROOT / "esp32").resolve()),
 }
 
-FLASH_ACTIONS: dict[str, list[tuple[str, list[str]]]] = {
-    "teensy": [
-        ("Flash Main",        ["run",  "-e", "teensy41",    "-t", "upload"]),
-        ("Flash IMU Test",    ["test", "-e", "test_teensy", "-f", "test_imu"]),
-        ("Flash Hip Test",    ["test", "-e", "test_teensy", "-f", "test_hip_motor"]),
-        ("Flash Wheel Test",  ["test", "-e", "test_teensy", "-f", "test_wheel_motor"]),
-        ("Flash RC Test",     ["test", "-e", "test_teensy", "-f", "test_rc"]),
-        ("Flash Telem. Test", ["test", "-e", "test_teensy", "-f", "test_telemetry"]),
-    ],
-    "esp32": [
-        ("Flash Main",        ["run",  "-e", "esp32s3",    "-t", "upload"]),
-        ("Flash Telem. Test", ["test", "-e", "test_esp32", "-f", "test_telemetry"]),
-    ],
+FLASH_ACTIONS: dict[str, dict] = {
+    "teensy": {
+        "main":  [("Flash Main",         ["run",  "-e", "teensy41",    "-t", "upload"])],
+        "tests": [
+            ("Flash IMU Test",    ["test", "-e", "test_teensy", "-f", "test_imu"]),
+            ("Flash AK45 Test",   ["test", "-e", "test_teensy", "-f", "test_hip_motor"]),
+            ("Flash ODrive Test", ["test", "-e", "test_teensy", "-f", "test_wheel_motor"]),
+            ("Flash RC Test",     ["test", "-e", "test_teensy", "-f", "test_rc"]),
+            ("Flash Teensy-ESP32 Interface Test", ["test", "-e", "test_teensy", "-f", "test_telemetry"]),
+            ("Flash UART HW Test",                ["test", "-e", "test_teensy", "-f", "test_uart_hw"]),
+        ],
+    },
+    "esp32": {
+        "main":  [("Flash Main",         ["run",  "-e", "esp32s3",    "-t", "upload"])],
+        "tests": [
+            ("Flash Teensy-ESP32 Interface Test", ["test", "-e", "test_esp32", "-f", "test_telemetry"]),
+            ("Flash UART HW Test",                ["test", "-e", "test_esp32",  "-f", "test_uart_hw"]),
+        ],
+    },
 }
 
 DEVICE_COLOR = {"teensy": BLUE,   "esp32": ORANGE}
-DEVICE_LABEL = {"teensy": "TEENSY 4.1", "esp32": "ESP32-S3"}
+DEVICE_LABEL = {"teensy": "TEENSY 4.1", "esp32": "ESP32 DevKit V1"}
 DEVICE_BAUD  = {"teensy": "115200",     "esp32": "115200"}
 
 BAUD_OPTIONS = ["9600", "115200", "230400", "460800", "1000000", "1200000"]
@@ -369,16 +375,35 @@ class DevicePanel(QWidget):
         self._cancel_btn.hide()
         self._cancel_btn.clicked.connect(self._cancel_flash)
 
-        btn_grid = QGridLayout()
-        btn_grid.setSpacing(4)
-        for i, (label, args) in enumerate(FLASH_ACTIONS.get(device, [])):
+        actions = FLASH_ACTIONS.get(device, {"main": [], "tests": []})
+
+        main_col = QVBoxLayout()
+        main_col.setSpacing(4)
+        for label, args in actions["main"]:
             btn = QPushButton(label)
             btn.clicked.connect(lambda _, a=args: self._flash(a))
             self._flash_btns.append(btn)
-            btn_grid.addWidget(btn, i // 2, i % 2)
+            main_col.addWidget(btn)
+        main_col.addStretch()
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setStyleSheet(f"color: {BORDER};")
+
+        test_grid = QGridLayout()
+        test_grid.setSpacing(4)
+        for i, (label, args) in enumerate(actions["tests"]):
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda _, a=args: self._flash(a))
+            self._flash_btns.append(btn)
+            test_grid.addWidget(btn, i // 2, i % 2)
 
         flash_row = QHBoxLayout()
-        flash_row.addLayout(btn_grid)
+        flash_row.addLayout(main_col)
+        flash_row.addSpacing(8)
+        flash_row.addWidget(sep)
+        flash_row.addSpacing(8)
+        flash_row.addLayout(test_grid)
         flash_row.addStretch()
         flash_row.addWidget(self._cancel_btn)
 

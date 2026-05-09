@@ -6,7 +6,7 @@
 |-------|--------|-------|
 | 24V → 5V | Buck converter (e.g. Pololu D24V50F5, or LM2596 module) | Must supply ≥1A for Teensy + peripherals |
 | 5V → 3.3V | Teensy 4.1 built-in regulator (250 mA) | Powers Teensy logic, IMU, CAN transceivers |
-| 5V consumers | FlySky receiver, display MCU (XIAO 5V pin), CAN transceiver VCC (if TJA1050) | |
+| 5V consumers | FlySky receiver, ESP32 DevKit V1 VIN pin, CAN transceiver VCC (if TJA1050) | |
 
 Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN65HVD230) or add level shifters.
 
@@ -62,8 +62,8 @@ Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN6
 Two separate CAN buses — cleaner isolation, no ID collision risk:
 
 ```
-Teensy CAN1 (pins 22/23)  →  SN65HVD230  →  CANH/CANL  →  AK45-10 L (0x41)
-                                                           →  AK45-10 R (0x42)
+Teensy CAN1 (pins 22/23)  →  SN65HVD230  →  CANH/CANL  →  AK45-10 L (0x11)
+                                                           →  AK45-10 R (0x12)
                                               120 Ω terminator at each end
 
 Teensy CAN2 (pins  0/ 1)  →  SN65HVD230  →  CANH/CANL  →  ODrive axis 0 (node 0)
@@ -72,6 +72,49 @@ Teensy CAN2 (pins  0/ 1)  →  SN65HVD230  →  CANH/CANL  →  ODrive axis 0 (n
 ```
 
 Each SN65HVD230 is powered from the 3.3V rail. No level shifting needed.
+
+---
+
+## CAN ID Reference
+
+### CAN1 — AK45-10 Hip Motors (MIT Cheetah protocol)
+
+Motor IDs are set in the AK45 firmware (factory default 0x01; ours are configured to **11 = left, 12 = right** — decimal, not hex).
+All frames (Teensy → motor and motor → Teensy) use the **same arbitration ID = motor ID**.
+The response is distinguished by the first data byte equalling the motor ID.
+
+| ID (decimal) | Direction | Frame content |
+|--------------|-----------|---------------|
+| 11 | TX → left hip | 8-byte MIT control packet [p_des, v_des, Kp, Kd, t_ff] |
+| 11 | RX ← left hip | 8-byte status [motor_id, pos, vel, torque] |
+| 12 | TX → right hip | same format |
+| 12 | RX ← right hip | same format |
+
+Special command bytes (all other bytes 0xFF):
+
+| Last byte (byte 7) | Command |
+|--------------------|---------|
+| 0xFC | Enter MIT mode |
+| 0xFD | Exit MIT mode |
+| 0xFE | Set zero position |
+
+### CAN2 — ODrive Wheel Motors (ODrive CAN v2, fw 0.5.6)
+
+Arbitration ID format: `(node_id << 5) | cmd_id`
+
+ODrive axis 0 = node 0 (base 0x000), axis 1 = node 1 (base 0x020).
+
+| ID (axis 0) | ID (axis 1) | Dir | Command |
+|-------------|-------------|-----|---------|
+| 0x001 | 0x021 | RX ← ODrive | Heartbeat (axis state + error) |
+| 0x006 | 0x026 | TX → ODrive | Clear errors |
+| 0x007 | 0x027 | TX → ODrive | Set axis state (e.g. CLOSED_LOOP = 8) |
+| 0x009 | 0x029 | TX → (RTR) | Get encoder estimates → pos [turns], vel [turns/s] |
+| 0x00B | 0x02B | TX → ODrive | Set controller mode |
+| 0x00D | 0x02D | TX → ODrive | Set input velocity [turns/s] + torque_ff [Nm] |
+| 0x00E | 0x02E | TX → ODrive | Set input torque [Nm] |
+| 0x014 | 0x034 | TX → (RTR) | Get IQ [A] |
+| 0x018 | 0x038 | TX → (RTR) | Get bus voltage & current |
 
 ---
 
@@ -107,17 +150,42 @@ No pin collision with CAN — CAN1/CAN2 do not share any SPI0 pins on Teensy 4.1
 
 ## External MCU / WiFi Module (UART)
 
-Serial5 (pins 20/21) connects to a co-processor (e.g. XIAO ESP32-S3 for display):
+Serial5 (pins 20/21) connects to the ESP32 DevKit V1:
 
 ```
-Teensy TX (pin 20)  →  MCU RX
-Teensy RX (pin 21)  ←  MCU TX
-Teensy GND          →  MCU GND   (shared ground required)
-5V rail             →  MCU 5V    (XIAO takes 5V in)
+Teensy TX (pin 20)  →  ESP32 GPIO16 (RX2)
+Teensy RX (pin 21)  ←  ESP32 GPIO17 (TX2)
+Teensy GND          →  ESP32 GND   (shared ground required)
+5V rail             →  ESP32 VIN   (accepts 5V in)
 ```
 
-For higher bandwidth (streaming display frames), use SPI1 (pins 24–27) with a simple
-packet protocol — MCU runs as SPI slave.
+---
+
+## ESP32 DevKit V1 Pinout
+
+Board: `esp32dev` (ESP32-WROOM-32, 3.3V logic, 5V tolerant VIN).
+
+### Teensy Link (Serial2 / UART2)
+
+| ESP32 Pin | GPIO | Signal | Connects to |
+|-----------|------|--------|-------------|
+| GPIO16 | RX2 | UART2 RX | Teensy pin 20 (Serial5 TX) |
+| GPIO17 | TX2 | UART2 TX | Teensy pin 21 (Serial5 RX) |
+| VIN | — | Power in | 5V rail (buck output) |
+| GND | — | Ground | Shared GND |
+
+Baud rate: **1,200,000** (defined in `esp32/src/config.h` as `TEENSY_UART_BAUD`).
+No level shifter needed — both sides are 3.3V logic.
+
+### WiFi Roles
+
+| Role | Protocol | Port |
+|------|----------|------|
+| Telemetry stream (ESP32 → PC) | UDP | 5005 |
+| Command link (PC → ESP32) | TCP | 5006 |
+| OTA firmware update | espota | — |
+
+All WiFi I/O is handled internally by the ESP32-WROOM-32's integrated radio — no extra pins required.
 
 ---
 

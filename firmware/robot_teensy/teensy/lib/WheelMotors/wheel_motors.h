@@ -7,6 +7,7 @@ enum class WheelMode : uint8_t { IDLE = 0, VELOCITY = 1, POSITION = 2, TORQUE = 
 struct WheelAxisState {
     float    pos_turns;    // encoder position  [turns]
     float    vel_turns_s;  // encoder velocity  [turns/s]
+    float    vbus;         // bus voltage [V] — updated by wheel_motors_request_vbus()
     uint32_t error;        // ODrive Axis_Error word (0 = no fault)
     uint8_t  axis_state;   // ODrive Axis_State enum value
     uint32_t last_fb_ms;   // millis() of most recent encoder estimate callback
@@ -43,3 +44,7 @@ void wheel_motors_pet_watchdog();
 
 // Send CLEAR_ERRORS to both axes (clears latched ODrive faults).
 void wheel_motors_clear_errors();
+
+// Request bus voltage from both axes (ODrive replies asynchronously via CAN).
+// Call this, then read wm_L.vbus / wm_R.vbus a few ms later.
+void wheel_motors_request_vbus();

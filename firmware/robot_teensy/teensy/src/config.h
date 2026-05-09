@@ -29,6 +29,10 @@
 // --- Control loop ---
 #define CONTROL_HZ      500
 
+// --- AK45-10 hip motor CAN IDs (MIT Cheetah protocol, CAN1) ---
+#define AK45_ID_L           11          // left hip motor
+#define AK45_ID_R           12          // right hip motor
+
 // --- ODrive wheel motor CAN ---
 #define ODESC_NODE_L        0           // ODrive axis 0 — left wheel
 #define ODESC_NODE_R        1           // ODrive axis 1 — right wheel

@@ -5,7 +5,7 @@
 | Device | Part Number | Interface |
 |--------|------------|-----------|
 | MCU (main) | PJRC Teensy 4.1 | — |
-| MCU (wireless) | Seeed XIAO ESP32-S3 | UART / SPI |
+| MCU (wireless) | ESP32 DevKit V1 (ESP32-WROOM-32) | UART / SPI |
 | IMU | Bosch BNO086 | SPI |
 | Hip motors (×2) | CubeMars AK45-10 KV75 | CAN (MIT mode) |
 | Wheel motor controller | ODESC 3.6 Dual Drive | CAN (ODrive v0.5.x) |

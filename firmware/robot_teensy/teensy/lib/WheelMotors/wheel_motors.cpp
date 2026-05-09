@@ -12,6 +12,7 @@
 #define CMD_SET_INPUT_VEL   0x00D
 #define CMD_SET_INPUT_TRQ   0x00E
 #define CMD_CLEAR_ERRORS    0x018
+#define CMD_GET_VBUS        0x017
 
 // ODrive axis state values
 #define AXIS_IDLE           1u
@@ -66,6 +67,8 @@ static void rx_callback(const CAN_message_t& msg) {
         ax->error      = err;
         ax->axis_state = msg.buf[4];
         ax->last_hb_ms = millis();
+    } else if (cmd_id == CMD_GET_VBUS && msg.len >= 4) {
+        memcpy(&ax->vbus, msg.buf + 0, 4);
     }
 }
 
@@ -175,6 +178,17 @@ void wheel_motors_pet_watchdog() {
         delayMicroseconds(CAN_INTER_FRAME_US);
         send_frame(ODESC_NODE_R, CMD_SET_INPUT_VEL, zero, 8);
     }
+}
+
+void wheel_motors_request_vbus() {
+    CAN_message_t msg = {};
+    msg.flags.remote = 1;
+    msg.len = 8;
+    msg.id = ((uint32_t)ODESC_NODE_L << 5) | CMD_GET_VBUS;
+    can2.write(msg);
+    delayMicroseconds(CAN_INTER_FRAME_US);
+    msg.id = ((uint32_t)ODESC_NODE_R << 5) | CMD_GET_VBUS;
+    can2.write(msg);
 }
 
 void wheel_motors_clear_errors() {
