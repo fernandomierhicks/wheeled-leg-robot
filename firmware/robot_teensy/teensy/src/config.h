@@ -1,20 +1,26 @@
 #pragma once
 
 // --- CAN buses ---
-#define PIN_CAN1_TX     22  // AK45 hip motors
-#define PIN_CAN1_RX     23
-#define PIN_CAN2_TX      1  // ODrive wheel motors (Serial1 unavailable on these pins)
+#define PIN_CAN2_TX      1  // AK45 hip motors (Serial1 unavailable on these pins)
 #define PIN_CAN2_RX      0
+#define PIN_CAN3_TX     31  // ODrive wheel motors
+#define PIN_CAN3_RX     30
 
 // --- IMU (BNO086, SPI0) ---
 #define PIN_IMU_CS      10
-#define PIN_IMU_INT      2
-#define PIN_IMU_RST      3
+#define PIN_IMU_INT      9
+#define PIN_IMU_RST      6
 
 // --- RGB LED ---
 #define PIN_LED_R        4
 #define PIN_LED_G        5
-#define PIN_LED_B        6
+#define PIN_LED_B       24
+
+// --- AK45 UART (Serial2 / Serial3, half-duplex) ---
+#define PIN_AK45_1_RX    7
+#define PIN_AK45_1_TX    8
+#define PIN_AK45_2_TX   14
+#define PIN_AK45_2_RX   15
 
 // --- RC receiver (FlySky iBUS, Serial4 RX only) ---
 #define PIN_IBUS_RX     16

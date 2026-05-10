@@ -8,21 +8,21 @@ Priorities:
 2. Once each is working port onto proto board if enough time. 
 3. Based on proto design, design flat plate in CAD for printing
 
-IMU                                         8 pins 
-CAN odrive                                  3 pins
-CAN AK45 + UART for positoin?               2pins + 3 + 3
-LASER?                                      6 each
-RGB LED / neopixel                          3
+IMU                                         8 pins                      Interface checked
+CAN odrive                                  3 pins                      Interface checked
+CAN AK45 + UART for positoin?               2pins + 3 + 3               Interface checked
+
+
+RGB LED / neopixel                          3                           Interface checked
+
+
+-RX receiver                                3                           Interface checked
+-OLED                                       8                           Interface checked
+LASER?                                      6 each                      Interface checked
+
+
 /Buzzer                         
-ESP32→Teensy                        
--RX receiver                                3
--OLED                                       8
-
--
-
-
-
-
+ESP32→Teensy       
 
 
 

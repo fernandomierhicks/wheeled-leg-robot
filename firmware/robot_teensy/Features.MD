@@ -35,3 +35,42 @@
 - 4× VL53L1X ToF distance sensors read by T4.1
 - RGB LED controlled by T4.1
 - iBUS RC receiver (FlySky) read by T4.1 or ESP32
+- NeoPixel strip (30× WS2812B) on ESP32 GPIO13, animation task pinned to core 0
+
+---
+
+## ESP32 — FreeRTOS Core Split
+
+### Constraint
+The WiFi stack is permanently bound to **core 0**. Any task calling WiFi send/receive APIs must run on core 0, or hand data to core 0 via a FreeRTOS queue.
+
+### Core assignment
+
+**Core 0 — WiFi + cosmetics**
+| Task | Notes |
+|------|-------|
+| WiFi stack | Automatic — always here |
+| UDP telemetry TX | Pulls from shared queue → sends to PC (port 5005) |
+| TCP command RX | Receives from PC (port 5006) → pushes to command queue |
+| OTA | Background only |
+| NeoPixel animation | Pinned here; RMT drives GPIO13, ~1 ms show() every 20 ms |
+
+**Core 1 — hardware I/O**
+| Task | Priority | Notes |
+|------|----------|-------|
+| Teensy UART RX/TX | High | Parses packets at 1.2 Mbaud; pushes telemetry to queue for core 0 |
+| VL53L1X polling | Medium | I2C reads every 50 ms; pushes range data to shared state |
+| TFT display | Low | Reads shared state; refreshes ST7789 over SPI |
+
+### Data flow
+```
+Core 1                           Core 0
+------                           ------
+Teensy UART RX ──► queue ───────► UDP TX → PC
+VL53L1X poll   ──► shared state
+TFT display    ◄── shared state
+                                  NeoPixel animation
+PC commands    ◄── queue ◄─────── TCP RX
+```
+
+Core 1 never touches WiFi APIs. Core 0 never touches I2C/UART hardware. No bus contention, no WiFi jitter on sensor reads.

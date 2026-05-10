@@ -23,8 +23,8 @@
 HipAxisState hm_L = {};
 HipAxisState hm_R = {};
 
-// CAN1 on Teensy 4.1 uses pins 22 (TX) and 23 (RX) — matches config.h PIN_CAN1_*.
-static FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> can1;
+// CAN2 on Teensy 4.1 uses pins 1 (TX) and 0 (RX) — matches config.h PIN_CAN2_*.
+static FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> can2;
 static uint32_t last_enter_ms = 0;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ static void send_raw(uint32_t id, const uint8_t data[8]) {
     msg.id  = id;
     msg.len = 8;
     memcpy(msg.buf, data, 8);
-    can1.write(msg);
+    can2.write(msg);
 }
 
 static void pack_and_send(uint32_t id, float pos, float vel, float kp, float kd, float torque) {
@@ -91,13 +91,13 @@ static void rx_callback(const CAN_message_t& msg) {
 // ── public API ────────────────────────────────────────────────────────────────
 
 bool hip_motors_init() {
-    can1.begin();
-    can1.setBaudRate(CAN_BAUD);
-    can1.setMaxMB(16);
-    can1.enableFIFO();
-    can1.enableFIFOInterrupt();
-    can1.onReceive(rx_callback);
-    Serial.print("[HipMotors] CAN1 init OK  ");
+    can2.begin();
+    can2.setBaudRate(CAN_BAUD);
+    can2.setMaxMB(16);
+    can2.enableFIFO();
+    can2.enableFIFOInterrupt();
+    can2.onReceive(rx_callback);
+    Serial.print("[HipMotors] CAN2 init OK  ");
     Serial.print(CAN_BAUD / 1000);
     Serial.print(" kbps  id_L=0x");
     Serial.print(AK45_ID_L, HEX);

@@ -30,8 +30,8 @@ WheelAxisState wm_L    = {};
 WheelAxisState wm_R    = {};
 WheelMode      wm_mode = WheelMode::IDLE;
 
-// CAN2 on Teensy 4.1 uses pins 0 (RX) and 1 (TX) — matches config.h PIN_CAN2_*.
-static FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> can2;
+// CAN3 on Teensy 4.1 uses pins 30 (RX) and 31 (TX) — matches config.h PIN_CAN3_*.
+static FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_16> can3;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ static void send_frame(uint8_t node_id, uint8_t cmd_id, const void* data, uint8_
     msg.id  = ((uint32_t)node_id << 5) | cmd_id;
     msg.len = len;
     memcpy(msg.buf, data, len);
-    can2.write(msg);
+    can3.write(msg);
 }
 
 // ── CAN RX callback (called from FlexCAN_T4 ISR) ─────────────────────────────
@@ -75,13 +75,13 @@ static void rx_callback(const CAN_message_t& msg) {
 // ── public API ────────────────────────────────────────────────────────────────
 
 bool wheel_motors_init() {
-    can2.begin();
-    can2.setBaudRate(CAN_BAUD);
-    can2.setMaxMB(16);
-    can2.enableFIFO();
-    can2.enableFIFOInterrupt();
-    can2.onReceive(rx_callback);
-    Serial.print("[WheelMotors] CAN2 init OK  ");
+    can3.begin();
+    can3.setBaudRate(CAN_BAUD);
+    can3.setMaxMB(16);
+    can3.enableFIFO();
+    can3.enableFIFOInterrupt();
+    can3.onReceive(rx_callback);
+    Serial.print("[WheelMotors] CAN3 init OK  ");
     Serial.print(CAN_BAUD / 1000);
     Serial.print(" kbps  node_L=");
     Serial.print(ODESC_NODE_L);
@@ -185,10 +185,10 @@ void wheel_motors_request_vbus() {
     msg.flags.remote = 1;
     msg.len = 8;
     msg.id = ((uint32_t)ODESC_NODE_L << 5) | CMD_GET_VBUS;
-    can2.write(msg);
+    can3.write(msg);
     delayMicroseconds(CAN_INTER_FRAME_US);
     msg.id = ((uint32_t)ODESC_NODE_R << 5) | CMD_GET_VBUS;
-    can2.write(msg);
+    can3.write(msg);
 }
 
 void wheel_motors_clear_errors() {

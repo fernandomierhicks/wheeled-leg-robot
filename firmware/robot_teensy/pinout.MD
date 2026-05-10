@@ -2,6 +2,24 @@
 
 ---
 
+# 0 · Peripheral → µC Summary
+
+| Peripheral | µC | Interface | Notes |
+|---|---|---|---|
+| BNO086 IMU | Teensy 4.1 | SPI0 (pins 10–13, INT=2, RST=3) | 9-DoF attitude |
+| AK45-10 hip motors (L + R) | Teensy 4.1 | CAN2 (pins 0/1) | MIT Cheetah protocol, IDs 11/12 |
+| ODrive wheel motors (axis 0/1) | Teensy 4.1 | CAN3 (pins 30/31) | ODrive CAN v2, fw 0.5.6 |
+| FlySky receiver (iBUS) | Teensy 4.1 | Serial4 RX (pin 16) | 115200 baud, RX-only |
+| AK45 UART | Teensy 4.1 | Serial2 / Serial3 | Half-duplex, pins 7–8 / 14–15 |
+| RGB status LED | Teensy 4.1 | PWM (pins 4/5/6) | 33 Ω series resistor |
+| ESP32 link | Teensy 4.1 ↔ ESP32 | Serial5 / UART2 | 1.2 Mbaud, pins 20/21 ↔ GPIO16/17 |
+| 2.0″ TFT display (ST7789) | ESP32 | VSPI (GPIO18/23, CS=5, DC=2, RST=4, BLK=15) | 240×320, adafruit ST7789 lib |
+| VL53L1X ToF sensors (×4) | ESP32 | I2C (GPIO21/22) + XSHUT (GPIO25–27, 32) | Addresses 0x30–0x33 |
+| NeoPixel strip (WS2812B, 30 LEDs) | ESP32 | GPIO13 (FastLED) | 5V power from buck; level-shift if needed |
+| WiFi — telemetry / command / OTA | ESP32 | Integrated radio | UDP 5005 / TCP 5006 / espota |
+
+---
+
 # 1 · Teensy 4.1
 
 ## Power
@@ -20,36 +38,40 @@ Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN6
 
 | Pin | Signal | Peripheral | Interface | Voltage | Notes |
 |-----|--------|-----------|-----------|---------|-------|
-| 0 | CAN2_RX | ODrive wheel motors | CAN2 | 3.3V | Via SN65HVD230 transceiver |
-| 1 | CAN2_TX | ODrive wheel motors | CAN2 | 3.3V | Pins 0/1 = CAN2 only; Serial1 unavailable |
-| 2 | IMU_INT | BNO086 | SPI0 | 3.3V | Active-low interrupt |
-| 3 | IMU_RST | BNO086 | SPI0 | 3.3V | Active-low reset |
+| 0 | CAN2_RX | AK45-10 hip motors | CAN2 | 3.3V | Via SN65HVD230 transceiver; Serial1 unavailable |
+| 1 | CAN2_TX | AK45-10 hip motors | CAN2 | 3.3V | |
+| 2 | (spare) | — | — | — | |
+| 3 | (spare) | — | — | — | |
 | 4 | LED_R | RGB LED | PWM | 3.3V | 33 Ω series resistor to LED |
 | 5 | LED_G | RGB LED | PWM | 3.3V | |
-| 6 | LED_B | RGB LED | PWM | 3.3V | |
-| 7 | AK45_1_RX | AK45-1 UART (optional) | Serial2 | 3.3V | Half-duplex; use 1 kΩ series + diode |
-| 8 | AK45_1_TX | AK45-1 UART (optional) | Serial2 | 3.3V | |
-| 9 | (spare) | — | — | — | Free GPIO / PWM |
+| 6 | IMU_RST | BNO086 | SPI0 | 3.3V | Active-low reset |
+| 7 | AK45_1_RX | AK45-1 UART | Serial2 | 3.3V | Half-duplex; use 1 kΩ series + diode |
+| 8 | AK45_1_TX | AK45-1 UART | Serial2 | 3.3V | |
+| 9 | IMU_INT | BNO086 | SPI0 | 3.3V | Active-low interrupt; input with pullup |
 | 10 | IMU_CS | BNO086 | SPI0 | 3.3V | Chip select, active low |
 | 11 | SPI0_MOSI | BNO086 | SPI0 | 3.3V | Hardware SPI bus |
 | 12 | SPI0_MISO | BNO086 | SPI0 | 3.3V | |
 | 13 | SPI0_SCK | BNO086 | SPI0 | 3.3V | Also drives built-in orange LED |
-| 14 | AK45_2_TX | AK45-2 UART (optional) | Serial3 | 3.3V | |
-| 15 | AK45_2_RX | AK45-2 UART (optional) | Serial3 | 3.3V | |
+| 14 | AK45_2_TX | AK45-2 UART | Serial3 | 3.3V | |
+| 15 | AK45_2_RX | AK45-2 UART | Serial3 | 3.3V | |
 | 16 | IBUS_RX | FlySky receiver iBUS | Serial4 RX | 3.3V* | See iBUS note below |
 | 17 | (spare) | Serial4 TX unused | — | — | iBUS is RX-only |
 | 18 | I2C_SDA | Spare / future sensor | Wire | 3.3V | |
 | 19 | I2C_SCL | Spare / future sensor | Wire | 3.3V | |
 | 20 | EXT_MCU_TX | ESP32 | Serial5 | 3.3V | Teensy TX → ESP32 GPIO16 (RX2) |
 | 21 | EXT_MCU_RX | ESP32 | Serial5 | 3.3V | Teensy RX ← ESP32 GPIO17 (TX2) |
-| 22 | CAN1_TX | AK45-10 hip motors | CAN1 | 3.3V | Via SN65HVD230 transceiver |
-| 23 | CAN1_RX | AK45-10 hip motors | CAN1 | 3.3V | Separate bus from ODrive |
-| 24 | SPI1_CS | Display MCU (optional) | SPI1 | 3.3V | High-speed alt to UART |
-| 25 | SPI1_MISO | Display MCU (optional) | SPI1 | 3.3V | |
-| 26 | SPI1_MOSI | Display MCU (optional) | SPI1 | 3.3V | |
-| 27 | SPI1_SCK | Display MCU (optional) | SPI1 | 3.3V | |
-| 28–33 | (spare) | — | — | — | Digital / analog / PWM |
-| VBAT sense | Analog voltage divider | Battery monitor | A_in | 3.3V max | 24V → 3.3V: use 68k/10k divider |
+| 22 | (spare) | — | — | — | |
+| 23 | (spare) | — | — | — | |
+| 24 | LED_B | RGB LED | PWM | 3.3V | |
+| 25 | (spare) | — | — | — | |
+| 26 | (spare) | — | — | — | |
+| 27 | (spare) | — | — | — | |
+| 28 | (spare) | — | — | — | |
+| 29 | (spare) | — | — | — | |
+| 30 | CAN3_RX | ODrive wheel motors | CAN3 | 3.3V | Via SN65HVD230 transceiver |
+| 31 | CAN3_TX | ODrive wheel motors | CAN3 | 3.3V | |
+| 32 | (spare) | — | — | — | |
+| 33 | (spare) | — | — | — | |
 
 ### Bottom pads (solder only)
 
@@ -57,7 +79,7 @@ Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN6
 |-----|--------|-------|
 | 34 | Serial8_RX | Spare UART |
 | 35 | Serial8_TX | Spare UART |
-| 36–39 | SPI1 alt pins | SPI1 MISO=39, usable if needed |
+| 36–39 | (spare) | |
 | 54–57 | SDIO | microSD card (built-in slot on Teensy 4.1) |
 
 ---
@@ -70,8 +92,8 @@ Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN6
 | MOSI (SDA) | 11 | |
 | MISO (SA0) | 12 | |
 | SCK (SCL) | 13 | |
-| INT | 2 | Active low; input with pullup |
-| RST | 3 | Active low; drive low 10 ms to reset |
+| INT | 9 | Active low; input with pullup |
+| RST | 6 | Active low; drive low 10 ms to reset |
 | VCC | 3.3V | |
 | GND | GND | |
 | PS0 | GND | PS0+PS1 both LOW = SPI mode |
@@ -146,6 +168,22 @@ Default I2C address is 0x29; firmware reassigns each to 0x30–0x33 in sequence.
 Library: `pololu/VL53L1X` · Env: `vl53l1x_demo` · Distance mode: Short (≤1.3 m) · Timing budget: 50 ms
 Firmware: `esp32/src/vl53l1x/main.cpp`
 
+> **Hello-world demo** (`vl53l1x/main.cpp`) wires a single sensor with **XSHUT = GPIO19** (breadboard-accessible TX2-side pin). The production 4-sensor wiring above (GPIO25–27, 32) is the target pinout for the main firmware.
+
+---
+
+## NeoPixel Strip (WS2812B)
+
+| ESP32 GPIO | Signal | Notes |
+|------------|--------|-------|
+| GPIO13 | NeoPixel DIN | FastLED WS2812B, GRB order |
+| 5V rail | VCC | Draw strip current from buck, not ESP32 3.3V reg |
+| GND | GND | Shared GND |
+
+30 LEDs · 800 kHz · Animation task pinned to core 0 · Library: `fastled/FastLED`
+Firmware: `esp32/src/neopixel/main.cpp`
+Note: ESP32 outputs 3.3V logic; WS2812B spec minimum is 3.5V — add 74AHCT125 level shifter if flickering occurs.
+
 ---
 
 ## WiFi Roles
@@ -176,11 +214,11 @@ Teensy GND          →  ESP32 GND   (shared ground required)
 | Port | TX | RX | Assigned to |
 |------|----|----|-------------|
 | Serial1 | 1 | 0 | **UNAVAILABLE** — pins used by CAN2 |
-| Serial2 | 8 | 7 | AK45-1 UART (optional) |
-| Serial3 | 14 | 15 | AK45-2 UART (optional) |
+| Serial2 | 8 | 7 | AK45-1 UART |
+| Serial3 | 14 | 15 | AK45-2 UART |
 | Serial4 | 17 | 16 | FlySky iBUS RX |
 | Serial5 | 20 | 21 | ESP32 link |
-| Serial6 | 24 | 25 | Spare (or repurpose if SPI1 used) |
+| Serial6 | 24 | 25 | Spare |
 | Serial7 | 29 | 28 | Spare |
 | Serial8 | 35 | 34 | Spare (bottom pads) |
 
@@ -191,11 +229,11 @@ Teensy GND          →  ESP32 GND   (shared ground required)
 Two separate CAN buses — cleaner isolation, no ID collision risk:
 
 ```
-Teensy CAN1 (pins 22/23)  →  SN65HVD230  →  CANH/CANL  →  AK45-10 L (ID 11 = 0x0B)
+Teensy CAN2 (pins  0/ 1)  →  SN65HVD230  →  CANH/CANL  →  AK45-10 L (ID 11 = 0x0B)
                                                            →  AK45-10 R (ID 12 = 0x0C)
                                               120 Ω terminator at each end
 
-Teensy CAN2 (pins  0/ 1)  →  SN65HVD230  →  CANH/CANL  →  ODrive axis 0 (node 0)
+Teensy CAN3 (pins 30/31)  →  SN65HVD230  →  CANH/CANL  →  ODrive axis 0 (node 0)
                                                            →  ODrive axis 1 (node 1)
                                               120 Ω terminator at each end
 ```
