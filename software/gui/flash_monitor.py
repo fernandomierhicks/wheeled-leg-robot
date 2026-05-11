@@ -46,6 +46,7 @@ FLASH_ACTIONS: dict[str, dict] = {
             ("◈  iBUS Test",      ["run",  "-e", "ibus_demo",     "-t", "upload"]),
             ("⚙  AK45 UART",      ["run",  "-e", "ak45_uart_demo", "-t", "upload"]),
             ("★  RGB LED",        ["run",  "-e", "rgb_led_demo",   "-t", "upload"]),
+            ("♪  Buzzer",         ["test", "-e", "test_teensy",    "-f", "test_buzzer"]),
         ],
     },
     "esp32": {
