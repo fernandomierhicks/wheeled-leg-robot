@@ -11,7 +11,8 @@
 | ODrive wheel motors (axis 0/1) | Teensy 4.1 | CAN3 (pins 30/31) | ODrive CAN v2, fw 0.5.6 |
 | FlySky receiver (iBUS) | Teensy 4.1 | Serial4 RX (pin 16) | 115200 baud, RX-only |
 | AK45 UART | Teensy 4.1 | Serial2 / Serial3 | Half-duplex, pins 7–8 / 14–15 |
-| RGB status LED | Teensy 4.1 | PWM (pins 4/5/6) | 33 Ω series resistor |
+| RGB status LED | Teensy 4.1 | PWM (pins 2/3/4) | 33 Ω series resistor |
+| Passive buzzer | Teensy 4.1 | PWM (pin 5) | PWM tone output |
 | ESP32 link | Teensy 4.1 ↔ ESP32 | Serial5 / UART2 | 1.2 Mbaud, pins 20/21 ↔ GPIO16/17 |
 | 2.0″ TFT display (ST7789) | ESP32 | VSPI (GPIO18/23, CS=5, DC=2, RST=4, BLK=15) | 240×320, adafruit ST7789 lib |
 | VL53L1X ToF sensors (×4) | ESP32 | I2C (GPIO21/22) + XSHUT (GPIO25–27, 32) | Addresses 0x30–0x33 |
@@ -40,10 +41,10 @@ Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN6
 |-----|--------|-----------|-----------|---------|-------|
 | 0 | CAN2_RX | AK45-10 hip motors | CAN2 | 3.3V | Via SN65HVD230 transceiver; Serial1 unavailable |
 | 1 | CAN2_TX | AK45-10 hip motors | CAN2 | 3.3V | |
-| 2 | (spare) | — | — | — | |
-| 3 | (spare) | — | — | — | |
-| 4 | LED_R | RGB LED | PWM | 3.3V | 33 Ω series resistor to LED |
-| 5 | LED_G | RGB LED | PWM | 3.3V | |
+| 2 | LED_G | RGB LED | PWM | 3.3V | 33 Ω series resistor to LED |
+| 3 | LED_R | RGB LED | PWM | 3.3V | |
+| 4 | LED_B | RGB LED | PWM | 3.3V | |
+| 5 | BUZZER | Passive buzzer | PWM | 3.3V | PWM tone; add NPN transistor for louder drive |
 | 6 | IMU_RST | BNO086 | SPI0 | 3.3V | Active-low reset |
 | 7 | AK45_1_RX | AK45-1 UART | Serial2 | 3.3V | Half-duplex; use 1 kΩ series + diode |
 | 8 | AK45_1_TX | AK45-1 UART | Serial2 | 3.3V | |
@@ -62,7 +63,7 @@ Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN6
 | 21 | EXT_MCU_RX | ESP32 | Serial5 | 3.3V | Teensy RX ← ESP32 GPIO17 (TX2) |
 | 22 | (spare) | — | — | — | |
 | 23 | (spare) | — | — | — | |
-| 24 | LED_B | RGB LED | PWM | 3.3V | |
+| 24 | (spare) | — | — | — | |
 | 25 | (spare) | — | — | — | |
 | 26 | (spare) | — | — | — | |
 | 27 | (spare) | — | — | — | |

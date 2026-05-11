@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <unity.h>
 #include "hip_motors.h"
+#include "../test_led.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -69,11 +70,12 @@ static void move_update() {
 void setup() {
     Serial.begin(115200);
     delay(500);
+    test_led_begin();
 
     UNITY_BEGIN();
     RUN_TEST(test_can_init);
     RUN_TEST(test_feedback_received);
-    UNITY_END();
+    test_led_done(UNITY_END());
 
     Serial.println();
     Serial.println("--- MIT mode active — holding at 0 rad (kp=5, kd=0.5) ---");

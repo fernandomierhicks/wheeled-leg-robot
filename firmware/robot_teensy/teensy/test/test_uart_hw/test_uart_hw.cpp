@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <unity.h>
+#include "../test_led.h"
 
 // Serial5: TX=pin20 → ESP32 GPIO16(RX2), RX=pin21 ← ESP32 GPIO17(TX2)
 #define LINK Serial5
@@ -34,10 +35,11 @@ void setup() {
     Serial.begin(115200);
     LINK.begin(LINK_BAUD);
     delay(500);
+    test_led_begin();
 
     UNITY_BEGIN();
     RUN_TEST(test_uart_echo);
-    UNITY_END();
+    test_led_done(UNITY_END());
 
     Serial.println();
     Serial.println("--- UART HW: Teensy sends incrementing bytes, ESP32 replies +1 ---");

@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <unity.h>
 #include "comm_protocol.h"
+#include "../test_led.h"
 #include "CommLink.h"
 #include "esp32_link.h"
 
@@ -134,6 +135,7 @@ void test_uart_tx_no_stall(void) {
 void setup() {
     Serial.begin(115200);
     delay(500);
+    test_led_begin();
 
     UNITY_BEGIN();
     RUN_TEST(test_payload_size);
@@ -141,7 +143,7 @@ void setup() {
     RUN_TEST(test_telemetry_roundtrip);
     RUN_TEST(test_bad_checksum_dropped);
     RUN_TEST(test_uart_tx_no_stall);
-    UNITY_END();
+    test_led_done(UNITY_END());
 
     g_esp32.onCommand(on_ack);
 

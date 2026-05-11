@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <unity.h>
 #include "wheel_motors.h"
+#include "../test_led.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -87,13 +88,14 @@ static void spin_update() {
 void setup() {
     Serial.begin(115200);
     delay(500);
+    test_led_begin();
 
     UNITY_BEGIN();
     RUN_TEST(test_can_init);
     RUN_TEST(test_heartbeats_received);
     RUN_TEST(test_no_errors);
     RUN_TEST(test_encoder_feedback);
-    UNITY_END();
+    test_led_done(UNITY_END());
 
     wheel_motors_request_vbus();
 

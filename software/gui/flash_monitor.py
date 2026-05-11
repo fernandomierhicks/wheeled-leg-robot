@@ -32,26 +32,30 @@ PIO_DIR = {
 
 FLASH_ACTIONS: dict[str, dict] = {
     "teensy": {
-        "main":  [("Flash Main",         ["run",  "-e", "teensy41",    "-t", "upload"])],
+        "main":  [("▶  Flash Main",      ["run",  "-e", "teensy41",    "-t", "upload"])],
         "tests": [
-            ("Flash IMU Test",    ["test", "-e", "test_teensy", "-f", "test_imu"]),
-            ("Flash AK45 Test",   ["test", "-e", "test_teensy", "-f", "test_hip_motor"]),
-            ("Flash ODrive Test", ["test", "-e", "test_teensy", "-f", "test_wheel_motor"]),
-            ("Flash RC Test",     ["test", "-e", "test_teensy", "-f", "test_rc"]),
-            ("Flash Teensy-ESP32 Interface Test", ["test", "-e", "test_teensy", "-f", "test_telemetry"]),
-            ("Flash UART HW Test",                ["test", "-e", "test_teensy", "-f", "test_uart_hw"]),
-            ("Flash Test Neopixel",               ["run",  "-e", "neopixel_demo", "-t", "upload"]),
-            ("Flash iBUS Test",                   ["run",  "-e", "ibus_demo",     "-t", "upload"]),
+            ("⊕  IMU Test",       ["test", "-e", "test_teensy", "-f", "test_imu"]),
+            ("⚙  AK45 Test",      ["test", "-e", "test_teensy", "-f", "test_hip_motor"]),
+            ("⚙  ODrive Test",    ["test", "-e", "test_teensy", "-f", "test_wheel_motor"]),
+            ("◈  RC Test",        ["test", "-e", "test_teensy", "-f", "test_rc"]),
+            ("⇄  Comm USB",        ["test", "-e", "test_comm_usb", "-f", "test_comm_usb"]),
+            ("⇄  ESP32 Link",      ["test", "-e", "test_teensy", "-f", "test_esp32_link"]),
+            ("⇄  T↔ESP32 Link",   ["test", "-e", "test_teensy", "-f", "test_telemetry"]),
+            ("⇄  UART HW",        ["test", "-e", "test_teensy", "-f", "test_uart_hw"]),
+            ("★  Neopixel",       ["run",  "-e", "neopixel_demo", "-t", "upload"]),
+            ("◈  iBUS Test",      ["run",  "-e", "ibus_demo",     "-t", "upload"]),
+            ("⚙  AK45 UART",      ["run",  "-e", "ak45_uart_demo", "-t", "upload"]),
+            ("★  RGB LED",        ["run",  "-e", "rgb_led_demo",   "-t", "upload"]),
         ],
     },
     "esp32": {
-        "main":  [("Flash Main",         ["run",  "-e", "esp32s3",    "-t", "upload"])],
+        "main":  [("▶  Flash Main",      ["run",  "-e", "esp32s3",    "-t", "upload"])],
         "tests": [
-            ("Flash OLED Test",                   ["run",  "-e", "esp32dev",      "-t", "upload"]),
-            ("Flash Laser Test",                  ["run",  "-e", "vl53l1x_demo",  "-t", "upload"]),
-            ("Flash Test Neopixel",               ["run",  "-e", "neopixel_demo", "-t", "upload"]),
-            ("Flash Teensy-ESP32 Interface Test", ["test", "-e", "test_esp32",    "-f", "test_telemetry"]),
-            ("Flash UART HW Test",                ["test", "-e", "test_esp32",    "-f", "test_uart_hw"]),
+            ("★  OLED Test",      ["run",  "-e", "esp32dev",      "-t", "upload"]),
+            ("⊕  Laser Test",     ["run",  "-e", "vl53l1x_demo",  "-t", "upload"]),
+            ("★  Neopixel",       ["run",  "-e", "neopixel_demo", "-t", "upload"]),
+            ("⇄  T↔ESP32 Link",   ["test", "-e", "test_esp32",    "-f", "test_telemetry"]),
+            ("⇄  UART HW",        ["test", "-e", "test_esp32",    "-f", "test_uart_hw"]),
         ],
     },
 }
@@ -375,7 +379,7 @@ class DevicePanel(QWidget):
 
         # ── Flash buttons ────────────────────────────────────────────────────
         self._flash_btns: list[QPushButton] = []
-        self._cancel_btn = QPushButton("Cancel Flash")
+        self._cancel_btn = QPushButton("✕  Cancel Flash")
         self._cancel_btn.setStyleSheet(f"color: {RED}; border-color: {RED};")
         self._cancel_btn.hide()
         self._cancel_btn.clicked.connect(self._cancel_flash)
@@ -386,6 +390,13 @@ class DevicePanel(QWidget):
         main_col.setSpacing(4)
         for label, args in actions["main"]:
             btn = QPushButton(label)
+            btn.setMinimumHeight(40)
+            btn.setStyleSheet(
+                f"QPushButton {{ color: {color}; border: 1px solid {color}; "
+                f"font-weight: bold; font-size: 13px; padding: 0 12px; }}"
+                f"QPushButton:hover {{ background: {color}22; }}"
+                f"QPushButton:disabled {{ color: {DIM}; border-color: {DIM}; }}"
+            )
             btn.clicked.connect(lambda _, a=args: self._flash(a))
             self._flash_btns.append(btn)
             main_col.addWidget(btn)
@@ -395,6 +406,9 @@ class DevicePanel(QWidget):
         sep.setFrameShape(QFrame.Shape.VLine)
         sep.setStyleSheet(f"color: {BORDER};")
 
+        tests_lbl = QLabel("Tests")
+        tests_lbl.setStyleSheet(f"color: {DIM}; font-size: 10px; font-style: italic;")
+
         test_grid = QGridLayout()
         test_grid.setSpacing(4)
         for i, (label, args) in enumerate(actions["tests"]):
@@ -403,12 +417,17 @@ class DevicePanel(QWidget):
             self._flash_btns.append(btn)
             test_grid.addWidget(btn, i // 2, i % 2)
 
+        tests_col = QVBoxLayout()
+        tests_col.setSpacing(3)
+        tests_col.addWidget(tests_lbl)
+        tests_col.addLayout(test_grid)
+
         flash_row = QHBoxLayout()
         flash_row.addLayout(main_col)
         flash_row.addSpacing(8)
         flash_row.addWidget(sep)
         flash_row.addSpacing(8)
-        flash_row.addLayout(test_grid)
+        flash_row.addLayout(tests_col)
         flash_row.addStretch()
         flash_row.addWidget(self._cancel_btn)
 

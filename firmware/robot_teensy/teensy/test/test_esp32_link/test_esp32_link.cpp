@@ -3,6 +3,7 @@
 #include "esp32_link.h"
 #include "comm_protocol.h"
 #include "config.h"
+#include "../test_led.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -50,13 +51,14 @@ void test_send_no_stall(void) {
 void setup() {
     Serial.begin(115200);
     delay(500);
+    test_led_begin();
 
     UNITY_BEGIN();
     RUN_TEST(test_baud_config);
     RUN_TEST(test_frame_size);
     RUN_TEST(test_serial5_init);
     RUN_TEST(test_send_no_stall);
-    UNITY_END();
+    test_led_done(UNITY_END());
 
     Serial.println();
     Serial.println("--- Streaming telemetry on Serial5 (TX=pin20, RX=pin21) at 500 Hz ---");

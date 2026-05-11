@@ -8,9 +8,10 @@ Priorities:
 2. Once each is working port onto proto board if enough time. 
 3. Based on proto design, design flat plate in CAD for printing
 
-IMU                                         8 pins                      Interface checked
-CAN odrive                                  3 pins                      Interface checked
-CAN AK45 + UART for positoin?               2pins + 3 + 3               Interface checked
+IMU                                         8 pins                      Connectorized and checked
+CAN odrive                                  3 pins                      Connectorized and checked
+CAN AK45                                                                Connectorized and checked
+AK45  UART                                    2pins + 3 + 3             Wrong connector, check!
 
 
 RGB LED / neopixel                          3                           Interface checked

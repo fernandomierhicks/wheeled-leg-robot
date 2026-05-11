@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <unity.h>
 #include "IMU.h"
+#include "../test_led.h"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -80,13 +81,14 @@ void test_imu_update_fresh(void) {
 void setup() {
     Serial.begin(115200);
     delay(1000);  // let serial port settle before Unity output starts
+    test_led_begin();
 
     UNITY_BEGIN();
     RUN_TEST(test_imu_reaches_nominal);
     RUN_TEST(test_imu_values_plausible);
     RUN_TEST(test_imu_packet_loss_low);
     RUN_TEST(test_imu_update_fresh);
-    UNITY_END();
+    test_led_done(UNITY_END());
 }
 
 void loop() {

@@ -12,15 +12,19 @@
 #define PIN_IMU_RST      6
 
 // --- RGB LED ---
-#define PIN_LED_R        4
-#define PIN_LED_G        5
-#define PIN_LED_B       24
+#define PIN_LED_R        3
+#define PIN_LED_G        2
+#define PIN_LED_B        4
 
-// --- AK45 UART (Serial2 / Serial3, half-duplex) ---
+// --- Passive buzzer (PWM tone) ---
+#define PIN_BUZZER       5
+
+// --- AK45 UART (Serial2 / Serial3, half-duplex, 1 kΩ series + diode) ---
 #define PIN_AK45_1_RX    7
 #define PIN_AK45_1_TX    8
 #define PIN_AK45_2_TX   14
 #define PIN_AK45_2_RX   15
+#define AK45_UART_BAUD   921600UL   // CubeMars default; verify if no response
 
 // --- RC receiver (FlySky iBUS, Serial4 RX only) ---
 #define PIN_IBUS_RX     16
