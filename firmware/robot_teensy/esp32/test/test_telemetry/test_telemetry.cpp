@@ -35,9 +35,14 @@ static uint32_t   s_ack_tx   = 0;
 static const uint8_t kEmpty = 0;
 
 static void on_teensy_packet(uint8_t type, uint8_t /*ver*/, uint8_t src,
-                              const uint8_t* /*payload*/, uint16_t /*len*/) {
+                              const uint8_t* payload, uint16_t len) {
     if (type == COMM_TYPE_TELEMETRY && src == COMM_SRC_TEENSY) {
         ++s_rx_count;
+        float pitch = 0.0f;
+        if (len >= sizeof(TelemetryPayload))
+            pitch = reinterpret_cast<const TelemetryPayload*>(payload)->pitch_rad;
+        Serial.printf("ESP32 received #%lu  pitch=%.3f rad  -> ACK sent\n",
+                      (unsigned long)s_rx_count, pitch);
         s_link->send(COMM_TYPE_ACK, 1, &kEmpty, 0);
         ++s_ack_tx;
     }
@@ -144,21 +149,11 @@ void setup() {
     UNITY_END();
 
     Serial.println();
-    Serial.println("--- ACK-ing every TELEM from Teensy (RX2=GPIO16, TX2=GPIO17) ---");
-    Serial.println("  rx_count |  ack_tx");
-    Serial.println("-----------+---------");
+    Serial.println("--- Bidirectional link test: ACK-ing every TELEM from Teensy ---");
 }
 
 // ── ACK loop ──────────────────────────────────────────────────────────────────
 
 void loop() {
-    static uint32_t last_print = 0;
-
     if (s_link) s_link->update();
-
-    uint32_t now_ms = millis();
-    if (now_ms - last_print >= 1000) {
-        last_print = now_ms;
-        Serial.printf("%10lu | %8lu\n", s_rx_count, s_ack_tx);
-    }
 }

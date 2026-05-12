@@ -30,8 +30,10 @@ static volatile uint32_t s_ack_count = 0;
 
 static void on_ack(uint8_t type, uint8_t /*ver*/, uint8_t src,
                    const uint8_t* /*payload*/, uint16_t /*len*/) {
-    if (type == COMM_TYPE_ACK && src == COMM_SRC_ESP32)
+    if (type == COMM_TYPE_ACK && src == COMM_SRC_ESP32) {
         ++s_ack_count;
+        Serial.printf("<- ESP32 ACK #%lu\n", (unsigned long)s_ack_count);
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -148,43 +150,27 @@ void setup() {
     g_esp32.onCommand(on_ack);
 
     Serial.println();
-    Serial.println("--- Streaming telemetry on Serial5 (TX=pin20) at 500 Hz ---");
-    Serial.println("--- Listening for ACKs from ESP32 (RX=pin21)           ---");
-    Serial.println("  tx_count |  ack_rx  | ack_rate (%)");
-    Serial.println("-----------+----------+--------------");
+    Serial.println("--- Bidirectional link test: Teensy sends 1/s, ESP32 ACKs ---");
 }
 
 // ── Live stream ───────────────────────────────────────────────────────────────
 
 void loop() {
-    static uint32_t last_send_us = 0;
-    static uint32_t last_print   = 0;
-    static uint32_t tx_snap      = 0;
-    static uint32_t ack_snap     = 0;
+    static uint32_t last_send_ms = 0;
+    static uint32_t s_seq        = 0;
 
     g_esp32.update();
 
-    uint32_t now_us = micros();
-    if (now_us - last_send_us >= 2000) {
-        last_send_us = now_us;
+    uint32_t now_ms = millis();
+    if (now_ms - last_send_ms >= 1000) {
+        last_send_ms = now_ms;
+        ++s_seq;
 
         TelemetryPayload t = {};
-        t.timestamp_ms = millis();
-        t.pitch_rad    = 0.05f * sinf(millis() * 0.001f * TWO_PI * 0.5f);
+        t.timestamp_ms = now_ms;
+        t.pitch_rad    = 0.05f * sinf(now_ms * 0.001f * TWO_PI * 0.5f);
         t.robot_state  = 2;
         g_esp32.send_telemetry(t);
-    }
-
-    uint32_t now_ms = millis();
-    if (now_ms - last_print >= 1000) {
-        uint32_t tx  = g_esp32.tx_count();
-        uint32_t ack = s_ack_count;
-        uint32_t dtx = tx  - tx_snap;
-        uint32_t dak = ack - ack_snap;
-        tx_snap  = tx;
-        ack_snap = ack;
-        float rate = (dtx > 0) ? (100.0f * dak / dtx) : 0.0f;
-        Serial.printf("%10lu | %8lu | %10.1f %%\n", tx, ack, rate);
-        last_print = now_ms;
+        Serial.printf("Teensy sent #%lu  pitch=%.3f rad\n", (unsigned long)s_seq, t.pitch_rad);
     }
 }

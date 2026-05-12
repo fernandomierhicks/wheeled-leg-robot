@@ -123,10 +123,14 @@ Board: `esp32dev` (ESP32-WROOM-32, 3.3V logic, 5V tolerant VIN).
 |------------|--------|-------------|-------|
 | GPIO16 (RX2) | UART2 RX | Teensy pin 20 (Serial5 TX) | |
 | GPIO17 (TX2) | UART2 TX | Teensy pin 21 (Serial5 RX) | |
+| GPIO14 | TEENSY_RST *(optional)* | Teensy RST pad (bottom) | Pull low to reset Teensy; needed for UART bootloader entry |
+| GPIO34 | TEENSY_PROG *(optional)* | Teensy PROG pad (bottom) | Pull low during reset to enter bootloader mode |
 | VIN | Power in | 5V rail (buck output) | |
 | GND | Ground | Shared GND | |
 
 Baud rate: **1,200,000** (`TEENSY_UART_BAUD` in `esp32/src/config.h`). No level shifter needed — both sides are 3.3V logic.
+
+> **Optional — UART bootloader:** If ESP32 is to flash the Teensy over UART, wire GPIO14→RST and GPIO34→PROG (both active-low open-drain). A third-party UART bootloader must be installed on the Teensy; the factory HalfKay bootloader is USB-only.
 
 ---
 
@@ -165,6 +169,7 @@ Default I2C address is 0x29; firmware reassigns each to 0x30–0x33 in sequence.
 | GPIO32 | XSHUT 3 | sensor 3 | → address 0x33 |
 | 3.3V | VCC | all | |
 | GND | GND | all | |
+| *(INT pins)* | *(not wired — spare)* | all | GPIO1/INT on each sensor left unconnected; polling used instead of interrupt-driven reads |
 
 Library: `pololu/VL53L1X` · Env: `vl53l1x_demo` · Distance mode: Short (≤1.3 m) · Timing budget: 50 ms
 Firmware: `esp32/src/vl53l1x/main.cpp`
@@ -204,10 +209,12 @@ All WiFi I/O is handled by the ESP32-WROOM-32's integrated radio — no extra pi
 ## Teensy–ESP32 UART Bridge
 
 ```
-Teensy TX (pin 20)  →  ESP32 GPIO16 (RX2)
-Teensy RX (pin 21)  ←  ESP32 GPIO17 (TX2)
-Teensy GND          →  ESP32 GND   (shared ground required)
-5V rail             →  ESP32 VIN
+Teensy TX (pin 20)    →  ESP32 GPIO16 (RX2)
+Teensy RX (pin 21)    ←  ESP32 GPIO17 (TX2)
+Teensy RST pad        ←  ESP32 GPIO14  [optional — UART bootloader]
+Teensy PROG pad       ←  ESP32 GPIO34  [optional — UART bootloader]
+Teensy GND            →  ESP32 GND     (shared ground required)
+5V rail               →  ESP32 VIN
 ```
 
 ## Serial Port Allocation Summary (Teensy 4.1)

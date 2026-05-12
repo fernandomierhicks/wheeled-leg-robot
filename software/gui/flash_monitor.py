@@ -39,9 +39,7 @@ FLASH_ACTIONS: dict[str, dict] = {
             ("⚙  ODrive Test",    ["test", "-e", "test_teensy", "-f", "test_wheel_motor"]),
             ("◈  RC Test",        ["test", "-e", "test_teensy", "-f", "test_rc"]),
             ("⇄  Comm USB",        ["test", "-e", "test_comm_usb", "-f", "test_comm_usb"]),
-            ("⇄  ESP32 Link",      ["test", "-e", "test_teensy", "-f", "test_esp32_link"]),
             ("⇄  T↔ESP32 Link",   ["test", "-e", "test_teensy", "-f", "test_telemetry"]),
-            ("⇄  UART HW",        ["test", "-e", "test_teensy", "-f", "test_uart_hw"]),
             ("★  Neopixel",       ["run",  "-e", "neopixel_demo", "-t", "upload"]),
             ("◈  iBUS Test",      ["run",  "-e", "ibus_demo",     "-t", "upload"]),
             ("⚙  AK45 UART",      ["run",  "-e", "ak45_uart_demo", "-t", "upload"]),
@@ -52,11 +50,10 @@ FLASH_ACTIONS: dict[str, dict] = {
     "esp32": {
         "main":  [("▶  Flash Main",      ["run",  "-e", "esp32s3",    "-t", "upload"])],
         "tests": [
-            ("★  OLED Test",      ["run",  "-e", "esp32dev",      "-t", "upload"]),
+            ("★  TFT Screen",     ["run",  "-e", "esp32dev",      "-t", "upload"]),
             ("⊕  Laser Test",     ["run",  "-e", "vl53l1x_demo",  "-t", "upload"]),
             ("★  Neopixel",       ["run",  "-e", "neopixel_demo", "-t", "upload"]),
             ("⇄  T↔ESP32 Link",   ["test", "-e", "test_esp32",    "-f", "test_telemetry"]),
-            ("⇄  UART HW",        ["test", "-e", "test_esp32",    "-f", "test_uart_hw"]),
         ],
     },
 }
