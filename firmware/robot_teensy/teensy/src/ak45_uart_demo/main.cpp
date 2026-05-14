@@ -10,7 +10,7 @@ static AK45Uart ak2(Serial3);
 void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 3000) {}
-    Serial.println("AK45 UART hello-world — hip motors on Serial2 (pin 8/7) + Serial3 (pin 14/15)");
+    Serial.println("AK45 UART demo — hip motors on Serial2 (pin 8/7) + Serial3 (pin 14/15)");
 
     ak1.begin(AK45_UART_BAUD);
     ak2.begin(AK45_UART_BAUD);
@@ -20,9 +20,8 @@ static void print_motor(const char* label, const AK45Uart& ak) {
     const AK45UartState& s = ak.state();
     Serial.print(label);
     if (!s.ok) { Serial.println(": no response"); return; }
-    Serial.print(":  E=");   Serial.print(s.e_angle_rad, 4);
-    Serial.print(" rad  M="); Serial.print(s.m_angle_rad, 4);
-    Serial.print(" rad  RAW="); Serial.println(s.raw);
+    Serial.printf(":  E=%.4f rad  M=%.4f rad  RAW=%d\n",
+                  s.e_angle_rad, s.m_angle_rad, s.raw);
 }
 
 void loop() {
@@ -33,7 +32,6 @@ void loop() {
 
     ak1.poll();
     ak2.poll();
-
     print_motor("AK45-1", ak1);
     print_motor("AK45-2", ak2);
 }

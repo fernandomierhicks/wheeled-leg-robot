@@ -35,12 +35,22 @@ bool AK45Uart::poll(uint32_t timeout_ms) {
     _port.write(CMD_ENCODER, sizeof(CMD_ENCODER));
     _port.flush();
 
+    // Motor sends a diagnostic "show encoder now" frame before the data frame —
+    // keep reading frames until one parses or the window expires.
+    uint32_t deadline = millis() + timeout_ms;
     uint8_t buf[128];
-    uint8_t n = read_frame(buf, sizeof(buf), timeout_ms);
-
-    _state.ok = (n > 0) && parse_response(buf, n);
-    if (_state.ok) _state.last_fb_ms = millis();
-    return _state.ok;
+    while (millis() < deadline) {
+        uint32_t remaining = deadline - millis();
+        uint8_t n = read_frame(buf, sizeof(buf), remaining);
+        if (n == 0) break;
+        if (parse_response(buf, n)) {
+            _state.ok = true;
+            _state.last_fb_ms = millis();
+            return true;
+        }
+    }
+    _state.ok = false;
+    return false;
 }
 
 // Read bytes until FRAME_TAIL or timeout; returns total byte count (0 = fail).

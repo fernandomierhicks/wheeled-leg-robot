@@ -12,7 +12,7 @@
 
 // ── Config ───────────────────────────────────────────────────────────────────
 static constexpr uint32_t IMU_RATE_HZ       = 400;
-static constexpr uint32_t TIMEOUT_MS        = 100;   // silence before ERROR
+static constexpr uint32_t TIMEOUT_MS        = 100;   // silence before ERROR (measured from last poll, not wall clock)
 static constexpr uint32_t RETRY_INTERVAL_MS = 1000;
 static constexpr uint32_t LOSS_WINDOW_MS    = 1000;
 static constexpr float    LOSS_THRESHOLD    = 0.10f;
@@ -34,6 +34,7 @@ static float     _roll_rate      = 0.0f;
 static float     _yaw_rate       = 0.0f;
 static float     _packet_loss    = 0.0f;
 static uint32_t  _last_update_ms = 0;
+static uint32_t  _last_poll_ms   = 0;
 static uint32_t  _retry_due_ms   = 0;
 
 // Packet loss tracking
@@ -156,6 +157,7 @@ void imu_update() {
         if (attempt_init()) {
             _state          = ImuState::NOMINAL;
             _last_update_ms = millis();
+            _last_poll_ms   = _last_update_ms;
             _rv_seq_valid   = false;
             _packet_loss    = 0.0f;
             reset_loss_window(_last_update_ms);
@@ -167,6 +169,7 @@ void imu_update() {
 
     case ImuState::NOMINAL:
     case ImuState::DEGRADED:
+        _last_poll_ms = now;
         break;
     }
 
@@ -204,8 +207,8 @@ void imu_update() {
         }
     }
 
-    // Sensor silence timeout
-    if (now - _last_update_ms > TIMEOUT_MS) {
+    // Sensor silence timeout — only fires if we've been actively polling but data stopped
+    if (now - _last_update_ms > TIMEOUT_MS && now - _last_poll_ms >= TIMEOUT_MS) {
         _state        = ImuState::ERROR;
         _retry_due_ms = now + RETRY_INTERVAL_MS;
         return;

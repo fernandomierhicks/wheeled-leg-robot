@@ -54,10 +54,10 @@ void test_imu_values_plausible(void) {
     TEST_ASSERT_FALSE_MESSAGE(isnan(rate),  "pitch_rate is NaN");
 
     // Plausibility: sitting still the angles should be within ±π/2 of level
-    TEST_ASSERT_LESS_THAN(1.57f,  fabsf(pitch));
-    TEST_ASSERT_LESS_THAN(1.57f,  fabsf(roll));
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(pitch) < 1.57f, "pitch out of range");
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(roll)  < 1.57f, "roll out of range");
     // Gyro should be near zero at rest (< 0.5 rad/s)
-    TEST_ASSERT_LESS_THAN(0.5f, fabsf(rate));
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(rate)  < 0.5f,  "pitch_rate not near zero at rest");
 }
 
 // Packet loss should be below 10% after a full 1.5 s window.
@@ -65,7 +65,7 @@ void test_imu_packet_loss_low(void) {
     spin_imu(1500);  // cover at least one loss-window cycle (window = 1 s)
     float loss = imu_packet_loss();
     Serial.printf("[IMU] Packet loss: %.1f%%\n", loss * 100.0f);
-    TEST_ASSERT_LESS_THAN(0.10f, loss);
+    TEST_ASSERT_TRUE_MESSAGE(loss < 0.10f, "packet loss >= 10%");
 }
 
 // last_update_ms must be recent (< 50 ms ago) — sensor is still alive.

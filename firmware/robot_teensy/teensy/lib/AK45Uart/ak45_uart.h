@@ -2,7 +2,7 @@
 #include <Arduino.h>
 
 // AK45-10 UART driver — CubeMars MIT Serial terminal protocol (manual §5.3.1).
-// Each instance owns one HardwareSerial port (half-duplex, 1 kΩ + diode wiring).
+// Each instance owns one HardwareSerial port (standard 2-wire TX/RX).
 //
 // Typical wiring (from pinout.MD):
 //   AK45-1 → Serial2  TX=pin8  RX=pin7

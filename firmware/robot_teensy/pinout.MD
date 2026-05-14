@@ -10,7 +10,7 @@
 | AK45-10 hip motors (L + R) | Teensy 4.1 | CAN2 (pins 0/1) | MIT Cheetah protocol, IDs 11/12 |
 | ODrive wheel motors (axis 0/1) | Teensy 4.1 | CAN3 (pins 30/31) | ODrive CAN v2, fw 0.5.6 |
 | FlySky receiver (iBUS) | Teensy 4.1 | Serial4 RX (pin 16) | 115200 baud, RX-only |
-| AK45 UART | Teensy 4.1 | Serial2 / Serial3 | Half-duplex, pins 7–8 / 14–15 |
+| AK45 UART | Teensy 4.1 | Serial2 / Serial3 | 2-wire TX/RX, pins 7–8 / 14–15 |
 | RGB status LED | Teensy 4.1 | PWM (pins 2/3/4) | 33 Ω series resistor |
 | Passive buzzer | Teensy 4.1 | PWM (pin 5) | PWM tone output |
 | ESP32 link | Teensy 4.1 ↔ ESP32 | Serial5 / UART2 | 1.2 Mbaud, pins 20/21 ↔ GPIO16/17 |
@@ -46,7 +46,7 @@ Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN6
 | 4 | LED_B | RGB LED | PWM | 3.3V | |
 | 5 | BUZZER | Passive buzzer | PWM | 3.3V | PWM tone; add NPN transistor for louder drive |
 | 6 | IMU_RST | BNO086 | SPI0 | 3.3V | Active-low reset |
-| 7 | AK45_1_RX | AK45-1 UART | Serial2 | 3.3V | Half-duplex; use 1 kΩ series + diode |
+| 7 | AK45_1_RX | AK45-1 UART | Serial2 | 3.3V | |
 | 8 | AK45_1_TX | AK45-1 UART | Serial2 | 3.3V | |
 | 9 | IMU_INT | BNO086 | SPI0 | 3.3V | Active-low interrupt; input with pullup |
 | 10 | IMU_CS | BNO086 | SPI0 | 3.3V | Chip select, active low |

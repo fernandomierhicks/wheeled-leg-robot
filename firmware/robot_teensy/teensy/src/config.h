@@ -19,12 +19,12 @@
 // --- Passive buzzer (PWM tone) ---
 #define PIN_BUZZER       5
 
-// --- AK45 UART (Serial2 / Serial3, half-duplex, 1 kΩ series + diode) ---
+// --- AK45 UART (Serial2 / Serial3, standard 2-wire TX/RX) ---
 #define PIN_AK45_1_RX    7
 #define PIN_AK45_1_TX    8
 #define PIN_AK45_2_TX   14
 #define PIN_AK45_2_RX   15
-#define AK45_UART_BAUD   921600UL   // CubeMars default; verify if no response
+#define AK45_UART_BAUD   921600UL
 
 // --- RC receiver (FlySky iBUS, Serial4 RX only) ---
 #define PIN_IBUS_RX     16
