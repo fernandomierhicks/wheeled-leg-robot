@@ -1,0 +1,2 @@
+Drill all holes
+Chamfers need to be drilled without 3d part in there. 

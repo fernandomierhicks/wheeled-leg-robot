@@ -6,27 +6,18 @@
 ---Fernandos note dont change below
 
 
-
--Fix AK45 uarts
--Wire lasers. 
--Add bananas to supply
-
-
-
-
-
-
-
 ------------------------------------------------------firmware
+Teensy to  ESP32  USB pass through
+WIFI passthourgh
 Easy to rotate frames around, IMU and screen
+Robot visualizer, leg angle, lasers wheel angles
 Robust state machine with diagram
 unified color and mode signaling and Buzzer
-Robust interµC
+Dashboard for major interfaces. IMU with 3d graphic, RX with charts and modes, motors with contorl
 
+-------------------------------------------------------Jump
+For jump height, box mass is much less sensitive than wheel mass. Wheel mass direct penalty, box mass might help as long as motor can accelerate it fast enough
 
-
--------------------------------------------------------CAD
-Square tube
 
 
 ---------------------------------------------------------SIMULATION

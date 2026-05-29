@@ -387,18 +387,16 @@ class RobotGeometry:
     F_Z: float = -0.01821           # [m] coupler pivot Z in body frame
     A_Z: float = -0.0235            # [m] hip motor Z offset from body centre
 
-    m_box: float = 0.985            # [kg] body box (210) + electronics (244) + battery (275)
-                                     #       + motor mounts (90) + wiring (100) + fasteners (50)
-                                     #       + XT60 (10) + MR30 (6)  — see COMPONENTS.MD
-    m_femur: float = 0.0192         # [kg] femur Al tube (14×1.0mm, 174mm — scaled by length)
-    m_tibia: float = 0.0183         # [kg] tibia Al tube (16×1.0mm, 165mm — scaled by length)
-    m_coupler: float = 0.01150      # [kg] coupler Al tube (10×1.0mm, 151mm — scaled by length)
-    m_bearing: float = 0.0175       # [kg] avg bearing (608=12g, 6001=17g); ×4/side in physics.py → 140g total
-    m_wheel: float = 0.510          # [kg] wheel assembly (motor 440g + hub + tyre 70g)
+    m_box: float = 0.985            # [kg] BASELINE 0.985 — body box (210) + electronics (244) + battery (275) + motor mounts (90) + wiring (100) + fasteners (50) + XT60 (10) + MR30 (6) — body box (210) + electronics (244) + battery (275) + motor mounts (90) + wiring (100) + fasteners (50) + XT60 (10) + MR30 (6)
+    m_femur: float = 0.0192         # [kg] BASELINE 0.0192 — femur Al tube (14×1.0mm, 174mm)
+    m_tibia: float = 0.0183         # [kg] BASELINE 0.0183 — tibia Al tube (16×1.0mm, 165mm)
+    m_coupler: float = 0.01150      # [kg] BASELINE 0.01150 — coupler Al tube (10×1.0mm, 151mm)
+    m_bearing: float = 0.0175       # [kg] BASELINE 0.0175 — avg bearing (608=12g, 6001=17g); ×4/side in physics.py → 140g total
+    m_wheel: float = 0.383          # [kg] BASELINE 0.510 — wheel assembly (motor 440g + hub + tyre 70g) — wheel assembly (motor 440g + hub + tyre 70g)
 
     wheel_r: float = 0.075          # [m] wheel radius (150 mm OD)
     leg_y: float = 0.1430           # [m] Y-offset of leg plane from body centre
-    motor_mass: float = 0.260       # [kg] AK45-10 hip motor
+    motor_mass: float = 0.260       # [kg] BASELINE 0.260 — AK45-10 hip motor
 
     # Hip stroke angles (auto-computed by auto_stroke_angles for new geometry)
     Q_RET: float = -0.733038         # [rad] fully retracted (crouch)

@@ -36,6 +36,9 @@ data/tuning/
 Thumbs.db
 desktop.ini
 
+# SolidWorks lock files
+~$*
+
 # VSCode workspace (keep settings.json for Claude permissions)
 *.code-workspace
 
