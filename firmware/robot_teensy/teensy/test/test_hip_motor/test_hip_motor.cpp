@@ -1,7 +1,12 @@
 #include <Arduino.h>
 #include <unity.h>
 #include "hip_motors.h"
+#include "robot_state.h"
 #include "../test_led.h"
+
+// Satisfy hip_motors.cpp's reference to g_state; poll() reads state == STATE_STANDBY.
+RobotState g_state = {};
+HipCmd     g_hip_cmd = {};
 
 void setUp(void) {}
 void tearDown(void) {}

@@ -1,7 +1,12 @@
 #include "hip_motors.h"
 #include "config.h"
+#include "robot_state.h"
+#include "comm_protocol.h"
 #include <Arduino.h>
 #include <FlexCAN_T4.h>
+
+// Maximum allowed position step per command (rad). Larger jumps trigger ESTOP.
+#define MAX_HIP_DELTA_RAD  1.5708f  // 90 deg
 
 // AK45-10 MIT Cheetah protocol parameter limits
 #define P_MIN   -12.5f
@@ -50,6 +55,21 @@ static void send_raw(uint32_t id, const uint8_t data[8]) {
 }
 
 static void pack_and_send(uint32_t id, float pos, float vel, float kp, float kd, float torque) {
+    // Guard against large position jumps — fault and suppress the frame.
+    const HipAxisState* ax = (id == AK45_ID_L) ? &hm_L : &hm_R;
+    if (ax->ever_heard) {
+        float delta = pos - ax->pos_rad;
+        if (delta < 0) delta = -delta;
+        if (delta > MAX_HIP_DELTA_RAD) {
+            const char* side = (id == AK45_ID_L) ? "L" : "R";
+            Serial.printf("[HipMotors] FAULT: %s hip position jump %.3f rad > %.3f limit\n",
+                          side, delta, MAX_HIP_DELTA_RAD);
+            g_state.fault_code = FAULT_HIP_LARGE_POS_CMD;
+            g_state.state      = STATE_ESTOP;
+            return;
+        }
+    }
+
     uint16_t p   = float_to_uint(pos,    P_MIN,  P_MAX,  16);
     uint16_t v   = float_to_uint(vel,    V_MIN,  V_MAX,  12);
     uint16_t kp_ = float_to_uint(kp,     KP_MIN, KP_MAX, 12);
@@ -86,6 +106,7 @@ static void rx_callback(const CAN_message_t& msg) {
     ax->vel_rad_s  = uint_to_float(raw_vel, V_MIN, V_MAX, 12);
     ax->current_A  = uint_to_float(raw_cur, I_MIN, I_MAX, 12);
     ax->last_fb_ms = millis();
+    ax->ever_heard = true;
 }
 
 // ── public API ────────────────────────────────────────────────────────────────
@@ -108,11 +129,20 @@ bool hip_motors_init() {
 
 void hip_motors_poll() {
     uint32_t now = millis();
-    hm_L.ok = (now - hm_L.last_fb_ms) < CAN_TIMEOUT_MS;
-    hm_R.ok = (now - hm_R.last_fb_ms) < CAN_TIMEOUT_MS;
+    hm_L.ok = hm_L.ever_heard && (now - hm_L.last_fb_ms) < CAN_TIMEOUT_MS;
+    hm_R.ok = hm_R.ever_heard && (now - hm_R.last_fb_ms) < CAN_TIMEOUT_MS;
 
     if (hm_L.mit_active && (now - last_enter_ms) >= MIT_REENTER_MS) {
         hip_motors_enter_mit();
+    }
+
+    // Always ping with current-position + zero-torque so the AK45 returns feedback
+    // every frame. Explicit commands from the control loop or GUI override this on
+    // the same tick (they call pack_and_send directly after poll() returns).
+    if (hm_L.mit_active) {
+        pack_and_send(AK45_ID_L, hm_L.pos_rad, 0.0f, 0.0f, 0.0f, 0.0f);
+        delayMicroseconds(CAN_INTER_FRAME_US);
+        pack_and_send(AK45_ID_R, hm_R.pos_rad, 0.0f, 0.0f, 0.0f, 0.0f);
     }
 }
 
@@ -149,4 +179,18 @@ void hip_motors_send(float pos_L, float vel_L, float kp_L, float kd_L, float trq
     pack_and_send(AK45_ID_L, pos_L, vel_L, kp_L, kd_L, trq_L);
     delayMicroseconds(CAN_INTER_FRAME_US);
     pack_and_send(AK45_ID_R, pos_R, vel_R, kp_R, kd_R, trq_R);
+}
+
+void hip_motor_send_L(float pos, float vel, float kp, float kd, float torque) {
+    if (!hm_L.mit_active) return;
+    pack_and_send(AK45_ID_L, pos, vel, kp, kd, torque);
+}
+
+void hip_motor_send_R(float pos, float vel, float kp, float kd, float torque) {
+    if (!hm_R.mit_active) return;
+    pack_and_send(AK45_ID_R, pos, vel, kp, kd, torque);
+}
+
+bool hip_motors_ok() {
+    return hm_L.ok && hm_R.ok;
 }

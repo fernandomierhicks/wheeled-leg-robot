@@ -6,7 +6,8 @@ struct HipAxisState {
     float    vel_rad_s;    // rotor velocity [rad/s]
     float    current_A;    // phase current  [A]
     uint32_t last_fb_ms;   // millis() of most recent reply
-    bool     ok;           // true when feedback is fresh (< CAN_TIMEOUT_MS)
+    bool     ever_heard;   // true once any CAN reply has been received
+    bool     ok;           // true when feedback is fresh (< CAN_TIMEOUT_MS) AND ever_heard
     bool     mit_active;   // true after enter_mit sent, false after exit_mit
 };
 
@@ -18,6 +19,9 @@ bool hip_motors_init();
 // Check feedback timeouts; re-enter MIT mode on both axes if due (every 3 s).
 // Call once per control tick before reading hip feedback.
 void hip_motors_poll();
+
+// Returns true when both motors have replied at least once and feedback is fresh.
+bool hip_motors_ok();
 
 // Send the MIT-mode enable command to both motors.
 // Called automatically by hip_motors_poll(); call explicitly on startup.
@@ -38,3 +42,7 @@ void hip_motors_zero();
 // No-op if MIT mode is not active on either axis.
 void hip_motors_send(float pos_L, float vel_L, float kp_L, float kd_L, float trq_L,
                      float pos_R, float vel_R, float kp_R, float kd_R, float trq_R);
+
+// Single-motor MIT commands — leave the other motor's CAN mailbox untouched.
+void hip_motor_send_L(float pos, float vel, float kp, float kd, float torque);
+void hip_motor_send_R(float pos, float vel, float kp, float kd, float torque);

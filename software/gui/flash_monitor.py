@@ -46,7 +46,7 @@ FLASH_ACTIONS: dict[str, dict] = {
         ],
     },
     "esp32": {
-        "main":  [("▶  Flash Main",      ["run",  "-e", "esp32s3",    "-t", "upload"])],
+        "main":  [("▶  Flash Main",      ["run",  "-e", "esp32dev",   "-t", "upload"])],
         "tests": [
             ("★  TFT Screen",     ["run",  "-e", "esp32dev",      "-t", "upload"]),
             ("⊕  Laser Test",     ["run",  "-e", "vl53l1x_demo",  "-t", "upload"]),
@@ -158,15 +158,22 @@ _OVERHEAD    = 9   # header(7) + checksum(1) + end(1)
 
 _TYPE_NAMES  = {0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG"}
 _SRC_NAMES   = {0x01: "TEENSY", 0x02: "ESP32", 0x03: "PC"}
-_STATE_NAMES = {0: "STARTUP", 1: "CALIB", 2: "RUNNING", 3: "ESTOP"}
+_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL"}
+_FAULT_NAMES = {
+    0x00: "NONE",
+    0x01: "IMU_ERROR",
+    0x02: "HIP_INIT_TIMEOUT",
+    0x03: "HIP_FEEDBACK_LOST",
+}
 _LOG_LEVELS  = {0x01: "INFO", 0x02: "WARN", 0x03: "ERROR"}
 
 
 class PacketDecoder(QObject):
     packet_decoded = pyqtSignal(dict)
 
-    def __init__(self, parent=None):
+    def __init__(self, device: str = "", parent=None):
         super().__init__(parent)
+        self._device = device
         self._buf = b""
 
     def feed(self, data: bytes):
@@ -215,9 +222,9 @@ class PacketDecoder(QObject):
                 if ptype == 0x04 and length >= 2:
                     info["log_level"] = _LOG_LEVELS.get(payload[0], f"L{payload[0]}")
                     info["log_msg"]   = payload[1:].decode("utf-8", errors="replace")
-                elif ptype == 0x01 and length >= 41:
-                    ts, pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw, state = \
-                        _struct.unpack_from("<IfffffffffB", payload)
+                elif ptype == 0x01 and length >= 46:
+                    ts, pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw, state, fault, test_val = \
+                        _struct.unpack_from("<IfffffffffBBf", payload)
                     info.update({
                         "timestamp_ms":    ts,
                         "pitch_rad":       pitch,
@@ -229,13 +236,19 @@ class PacketDecoder(QObject):
                         "cmd_r":           cmd_r,
                         "roll_rad":        roll,
                         "yaw_rad":         yaw,
+                        "robot_state":     state,
                         "state_name":      _STATE_NAMES.get(state, str(state)),
+                        "fault_code":      fault,
+                        "fault_name":      _FAULT_NAMES.get(fault, f"0x{fault:02X}"),
+                        "test_val":        test_val,
                     })
             except Exception:
                 pass
             self.packet_decoded.emit(info)
             from telemetry_bus import TelemetryBus
-            TelemetryBus.instance().packet.emit(info)
+            from source_manager import SourceManager
+            if SourceManager.instance().is_active(self._device):
+                TelemetryBus.instance().packet.emit(info)
             self._buf = self._buf[total:]
 
 
@@ -260,7 +273,7 @@ class PacketInspector(QWidget):
         self._v: dict[str, QLabel] = {}
         all_keys = ["Type", "Src", "Seq", "Len", "CRC",
                     "Pitch", "Rate", "WheelV", "State", "T(ms)",
-                    "HipL", "HipR", "CmdL", "CmdR"]
+                    "HipL", "HipR", "CmdL", "CmdR", "Fault"]
         for key in all_keys:
             _, val = _kv(key)
             self._v[key] = val
@@ -285,7 +298,7 @@ class PacketInspector(QWidget):
         inner.addWidget(title)
         inner.addLayout(_row(["Type", "Src", "Seq", "Len", "CRC"]))
         inner.addLayout(_row(["Pitch", "Rate", "WheelV", "State", "T(ms)"]))
-        inner.addLayout(_row(["HipL", "HipR", "CmdL", "CmdR"]))
+        inner.addLayout(_row(["HipL", "HipR", "CmdL", "CmdR", "Fault"]))
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -313,8 +326,10 @@ class PacketInspector(QWidget):
             self._set("HipR",   f"{info['hip_r_pos_rad']:+.3f}")
             self._set("CmdL",   f"{info['cmd_l']:+.3f}")
             self._set("CmdR",   f"{info['cmd_r']:+.3f}")
+            fault = info.get("fault_name", "—")
+            self._set("Fault", fault, RED if fault != "NONE" else TEXT)
         else:
-            for k in ["Pitch", "Rate", "WheelV", "State", "T(ms)", "HipL", "HipR", "CmdL", "CmdR"]:
+            for k in ["Pitch", "Rate", "WheelV", "State", "T(ms)", "HipL", "HipR", "CmdL", "CmdR", "Fault"]:
                 self._set(k, "—")
 
 
@@ -329,7 +344,7 @@ class DevicePanel(QWidget):
         self._auto_scroll = True
         self._flashing    = False
         self._log_path    = LOG_DIR / f"{device}.log"
-        self._decoder     = PacketDecoder(self)
+        self._decoder     = PacketDecoder(device, self)
 
         pm = SerialPortManager.instance()
         pm.port_released.connect(self._on_port_released)

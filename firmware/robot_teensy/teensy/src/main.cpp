@@ -7,8 +7,14 @@
 #include "CommLink.h"
 #include "comm_protocol.h"
 #include "IMU.h"
+#include "hip_motors.h"
+#include "RgbLed.h"
 
-CommLink g_comm(Serial, COMM_SRC_TEENSY);
+CommLink g_comm(Serial5, COMM_SRC_TEENSY);     // ESP32 UART bridge
+CommLink g_comm_usb(Serial, COMM_SRC_TEENSY);  // direct PC USB
+RgbLed   g_led(PIN_LED_R, PIN_LED_G, PIN_LED_B);
+
+HipCmd g_hip_cmd = {};
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -24,25 +30,57 @@ static void comm_log(uint8_t level, const char* fmt, ...) {
     buf[0] = level;
     memcpy(buf + 1, msg, n);
     g_comm.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
+    if (Serial) g_comm_usb.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
 }
 
 // ── Command handler ───────────────────────────────────────────────────────────
 
 static void on_command(uint8_t type, uint8_t version, uint8_t source,
                        const uint8_t* payload, uint16_t len) {
-    // TODO: dispatch on type / cmd_id
-    (void)type; (void)version; (void)source; (void)payload; (void)len;
+    (void)version; (void)source;
+    if (type != COMM_TYPE_COMMAND || len < 1) return;
+
+    uint8_t cmd_id = payload[0];
+
+    // ── Mode change: signal the state machine ─────────────────────────────────
+    if (cmd_id == CMD_ID_SET_MODE && len >= 2) {
+        uint8_t target = payload[1];
+        if (target == STATE_MANUAL)  stateMachine_request_manual();
+        if (target == STATE_STANDBY) stateMachine_exit_manual();
+        return;
+    }
+
+    // ── Hip command: queue for execution by the MANUAL state action ───────────
+    if (cmd_id == CMD_ID_HIP && len >= 3) {
+        g_hip_cmd.motor_id = payload[1];
+        g_hip_cmd.sub_cmd  = payload[2];
+        if (payload[2] == HIP_SUB_MIT && len >= 3 + 5 * 4) {
+            memcpy(&g_hip_cmd.p,   payload + 3,  4);
+            memcpy(&g_hip_cmd.v,   payload + 7,  4);
+            memcpy(&g_hip_cmd.kp,  payload + 11, 4);
+            memcpy(&g_hip_cmd.kd,  payload + 15, 4);
+            memcpy(&g_hip_cmd.tff, payload + 19, 4);
+        }
+        g_hip_cmd.pending = true;
+    }
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 void setup() {
     Serial.begin(115200);
+    Serial5.begin(ESP32_BAUD);
     g_comm.onPacket(on_command);
+    g_comm_usb.onPacket(on_command);
+
+    g_led.begin();
+    g_led.pulse(255, 255, 255, 2000);  // STARTUP: white breathe
 
     comm_log(LOG_LEVEL_INFO, "Firmware starting");
     imu_init();
     comm_log(LOG_LEVEL_INFO, "IMU initializing...");
+    hip_motors_init();
+    hip_motors_enter_mit();
     controlLoop_init();
     stateMachine_init();
     comm_log(LOG_LEVEL_INFO, "Setup complete");
@@ -63,19 +101,46 @@ static void send_telemetry() {
     telem.roll_rad         = imu_roll();
     telem.yaw_rad          = imu_yaw();
     telem.robot_state      = (uint8_t)g_state.state;
+    telem.fault_code       = g_state.fault_code;
+    telem.test_val         = sinf(2.0f * (float)M_PI * 2.0f * millis() / 1000.0f);
     g_comm.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &telem, sizeof(telem));
+    if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &telem, sizeof(telem));
+}
+
+// ── LED ───────────────────────────────────────────────────────────────────────
+
+static void update_led() {
+    static RobotStateEnum prev = (RobotStateEnum)0xFF;
+    RobotStateEnum cur = g_state.state;
+    if (cur != prev) {
+        prev = cur;
+        switch (cur) {
+            case STATE_STARTUP:     g_led.pulse(255, 255, 255, 2000); break;
+            case STATE_CALIBRATION: g_led.pulse(0,   0,   255, 2000); break;
+            case STATE_STANDBY:     g_led.pulse(255, 200,   0, 2000); break;
+            case STATE_RUNNING:     g_led.pulse(0,   255,   0, 2000); break;
+            case STATE_MANUAL:      g_led.pulse(0,   200, 255, 2000); break;
+            case STATE_ESTOP:       g_led.blink(255,   0,   0,  100, 100); break;
+        }
+    }
+    g_led.update();
 }
 
 // ── Per-loop tasks ────────────────────────────────────────────────────────────
 
 static void receive_commands() {
     g_comm.update();
+    g_comm_usb.update();
 }
 
 static void read_sensors() {
     imu_update();
     g_state.pitch_rad       = imu_pitch();
     g_state.pitch_rate_rads = imu_pitch_rate();
+
+    hip_motors_poll();
+    g_state.hip_l_pos_rad = hm_L.pos_rad;
+    g_state.hip_r_pos_rad = hm_R.pos_rad;
 }
 
 static void run_control_loop() {
@@ -112,7 +177,14 @@ void loop() {
     read_sensors();
     check_imu_state();
     run_control_loop();
-    send_telemetry();
+    update_led();
+
+    // Send telemetry at 50 Hz (every 10th tick of the 500 Hz loop)
+    static uint8_t telem_div = 0;
+    if (++telem_div >= 10) {
+        telem_div = 0;
+        send_telemetry();
+    }
 
     while (micros() - t_start < 2000) {}
 }

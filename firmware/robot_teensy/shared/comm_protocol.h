@@ -35,6 +35,14 @@
 //   [checksum]            1 byte  — XOR(type,version,source,seq,len_lo,len_hi,payload[0..n-1])
 //   [COMM_END]            1 byte  — 0xFE
 
+// ── Fault codes (robot_state == STATE_ESTOP → fault_code says why) ────────────
+// MIRROR: software/gui/flash_monitor.py  _FAULT_NAMES dict must stay in sync
+#define FAULT_NONE               0x00
+#define FAULT_IMU_ERROR          0x01  // IMU reported ERROR during startup
+#define FAULT_HIP_INIT_TIMEOUT   0x02  // no CAN reply from hip motors within 2 s of boot
+#define FAULT_HIP_FEEDBACK_LOST  0x03  // hip CAN feedback timed out during operation
+#define FAULT_HIP_LARGE_POS_CMD  0x04  // commanded position jump exceeded MAX_HIP_DELTA_RAD
+
 // ── Payload: telemetry ────────────────────────────────────────────────────────
 #define TELEM_PAYLOAD_V1  1
 
@@ -50,12 +58,30 @@ typedef struct __attribute__((packed)) {
     float    roll_rad;
     float    yaw_rad;
     uint8_t  robot_state;   // matches RobotStateEnum
-} TelemetryPayload;         // 41 bytes
+    uint8_t  fault_code;    // FAULT_* — non-zero only when robot_state == STATE_ESTOP
+    float    test_val;      // dummy 2 Hz sine wave for pipeline testing
+} TelemetryPayload;         // 46 bytes
 
-// ── Payload: command (fields TBD) ─────────────────────────────────────────────
+// ── Payload: command ──────────────────────────────────────────────────────────
 #define CMD_PAYLOAD_V1  1
 
 typedef struct __attribute__((packed)) {
     uint8_t cmd_id;
     uint8_t data[8];
 } CommandPayload;           // 9 bytes
+
+// ── Command IDs ───────────────────────────────────────────────────────────────
+// MIRROR: software/gui/hip_motors.py  _CMD_ID_* constants must stay in sync
+#define CMD_ID_SET_MODE   0x01  // payload: uint8_t target_state (RobotStateEnum)
+#define CMD_ID_HIP        0x05  // payload: uint8_t motor_id, uint8_t sub_cmd [, 5×float]
+
+// Hip motor IDs (CMD_ID_HIP payload byte 1)
+#define HIP_MOTOR_BOTH    0x00
+#define HIP_MOTOR_L       0x01
+#define HIP_MOTOR_R       0x02
+
+// Hip sub-commands (CMD_ID_HIP payload byte 2)
+#define HIP_SUB_DISABLE   0x00
+#define HIP_SUB_ENABLE    0x01
+#define HIP_SUB_ZERO      0x02
+#define HIP_SUB_MIT       0x03  // + float p_rad, vel_rad_s, kp, kd, tff  (20 bytes)

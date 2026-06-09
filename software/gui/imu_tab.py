@@ -4,11 +4,11 @@ from collections import deque
 import numpy as np
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSplitter, QVBoxLayout, QWidget
 
 from telemetry_bus import TelemetryBus
-from theme import BG, BORDER, BLUE, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
+from theme import BG, BORDER, BLUE, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, YELLOW, WHITE
 
 pg.setConfigOptions(antialias=True, background=BG, foreground=TEXT)
 
@@ -238,7 +238,7 @@ class ImuTab(QWidget):
         self._vals["Roll"].setText(f"{math.degrees(roll):+.1f}°")
         self._vals["Yaw"].setText(f"{math.degrees(yaw):+.1f}°")
         self._vals["Pitch rate"].setText(f"{rate:+.3f} r/s")
-        color = GREEN if state == "RUNNING" else (RED if state == "ESTOP" else TEXT)
+        color = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE, "STANDBY": YELLOW, "STARTUP": WHITE}.get(state, TEXT)
         self._vals["State"].setStyleSheet(
             f"color: {color}; font-size: 12px; font-weight: bold; font-family: Consolas;"
         )
@@ -262,3 +262,90 @@ class ImuTab(QWidget):
         # Gyro chart
         self._gyro_buf.append(rate)
         self._gyro_curve.setData(list(self._gyro_buf))
+
+
+# ── Compact IMU widget for embedding in other tabs ────────────────────────────
+
+def _apply_rotation(pitch: float, roll: float, yaw: float,
+                    axis_lines: list, body_lines: list):
+    cp, sp = math.cos(pitch), math.sin(pitch)
+    cr, sr = math.cos(roll),  math.sin(roll)
+    cy, sy = math.cos(yaw),   math.sin(yaw)
+    R = np.array([
+        [cy*cp,  cy*sp*sr - sy*cr,  cy*sp*cr + sy*sr],
+        [sy*cp,  sy*sp*sr + cy*cr,  sy*sp*cr - cy*sr],
+        [-sp,    cp*sr,             cp*cr            ],
+    ])
+    for vec0, line in axis_lines:
+        line.setData(pos=np.array([[0, 0, 0], R @ vec0], dtype=np.float32))
+    for pts0, line in body_lines:
+        line.setData(pos=(R @ pts0.T).T.astype(np.float32))
+
+
+class ImuMiniWidget(QWidget):
+    """Small 3-D orientation view + gyro readout for embedding in the dashboard."""
+
+    def __init__(self):
+        super().__init__()
+        self.setMaximumWidth(230)
+
+        self._gl = gl.GLViewWidget()
+        self._gl.opts["distance"]  = 3.5
+        self._gl.opts["elevation"] = 25
+        self._gl.opts["azimuth"]   = -50
+        self._gl.setBackgroundColor(pg.mkColor(BG))
+        self._gl.setFixedHeight(170)
+
+        self._axis_lines: list[tuple[np.ndarray, gl.GLLinePlotItem]] = []
+        for vec, color in [
+            (np.array([_AXIS_LEN, 0.0, 0.0]), (1.0, 0.3, 0.3, 1.0)),
+            (np.array([0.0, _AXIS_LEN, 0.0]), (0.3, 1.0, 0.3, 1.0)),
+            (np.array([0.0, 0.0, _AXIS_LEN]), (0.3, 0.6, 1.0, 1.0)),
+        ]:
+            pts  = np.array([[0, 0, 0], vec], dtype=np.float32)
+            line = gl.GLLinePlotItem(pos=pts, color=color, width=4.0, antialias=True)
+            self._gl.addItem(line)
+            self._axis_lines.append((vec.copy(), line))
+
+        self._body_lines = _build_robot(self._gl)
+
+        self._dot = QLabel("●  IMU")
+        self._dot.setStyleSheet(f"color: {DIM}; font-size: 12px;")
+        self._gyro_lbl = QLabel("gyro_z:  —")
+        self._gyro_lbl.setStyleSheet(
+            f"color: {TEXT}; font-size: 11px; font-family: Consolas;"
+        )
+
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        row.addWidget(self._dot)
+        row.addWidget(self._gyro_lbl)
+        row.addStretch()
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 4)
+        lay.setSpacing(4)
+        lay.addWidget(self._gl)
+        lay.addLayout(row)
+
+        self._timeout = QTimer(self)
+        self._timeout.setSingleShot(True)
+        self._timeout.setInterval(3000)
+        self._timeout.timeout.connect(
+            lambda: self._dot.setStyleSheet(f"color: {DIM}; font-size: 12px;")
+        )
+
+        TelemetryBus.instance().packet.connect(self._on_packet)
+
+    def _on_packet(self, info: dict):
+        if info.get("ptype") != 0x01:
+            return
+        pitch = info.get("pitch_rad",       0.0)
+        roll  = info.get("roll_rad",        0.0)
+        yaw   = info.get("yaw_rad",         0.0)
+        rate  = info.get("pitch_rate_rads", 0.0)
+
+        self._dot.setStyleSheet(f"color: {GREEN}; font-size: 12px;")
+        self._gyro_lbl.setText(f"gyro_z:  {rate:+.3f}")
+        self._timeout.start()
+        _apply_rotation(pitch, roll, yaw, self._axis_lines, self._body_lines)

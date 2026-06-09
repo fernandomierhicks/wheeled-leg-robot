@@ -76,6 +76,9 @@ class RawDataTab(QWidget):
         row = self._add_row(grid, row,
             ("cmd_l",          "—"),  ("cmd_r",           "—"),
         )
+        row = self._add_row(grid, row,
+            ("test_val",       "—"),  ("",                ""),
+        )
 
         grid.setRowStretch(row, 1)
 
@@ -211,6 +214,7 @@ class RawDataTab(QWidget):
             self._set("hip_r_pos_rad",  f"{info['hip_r_pos_rad']:+.6f}")
             self._set("cmd_l",          f"{info['cmd_l']:+.6f}")
             self._set("cmd_r",          f"{info['cmd_r']:+.6f}")
+            self._set("test_val",       f"{info['test_val']:+.6f}" if "test_val" in info else "—")
         elif info.get("ptype") == 0x04:
             self._append_log(info.get("log_level", "INFO"), info.get("log_msg", ""))
         else:

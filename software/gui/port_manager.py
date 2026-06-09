@@ -52,7 +52,17 @@ class SerialPortManager(QObject):
             if device in self._open:
                 return self._open[device]
             try:
-                s = serial.Serial(port, baud, timeout=0)
+                # Configure before open() so DTR/RTS start LOW.
+                # If DTR were asserted HIGH during open the OS would drive it
+                # LOW on close, and the RC pulse on ESP32 DevKit's auto-reset
+                # circuit would reset the chip.
+                s = serial.Serial()
+                s.port     = port
+                s.baudrate = baud
+                s.timeout  = 0
+                s.dtr      = False
+                s.rts      = False
+                s.open()
                 self._open[device] = s
             except Exception:
                 return None

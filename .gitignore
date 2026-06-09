@@ -45,3 +45,4 @@ desktop.ini
 # Secrets / local config overrides
 .env
 secrets.*
+wifi_config.h

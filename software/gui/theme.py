@@ -7,6 +7,8 @@ GREEN   = "#00e676"
 ORANGE  = "#ff9800"
 RED     = "#f44336"
 BLUE    = "#448aff"
+YELLOW  = "#ffe57f"
+WHITE   = "#ffffff"
 MONO    = "Consolas, 'Courier New', monospace"
 
 APP_STYLE = f"""

@@ -6,6 +6,12 @@
 ---Fernandos note dont change below
 
 
+Manual mode:
+enter and exit
+responsige GUI
+
+
+
 ------------------------------------------------------firmware
 Teensy to  ESP32  USB pass through
 WIFI passthourgh
