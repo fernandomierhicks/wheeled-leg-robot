@@ -49,6 +49,16 @@ void RgbLed::fade_to(uint8_t r, uint8_t g, uint8_t b, uint32_t duration_ms) {
     _anim_start = millis();
 }
 
+void RgbLed::flash_then_pulse(uint8_t r, uint8_t g, uint8_t b,
+                               uint32_t flash_ms, uint32_t period_ms) {
+    _r = r; _g = g; _b = b;
+    _duration_ms = flash_ms;
+    _period_ms   = period_ms;
+    _mode = Mode::FLASH;
+    _done = false;
+    _anim_start = millis();
+}
+
 bool RgbLed::is_done() const { return _done; }
 
 // --------------------------------------------------------------------------
@@ -78,6 +88,18 @@ void RgbLed::update() {
             _write((uint8_t)(_r * brightness),
                    (uint8_t)(_g * brightness),
                    (uint8_t)(_b * brightness));
+            break;
+        }
+
+        case Mode::FLASH: {
+            if (elapsed >= _duration_ms) {
+                _mode = Mode::PULSE;
+                _anim_start = now;
+                _done = true;
+                _write(_r, _g, _b);
+            } else {
+                _write(_r, _g, _b);
+            }
             break;
         }
 

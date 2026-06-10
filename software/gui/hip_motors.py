@@ -17,29 +17,21 @@ import struct
 from collections import deque
 
 import pyqtgraph as pg
-from PyQt6.QtCore import Qt
+pg.setConfigOptions(antialias=False)
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
-    QPushButton, QSplitter, QVBoxLayout, QWidget, QSizePolicy,
+    QPushButton, QVBoxLayout, QWidget, QSizePolicy,
 )
 
-from port_manager import SerialPortManager
 from telemetry_bus import TelemetryBus
-from theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
+from theme import BG, BLUE, BORDER, DIM, ORANGE, SURFACE, TEXT
+from comm_commands import build_frame, send_frame, send_set_mode, CMD_ID_HIP
 
-_BUF = 750          # rolling chart samples (~1.5 s at 500 Hz)
-HIP_TORQUE_MAX = 7.0  # N·m — used for limit lines
-
-# ── CommLink frame constants (shared/comm_protocol.h) ─────────────────────────
-_COMM_START    = 0xFF
-_COMM_END      = 0xFE
-_COMM_SRC_PC   = 0x03
-_COMM_TYPE_CMD = 0x02
-_CMD_PAYLOAD_V = 1
+_BUF = 750          # rolling chart samples (~15 s at 50 Hz telemetry)
 
 # Command IDs (comm_protocol.h CMD_ID_*)
-_CMD_ID_SET_MODE = 0x01
-_CMD_ID_HIP      = 0x05
+_CMD_ID_HIP      = CMD_ID_HIP
 
 # Hip motor IDs
 _HIP_MOTOR_BOTH  = 0x00
@@ -58,35 +50,6 @@ _STATE_MANUAL  = 5
 
 # Keep old alias so nothing else breaks
 _CMD_HIP_MOTOR = _CMD_ID_HIP
-
-_seq = [0]  # rolling Tx sequence counter
-
-
-# ── CommLink framing helpers ──────────────────────────────────────────────────
-
-def _build_frame(payload: bytes) -> bytes:
-    """Wrap payload in a CommLink COMMAND frame."""
-    seq = _seq[0] & 0xFF
-    _seq[0] += 1
-    plen = len(payload)
-    header = bytes([_COMM_TYPE_CMD, _CMD_PAYLOAD_V, _COMM_SRC_PC,
-                    seq, plen & 0xFF, (plen >> 8) & 0xFF])
-    crc = 0
-    for b in header + payload:
-        crc ^= b
-    return bytes([_COMM_START]) + header + payload + bytes([crc, _COMM_END])
-
-
-def _send(frame: bytes):
-    """Write a frame to the Teensy serial port (no-op if port is closed)."""
-    pm = SerialPortManager.instance()
-    with pm._lock:
-        s = pm._open.get("teensy")
-    if s and s.is_open:
-        try:
-            s.write(frame)
-        except Exception:
-            pass
 
 
 # ── Small UI helpers ──────────────────────────────────────────────────────────
@@ -124,6 +87,8 @@ def _colored_btn(label: str, bg: str) -> QPushButton:
         f"border:1px solid {BORDER};border-radius:3px;padding:4px 10px}}"
         f"QPushButton:hover{{background:{bg}cc}}"
         f"QPushButton:pressed{{background:{bg}88}}"
+        f"QPushButton:disabled{{background:{SURFACE};color:{DIM};"
+        f"border:1px solid {BORDER}}}"
     )
     return b
 
@@ -141,6 +106,7 @@ def _spin(lo: float, hi: float, step: float,
         f"font-family:Consolas;font-size:10px;"
         f"border:1px solid {BORDER};border-radius:3px;padding:1px 4px}}"
         f"QDoubleSpinBox::up-button,QDoubleSpinBox::down-button{{width:14px}}"
+        f"QDoubleSpinBox:disabled{{background:{SURFACE};color:{DIM}}}"
     )
     return s
 
@@ -155,6 +121,9 @@ class _MotorPanel(QWidget):
         self._mid = motor_id
         self._pos_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
         self._tau_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
+        self._latest_pos_deg = 0.0
+        self._latest_tau_nm  = 0.0
+        self._redraw_count = 0
 
         self.setObjectName("MotorPanel")
         self.setStyleSheet(
@@ -233,6 +202,8 @@ class _MotorPanel(QWidget):
                 f"QPushButton{{background:{bg};color:white;"
                 f"border:1px solid {BORDER};border-radius:3px;padding:3px 10px}}"
                 f"QPushButton:hover{{background:{bg}cc}}"
+                f"QPushButton:disabled{{background:{SURFACE};color:{DIM};"
+                f"border:1px solid {BORDER}}}"
             )
             b.clicked.connect(lambda _, kp=kp_val, kd=kd_val: self._apply_preset(kp, kd))
             pre_row.addWidget(b)
@@ -277,6 +248,8 @@ class _MotorPanel(QWidget):
             f"QPushButton{{background:#1a4a7a;color:white;"
             f"border:1px solid {BORDER};border-radius:3px;padding:3px 10px}}"
             f"QPushButton:hover{{background:#2a5a8a}}"
+            f"QPushButton:disabled{{background:{SURFACE};color:{DIM};"
+            f"border:1px solid {BORDER}}}"
         )
         btn_mit.clicked.connect(self._send_mit)
         lim_row.addWidget(btn_mit)
@@ -287,6 +260,11 @@ class _MotorPanel(QWidget):
         lay.addWidget(self._ctrl)
         lay.addStretch()
 
+        # Redraw mini chart at a fixed rate, decoupled from telemetry rate
+        self._redraw_timer = QTimer(self)
+        self._redraw_timer.timeout.connect(self._redraw_chart)
+        self._redraw_timer.start(50)  # 20 Hz
+
     def set_controls_enabled(self, enabled: bool):
         self._ctrl.setEnabled(enabled)
 
@@ -294,7 +272,7 @@ class _MotorPanel(QWidget):
 
     def _simple_cmd(self, motor_id: int, hip_sub: int):
         payload = struct.pack("<BBB", _CMD_ID_HIP, motor_id, hip_sub)
-        _send(_build_frame(payload))
+        send_frame(build_frame(payload))
 
     def _apply_preset(self, kp: float, kd: float):
         self._sp_kp.setValue(kp)
@@ -312,26 +290,35 @@ class _MotorPanel(QWidget):
                               p_rad, 0.0,
                               self._sp_kp.value(), self._sp_kd.value(),
                               self._sp_tf.value())
-        _send(_build_frame(payload))
+        send_frame(build_frame(payload))
 
     # ── data update (called from HipMotorsTab._on_packet) ────────────────────
 
     def update_data(self, pos_rad: float, tau_nm: float):
         pos_deg = math.degrees(pos_rad)
-        self._lbl_pos.setText(f"{pos_deg:+.1f}°")
-        self._lbl_tau.setText(f"{tau_nm:+.2f} N·m")
+        self._latest_pos_deg = pos_deg
+        self._latest_tau_nm  = tau_nm
 
         self._pos_buf.append(pos_deg)
         self._tau_buf.append(tau_nm)
+
+    def _redraw_chart(self):
+        self._lbl_pos.setText(f"{self._latest_pos_deg:+.1f}°")
+        self._lbl_tau.setText(f"{self._latest_tau_nm:+.2f} N·m")
+
         self._crv_pos.setData(list(self._pos_buf))
         self._crv_tau.setData(list(self._tau_buf))
 
-        # auto-fit mini chart Y to both traces together
-        lo = min(min(self._pos_buf), min(self._tau_buf))
-        hi = max(max(self._pos_buf), max(self._tau_buf))
-        span = max(hi - lo, 5.0)
-        mid  = (lo + hi) / 2
-        self._chart.setYRange(mid - span * 0.6, mid + span * 0.6, padding=0.05)
+        # auto-fit mini chart Y to both traces together — only every 5th
+        # redraw (4 Hz at 20 Hz refresh); the Y range doesn't need to track
+        # every single frame and setYRange forces an axis/repaint pass.
+        self._redraw_count += 1
+        if self._redraw_count % 5 == 0:
+            lo = min(min(self._pos_buf), min(self._tau_buf))
+            hi = max(max(self._pos_buf), max(self._tau_buf))
+            span = max(hi - lo, 5.0)
+            mid  = (lo + hi) / 2
+            self._chart.setYRange(mid - span * 0.6, mid + span * 0.6, padding=0.05)
 
 
 # ── Main tab ──────────────────────────────────────────────────────────────────
@@ -374,46 +361,6 @@ class HipMotorsTab(QWidget):
         top_lay.addWidget(both)
         top_lay.addWidget(self._panel_R, stretch=1)
 
-        # ── Bottom: position + torque charts (both motors together) ───────────
-        self._pos_L: deque = deque([0.0] * _BUF, maxlen=_BUF)
-        self._pos_R: deque = deque([0.0] * _BUF, maxlen=_BUF)
-        self._tau_L: deque = deque([0.0] * _BUF, maxlen=_BUF)
-        self._tau_R: deque = deque([0.0] * _BUF, maxlen=_BUF)
-
-        glw = pg.GraphicsLayoutWidget()
-        glw.setBackground(BG)
-
-        def _chart(row, col, title, ylabel):
-            p = glw.addPlot(row=row, col=col)
-            p.setTitle(f'<span style="color:{TEXT}">{title}</span>', size="10pt")
-            p.setLabel("left", f'<span style="color:{DIM}">{ylabel}</span>')
-            p.showGrid(x=True, y=True, alpha=0.12)
-            p.setXRange(0, _BUF)
-            p.getAxis("bottom").setStyle(showValues=False)
-            p.addLegend(offset=(5, 5), verSpacing=-4)
-            return p
-
-        p_pos = _chart(0, 0, "Hip Position", "deg")
-        p_pos.enableAutoRange(axis="y", enable=True)
-        self._ln_pos_L = p_pos.plot(
-            list(self._pos_L), pen=pg.mkPen(BLUE,  width=1.5), name="L")
-        self._ln_pos_R = p_pos.plot(
-            list(self._pos_R), pen=pg.mkPen(GREEN, width=1.5), name="R")
-
-        p_tau = _chart(0, 1, "Cmd Torque", "N·m")
-        p_tau.setYRange(-HIP_TORQUE_MAX * 1.1, HIP_TORQUE_MAX * 1.1, padding=0)
-        p_tau.disableAutoRange()
-        for sign in (1, -1):
-            p_tau.addItem(pg.InfiniteLine(
-                pos=sign * HIP_TORQUE_MAX, angle=0,
-                pen=pg.mkPen(RED, width=1, style=Qt.PenStyle.DashLine),
-                label=f'{"+" if sign > 0 else "−"}{HIP_TORQUE_MAX:.1f}',
-                labelOpts={"color": RED, "anchors": [(0.05, 1.1), (0.05, 1.1)]}))
-        self._ln_tau_L = p_tau.plot(
-            list(self._tau_L), pen=pg.mkPen(BLUE,  width=1.5), name="L")
-        self._ln_tau_R = p_tau.plot(
-            list(self._tau_R), pen=pg.mkPen(GREEN, width=1.5), name="R")
-
         # ── Manual mode bar ───────────────────────────────────────────────────
         mode_bar = QWidget()
         mode_bar.setObjectName("ModeBar")
@@ -447,31 +394,24 @@ class HipMotorsTab(QWidget):
         mb_lay.addWidget(self._btn_enter)
         mb_lay.addWidget(self._btn_exit)
 
-        # ── Outer splitter ────────────────────────────────────────────────────
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.addWidget(top)
-        splitter.addWidget(glw)
-        splitter.setSizes([460, 220])
-        splitter.setHandleWidth(5)
-        splitter.setStyleSheet(f"QSplitter::handle {{ background: {BORDER}; }}")
-
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(4)
         lay.addWidget(mode_bar)
-        lay.addWidget(splitter)
+        lay.addWidget(top)
 
         TelemetryBus.instance().packet.connect(self._on_packet)
+
+        self._last_state_id: int | None = None
 
     # ── commands ──────────────────────────────────────────────────────────────
 
     def _set_mode(self, target: int):
-        payload = struct.pack("<BB", _CMD_ID_SET_MODE, target)
-        _send(_build_frame(payload))
+        send_set_mode(target)
 
     def _both_cmd(self, hip_sub: int):
         payload = struct.pack("<BBB", _CMD_ID_HIP, _HIP_MOTOR_BOTH, hip_sub)
-        _send(_build_frame(payload))
+        send_frame(build_frame(payload))
 
     # ── telemetry ─────────────────────────────────────────────────────────────
 
@@ -489,19 +429,25 @@ class HipMotorsTab(QWidget):
             return
 
         state_id = info.get("robot_state", 0)
-        label, color = self._STATE_LABELS.get(state_id, (f"STATE {state_id}", "#aaaaaa"))
         fault = info.get("fault_name", "")
-        if state_id == 4 and fault and fault != "NONE":  # ESTOP
-            label = f"ESTOP [{fault}]"
-        self._lbl_mode.setText(label)
-        self._lbl_mode.setStyleSheet(
-            f"color: {color}; font-size: 12px; font-weight: bold; font-family: Consolas;"
-        )
 
-        in_manual = (state_id == _STATE_MANUAL)
-        self._panel_L.set_controls_enabled(in_manual)
-        self._panel_R.set_controls_enabled(in_manual)
-        self._both.setEnabled(in_manual)
+        # Mode bar / control-enable state only changes occasionally — skip the
+        # (relatively expensive) setStyleSheet/setEnabled calls on every
+        # telemetry packet (~500 Hz) to keep the UI thread free for input.
+        if state_id != self._last_state_id or (state_id == 4 and fault and fault != "NONE"):
+            self._last_state_id = state_id
+            label, color = self._STATE_LABELS.get(state_id, (f"STATE {state_id}", "#aaaaaa"))
+            if state_id == 4 and fault and fault != "NONE":  # ESTOP
+                label = f"ESTOP [{fault}]"
+            self._lbl_mode.setText(label)
+            self._lbl_mode.setStyleSheet(
+                f"color: {color}; font-size: 12px; font-weight: bold; font-family: Consolas;"
+            )
+
+            in_manual = (state_id == _STATE_MANUAL)
+            self._panel_L.set_controls_enabled(in_manual)
+            self._panel_R.set_controls_enabled(in_manual)
+            self._both.setEnabled(in_manual)
 
         pos_l = info.get("hip_l_pos_rad", 0.0)
         pos_r = info.get("hip_r_pos_rad", 0.0)
@@ -511,13 +457,3 @@ class HipMotorsTab(QWidget):
         # Update per-motor panels
         self._panel_L.update_data(pos_l, tau_l)
         self._panel_R.update_data(pos_r, tau_r)
-
-        # Update bottom charts
-        self._pos_L.append(math.degrees(pos_l))
-        self._pos_R.append(math.degrees(pos_r))
-        self._tau_L.append(tau_l)
-        self._tau_R.append(tau_r)
-        self._ln_pos_L.setData(list(self._pos_L))
-        self._ln_pos_R.setData(list(self._pos_R))
-        self._ln_tau_L.setData(list(self._tau_L))
-        self._ln_tau_R.setData(list(self._tau_R))

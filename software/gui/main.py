@@ -16,7 +16,7 @@ def _kill_other_instances():
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget,
-    QLabel, QVBoxLayout, QHBoxLayout, QFrame,
+    QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
@@ -29,6 +29,7 @@ from raw_data_tab import RawDataTab
 from robot_visualizer_tab import RobotVisualizerTab
 from telemetry_bus import TelemetryBus
 from source_manager import SourceManager, TRANSPORT_LABEL
+from comm_commands import send_set_mode, send_reboot, STATE_STARTUP
 
 _BG = "#0b0b18"
 
@@ -134,10 +135,40 @@ class StatusBar:
         self._conn      = QLabel("● Disconnected")
         self._conn.setStyleSheet(f"color: {RED};")
 
+        self._btn_reset = QPushButton("Reset")
+        self._btn_reset.setStyleSheet(
+            f"QPushButton{{background:#4a1a1a;color:white;"
+            f"border:1px solid {BORDER};border-radius:3px;padding:2px 10px}}"
+            f"QPushButton:hover{{background:#4a1a1acc}}"
+            f"QPushButton:pressed{{background:#4a1a1a88}}"
+            f"QPushButton:disabled{{background:transparent;color:{DIM};"
+            f"border:1px solid {BORDER}}}"
+        )
+        self._btn_reset.setEnabled(False)
+        self._btn_reset.clicked.connect(lambda: send_set_mode(STATE_STARTUP))
+
+        self._btn_reboot = QPushButton("Reboot")
+        self._btn_reboot.setStyleSheet(self._btn_reset.styleSheet())
+        self._btn_reboot.setEnabled(False)
+        self._btn_reboot.clicked.connect(self._on_reboot_clicked)
+
         for w in (self._source, _vsep(), self._transport, _vsep(), self._dt, _vsep(), self._mode, _vsep(), self._test):
             sb.addWidget(w)
+        sb.addPermanentWidget(self._btn_reset)
+        sb.addPermanentWidget(self._btn_reboot)
         sb.addPermanentWidget(_vsep())
         sb.addPermanentWidget(self._conn)
+
+    def _on_reboot_clicked(self):
+        reply = QMessageBox.question(
+            None, "Reboot Teensy",
+            "This will fully reset the Teensy MCU and re-run setup() from scratch.\n"
+            "All motors and state will drop momentarily. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            send_reboot()
 
     def set_source(self, src: str):
         color = {
@@ -157,11 +188,15 @@ class StatusBar:
         if state == "—":
             self._mode.setStyleSheet(f"color: {DIM};")
             self._mode.setText("—")
+            self._btn_reset.setEnabled(False)
+            self._btn_reboot.setEnabled(False)
             return
         color = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE, "STANDBY": YELLOW, "STARTUP": WHITE}.get(state, DIM)
         self._mode.setStyleSheet(f"color: {color}; font-weight: bold;")
         label = f"{state}  [{fault}]" if state == "ESTOP" and fault and fault != "NONE" else state
         self._mode.setText(label)
+        self._btn_reset.setEnabled(state == "ESTOP")
+        self._btn_reboot.setEnabled(True)
 
     def set_test_val(self, val: float):
         self._test.setStyleSheet(f"color: {TEXT}; font-family: Consolas;")

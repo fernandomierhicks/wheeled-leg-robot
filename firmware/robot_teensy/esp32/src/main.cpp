@@ -4,6 +4,7 @@
 #include <SPI.h>
 #include <FastLED.h>
 #include <WiFi.h>
+#include <string.h>
 #include "config.h"
 #include "CommLink.h"
 #include "comm_protocol.h"
@@ -89,11 +90,75 @@ static bool        g_wifi_inited = false;
 
 // ── Command routing ───────────────────────────────────────────────────────────
 
+static const char* mode_name(uint8_t state);  // defined in Display section below
+
+// Rolling log of the last few decoded commands, newest first.
+#define CMD_LOG_SIZE 3
+static char     g_cmd_log[CMD_LOG_SIZE][24];
+static uint32_t g_cmd_log_ms[CMD_LOG_SIZE];
+static uint8_t  g_cmd_log_count = 0;
+static volatile bool g_cmd_log_dirty = false;
+
+// Decode a CommandPayload into a short human-readable string.
+static void decode_command(const uint8_t* payload, uint16_t len, char* out, size_t outlen) {
+    if (len < 1) {
+        snprintf(out, outlen, "CMD ?");
+        return;
+    }
+    uint8_t cmd_id = payload[0];
+    switch (cmd_id) {
+        case CMD_ID_SET_MODE:
+            if (len >= 2)
+                snprintf(out, outlen, "MODE -> %s", mode_name(payload[1]));
+            else
+                snprintf(out, outlen, "SET MODE");
+            break;
+        case CMD_ID_HIP:
+            if (len >= 3) {
+                const char* motor = (payload[1] == HIP_MOTOR_L) ? "L"
+                                   : (payload[1] == HIP_MOTOR_R) ? "R" : "BOTH";
+                const char* sub;
+                switch (payload[2]) {
+                    case HIP_SUB_DISABLE: sub = "DISABLE"; break;
+                    case HIP_SUB_ENABLE:  sub = "ENABLE";  break;
+                    case HIP_SUB_ZERO:    sub = "ZERO";    break;
+                    case HIP_SUB_MIT:     sub = "MIT";     break;
+                    default:              sub = "?";       break;
+                }
+                snprintf(out, outlen, "HIP %s %s", motor, sub);
+            } else {
+                snprintf(out, outlen, "HIP");
+            }
+            break;
+        case CMD_ID_REBOOT:
+            snprintf(out, outlen, "REBOOT");
+            break;
+        default:
+            snprintf(out, outlen, "CMD 0x%02X", cmd_id);
+            break;
+    }
+}
+
+// Push a newly decoded command onto the front of the rolling log.
+static void log_command(const uint8_t* payload, uint16_t len) {
+    for (int i = CMD_LOG_SIZE - 1; i > 0; i--) {
+        memcpy(g_cmd_log[i], g_cmd_log[i - 1], sizeof(g_cmd_log[i]));
+        g_cmd_log_ms[i] = g_cmd_log_ms[i - 1];
+    }
+    decode_command(payload, len, g_cmd_log[0], sizeof(g_cmd_log[0]));
+    g_cmd_log_ms[0] = millis();
+    if (g_cmd_log_count < CMD_LOG_SIZE)
+        g_cmd_log_count++;
+    g_cmd_log_dirty = true;
+}
+
 // Forward any COMMAND packet (from USB or WiFi TCP) to the Teensy UART.
 static void forward_to_teensy(uint8_t type, uint8_t version, uint8_t /*source*/,
                                const uint8_t* payload, uint16_t len) {
-    if (type == COMM_TYPE_COMMAND)
+    if (type == COMM_TYPE_COMMAND) {
         g_teensy.send(type, version, payload, len);
+        log_command(payload, len);
+    }
 }
 
 // ── Teensy → all outputs ──────────────────────────────────────────────────────
@@ -199,6 +264,24 @@ static void update_display() {
         tft.print("Dummy: ");
         tft.print(val, 3);
         prev_val = val;
+    }
+
+    // Redraw on a new command, or once a second so the "ago" times stay current.
+    static uint32_t last_log_redraw_ms = 0;
+    if (g_cmd_log_dirty || (millis() - last_log_redraw_ms >= 1000)) {
+        tft.fillRect(0, 178, 320, 62, ST77XX_BLACK);
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, 180);
+        tft.print("Last commands:");
+        tft.setTextColor(ST77XX_CYAN);
+        for (uint8_t i = 0; i < g_cmd_log_count; i++) {
+            uint32_t age_s = (millis() - g_cmd_log_ms[i]) / 1000;
+            tft.setCursor(10, 195 + i * 14);
+            tft.printf("%3lus  %s", (unsigned long)age_s, g_cmd_log[i]);
+        }
+        g_cmd_log_dirty   = false;
+        last_log_redraw_ms = millis();
     }
 }
 

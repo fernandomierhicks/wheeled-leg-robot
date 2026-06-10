@@ -25,8 +25,14 @@
 // Motor silently drops out of MIT mode after ~4 s without re-entry; use 3 s margin.
 #define MIT_REENTER_MS  3000u
 
+// A cached setpoint not refreshed within this window is considered stale and
+// poll() reverts to the safe zero-torque ping.
+#define HIP_SETPOINT_TIMEOUT_MS  5000u
+
 HipAxisState hm_L = {};
 HipAxisState hm_R = {};
+HipSetpoint  hm_sp_L = {};
+HipSetpoint  hm_sp_R = {};
 
 // CAN2 on Teensy 4.1 uses pins 1 (TX) and 0 (RX) — matches config.h PIN_CAN2_*.
 static FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> can2;
@@ -129,20 +135,34 @@ bool hip_motors_init() {
 
 void hip_motors_poll() {
     uint32_t now = millis();
-    hm_L.ok = hm_L.ever_heard && (now - hm_L.last_fb_ms) < CAN_TIMEOUT_MS;
-    hm_R.ok = hm_R.ever_heard && (now - hm_R.last_fb_ms) < CAN_TIMEOUT_MS;
+    hm_L.ok = hm_L.ever_heard && (now - hm_L.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
+    hm_R.ok = hm_R.ever_heard && (now - hm_R.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
 
     if (hm_L.mit_active && (now - last_enter_ms) >= MIT_REENTER_MS) {
         hip_motors_enter_mit();
     }
 
-    // Always ping with current-position + zero-torque so the AK45 returns feedback
-    // every frame. Explicit commands from the control loop or GUI override this on
-    // the same tick (they call pack_and_send directly after poll() returns).
+    // ESTOP or a stale (unrefreshed) setpoint both fall back to the safe ping.
+    if (g_state.state == STATE_ESTOP) {
+        hm_sp_L.active = false;
+        hm_sp_R.active = false;
+    }
+    if (hm_sp_L.active && (now - hm_sp_L.last_cmd_ms) > HIP_SETPOINT_TIMEOUT_MS) hm_sp_L.active = false;
+    if (hm_sp_R.active && (now - hm_sp_R.last_cmd_ms) > HIP_SETPOINT_TIMEOUT_MS) hm_sp_R.active = false;
+
+    // While a setpoint is active, re-send it every tick so it isn't overridden
+    // by the zero-torque ping below. Otherwise ping with current-position +
+    // zero-torque so the AK45 returns feedback every frame.
     if (hm_L.mit_active) {
-        pack_and_send(AK45_ID_L, hm_L.pos_rad, 0.0f, 0.0f, 0.0f, 0.0f);
+        if (hm_sp_L.active)
+            pack_and_send(AK45_ID_L, hm_sp_L.p, hm_sp_L.v, hm_sp_L.kp, hm_sp_L.kd, hm_sp_L.tff);
+        else
+            pack_and_send(AK45_ID_L, hm_L.pos_rad, 0.0f, 0.0f, 0.0f, 0.0f);
         delayMicroseconds(CAN_INTER_FRAME_US);
-        pack_and_send(AK45_ID_R, hm_R.pos_rad, 0.0f, 0.0f, 0.0f, 0.0f);
+        if (hm_sp_R.active)
+            pack_and_send(AK45_ID_R, hm_sp_R.p, hm_sp_R.v, hm_sp_R.kp, hm_sp_R.kd, hm_sp_R.tff);
+        else
+            pack_and_send(AK45_ID_R, hm_R.pos_rad, 0.0f, 0.0f, 0.0f, 0.0f);
     }
 }
 
@@ -163,6 +183,7 @@ void hip_motors_exit_mit() {
     send_raw(AK45_ID_R, cmd);
     hm_L.mit_active = false;
     hm_R.mit_active = false;
+    hip_motors_clear_setpoints();
 }
 
 void hip_motors_zero() {
@@ -189,6 +210,19 @@ void hip_motor_send_L(float pos, float vel, float kp, float kd, float torque) {
 void hip_motor_send_R(float pos, float vel, float kp, float kd, float torque) {
     if (!hm_R.mit_active) return;
     pack_and_send(AK45_ID_R, pos, vel, kp, kd, torque);
+}
+
+void hip_motors_set_setpoint_L(float pos, float vel, float kp, float kd, float torque) {
+    hm_sp_L = {pos, vel, kp, kd, torque, true, millis()};
+}
+
+void hip_motors_set_setpoint_R(float pos, float vel, float kp, float kd, float torque) {
+    hm_sp_R = {pos, vel, kp, kd, torque, true, millis()};
+}
+
+void hip_motors_clear_setpoints() {
+    hm_sp_L.active = false;
+    hm_sp_R.active = false;
 }
 
 bool hip_motors_ok() {

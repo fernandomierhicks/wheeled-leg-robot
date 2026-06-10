@@ -7,11 +7,21 @@ struct HipAxisState {
     float    current_A;    // phase current  [A]
     uint32_t last_fb_ms;   // millis() of most recent reply
     bool     ever_heard;   // true once any CAN reply has been received
-    bool     ok;           // true when feedback is fresh (< CAN_TIMEOUT_MS) AND ever_heard
+    bool     ok;           // true when feedback is fresh (< HIP_CAN_TIMEOUT_MS) AND ever_heard
     bool     mit_active;   // true after enter_mit sent, false after exit_mit
 };
 
+// Cached MIT setpoint, re-sent every poll() tick while active. Falls back to
+// the safe zero-torque ping if cleared, stale (> HIP_SETPOINT_TIMEOUT_MS), or
+// the robot enters ESTOP.
+struct HipSetpoint {
+    float    p, v, kp, kd, tff;
+    bool     active;
+    uint32_t last_cmd_ms;
+};
+
 extern HipAxisState hm_L, hm_R;
+extern HipSetpoint  hm_sp_L, hm_sp_R;
 
 // Call once in setup(). Starts CAN1 at 1 Mbps and registers the RX callback.
 bool hip_motors_init();
@@ -46,3 +56,14 @@ void hip_motors_send(float pos_L, float vel_L, float kp_L, float kd_L, float trq
 // Single-motor MIT commands — leave the other motor's CAN mailbox untouched.
 void hip_motor_send_L(float pos, float vel, float kp, float kd, float torque);
 void hip_motor_send_R(float pos, float vel, float kp, float kd, float torque);
+
+// Cache a MIT setpoint that hip_motors_poll() will re-send every tick until
+// it's cleared, goes stale (> HIP_SETPOINT_TIMEOUT_MS without a refresh), or
+// the robot enters ESTOP — at which point poll() falls back to the safe
+// zero-torque ping.
+void hip_motors_set_setpoint_L(float pos, float vel, float kp, float kd, float torque);
+void hip_motors_set_setpoint_R(float pos, float vel, float kp, float kd, float torque);
+
+// Drop any cached setpoints on both axes, reverting poll() to the safe
+// zero-torque ping. Call on disable, or when leaving the commanding mode.
+void hip_motors_clear_setpoints();

@@ -74,6 +74,7 @@ typedef struct __attribute__((packed)) {
 // MIRROR: software/gui/hip_motors.py  _CMD_ID_* constants must stay in sync
 #define CMD_ID_SET_MODE   0x01  // payload: uint8_t target_state (RobotStateEnum)
 #define CMD_ID_HIP        0x05  // payload: uint8_t motor_id, uint8_t sub_cmd [, 5×float]
+#define CMD_ID_REBOOT     0x06  // payload: none — triggers a full MCU reset (reruns setup())
 
 // Hip motor IDs (CMD_ID_HIP payload byte 1)
 #define HIP_MOTOR_BOTH    0x00

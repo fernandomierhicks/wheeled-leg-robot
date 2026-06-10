@@ -9,10 +9,12 @@
 #include "IMU.h"
 #include "hip_motors.h"
 #include "RgbLed.h"
+#include "Buzzer.h"
 
 CommLink g_comm(Serial5, COMM_SRC_TEENSY);     // ESP32 UART bridge
 CommLink g_comm_usb(Serial, COMM_SRC_TEENSY);  // direct PC USB
 RgbLed   g_led(PIN_LED_R, PIN_LED_G, PIN_LED_B);
+Buzzer   g_buzzer(PIN_BUZZER);
 
 HipCmd g_hip_cmd = {};
 
@@ -47,6 +49,17 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         uint8_t target = payload[1];
         if (target == STATE_MANUAL)  stateMachine_request_manual();
         if (target == STATE_STANDBY) stateMachine_exit_manual();
+        if (target == STATE_STARTUP) stateMachine_request_reset();
+        return;
+    }
+
+    // ── Reboot: full MCU reset — re-runs setup() from scratch ──────────────────
+    if (cmd_id == CMD_ID_REBOOT) {
+        comm_log(LOG_LEVEL_WARN, "Reboot requested");
+        Serial.flush();
+        Serial5.flush();
+        delay(50);
+        SCB_AIRCR = 0x05FA0004;  // Cortex-M7 system reset request
         return;
     }
 
@@ -74,6 +87,35 @@ void setup() {
     g_comm_usb.onPacket(on_command);
 
     g_led.begin();
+    g_buzzer.begin();
+
+    // Boot indicator: quick rainbow flash + low-volume chime, ~1.3 s total.
+    static const uint8_t BOOT_RAINBOW[][3] = {
+        {255,   0,   0},  // red
+        {255, 127,   0},  // orange
+        {255, 255,   0},  // yellow
+        {0,   255,   0},  // green
+        {0,   255, 255},  // cyan
+        {0,     0, 255},  // blue
+        {255,   0, 255},  // magenta
+    };
+    static const BuzzerNote BOOT_CHIME[] = {
+        {72, 40, 0},  // C5
+        {76, 40, 0},  // E5
+        {79, 40, 0},  // G5
+    };
+    g_buzzer.play(BOOT_CHIME, sizeof(BOOT_CHIME) / sizeof(BOOT_CHIME[0]), 30);  // quiet arpeggio
+    for (auto& c : BOOT_RAINBOW) {
+        g_led.solid(c[0], c[1], c[2]);
+        uint32_t step_start = millis();
+        while (millis() - step_start < 180) {
+            g_buzzer.update();
+            delay(2);
+        }
+    }
+    g_buzzer.off();
+    g_led.off();
+
     g_led.pulse(255, 255, 255, 2000);  // STARTUP: white breathe
 
     comm_log(LOG_LEVEL_INFO, "Firmware starting");
@@ -113,9 +155,14 @@ static void update_led() {
     static RobotStateEnum prev = (RobotStateEnum)0xFF;
     RobotStateEnum cur = g_state.state;
     if (cur != prev) {
+        bool was_estop = (prev == STATE_ESTOP);
         prev = cur;
         switch (cur) {
-            case STATE_STARTUP:     g_led.pulse(255, 255, 255, 2000); break;
+            case STATE_STARTUP:
+                // Reset accepted from ESTOP: flash white for 1 s, then breathe white.
+                if (was_estop) g_led.flash_then_pulse(255, 255, 255, 1000, 2000);
+                else           g_led.pulse(255, 255, 255, 2000);
+                break;
             case STATE_CALIBRATION: g_led.pulse(0,   0,   255, 2000); break;
             case STATE_STANDBY:     g_led.pulse(255, 200,   0, 2000); break;
             case STATE_RUNNING:     g_led.pulse(0,   255,   0, 2000); break;

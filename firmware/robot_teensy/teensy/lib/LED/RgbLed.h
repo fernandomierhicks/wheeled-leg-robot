@@ -7,7 +7,7 @@
 
 class RgbLed {
 public:
-    enum class Mode { SOLID, BLINK, PULSE, FADE };
+    enum class Mode { SOLID, BLINK, PULSE, FADE, FLASH };
 
     RgbLed(uint8_t pin_r, uint8_t pin_g, uint8_t pin_b, bool active_low = false);
 
@@ -29,6 +29,11 @@ public:
 
     // One-shot fade from current output to target over duration_ms, then holds as SOLID.
     void fade_to(uint8_t r, uint8_t g, uint8_t b, uint32_t duration_ms = 500);
+
+    // One-shot solid flash for flash_ms, then settles into a PULSE breathe
+    // at period_ms (same color).
+    void flash_then_pulse(uint8_t r, uint8_t g, uint8_t b,
+                           uint32_t flash_ms, uint32_t period_ms);
 
     // --- State queries ---
     bool is_done() const;  // true once a fade_to completes
