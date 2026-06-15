@@ -50,3 +50,21 @@
 #define CAN_TIMEOUT_MS      20          // encoder feedback watchdog
 #define HIP_CAN_TIMEOUT_MS  50          // AK45 MIT feedback watchdog (looser than wheel encoders)
 #define CAN_INTER_FRAME_US  500         // gap between back-to-back TX frames
+
+// --- Hip hardstop calibration (STATE_CALIBRATION) ---
+#define CALIB_SEEK_SPEED_RADS     (10.0f * PI / 180.0f)  // ramp speed while seeking a hardstop (~10 deg/s)
+#define CALIB_KP                  2.0f    // gentle position gain while seeking
+#define CALIB_KD                  0.05f   // damping while seeking
+#define CALIB_HOLD_KP             1.0f    // position gain once homed, holding at midpoint
+#define CALIB_HOLD_KD             0.05f   // damping once homed
+#define CALIB_STALL_CUR_A         0.5f    // current threshold [A] indicating a hardstop
+#define CALIB_STALL_DEADBAND_RAD  0.02f   // max position movement per tick to count as stalled
+#define CALIB_STALL_CONFIRM_TICKS 15      // consecutive ticks before declaring a hardstop (30 ms @ 500 Hz)
+#define CALIB_MARGIN_RAD          (10.0f * PI / 180.0f)  // software limit margin from each hardstop (~10 deg)
+#define CALIB_SAFETY_BOUND_RAD    (90.0f * PI / 180.0f)  // abort if a seek ramps more than this far from the start position (~90 deg)
+
+// Seek-direction sign toward each hip's "bottom" hardstop (the one zeroed to
+// 0 rad). L and R may be mirrored — verify on first run and flip if a leg
+// seeks toward its top hardstop first.
+#define HIP_L_SEEK_DIR      (+1.0f)
+#define HIP_R_SEEK_DIR      (-1.0f)

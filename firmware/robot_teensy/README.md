@@ -75,7 +75,7 @@ Hip motors hold leg height; wheel motors balance and drive.
 | Value | Name | LED | GUI colour |
 |---|---|---|---|
 | 0 | `STATE_STARTUP` | white breathe | grey |
-| 1 | `STATE_CALIBRATION` | blue breathe | blue *(stub — no transitions yet)* |
+| 1 | `STATE_CALIBRATION` | blue breathe | blue — hip hardstop homing, only from STANDBY |
 | 2 | `STATE_STANDBY` | amber breathe | yellow |
 | 3 | `STATE_RUNNING` | green breathe | green *(stub — no transitions yet)* |
 | 4 | `STATE_ESTOP` | red blink | red |
@@ -93,6 +93,11 @@ Set in `g_state.fault_code` before any transition to `STATE_ESTOP`. Transmitted 
 | `0x01` | `FAULT_IMU_ERROR` | IMU reported ERROR during startup |
 | `0x02` | `FAULT_HIP_INIT_TIMEOUT` | No CAN reply from hip motors within 2 s of boot |
 | `0x03` | `FAULT_HIP_FEEDBACK_LOST` | Hip CAN feedback timed out during operation (> 20 ms) |
+| `0x04` | `FAULT_HIP_LARGE_POS_CMD` | Commanded hip position jump exceeded `MAX_HIP_DELTA_RAD` |
+| `0x05` | `FAULT_CALIBRATION_TIMEOUT` | Hardstop not found within `CALIB_SAFETY_BOUND_RAD` during calibration |
+| `0x06` | `FAULT_HUMAN_ESTOP` | ESTOP requested by user via GUI button |
+
+Defined in `shared/comm_protocol.h` (lines ~38-45). Mirror `_FAULT_NAMES` in `software/gui/flash_monitor.py` when adding/changing codes.
 
 ## Each driver has its own README
 

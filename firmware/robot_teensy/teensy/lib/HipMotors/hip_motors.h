@@ -20,8 +20,16 @@ struct HipSetpoint {
     uint32_t last_cmd_ms;
 };
 
+// Software position limits, populated by calibration (RAM-only — lost on
+// reboot). While `valid` is false, setpoints are not clamped.
+struct HipLimits {
+    float min_rad, max_rad;
+    bool  valid;
+};
+
 extern HipAxisState hm_L, hm_R;
 extern HipSetpoint  hm_sp_L, hm_sp_R;
+extern HipLimits    hm_limits_L, hm_limits_R;
 
 // Call once in setup(). Starts CAN1 at 1 Mbps and registers the RX callback.
 bool hip_motors_init();
@@ -42,6 +50,12 @@ void hip_motors_exit_mit();
 
 // Zero the encoder on both motors at the current shaft position.
 void hip_motors_zero();
+
+// Zero the encoder on a single motor at its current shaft position.
+// Used by calibration so one axis can be zeroed while the other is still
+// seeking. Zeroing persists across power cycles (written to motor flash).
+void hip_motor_zero_L();
+void hip_motor_zero_R();
 
 // Send a MIT Cheetah torque-control command to both motors.
 //   pos    : target position   [rad]    (-12.5 … +12.5)

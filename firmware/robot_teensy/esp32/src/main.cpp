@@ -78,6 +78,7 @@ static CommLink g_usb(Serial,    COMM_SRC_ESP32);   // USB serial to PC
 
 static volatile uint32_t g_last_teensy_ms = 0;
 static volatile float    g_telem_test_val = 0.0f;
+static volatile uint8_t  g_fault_code     = FAULT_NONE;
 
 // ── WiFi / TCP / UDP ──────────────────────────────────────────────────────────
 
@@ -184,6 +185,7 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
         const TelemetryPayload* t = reinterpret_cast<const TelemetryPayload*>(payload);
         g_robot_state    = t->robot_state;
         g_telem_test_val = t->test_val;
+        g_fault_code     = t->fault_code;
     }
     g_last_teensy_ms = millis();
 }
@@ -216,17 +218,33 @@ static const char* mode_name(uint8_t state) {
     }
 }
 
+// Verbose fault descriptions — MIRROR: software/gui/flash_monitor.py _FAULT_DESCRIPTIONS
+static const char* fault_description(uint8_t code) {
+    switch (code) {
+        case FAULT_NONE:              return "";
+        case FAULT_IMU_ERROR:         return "IMU reported ERROR during startup";
+        case FAULT_HIP_INIT_TIMEOUT:  return "No CAN reply from hip motors within 2s of boot";
+        case FAULT_HIP_FEEDBACK_LOST: return "Hip CAN feedback timed out during operation";
+        case FAULT_HIP_LARGE_POS_CMD: return "Commanded hip position jump too large";
+        case FAULT_CALIBRATION_TIMEOUT: return "Hardstop not found during calibration";
+        case FAULT_HUMAN_ESTOP:       return "Human triggered ESTOP";
+        default:                      return "Unknown fault";
+    }
+}
+
 // Redraws only fields that changed; call from loop() at ~10 Hz.
 static void update_display() {
     static uint8_t prev_state  = 0xFF;
+    static uint8_t prev_fault  = 0xFF;
     static bool    prev_active = false;
     static float   prev_val    = -9999.0f;
 
     uint8_t state  = g_robot_state;
+    uint8_t fault  = g_fault_code;
     bool    active = (millis() - g_last_teensy_ms) < 1000;
     float   val    = g_telem_test_val;
 
-    if (state != prev_state) {
+    if (state != prev_state || fault != prev_fault) {
         // "Mode:" label (static, but repaint on first draw)
         tft.fillRect(0, 5, 320, 80, ST77XX_BLACK);
         tft.setTextSize(2);
@@ -238,7 +256,17 @@ static void update_display() {
         tft.setTextColor(mode_color_565(state));
         tft.setCursor(10, 38);
         tft.print(mode_name(state));
+
+        // Verbose fault description, shown only while latched in ESTOP
+        tft.fillRect(0, 85, 320, 12, ST77XX_BLACK);
+        if (state == RS_ESTOP && fault != FAULT_NONE) {
+            tft.setTextSize(1);
+            tft.setTextColor(ST77XX_YELLOW);
+            tft.setCursor(10, 88);
+            tft.print(fault_description(fault));
+        }
         prev_state = state;
+        prev_fault = fault;
     }
 
     if (active != prev_active) {

@@ -164,6 +164,18 @@ _FAULT_NAMES = {
     0x01: "IMU_ERROR",
     0x02: "HIP_INIT_TIMEOUT",
     0x03: "HIP_FEEDBACK_LOST",
+    0x04: "HIP_LARGE_POS_CMD",
+    0x05: "CALIBRATION_TIMEOUT",
+    0x06: "HUMAN_ESTOP",
+}
+_FAULT_DESCRIPTIONS = {
+    0x00: "",
+    0x01: "IMU reported ERROR during startup",
+    0x02: "No CAN reply from hip motors within 2 s of boot",
+    0x03: "Hip CAN feedback timed out during operation (> 20 ms)",
+    0x04: "Commanded hip position jump exceeded MAX_HIP_DELTA_RAD",
+    0x05: "Hardstop not found within CALIB_SAFETY_BOUND_RAD",
+    0x06: "Human triggered ESTOP",
 }
 _LOG_LEVELS  = {0x01: "INFO", 0x02: "WARN", 0x03: "ERROR"}
 
@@ -222,9 +234,10 @@ class PacketDecoder(QObject):
                 if ptype == 0x04 and length >= 2:
                     info["log_level"] = _LOG_LEVELS.get(payload[0], f"L{payload[0]}")
                     info["log_msg"]   = payload[1:].decode("utf-8", errors="replace")
-                elif ptype == 0x01 and length >= 46:
-                    ts, pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw, state, fault, test_val = \
-                        _struct.unpack_from("<IfffffffffBBf", payload)
+                elif ptype == 0x01 and length >= 54:
+                    ts, pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw, state, fault, test_val, \
+                        hip_l_current, hip_r_current = \
+                        _struct.unpack_from("<IfffffffffBBfff", payload)
                     info.update({
                         "timestamp_ms":    ts,
                         "pitch_rad":       pitch,
@@ -240,7 +253,10 @@ class PacketDecoder(QObject):
                         "state_name":      _STATE_NAMES.get(state, str(state)),
                         "fault_code":      fault,
                         "fault_name":      _FAULT_NAMES.get(fault, f"0x{fault:02X}"),
+                        "fault_description": _FAULT_DESCRIPTIONS.get(fault, "Unknown fault"),
                         "test_val":        test_val,
+                        "hip_l_current_a": hip_l_current,
+                        "hip_r_current_a": hip_r_current,
                     })
             except Exception:
                 pass

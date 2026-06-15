@@ -20,6 +20,8 @@ typedef struct {
     float          hip_r_pos_rad;
     float          cmd_l;
     float          cmd_r;
+    float          hip_l_current_a;
+    float          hip_r_current_a;
     RobotStateEnum state;
     uint8_t        fault_code;   // FAULT_* from comm_protocol.h; set before entering ESTOP
     uint32_t       loop_count;

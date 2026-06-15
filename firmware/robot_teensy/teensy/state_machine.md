@@ -9,8 +9,19 @@ stateDiagram-v2
 
     STANDBY --> ESTOP   : hip feedback lost (CAN timeout 20 ms)
     STANDBY --> MANUAL  : GUI "Enter Manual"
+    STANDBY --> CALIBRATION : GUI "Calibrate"
     MANUAL  --> ESTOP   : hip feedback lost (CAN timeout 20 ms)
     MANUAL  --> STANDBY : GUI "Exit Manual"
+
+    CALIBRATION --> ESTOP   : hip feedback lost (CAN timeout 20 ms)
+    CALIBRATION --> ESTOP   : hardstop not found within CALIB_SAFETY_BOUND_RAD
+    CALIBRATION --> STANDBY : both hips homed (limits computed, holding at midpoint)
+    CALIBRATION --> STANDBY : GUI "Exit Manual" (abort)
+
+    STARTUP     --> ESTOP   : GUI "ESTOP" (human triggered)
+    STANDBY     --> ESTOP   : GUI "ESTOP" (human triggered)
+    MANUAL      --> ESTOP   : GUI "ESTOP" (human triggered)
+    CALIBRATION --> ESTOP   : GUI "ESTOP" (human triggered)
 
     state STARTUP {
         direction LR
@@ -20,6 +31,11 @@ stateDiagram-v2
     state STANDBY {
         direction LR
         s2 : hip MIT active<br/>500 Hz — current pos + zero torque ping<br/>motors reply with position on every frame<br/>50 Hz telemetry TX<br/>no torque output
+    }
+
+    state CALIBRATION {
+        direction LR
+        s5 : per hip (L/R in parallel):<br/>SEEK_BOTTOM → zero encoder → SEEK_TOP →<br/>compute hm_limits_{L,R} (±CALIB_MARGIN_RAD) →<br/>RETURN_HOME → DONE<br/>seek = gentle MIT pos ramp (CALIB_KP/KD)<br/>stall = |Δpos| small + |current| > 0.5 A for 15 ticks<br/>buzzer: start chime, beep per hardstop, done/fault melody<br/>on exit: hip_motors_clear_setpoints()
     }
 
     state MANUAL {
@@ -32,5 +48,5 @@ stateDiagram-v2
         s4 : LED red blink<br/>no exit transition — firmware reset required<br/>no hip commands sent
     }
 
-    note right of STANDBY : CALIBRATION and RUNNING defined<br/>in RobotStateEnum but not yet<br/>wired into the state machine
+    note right of STANDBY : RUNNING defined in RobotStateEnum<br/>but not yet wired into the state machine
 ```

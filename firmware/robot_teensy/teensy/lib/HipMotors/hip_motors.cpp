@@ -33,6 +33,8 @@ HipAxisState hm_L = {};
 HipAxisState hm_R = {};
 HipSetpoint  hm_sp_L = {};
 HipSetpoint  hm_sp_R = {};
+HipLimits    hm_limits_L = {};
+HipLimits    hm_limits_R = {};
 
 // CAN2 on Teensy 4.1 uses pins 1 (TX) and 0 (RX) — matches config.h PIN_CAN2_*.
 static FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> can2;
@@ -50,6 +52,14 @@ static uint16_t float_to_uint(float x, float x_min, float x_max, int bits) {
 static float uint_to_float(uint16_t x, float x_min, float x_max, int bits) {
     uint32_t max_val = (1u << bits) - 1;
     return (float)x / (float)max_val * (x_max - x_min) + x_min;
+}
+
+// Clamp a commanded position to the calibrated software limits, if valid.
+static float clamp_to_limits(float pos, const HipLimits& lim) {
+    if (!lim.valid) return pos;
+    if (pos < lim.min_rad) return lim.min_rad;
+    if (pos > lim.max_rad) return lim.max_rad;
+    return pos;
 }
 
 static void send_raw(uint32_t id, const uint8_t data[8]) {
@@ -194,30 +204,42 @@ void hip_motors_zero() {
     Serial.println("[HipMotors] encoder zeroed");
 }
 
+void hip_motor_zero_L() {
+    static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE};
+    send_raw(AK45_ID_L, cmd);
+    Serial.println("[HipMotors] L encoder zeroed");
+}
+
+void hip_motor_zero_R() {
+    static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE};
+    send_raw(AK45_ID_R, cmd);
+    Serial.println("[HipMotors] R encoder zeroed");
+}
+
 void hip_motors_send(float pos_L, float vel_L, float kp_L, float kd_L, float trq_L,
                      float pos_R, float vel_R, float kp_R, float kd_R, float trq_R) {
     if (!hm_L.mit_active) return;
-    pack_and_send(AK45_ID_L, pos_L, vel_L, kp_L, kd_L, trq_L);
+    pack_and_send(AK45_ID_L, clamp_to_limits(pos_L, hm_limits_L), vel_L, kp_L, kd_L, trq_L);
     delayMicroseconds(CAN_INTER_FRAME_US);
-    pack_and_send(AK45_ID_R, pos_R, vel_R, kp_R, kd_R, trq_R);
+    pack_and_send(AK45_ID_R, clamp_to_limits(pos_R, hm_limits_R), vel_R, kp_R, kd_R, trq_R);
 }
 
 void hip_motor_send_L(float pos, float vel, float kp, float kd, float torque) {
     if (!hm_L.mit_active) return;
-    pack_and_send(AK45_ID_L, pos, vel, kp, kd, torque);
+    pack_and_send(AK45_ID_L, clamp_to_limits(pos, hm_limits_L), vel, kp, kd, torque);
 }
 
 void hip_motor_send_R(float pos, float vel, float kp, float kd, float torque) {
     if (!hm_R.mit_active) return;
-    pack_and_send(AK45_ID_R, pos, vel, kp, kd, torque);
+    pack_and_send(AK45_ID_R, clamp_to_limits(pos, hm_limits_R), vel, kp, kd, torque);
 }
 
 void hip_motors_set_setpoint_L(float pos, float vel, float kp, float kd, float torque) {
-    hm_sp_L = {pos, vel, kp, kd, torque, true, millis()};
+    hm_sp_L = {clamp_to_limits(pos, hm_limits_L), vel, kp, kd, torque, true, millis()};
 }
 
 void hip_motors_set_setpoint_R(float pos, float vel, float kp, float kd, float torque) {
-    hm_sp_R = {pos, vel, kp, kd, torque, true, millis()};
+    hm_sp_R = {clamp_to_limits(pos, hm_limits_R), vel, kp, kd, torque, true, millis()};
 }
 
 void hip_motors_clear_setpoints() {

@@ -29,7 +29,7 @@ from raw_data_tab import RawDataTab
 from robot_visualizer_tab import RobotVisualizerTab
 from telemetry_bus import TelemetryBus
 from source_manager import SourceManager, TRANSPORT_LABEL
-from comm_commands import send_set_mode, send_reboot, STATE_STARTUP
+from comm_commands import send_set_mode, send_reboot, STATE_STARTUP, STATE_ESTOP
 
 _BG = "#0b0b18"
 
@@ -135,6 +135,15 @@ class StatusBar:
         self._conn      = QLabel("● Disconnected")
         self._conn.setStyleSheet(f"color: {RED};")
 
+        self._btn_estop = QPushButton("ESTOP")
+        self._btn_estop.setStyleSheet(
+            f"QPushButton{{background:{RED};color:white;font-weight:bold;font-size:14px;"
+            f"border:1px solid {RED};border-radius:4px;padding:6px 24px;margin:2px 6px}}"
+            f"QPushButton:hover{{background:#ff6e60}}"
+            f"QPushButton:pressed{{background:#b2362a}}"
+        )
+        self._btn_estop.clicked.connect(lambda: send_set_mode(STATE_ESTOP))
+
         self._btn_reset = QPushButton("Reset")
         self._btn_reset.setStyleSheet(
             f"QPushButton{{background:#4a1a1a;color:white;"
@@ -154,6 +163,8 @@ class StatusBar:
 
         for w in (self._source, _vsep(), self._transport, _vsep(), self._dt, _vsep(), self._mode, _vsep(), self._test):
             sb.addWidget(w)
+        sb.addPermanentWidget(self._btn_estop)
+        sb.addPermanentWidget(_vsep())
         sb.addPermanentWidget(self._btn_reset)
         sb.addPermanentWidget(self._btn_reboot)
         sb.addPermanentWidget(_vsep())
@@ -184,17 +195,20 @@ class StatusBar:
     def set_dt(self, dt_ms: float):
         self._dt.setText(f"dt: {dt_ms:.1f} ms")
 
-    def set_mode(self, state: str, fault: str = ""):
+    def set_mode(self, state: str, fault: str = "", fault_description: str = ""):
         if state == "—":
             self._mode.setStyleSheet(f"color: {DIM};")
             self._mode.setText("—")
+            self._mode.setToolTip("")
             self._btn_reset.setEnabled(False)
             self._btn_reboot.setEnabled(False)
             return
         color = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE, "STANDBY": YELLOW, "STARTUP": WHITE}.get(state, DIM)
         self._mode.setStyleSheet(f"color: {color}; font-weight: bold;")
-        label = f"{state}  [{fault}]" if state == "ESTOP" and fault and fault != "NONE" else state
+        is_fault = state == "ESTOP" and fault and fault != "NONE"
+        label = f"{state}  [{fault}]" if is_fault else state
         self._mode.setText(label)
+        self._mode.setToolTip(fault_description if is_fault else "")
         self._btn_reset.setEnabled(state == "ESTOP")
         self._btn_reboot.setEnabled(True)
 
@@ -266,7 +280,7 @@ class MainWindow(QMainWindow):
             self._last_ts_ms = ts
         state = info.get("state_name")
         if state:
-            self.status.set_mode(state, info.get("fault_name", ""))
+            self.status.set_mode(state, info.get("fault_name", ""), info.get("fault_description", ""))
         test_val = info.get("test_val")
         if test_val is not None:
             self.status.set_test_val(test_val)

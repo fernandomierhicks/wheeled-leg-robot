@@ -47,9 +47,11 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     // ── Mode change: signal the state machine ─────────────────────────────────
     if (cmd_id == CMD_ID_SET_MODE && len >= 2) {
         uint8_t target = payload[1];
-        if (target == STATE_MANUAL)  stateMachine_request_manual();
-        if (target == STATE_STANDBY) stateMachine_exit_manual();
-        if (target == STATE_STARTUP) stateMachine_request_reset();
+        if (target == STATE_MANUAL)      stateMachine_request_manual();
+        if (target == STATE_STANDBY)     stateMachine_exit_manual();
+        if (target == STATE_STARTUP)     stateMachine_request_reset();
+        if (target == STATE_CALIBRATION) stateMachine_request_calibration();
+        if (target == STATE_ESTOP)       stateMachine_request_estop();
         return;
     }
 
@@ -145,11 +147,17 @@ static void send_telemetry() {
     telem.robot_state      = (uint8_t)g_state.state;
     telem.fault_code       = g_state.fault_code;
     telem.test_val         = sinf(2.0f * (float)M_PI * 2.0f * millis() / 1000.0f);
+    telem.hip_l_current_a  = g_state.hip_l_current_a;
+    telem.hip_r_current_a  = g_state.hip_r_current_a;
     g_comm.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &telem, sizeof(telem));
     if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &telem, sizeof(telem));
 }
 
 // ── LED ───────────────────────────────────────────────────────────────────────
+
+static void update_buzzer() {
+    g_buzzer.update();
+}
 
 static void update_led() {
     static RobotStateEnum prev = (RobotStateEnum)0xFF;
@@ -188,6 +196,8 @@ static void read_sensors() {
     hip_motors_poll();
     g_state.hip_l_pos_rad = hm_L.pos_rad;
     g_state.hip_r_pos_rad = hm_R.pos_rad;
+    g_state.hip_l_current_a = hm_L.current_A;
+    g_state.hip_r_current_a = hm_R.current_A;
 }
 
 static void run_control_loop() {
@@ -225,6 +235,7 @@ void loop() {
     check_imu_state();
     run_control_loop();
     update_led();
+    update_buzzer();
 
     // Send telemetry at 50 Hz (every 10th tick of the 500 Hz loop)
     static uint8_t telem_div = 0;

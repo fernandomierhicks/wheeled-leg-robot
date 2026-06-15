@@ -36,12 +36,17 @@
 //   [COMM_END]            1 byte  — 0xFE
 
 // ── Fault codes (robot_state == STATE_ESTOP → fault_code says why) ────────────
-// MIRROR: software/gui/flash_monitor.py  _FAULT_NAMES dict must stay in sync
+// IMPORTANT: when adding/changing a fault code below, also update:
+//   - software/gui/flash_monitor.py   _FAULT_NAMES and _FAULT_DESCRIPTIONS dicts
+//   - esp32/src/main.cpp               fault_description()
+//   - firmware/robot_teensy/README.md  fault code table
 #define FAULT_NONE               0x00
 #define FAULT_IMU_ERROR          0x01  // IMU reported ERROR during startup
 #define FAULT_HIP_INIT_TIMEOUT   0x02  // no CAN reply from hip motors within 2 s of boot
 #define FAULT_HIP_FEEDBACK_LOST  0x03  // hip CAN feedback timed out during operation
 #define FAULT_HIP_LARGE_POS_CMD  0x04  // commanded position jump exceeded MAX_HIP_DELTA_RAD
+#define FAULT_CALIBRATION_TIMEOUT 0x05 // hardstop not found within CALIB_SAFETY_BOUND_RAD
+#define FAULT_HUMAN_ESTOP        0x06  // ESTOP requested by user via GUI button
 
 // ── Payload: telemetry ────────────────────────────────────────────────────────
 #define TELEM_PAYLOAD_V1  1
@@ -60,7 +65,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  robot_state;   // matches RobotStateEnum
     uint8_t  fault_code;    // FAULT_* — non-zero only when robot_state == STATE_ESTOP
     float    test_val;      // dummy 2 Hz sine wave for pipeline testing
-} TelemetryPayload;         // 46 bytes
+    float    hip_l_current_a;  // hip L phase current [A]
+    float    hip_r_current_a;  // hip R phase current [A]
+} TelemetryPayload;         // 54 bytes
 
 // ── Payload: command ──────────────────────────────────────────────────────────
 #define CMD_PAYLOAD_V1  1
