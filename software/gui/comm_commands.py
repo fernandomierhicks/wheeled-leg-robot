@@ -15,9 +15,11 @@ COMM_TYPE_CMD = 0x02
 CMD_PAYLOAD_V = 1
 
 # Command IDs (comm_protocol.h CMD_ID_*)
-CMD_ID_SET_MODE = 0x01
-CMD_ID_HIP      = 0x05
-CMD_ID_REBOOT   = 0x06
+CMD_ID_SET_MODE  = 0x01
+CMD_ID_HIP       = 0x05
+CMD_ID_REBOOT    = 0x06
+CMD_ID_PARAM_SET = 0x10
+CMD_ID_PARAM_GET = 0x11
 
 # Robot state IDs (robot_state.h RobotStateEnum)
 STATE_STARTUP = 0
@@ -63,3 +65,15 @@ def send_reboot():
     """Send CMD_ID_REBOOT — triggers a full Teensy MCU reset (reruns setup())."""
     import struct
     send_frame(build_frame(struct.pack("<B", CMD_ID_REBOOT)))
+
+
+def send_param_set(param_id: int, value: float):
+    """Send CMD_ID_PARAM_SET for one parameter. Firmware clamps and echoes back."""
+    import struct
+    send_frame(build_frame(struct.pack("<BHf", CMD_ID_PARAM_SET, param_id, value)))
+
+
+def send_param_get_all():
+    """Send CMD_ID_PARAM_GET 0xFFFF — firmware replies with one PARAM_REPORT per param."""
+    import struct
+    send_frame(build_frame(struct.pack("<BH", CMD_ID_PARAM_GET, 0xFFFF)))

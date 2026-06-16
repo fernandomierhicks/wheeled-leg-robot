@@ -78,7 +78,7 @@ void test_telemetry_roundtrip(void) {
     tx.wheel_vel_avg_ms = -0.5f;
     tx.robot_state      = 2;
 
-    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &tx, sizeof(tx));
+    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &tx, sizeof(tx));
     cl.update();
 
     TEST_ASSERT_TRUE(s_rx_got);
@@ -102,7 +102,7 @@ void test_bad_checksum_dropped(void) {
     cl.onPacket(on_packet);
 
     TelemetryPayload tx = {};
-    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &tx, sizeof(tx));
+    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &tx, sizeof(tx));
 
     uint8_t corrupt = ls.read();
     (void)corrupt;

@@ -7,6 +7,13 @@ void stateMachine_update();
 void stateMachine_request_manual();
 void stateMachine_exit_manual();
 
+// Request entry into STATE_RUNNING (armed). Only takes effect from STANDBY and
+// only if PARAM_CALIB_DONE == 1. Call when CH10 goes above the arm threshold.
+void stateMachine_request_running();
+
+// Request exit from STATE_RUNNING back to STANDBY. Call when CH10 drops.
+void stateMachine_disarm_running();
+
 // Request entry into STATE_CALIBRATION. Only takes effect from STANDBY.
 void stateMachine_request_calibration();
 

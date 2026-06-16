@@ -94,7 +94,7 @@ void test_telemetry_roundtrip(void) {
     tx.timestamp_ms = 42000;
     tx.pitch_rad    = -0.25f;
 
-    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &tx, sizeof(tx));
+    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &tx, sizeof(tx));
     cl.update();
 
     TEST_ASSERT_TRUE(s_rx_got);

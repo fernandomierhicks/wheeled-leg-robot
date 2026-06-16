@@ -11,10 +11,28 @@
 #define COMM_SRC_PC      0x03
 
 // ── Packet types ──────────────────────────────────────────────────────────────
-#define COMM_TYPE_TELEMETRY  0x01
-#define COMM_TYPE_COMMAND    0x02
-#define COMM_TYPE_ACK        0x03
-#define COMM_TYPE_LOG        0x04
+#define COMM_TYPE_TELEMETRY    0x01
+#define COMM_TYPE_COMMAND      0x02
+#define COMM_TYPE_ACK          0x03
+#define COMM_TYPE_LOG          0x04
+#define COMM_TYPE_CALIB_EVENT  0x05
+#define COMM_TYPE_PARAM_REPORT 0x06  // Teensy→GUI: current value of one param
+
+// ── Calibration event sub-types ───────────────────────────────────────────────
+#define CALIB_EVENT_PAYLOAD_V1   1
+#define CALIB_EVENT_START        0x01  // both axes: seek begins
+#define CALIB_EVENT_BOTTOM_FOUND 0x02  // axis: bottom hardstop found & zeroed
+#define CALIB_EVENT_LIMITS       0x03  // axis: top hardstop found, limits computed
+#define CALIB_EVENT_DONE         0x04  // axis: returned home, holding
+#define CALIB_EVENT_FAULT        0x05  // axis: hardstop not found within safety bound
+
+typedef struct __attribute__((packed)) {
+    uint8_t axis;     // HIP_MOTOR_BOTH/L/R
+    uint8_t event;    // CALIB_EVENT_*
+    float   pos_rad;  // measured position at the event
+    float   min_rad;  // computed lower limit (LIMITS/DONE only, else 0)
+    float   max_rad;  // computed upper limit (LIMITS/DONE only, else 0)
+} CalibEventPayload;  // 14 bytes
 
 // ── Log levels ────────────────────────────────────────────────────────────────
 #define LOG_LEVEL_INFO   0x01
@@ -49,7 +67,7 @@
 #define FAULT_HUMAN_ESTOP        0x06  // ESTOP requested by user via GUI button
 
 // ── Payload: telemetry ────────────────────────────────────────────────────────
-#define TELEM_PAYLOAD_V1  1
+#define TELEM_PAYLOAD_V2  2
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -62,12 +80,14 @@ typedef struct __attribute__((packed)) {
     float    cmd_r;
     float    roll_rad;
     float    yaw_rad;
-    uint8_t  robot_state;   // matches RobotStateEnum
-    uint8_t  fault_code;    // FAULT_* — non-zero only when robot_state == STATE_ESTOP
-    float    test_val;      // dummy 2 Hz sine wave for pipeline testing
-    float    hip_l_current_a;  // hip L phase current [A]
-    float    hip_r_current_a;  // hip R phase current [A]
-} TelemetryPayload;         // 54 bytes
+    uint8_t  robot_state;        // matches RobotStateEnum
+    uint8_t  fault_code;         // FAULT_* — non-zero only when robot_state == STATE_ESTOP
+    float    test_val;           // dummy 2 Hz sine wave for pipeline testing
+    float    hip_l_current_a;    // hip L phase current [A]
+    float    hip_r_current_a;    // hip R phase current [A]
+    uint16_t ibus_ch[14];        // RC channels 0–13, 1000–2000 µs (1500 = center)
+    uint8_t  ibus_alive;         // 1 = packet received within 500 ms, 0 = link lost
+} TelemetryPayload;              // 83 bytes
 
 // ── Payload: command ──────────────────────────────────────────────────────────
 #define CMD_PAYLOAD_V1  1
@@ -82,6 +102,20 @@ typedef struct __attribute__((packed)) {
 #define CMD_ID_SET_MODE   0x01  // payload: uint8_t target_state (RobotStateEnum)
 #define CMD_ID_HIP        0x05  // payload: uint8_t motor_id, uint8_t sub_cmd [, 5×float]
 #define CMD_ID_REBOOT     0x06  // payload: none — triggers a full MCU reset (reruns setup())
+#define CMD_ID_PARAM_SET  0x10  // payload: uint16_t param_id, float value  (6 bytes after cmd_id)
+#define CMD_ID_PARAM_GET  0x11  // payload: uint16_t param_id  (0xFFFF = dump all)
+
+// ── Payload: param report (COMM_TYPE_PARAM_REPORT) ───────────────────────────
+#define PARAM_REPORT_PAYLOAD_V1  1
+
+typedef struct __attribute__((packed)) {
+    uint16_t param_id;
+    float    value;
+    float    min_val;
+    float    max_val;
+    uint8_t  flags;
+    char     name[20];
+} ParamReportPayload;  // 35 bytes
 
 // Hip motor IDs (CMD_ID_HIP payload byte 1)
 #define HIP_MOTOR_BOTH    0x00
@@ -93,3 +127,10 @@ typedef struct __attribute__((packed)) {
 #define HIP_SUB_ENABLE    0x01
 #define HIP_SUB_ZERO      0x02
 #define HIP_SUB_MIT       0x03  // + float p_rad, vel_rad_s, kp, kd, tff  (20 bytes)
+
+// ── Logging / calib-event helpers (implemented in main.cpp) ──────────────────
+#ifdef __cplusplus
+void comm_log(uint8_t level, const char* fmt, ...);
+void comm_send_calib_event(uint8_t axis, uint8_t event,
+                            float pos_rad, float min_rad, float max_rad);
+#endif

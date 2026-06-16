@@ -5,8 +5,15 @@
 
 ---Fernandos note dont change below
 
-Calibration event data in Handoff.MD
+
 Frames in frames.md
+Remap things to 0-100%? hip angle for example
+Display hip command, and any mappings, on hip motors GUI tab
+Need to enable TX ARM button to swtich us to runnig  mode. 
+TX always read signal ok, need to check failsafe-like behaviour
+
+If we are in running mode, and only in running mode and if the TX si9gnal is alive we will command hip angle from channel 3. The hip motors will then follow the re-mapped signal. The hip motors will move with a very very gentle torque, very springy
+When you're ready to connect it, you just call hip_cmd_to_setpoints(param_get(PARAM_RADIO_HIP_CMD), &pos_L, &pos_R) inside the RUNNING state action.
 
 
 

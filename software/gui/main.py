@@ -25,8 +25,10 @@ from theme import APP_STYLE, BORDER, TEXT, DIM, GREEN, ORANGE, RED, BLUE, YELLOW
 from flash_monitor import FlashMonitorTab
 from hip_motors import HipMotorsTab
 from imu_tab import ImuTab, ImuMiniWidget
+from params_tab import ParamsTab
 from raw_data_tab import RawDataTab
 from robot_visualizer_tab import RobotVisualizerTab
+from radio_tab import RadioTab
 from telemetry_bus import TelemetryBus
 from source_manager import SourceManager, TRANSPORT_LABEL
 from comm_commands import send_set_mode, send_reboot, STATE_STARTUP, STATE_ESTOP
@@ -249,13 +251,15 @@ class MainWindow(QMainWindow):
         sm.source_changed.connect(self._on_source_changed)
 
         tabs = QTabWidget()
-        tabs.addTab(DashboardTab(),    "Dashboard")
-        tabs.addTab(ImuTab(),          "IMU")
-        tabs.addTab(RawDataTab(),      "Raw Data")
-        tabs.addTab(HipMotorsTab(),          "Hip Motors")
-        tabs.addTab(RobotVisualizerTab(),    "Visualizer")
-        tabs.addTab(WheelMotorsTab(),        "Wheel Motors")
-        tabs.addTab(FlashMonitorTab(), "Flash & Monitor")
+        tabs.addTab(DashboardTab(),       "Dashboard")
+        tabs.addTab(ImuTab(),             "IMU")
+        tabs.addTab(RawDataTab(),         "Raw Data")
+        tabs.addTab(HipMotorsTab(),       "Hip Motors")
+        tabs.addTab(ParamsTab(),          "Parameters")
+        tabs.addTab(RobotVisualizerTab(), "Visualizer")
+        tabs.addTab(WheelMotorsTab(),     "Wheel Motors")
+        tabs.addTab(RadioTab(),           "Radio")
+        tabs.addTab(FlashMonitorTab(),    "Flash & Monitor")
         self.setCentralWidget(tabs)
 
         self._on_source_changed(sm.active)

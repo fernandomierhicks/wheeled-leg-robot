@@ -52,7 +52,7 @@ static void _send_telemetry(float phase) {
     t.roll_rad        = 0.05f * sinf(phase * 1.3f);
     t.yaw_rad         = 0.02f * sinf(phase * 0.7f);
     t.robot_state     = 2;   // RUNNING
-    g_link.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &t, sizeof(t));
+    g_link.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &t, sizeof(t));
     g_tx_count++;
 }
 
@@ -120,7 +120,7 @@ void test_rx_parse(void) {
     tx.timestamp_ms = 0xDEADBEEF;
     tx.pitch_rad    = 1.23f;
     tx.robot_state  = 2;
-    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &tx, sizeof(tx));
+    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &tx, sizeof(tx));
     cl.update();
 
     TEST_ASSERT_TRUE_MESSAGE(got,  "parser callback never fired — framing broken");

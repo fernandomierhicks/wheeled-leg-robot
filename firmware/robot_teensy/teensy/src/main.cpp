@@ -10,9 +10,12 @@
 #include "hip_motors.h"
 #include "RgbLed.h"
 #include "Buzzer.h"
+#include "param_registry.h"
+#include "IBus.h"
 
 CommLink g_comm(Serial5, COMM_SRC_TEENSY);     // ESP32 UART bridge
 CommLink g_comm_usb(Serial, COMM_SRC_TEENSY);  // direct PC USB
+IBus     g_ibus(Serial4);                       // FlySky RC receiver, pin 16
 RgbLed   g_led(PIN_LED_R, PIN_LED_G, PIN_LED_B);
 Buzzer   g_buzzer(PIN_BUZZER);
 
@@ -20,7 +23,7 @@ HipCmd g_hip_cmd = {};
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
-static void comm_log(uint8_t level, const char* fmt, ...) {
+void comm_log(uint8_t level, const char* fmt, ...) {
     char msg[62];
     va_list ap;
     va_start(ap, fmt);
@@ -33,6 +36,35 @@ static void comm_log(uint8_t level, const char* fmt, ...) {
     memcpy(buf + 1, msg, n);
     g_comm.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
     if (Serial) g_comm_usb.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
+}
+
+void comm_send_calib_event(uint8_t axis, uint8_t event,
+                            float pos_rad, float min_rad, float max_rad) {
+    CalibEventPayload p;
+    p.axis    = axis;
+    p.event   = event;
+    p.pos_rad = pos_rad;
+    p.min_rad = min_rad;
+    p.max_rad = max_rad;
+    g_comm.send(COMM_TYPE_CALIB_EVENT, CALIB_EVENT_PAYLOAD_V1, &p, sizeof(p));
+    if (Serial) g_comm_usb.send(COMM_TYPE_CALIB_EVENT, CALIB_EVENT_PAYLOAD_V1, &p, sizeof(p));
+}
+
+// ── Param report helper ───────────────────────────────────────────────────────
+
+static void send_param_report(uint16_t idx) {
+    Param p;
+    if (!param_by_index(idx, &p)) return;
+    ParamReportPayload rpt;
+    rpt.param_id = p.id;
+    rpt.value    = p.value;
+    rpt.min_val  = p.min_val;
+    rpt.max_val  = p.max_val;
+    rpt.flags    = p.flags;
+    static_assert(sizeof(rpt.name) == 20, "name size mismatch");
+    memcpy(rpt.name, p.name, 20);
+    g_comm.send(COMM_TYPE_PARAM_REPORT, PARAM_REPORT_PAYLOAD_V1, &rpt, sizeof(rpt));
+    if (Serial) g_comm_usb.send(COMM_TYPE_PARAM_REPORT, PARAM_REPORT_PAYLOAD_V1, &rpt, sizeof(rpt));
 }
 
 // ── Command handler ───────────────────────────────────────────────────────────
@@ -77,6 +109,36 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             memcpy(&g_hip_cmd.tff, payload + 19, 4);
         }
         g_hip_cmd.pending = true;
+        return;
+    }
+
+    // ── Param write: set one parameter value ──────────────────────────────────
+    if (cmd_id == CMD_ID_PARAM_SET && len >= 7) {
+        uint16_t id;  float val;
+        memcpy(&id,  payload + 1, 2);
+        memcpy(&val, payload + 3, 4);
+        ParamSetResult res = param_set(id, val);
+        if (res == ParamSetResult::FAULT) {
+            comm_log(LOG_LEVEL_ERROR, "Param 0x%04X out of bounds — ESTOP", id);
+            stateMachine_request_estop();
+        }
+        // Echo back actual (possibly clamped) value
+        Param p; uint16_t idx = 0;
+        while (param_by_index(idx, &p)) { if (p.id == id) { send_param_report(idx); break; } idx++; }
+        return;
+    }
+
+    // ── Param read: report one param, or dump all ─────────────────────────────
+    if (cmd_id == CMD_ID_PARAM_GET && len >= 3) {
+        uint16_t id;
+        memcpy(&id, payload + 1, 2);
+        if (id == 0xFFFF) {
+            for (uint16_t i = 0; i < param_count(); i++) send_param_report(i);
+        } else {
+            Param p; uint16_t idx = 0;
+            while (param_by_index(idx, &p)) { if (p.id == id) { send_param_report(idx); break; } idx++; }
+        }
+        return;
     }
 }
 
@@ -121,6 +183,8 @@ void setup() {
     g_led.pulse(255, 255, 255, 2000);  // STARTUP: white breathe
 
     comm_log(LOG_LEVEL_INFO, "Firmware starting");
+    param_init();
+    g_ibus.begin();
     imu_init();
     comm_log(LOG_LEVEL_INFO, "IMU initializing...");
     hip_motors_init();
@@ -149,8 +213,10 @@ static void send_telemetry() {
     telem.test_val         = sinf(2.0f * (float)M_PI * 2.0f * millis() / 1000.0f);
     telem.hip_l_current_a  = g_state.hip_l_current_a;
     telem.hip_r_current_a  = g_state.hip_r_current_a;
-    g_comm.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &telem, sizeof(telem));
-    if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &telem, sizeof(telem));
+    for (uint8_t i = 0; i < IBUS_NUM_CH; i++) telem.ibus_ch[i] = g_ibus.channel(i);
+    telem.ibus_alive       = g_ibus.alive() ? 1 : 0;
+    g_comm.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &telem, sizeof(telem));
+    if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &telem, sizeof(telem));
 }
 
 // ── LED ───────────────────────────────────────────────────────────────────────
@@ -194,10 +260,64 @@ static void read_sensors() {
     g_state.pitch_rate_rads = imu_pitch_rate();
 
     hip_motors_poll();
-    g_state.hip_l_pos_rad = hm_L.pos_rad;
-    g_state.hip_r_pos_rad = hm_R.pos_rad;
+    g_state.hip_l_pos_rad   = hm_L.pos_rad;
+    g_state.hip_r_pos_rad   = hm_R.pos_rad;
     g_state.hip_l_current_a = hm_L.current_A;
     g_state.hip_r_current_a = hm_R.current_A;
+
+    g_ibus.update();
+    for (uint8_t i = 0; i < IBUS_NUM_CH; i++)
+        param_force_set(PARAM_IBUS_CH0 + i, (float)g_ibus.channel(i));
+    param_force_set(PARAM_IBUS_ALIVE, g_ibus.alive() ? 1.0f : 0.0f);
+}
+
+// ── Hip direction transform ────────────────────────────────────────────────────
+// Converts a single normalised hip extension command t ∈ [0, 1] (0 = retracted,
+// 1 = fully extended) into per-motor position setpoints [rad].
+//
+// The two motors spin in opposite directions:
+//   seek_dir > 0 (L default): bottom hardstop is in the + direction, so
+//     extending moves the motor toward min_rad (more negative).
+//   seek_dir < 0 (R default): bottom hardstop is in the - direction, so
+//     extending moves the motor toward max_rad (more positive).
+// Each motor is mapped across its own full calibrated span, so they move
+// symmetrically regardless of any small mechanical asymmetry between sides.
+static void hip_cmd_to_setpoints(float t, float* pos_L, float* pos_R) {
+    float span_L = hm_limits_L.max_rad - hm_limits_L.min_rad;
+    float span_R = hm_limits_R.max_rad - hm_limits_R.min_rad;
+    float dir_L  = param_get(PARAM_CALIB_L_SEEK_DIR);
+    float dir_R  = param_get(PARAM_CALIB_R_SEEK_DIR);
+    // seek_dir > 0: extended = min_rad  →  start from max_rad, move toward min
+    // seek_dir < 0: extended = max_rad  →  start from min_rad, move toward max
+    *pos_L = (dir_L > 0.0f) ? (hm_limits_L.max_rad - t * span_L)
+                             : (hm_limits_L.min_rad + t * span_L);
+    *pos_R = (dir_R > 0.0f) ? (hm_limits_R.max_rad - t * span_R)
+                             : (hm_limits_R.min_rad + t * span_R);
+}
+
+// ── Radio interpretation ───────────────────────────────────────────────────────
+// CH10 > 1990: arm into RUNNING (requires prior calibration).
+// CH10 drop:   disarm back to STANDBY.
+// CH3 1000–2000: maps to PARAM_RADIO_HIP_CMD as t ∈ [0,1].
+//   Left stale when radio is dead.
+
+static void radio_update() {
+    bool alive = g_ibus.alive();
+    uint16_t ch10 = g_ibus.channel(10);
+
+    static bool s_was_armed = false;
+    bool armed = alive && (ch10 > 1990);
+    if (armed && !s_was_armed) {
+        stateMachine_request_running();
+    } else if (!armed && s_was_armed && g_state.state == STATE_RUNNING) {
+        stateMachine_disarm_running();
+    }
+    s_was_armed = armed;
+
+    if (alive) {
+        float t = constrain((g_ibus.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);
+        param_force_set(PARAM_RADIO_HIP_CMD, t);
+    }
 }
 
 static void run_control_loop() {
@@ -233,6 +353,7 @@ void loop() {
     receive_commands();
     read_sensors();
     check_imu_state();
+    radio_update();
     run_control_loop();
     update_led();
     update_buzzer();

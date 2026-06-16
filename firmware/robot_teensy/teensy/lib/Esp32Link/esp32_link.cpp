@@ -11,7 +11,7 @@ void Esp32Link::begin() {
 }
 
 void Esp32Link::send_telemetry(const TelemetryPayload& t) {
-    _link.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V1, &t, sizeof(t));
+    _link.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &t, sizeof(t));
     ++_tx_count;
 }
 

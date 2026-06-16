@@ -156,7 +156,7 @@ _COMM_END    = 0xFE
 _HEADER_SZ   = 7   # start + type + version + source + seq + len_lo + len_hi
 _OVERHEAD    = 9   # header(7) + checksum(1) + end(1)
 
-_TYPE_NAMES  = {0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG"}
+_TYPE_NAMES  = {0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG", 0x05: "CALIB", 0x06: "PARAM"}
 _SRC_NAMES   = {0x01: "TEENSY", 0x02: "ESP32", 0x03: "PC"}
 _STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL"}
 _FAULT_NAMES = {
@@ -234,10 +234,32 @@ class PacketDecoder(QObject):
                 if ptype == 0x04 and length >= 2:
                     info["log_level"] = _LOG_LEVELS.get(payload[0], f"L{payload[0]}")
                     info["log_msg"]   = payload[1:].decode("utf-8", errors="replace")
-                elif ptype == 0x01 and length >= 54:
+                elif ptype == 0x06 and length >= 35:
+                    # ParamReportPayload: uint16 id, float value, float min, float max, uint8 flags, char name[20]
+                    param_id, value, min_val, max_val, flags = _struct.unpack_from("<HfffB", payload)
+                    name = payload[15:35].rstrip(b'\x00').decode("utf-8", errors="replace")
+                    info.update({
+                        "param_id":    param_id,
+                        "param_value": value,
+                        "param_min":   min_val,
+                        "param_max":   max_val,
+                        "param_flags": flags,
+                        "param_name":  name,
+                    })
+                elif ptype == 0x05 and length >= 14:
+                    axis, event, pos, mn, mx = _struct.unpack_from("<BBfff", payload)
+                    info.update({
+                        "calib_axis":    axis,
+                        "calib_event":   event,
+                        "calib_pos_rad": pos,
+                        "calib_min_rad": mn,
+                        "calib_max_rad": mx,
+                    })
+                elif ptype == 0x01 and length >= 83:
                     ts, pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw, state, fault, test_val, \
                         hip_l_current, hip_r_current = \
                         _struct.unpack_from("<IfffffffffBBfff", payload)
+                    ibus_raw = _struct.unpack_from("<14HB", payload, 54)
                     info.update({
                         "timestamp_ms":    ts,
                         "pitch_rad":       pitch,
@@ -257,6 +279,8 @@ class PacketDecoder(QObject):
                         "test_val":        test_val,
                         "hip_l_current_a": hip_l_current,
                         "hip_r_current_a": hip_r_current,
+                        "ibus_ch":         list(ibus_raw[:14]),
+                        "ibus_alive":      bool(ibus_raw[14]),
                     })
             except Exception:
                 pass

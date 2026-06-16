@@ -22,17 +22,19 @@ import math
 import struct
 import time
 from collections import deque
+from datetime import datetime
 
 import pyqtgraph as pg
 pg.setConfigOptions(antialias=False)
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (
     QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
-    QPushButton, QVBoxLayout, QWidget, QSizePolicy,
+    QPlainTextEdit, QPushButton, QVBoxLayout, QWidget, QSizePolicy,
 )
 
 from telemetry_bus import TelemetryBus
-from theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, SURFACE, TEXT
+from theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
 from comm_commands import build_frame, send_frame, send_set_mode, CMD_ID_HIP
 
 _BUF = 750          # rolling chart samples (~15 s at 50 Hz telemetry)
@@ -58,6 +60,13 @@ _STATE_MANUAL      = 5
 
 # Keep old alias so nothing else breaks
 _CMD_HIP_MOTOR = _CMD_ID_HIP
+
+# Calibration event sub-types (comm_protocol.h CALIB_EVENT_*)
+_CALIB_EVENT_START        = 0x01
+_CALIB_EVENT_BOTTOM_FOUND = 0x02
+_CALIB_EVENT_LIMITS       = 0x03
+_CALIB_EVENT_DONE         = 0x04
+_CALIB_EVENT_FAULT        = 0x05
 
 
 # ── Small UI helpers ──────────────────────────────────────────────────────────
@@ -201,9 +210,10 @@ class _MotorPanel(QWidget):
         lay.addWidget(_hline())
 
         # Live readouts
-        self._lbl_pos = _readout(lay, "Position", BLUE)
-        self._lbl_cmd = _readout(lay, "Command", ORANGE)
-        self._lbl_cur = _readout(lay, "Current", GREEN)
+        self._lbl_pos    = _readout(lay, "Position", BLUE)
+        self._lbl_cmd    = _readout(lay, "Command", ORANGE)
+        self._lbl_cur    = _readout(lay, "Current", GREEN)
+        self._lbl_limits = _readout(lay, "Limits", DIM)
         lay.addWidget(_hline())
 
         # Mini chart — pos (blue) + tau (orange) + current (green)
@@ -369,6 +379,12 @@ class _MotorPanel(QWidget):
 
     def set_calibration_active(self, active: bool):
         self._in_calibration = active
+
+    def set_calib_limits(self, min_rad: float | None, max_rad: float | None):
+        if min_rad is None:
+            self._lbl_limits.setText("—")
+        else:
+            self._lbl_limits.setText(f"[{min_rad:+.3f}, {max_rad:+.3f}] rad")
 
     # ── command helpers ───────────────────────────────────────────────────────
 
@@ -563,11 +579,35 @@ class HipMotorsTab(QWidget):
         mb_lay.addWidget(self._btn_enter)
         mb_lay.addWidget(self._btn_exit)
 
+        # ── Calibration event log ─────────────────────────────────────────────
+        log_hdr = QLabel("Calibration Log")
+        log_hdr.setStyleSheet(
+            f"color: {BLUE}; font-weight: bold; font-size: 11px;"
+        )
+        self._calib_log = QPlainTextEdit()
+        self._calib_log.setReadOnly(True)
+        self._calib_log.setMaximumBlockCount(200)
+        self._calib_log.setPlaceholderText("Waiting for calibration events…")
+        self._calib_log.setStyleSheet(
+            f"background: #0a0a14; color: {TEXT}; border: 1px solid {BORDER};"
+            f" font-family: Consolas; font-size: 11px;"
+        )
+        self._calib_log.setMaximumHeight(160)
+        self._calib_log.setMinimumHeight(70)
+
+        log_pane = QWidget()
+        log_pane_lay = QVBoxLayout(log_pane)
+        log_pane_lay.setContentsMargins(0, 4, 0, 0)
+        log_pane_lay.setSpacing(4)
+        log_pane_lay.addWidget(log_hdr)
+        log_pane_lay.addWidget(self._calib_log)
+
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(4)
         lay.addWidget(mode_bar)
         lay.addWidget(top)
+        lay.addWidget(log_pane)
 
         TelemetryBus.instance().packet.connect(self._on_packet)
 
@@ -588,6 +628,29 @@ class HipMotorsTab(QWidget):
         payload = struct.pack("<BBB", _CMD_ID_HIP, _HIP_MOTOR_BOTH, hip_sub)
         send_frame(build_frame(payload))
 
+    # ── calib log ─────────────────────────────────────────────────────────────
+
+    _AXIS_NAMES  = {0x00: "BOTH", 0x01: "L", 0x02: "R"}
+    _EVENT_NAMES = {
+        0x01: ("START",        BLUE),
+        0x02: ("BOTTOM FOUND", TEXT),
+        0x03: ("LIMITS",       GREEN),
+        0x04: ("DONE",         GREEN),
+        0x05: ("FAULT",        RED),
+    }
+
+    def _append_calib_log(self, text: str, color: str = TEXT):
+        ts  = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        fmt = QTextCharFormat()
+        fmt.setForeground(QColor(color))
+        cur = self._calib_log.textCursor()
+        cur.movePosition(QTextCursor.MoveOperation.End)
+        cur.setCharFormat(fmt)
+        cur.insertText(f"[{ts}] {text}\n")
+        self._calib_log.verticalScrollBar().setValue(
+            self._calib_log.verticalScrollBar().maximum()
+        )
+
     # ── telemetry ─────────────────────────────────────────────────────────────
 
     _STATE_LABELS = {
@@ -600,7 +663,58 @@ class HipMotorsTab(QWidget):
     }
 
     def _on_packet(self, info: dict):
-        if info.get("ptype") != 0x01:
+        ptype = info.get("ptype")
+
+        if ptype == 0x05:
+            event = info.get("calib_event")
+            axis  = info.get("calib_axis")
+            event_name, color = self._EVENT_NAMES.get(event, (f"0x{event:02X}", TEXT))
+            axis_name = self._AXIS_NAMES.get(axis, f"0x{axis:02X}")
+            pos = info.get("calib_pos_rad", 0.0)
+            mn  = info.get("calib_min_rad", 0.0)
+            mx  = info.get("calib_max_rad", 0.0)
+
+            if event == _CALIB_EVENT_START:
+                self._calib_log.clear()
+                self._append_calib_log("── calibration started ──", BLUE)
+                self._panel_L.set_calib_limits(None, None)
+                self._panel_R.set_calib_limits(None, None)
+            elif event == _CALIB_EVENT_BOTTOM_FOUND:
+                self._append_calib_log(
+                    f"{axis_name}: bottom hardstop found, zeroed @ {pos:+.3f} rad", color)
+            elif event == _CALIB_EVENT_LIMITS:
+                self._append_calib_log(
+                    f"{axis_name}: limits [{mn:+.3f}, {mx:+.3f}] rad  (range {pos:+.3f})", color)
+                if axis == _HIP_MOTOR_L:
+                    self._panel_L.set_calib_limits(mn, mx)
+                elif axis == _HIP_MOTOR_R:
+                    self._panel_R.set_calib_limits(mn, mx)
+            elif event == _CALIB_EVENT_DONE:
+                self._append_calib_log(
+                    f"{axis_name}: done, holding @ {pos:+.3f} rad  limits [{mn:+.3f}, {mx:+.3f}]",
+                    color)
+                if axis == _HIP_MOTOR_L:
+                    self._panel_L.set_calib_limits(mn, mx)
+                elif axis == _HIP_MOTOR_R:
+                    self._panel_R.set_calib_limits(mn, mx)
+            elif event == _CALIB_EVENT_FAULT:
+                self._append_calib_log(
+                    f"{axis_name}: FAULT — hardstop not found @ {pos:+.3f} rad", color)
+            else:
+                self._append_calib_log(f"{axis_name}: {event_name}  pos={pos:+.3f}", color)
+            return
+
+        if ptype == 0x04:
+            msg = info.get("log_msg", "")
+            if "calib" in msg.lower():
+                level = info.get("log_level", "INFO")
+                log_color = {
+                    "INFO": DIM, "WARN": ORANGE, "ERROR": RED,
+                }.get(level, DIM)
+                self._append_calib_log(f"[{level}] {msg}", log_color)
+            return
+
+        if ptype != 0x01:
             return
 
         state_id = info.get("robot_state", 0)

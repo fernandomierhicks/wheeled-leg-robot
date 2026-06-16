@@ -134,6 +134,27 @@ static void decode_command(const uint8_t* payload, uint16_t len, char* out, size
         case CMD_ID_REBOOT:
             snprintf(out, outlen, "REBOOT");
             break;
+        case CMD_ID_PARAM_SET:
+            if (len >= 3) {
+                uint16_t pid;
+                memcpy(&pid, payload + 1, 2);
+                snprintf(out, outlen, "PSET 0x%04X", pid);
+            } else {
+                snprintf(out, outlen, "PARAM SET");
+            }
+            break;
+        case CMD_ID_PARAM_GET:
+            if (len >= 3) {
+                uint16_t pid;
+                memcpy(&pid, payload + 1, 2);
+                if (pid == 0xFFFF)
+                    snprintf(out, outlen, "PARAM DUMP");
+                else
+                    snprintf(out, outlen, "PGET 0x%04X", pid);
+            } else {
+                snprintf(out, outlen, "PARAM GET");
+            }
+            break;
         default:
             snprintf(out, outlen, "CMD 0x%02X", cmd_id);
             break;
@@ -179,13 +200,16 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
     if (type == COMM_TYPE_TELEMETRY && g_wifi_inited)
         g_telem_udp.send(type, version, payload, len);
 
-    // Extract robot state and dummy value; mark UART as active
-    if (type == COMM_TYPE_TELEMETRY && version == TELEM_PAYLOAD_V1
+    // Extract robot state and dummy value; mark UART as active.
+    // Use memcpy to read floats from the byte buffer — ESP32's Xtensa FPU
+    // requires 4-byte alignment and _rx_buf may not satisfy that.
+    if (type == COMM_TYPE_TELEMETRY && version == TELEM_PAYLOAD_V2
             && len >= sizeof(TelemetryPayload)) {
-        const TelemetryPayload* t = reinterpret_cast<const TelemetryPayload*>(payload);
-        g_robot_state    = t->robot_state;
-        g_telem_test_val = t->test_val;
-        g_fault_code     = t->fault_code;
+        float test_val;
+        g_robot_state = payload[offsetof(TelemetryPayload, robot_state)];
+        g_fault_code  = payload[offsetof(TelemetryPayload, fault_code)];
+        memcpy(&test_val, payload + offsetof(TelemetryPayload, test_val), sizeof(float));
+        g_telem_test_val = test_val;
     }
     g_last_teensy_ms = millis();
 }
