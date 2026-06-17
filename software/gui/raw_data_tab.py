@@ -1,10 +1,7 @@
-from datetime import datetime
-
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QPlainTextEdit,
-    QScrollArea, QSplitter, QVBoxLayout, QWidget,
+    QFrame, QGridLayout, QHBoxLayout, QLabel,
+    QScrollArea, QVBoxLayout, QWidget,
 )
 
 from telemetry_bus import TelemetryBus
@@ -88,28 +85,6 @@ class RawDataTab(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet("background: transparent;")
 
-        # ── Log box ───────────────────────────────────────────────────────────
-        self._log = QPlainTextEdit()
-        self._log.setReadOnly(True)
-        self._log.setMaximumBlockCount(500)
-        self._log.setPlaceholderText("Waiting for log messages...")
-        self._log.setStyleSheet(
-            f"background: #0a0a14; color: {TEXT}; border: 1px solid {BORDER};"
-            f" font-family: Consolas; font-size: 11px;"
-        )
-        self._log.setMaximumHeight(180)
-        self._log.setMinimumHeight(80)
-
-        log_hdr = QLabel("Device Log")
-        log_hdr.setStyleSheet(f"color: {BLUE}; font-weight: bold; font-size: 11px;")
-
-        log_pane = QWidget()
-        log_lay = QVBoxLayout(log_pane)
-        log_lay.setContentsMargins(0, 0, 0, 0)
-        log_lay.setSpacing(4)
-        log_lay.addWidget(log_hdr)
-        log_lay.addWidget(self._log)
-
         # ── Outer layout ──────────────────────────────────────────────────────
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 12, 16, 12)
@@ -117,8 +92,6 @@ class RawDataTab(QWidget):
         lay.addLayout(hdr)
         lay.addWidget(_hline())
         lay.addWidget(scroll, stretch=1)
-        lay.addWidget(_hline())
-        lay.addWidget(log_pane)
 
         # ── Rate timer ────────────────────────────────────────────────────────
         self._rate_timer = QTimer(self)
@@ -215,26 +188,11 @@ class RawDataTab(QWidget):
             self._set("cmd_l",          f"{info['cmd_l']:+.6f}")
             self._set("cmd_r",          f"{info['cmd_r']:+.6f}")
             self._set("test_val",       f"{info['test_val']:+.6f}" if "test_val" in info else "—")
-        elif info.get("ptype") == 0x04:
-            self._append_log(info.get("log_level", "INFO"), info.get("log_msg", ""))
         else:
             for k in ("timestamp_ms", "robot_state", "pitch_rad", "pitch_rate_rads",
                       "roll_rad", "yaw_rad", "wheel_vel_avg",
                       "hip_l_pos_rad", "hip_r_pos_rad", "cmd_l", "cmd_r"):
                 self._set(k, "—")
-
-    def _append_log(self, level: str, msg: str):
-        colors = {"INFO": GREEN, "WARN": ORANGE, "ERROR": RED}
-        color  = colors.get(level, TEXT)
-        ts     = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        line   = f"[{ts}] [{level}] {msg}"
-        fmt = QTextCharFormat()
-        fmt.setForeground(QColor(color))
-        cur = self._log.textCursor()
-        cur.movePosition(QTextCursor.MoveOperation.End)
-        cur.setCharFormat(fmt)
-        cur.insertText(line + "\n")
-        self._log.verticalScrollBar().setValue(self._log.verticalScrollBar().maximum())
 
     def _tick_rate(self):
         self._rate_hz   = float(self._rate_count)

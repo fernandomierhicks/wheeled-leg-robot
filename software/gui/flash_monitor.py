@@ -158,7 +158,7 @@ _OVERHEAD    = 9   # header(7) + checksum(1) + end(1)
 
 _TYPE_NAMES  = {0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG", 0x05: "CALIB", 0x06: "PARAM"}
 _SRC_NAMES   = {0x01: "TEENSY", 0x02: "ESP32", 0x03: "PC"}
-_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL"}
+_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT"}
 _FAULT_NAMES = {
     0x00: "NONE",
     0x01: "IMU_ERROR",

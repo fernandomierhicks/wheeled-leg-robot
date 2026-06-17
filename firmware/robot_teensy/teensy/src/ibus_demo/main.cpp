@@ -28,9 +28,9 @@ void loop() {
 
     // Print all 14 channels on one line, 5 Hz
     Serial.print(new_packet ? "NEW  ch: " : "     ch: ");
-    for (uint8_t i = 0; i < IBUS_NUM_CH; i++) {
+    for (uint8_t i = 1; i <= IBUS_NUM_CH; i++) {
         Serial.print(ibus.channel(i));
-        if (i < IBUS_NUM_CH - 1) Serial.print("  ");
+        if (i < IBUS_NUM_CH) Serial.print("  ");
     }
     Serial.println();
 }

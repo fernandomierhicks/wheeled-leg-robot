@@ -6,7 +6,23 @@
 #include "calibration.h"
 #include "comm_protocol.h"
 #include "param_registry.h"
+#include "Buzzer.h"
 #include <StateMachine.h>
+
+extern Buzzer g_buzzer;
+
+static const BuzzerNote ARMED_MELODY[] = {
+    {79, 80, 20},   // G5
+    {86, 120,  0},  // D6 — rising fifth: "armed"
+};
+static const BuzzerNote DISARMED_MELODY[] = {
+    {86, 80, 20},   // D6
+    {79, 120,  0},  // G5 — falling fifth: "safe"
+};
+static const BuzzerNote REJECT_MELODY[] = {
+    {60, 100, 40},  // C4
+    {55, 180,  0},  // G3 — low descending: "denied"
+};
 
 // ── State machine ─────────────────────────────────────────────────────────────
 
@@ -18,6 +34,7 @@ static State* S_MANUAL;
 static State* S_CALIBRATION;
 static State* S_RUNNING;
 static State* S_ESTOP;
+static State* S_CMD_REJECT;
 
 // ── ESTOP hip-disable tracking ────────────────────────────────────────────────
 static bool s_estop_hip_disabled = false;  // set when MIT was killed on ESTOP entry
@@ -30,25 +47,37 @@ static volatile bool s_req_calibration   = false;
 static volatile bool s_req_running       = false;
 static volatile bool s_req_disarm_running = false;
 static volatile bool s_req_estop         = false;
+static volatile bool s_req_cmd_reject    = false;
+
+// ── CMD_REJECT auto-exit timer ────────────────────────────────────────────────
+static uint32_t s_cmd_reject_deadline_ms = 0;
 
 // ── State actions ─────────────────────────────────────────────────────────────
 
 static void on_startup()  {
+    bool entering = (g_state.state != STATE_STARTUP);
     g_state.state = STATE_STARTUP;
     g_state.fault_code = FAULT_NONE;
+    if (entering) comm_log(LOG_LEVEL_INFO, "-> STARTUP");
     if (s_estop_hip_disabled) {
         s_estop_hip_disabled = false;
         if (param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) hip_motors_enter_mit();
     }
 }
 static void on_standby()  {
+    bool entering     = (g_state.state != STATE_STANDBY);
+    bool from_running = (g_state.state == STATE_RUNNING);
     g_state.state = STATE_STANDBY;
     hip_motors_clear_setpoints();  // revert to zero-torque ping (e.g. after CALIBRATION)
     g_state.cmd_l = 0.0f;          // clear calibration ramp echo from cmd_l/cmd_r
     g_state.cmd_r = 0.0f;
+    if (entering) comm_log(LOG_LEVEL_INFO, "-> STANDBY");
+    if (from_running) g_buzzer.play(DISARMED_MELODY, sizeof(DISARMED_MELODY) / sizeof(DISARMED_MELODY[0]), 200);
 }
 static void on_manual() {
+    bool entering = (g_state.state != STATE_MANUAL);
     g_state.state = STATE_MANUAL;
+    if (entering) comm_log(LOG_LEVEL_INFO, "-> MANUAL");
     if (!g_hip_cmd.pending) return;
     g_hip_cmd.pending = false;
     switch (g_hip_cmd.sub_cmd) {
@@ -71,18 +100,51 @@ static void on_manual() {
 static void on_calibration() {
     bool entering = (g_state.state != STATE_CALIBRATION);
     g_state.state = STATE_CALIBRATION;
-    if (entering) calibration_start();
+    if (entering) {
+        comm_log(LOG_LEVEL_INFO, "-> CALIBRATION");
+        calibration_start();
+    }
     calibration_update();
 }
+// Soft gains for initial RUNNING mode testing — well within safe range.
+static constexpr float RUNNING_KP  = 5.0f;   // N·m/rad  (max 500)
+static constexpr float RUNNING_KD  = 0.5f;   // N·m·s/rad (max 5)
+static constexpr float RUNNING_TFF = 0.0f;   // N·m feed-forward
+
 static void on_running() {
+    bool entering = (g_state.state != STATE_RUNNING);
     g_state.state = STATE_RUNNING;
+    if (entering) {
+        comm_log(LOG_LEVEL_INFO, "-> RUNNING (armed)");
+        g_buzzer.play(ARMED_MELODY, sizeof(ARMED_MELODY) / sizeof(ARMED_MELODY[0]), 200);
+    }
+
+    float pos_L, pos_R;
+    hip_cmd_to_setpoints(param_get(PARAM_RADIO_HIP_CMD), &pos_L, &pos_R);
+    g_state.cmd_l = pos_L;
+    g_state.cmd_r = pos_R;
+
+    hip_motors_set_setpoint_L(pos_L, 0.0f, RUNNING_KP, RUNNING_KD, RUNNING_TFF);
+    hip_motors_set_setpoint_R(pos_R, 0.0f, RUNNING_KP, RUNNING_KD, RUNNING_TFF);
+}
+static void on_cmd_reject() {
+    bool entering = (g_state.state != STATE_CMD_REJECT);
+    g_state.state = STATE_CMD_REJECT;
+    if (entering) {
+        comm_log(LOG_LEVEL_WARN, "-> CMD_REJECT");
+        g_buzzer.play(REJECT_MELODY, sizeof(REJECT_MELODY) / sizeof(REJECT_MELODY[0]), 200);
+        s_cmd_reject_deadline_ms = millis() + 1000;
+    }
 }
 static void on_estop() {
     bool entering = (g_state.state != STATE_ESTOP);
     g_state.state = STATE_ESTOP;
-    if (entering && param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) {
-        hip_motors_exit_mit();
-        s_estop_hip_disabled = true;
+    if (entering) {
+        comm_log(LOG_LEVEL_ERROR, "-> ESTOP [fault 0x%02X]", g_state.fault_code);
+        if (param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) {
+            hip_motors_exit_mit();
+            s_estop_hip_disabled = true;
+        }
     }
 }
 
@@ -93,10 +155,12 @@ static bool startup_ok() {
 }
 static bool startup_fail() {
     if (imu_state() == ImuState::ERROR) {
+        comm_log(LOG_LEVEL_ERROR, "FAULT: IMU init failed");
         g_state.fault_code = FAULT_IMU_ERROR;
         return true;
     }
     if (millis() > 2000 && (!hm_L.ever_heard || !hm_R.ever_heard)) {
+        comm_log(LOG_LEVEL_ERROR, "FAULT: hip init timeout (L=%d R=%d)", (int)hm_L.ever_heard, (int)hm_R.ever_heard);
         g_state.fault_code = FAULT_HIP_INIT_TIMEOUT;
         return true;
     }
@@ -104,6 +168,7 @@ static bool startup_fail() {
 }
 static bool standby_hip_fault() {
     if (!hip_motors_ok()) {
+        comm_log(LOG_LEVEL_ERROR, "FAULT: hip feedback lost");
         g_state.fault_code = FAULT_HIP_FEEDBACK_LOST;
         return true;
     }
@@ -113,11 +178,14 @@ static bool req_manual()        { bool v = s_req_manual;  s_req_manual  = false;
 static bool req_standby()       { bool v = s_req_standby; s_req_standby = false; return v; }
 static bool req_reset()         { bool v = s_req_reset;   s_req_reset   = false; return v; }
 static bool req_calibration()   { bool v = s_req_calibration; s_req_calibration = false; return v; }
+static bool req_cmd_reject() { bool v = s_req_cmd_reject; s_req_cmd_reject = false; return v; }
+static bool cmd_reject_done() { return (millis() >= s_cmd_reject_deadline_ms); }
 static bool req_running() {
     if (!s_req_running) return false;
     s_req_running = false;
-    if (param_get(PARAM_CALIB_DONE) < 0.5f) {
-        comm_log(LOG_LEVEL_WARN, "RUNNING rejected: calibrate first");
+    if (!hm_limits_L.valid || !hm_limits_R.valid) {
+        comm_log(LOG_LEVEL_WARN, "Running mode denied: calibrate first (limits not valid).");
+        stateMachine_request_cmd_reject();
         return false;
     }
     return true;
@@ -148,6 +216,7 @@ void stateMachine_init() {
     S_CALIBRATION = sm.addState(on_calibration);
     S_RUNNING     = sm.addState(on_running);
     S_ESTOP       = sm.addState(on_estop);
+    S_CMD_REJECT  = sm.addState(on_cmd_reject);
 
     S_STARTUP->addTransition(req_estop,    S_ESTOP);
     S_STARTUP->addTransition(startup_ok,   S_STANDBY);
@@ -158,6 +227,7 @@ void stateMachine_init() {
     S_STANDBY->addTransition(req_manual,        S_MANUAL);
     S_STANDBY->addTransition(req_calibration,   S_CALIBRATION);
     S_STANDBY->addTransition(req_running,       S_RUNNING);
+    S_STANDBY->addTransition(req_cmd_reject,    S_CMD_REJECT);
 
     S_MANUAL ->addTransition(req_estop,         S_ESTOP);
     S_MANUAL ->addTransition(standby_hip_fault, S_ESTOP);
@@ -175,6 +245,8 @@ void stateMachine_init() {
 
     S_ESTOP  ->addTransition(req_reset,         S_STARTUP);
 
+    S_CMD_REJECT->addTransition(cmd_reject_done, S_STANDBY);
+
     g_state.state = STATE_STARTUP;
 }
 
@@ -184,10 +256,11 @@ void stateMachine_update() {
 
 // ── Public request API ────────────────────────────────────────────────────────
 
-void stateMachine_request_manual()      { s_req_manual        = true; }
-void stateMachine_exit_manual()         { s_req_standby       = true; }
-void stateMachine_request_reset()       { s_req_reset         = true; }
-void stateMachine_request_calibration() { s_req_calibration   = true; }
-void stateMachine_request_running()     { s_req_running       = true; }
+void stateMachine_request_manual()      { s_req_manual         = true; }
+void stateMachine_exit_manual()         { s_req_standby        = true; }
+void stateMachine_request_reset()       { s_req_reset          = true; }
+void stateMachine_request_calibration() { s_req_calibration    = true; }
+void stateMachine_request_running()     { s_req_running        = true; }
 void stateMachine_disarm_running()      { s_req_disarm_running = true; }
-void stateMachine_request_estop()       { s_req_estop         = true; }
+void stateMachine_request_estop()       { s_req_estop          = true; }
+void stateMachine_request_cmd_reject()  { s_req_cmd_reject     = true; }

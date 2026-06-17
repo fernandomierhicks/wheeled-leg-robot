@@ -19,7 +19,7 @@ IBus     g_ibus(Serial4);                       // FlySky RC receiver, pin 16
 RgbLed   g_led(PIN_LED_R, PIN_LED_G, PIN_LED_B);
 Buzzer   g_buzzer(PIN_BUZZER);
 
-HipCmd g_hip_cmd = {};
+HipCmd   g_hip_cmd = {};
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -79,6 +79,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     // ── Mode change: signal the state machine ─────────────────────────────────
     if (cmd_id == CMD_ID_SET_MODE && len >= 2) {
         uint8_t target = payload[1];
+        comm_log(LOG_LEVEL_INFO, "CMD set_mode -> %d", target);
         if (target == STATE_MANUAL)      stateMachine_request_manual();
         if (target == STATE_STANDBY)     stateMachine_exit_manual();
         if (target == STATE_STARTUP)     stateMachine_request_reset();
@@ -99,6 +100,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
 
     // ── Hip command: queue for execution by the MANUAL state action ───────────
     if (cmd_id == CMD_ID_HIP && len >= 3) {
+        comm_log(LOG_LEVEL_INFO, "CMD hip motor=0x%02X sub=0x%02X", payload[1], payload[2]);
         g_hip_cmd.motor_id = payload[1];
         g_hip_cmd.sub_cmd  = payload[2];
         if (payload[2] == HIP_SUB_MIT && len >= 3 + 5 * 4) {
@@ -117,6 +119,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         uint16_t id;  float val;
         memcpy(&id,  payload + 1, 2);
         memcpy(&val, payload + 3, 4);
+        comm_log(LOG_LEVEL_INFO, "CMD param_set 0x%04X = %.4f", id, val);
         ParamSetResult res = param_set(id, val);
         if (res == ParamSetResult::FAULT) {
             comm_log(LOG_LEVEL_ERROR, "Param 0x%04X out of bounds — ESTOP", id);
@@ -185,10 +188,13 @@ void setup() {
     comm_log(LOG_LEVEL_INFO, "Firmware starting");
     param_init();
     g_ibus.begin();
+    comm_log(LOG_LEVEL_INFO, "IBus RX ready (Serial4)");
     imu_init();
     comm_log(LOG_LEVEL_INFO, "IMU initializing...");
     hip_motors_init();
+    comm_log(LOG_LEVEL_INFO, "Hip CAN init OK");
     hip_motors_enter_mit();
+    comm_log(LOG_LEVEL_INFO, "Hip MIT mode enabled");
     controlLoop_init();
     stateMachine_init();
     comm_log(LOG_LEVEL_INFO, "Setup complete");
@@ -213,7 +219,7 @@ static void send_telemetry() {
     telem.test_val         = sinf(2.0f * (float)M_PI * 2.0f * millis() / 1000.0f);
     telem.hip_l_current_a  = g_state.hip_l_current_a;
     telem.hip_r_current_a  = g_state.hip_r_current_a;
-    for (uint8_t i = 0; i < IBUS_NUM_CH; i++) telem.ibus_ch[i] = g_ibus.channel(i);
+    for (uint8_t i = 1; i <= IBUS_NUM_CH; i++) telem.ibus_ch[i - 1] = g_ibus.channel(i);
     telem.ibus_alive       = g_ibus.alive() ? 1 : 0;
     g_comm.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &telem, sizeof(telem));
     if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &telem, sizeof(telem));
@@ -227,21 +233,22 @@ static void update_buzzer() {
 
 static void update_led() {
     static RobotStateEnum prev = (RobotStateEnum)0xFF;
+
     RobotStateEnum cur = g_state.state;
     if (cur != prev) {
         bool was_estop = (prev == STATE_ESTOP);
         prev = cur;
         switch (cur) {
             case STATE_STARTUP:
-                // Reset accepted from ESTOP: flash white for 1 s, then breathe white.
                 if (was_estop) g_led.flash_then_pulse(255, 255, 255, 1000, 2000);
                 else           g_led.pulse(255, 255, 255, 2000);
                 break;
-            case STATE_CALIBRATION: g_led.pulse(0,   0,   255, 2000); break;
-            case STATE_STANDBY:     g_led.pulse(255, 200,   0, 2000); break;
-            case STATE_RUNNING:     g_led.pulse(0,   255,   0, 2000); break;
-            case STATE_MANUAL:      g_led.pulse(0,   200, 255, 2000); break;
+            case STATE_CALIBRATION: g_led.pulse(0,   0,   255, 2000);      break;
+            case STATE_STANDBY:     g_led.pulse(255, 200,   0, 2000);      break;
+            case STATE_RUNNING:     g_led.blink(0,   255,   0,  167, 167); break;
+            case STATE_MANUAL:      g_led.pulse(0,   200, 255, 2000);      break;
             case STATE_ESTOP:       g_led.blink(255,   0,   0,  100, 100); break;
+            case STATE_CMD_REJECT:  g_led.blink(255,   0,   0,  300, 300); break;
         }
     }
     g_led.update();
@@ -266,56 +273,49 @@ static void read_sensors() {
     g_state.hip_r_current_a = hm_R.current_A;
 
     g_ibus.update();
-    for (uint8_t i = 0; i < IBUS_NUM_CH; i++)
-        param_force_set(PARAM_IBUS_CH0 + i, (float)g_ibus.channel(i));
+    for (uint8_t i = 1; i <= IBUS_NUM_CH; i++)
+        param_force_set(PARAM_IBUS_CH0 + (i - 1), (float)g_ibus.channel(i));
     param_force_set(PARAM_IBUS_ALIVE, g_ibus.alive() ? 1.0f : 0.0f);
-}
-
-// ── Hip direction transform ────────────────────────────────────────────────────
-// Converts a single normalised hip extension command t ∈ [0, 1] (0 = retracted,
-// 1 = fully extended) into per-motor position setpoints [rad].
-//
-// The two motors spin in opposite directions:
-//   seek_dir > 0 (L default): bottom hardstop is in the + direction, so
-//     extending moves the motor toward min_rad (more negative).
-//   seek_dir < 0 (R default): bottom hardstop is in the - direction, so
-//     extending moves the motor toward max_rad (more positive).
-// Each motor is mapped across its own full calibrated span, so they move
-// symmetrically regardless of any small mechanical asymmetry between sides.
-static void hip_cmd_to_setpoints(float t, float* pos_L, float* pos_R) {
-    float span_L = hm_limits_L.max_rad - hm_limits_L.min_rad;
-    float span_R = hm_limits_R.max_rad - hm_limits_R.min_rad;
-    float dir_L  = param_get(PARAM_CALIB_L_SEEK_DIR);
-    float dir_R  = param_get(PARAM_CALIB_R_SEEK_DIR);
-    // seek_dir > 0: extended = min_rad  →  start from max_rad, move toward min
-    // seek_dir < 0: extended = max_rad  →  start from min_rad, move toward max
-    *pos_L = (dir_L > 0.0f) ? (hm_limits_L.max_rad - t * span_L)
-                             : (hm_limits_L.min_rad + t * span_L);
-    *pos_R = (dir_R > 0.0f) ? (hm_limits_R.max_rad - t * span_R)
-                             : (hm_limits_R.min_rad + t * span_R);
 }
 
 // ── Radio interpretation ───────────────────────────────────────────────────────
 // CH10 > 1990: arm into RUNNING (requires prior calibration).
 // CH10 drop:   disarm back to STANDBY.
+// CH5  > 1990: trigger CALIBRATION (only from STANDBY, rising edge).
 // CH3 1000–2000: maps to PARAM_RADIO_HIP_CMD as t ∈ [0,1].
 //   Left stale when radio is dead.
 
 static void radio_update() {
     bool alive = g_ibus.alive();
     uint16_t ch10 = g_ibus.channel(10);
+    uint16_t ch5  = g_ibus.channel(5);
+
+    static bool s_was_alive = false;
+    if (alive && !s_was_alive) comm_log(LOG_LEVEL_INFO, "Radio: signal OK");
+    if (!alive && s_was_alive) comm_log(LOG_LEVEL_WARN, "Radio: signal lost");
+    s_was_alive = alive;
 
     static bool s_was_armed = false;
     bool armed = alive && (ch10 > 1990);
     if (armed && !s_was_armed) {
+        comm_log(LOG_LEVEL_INFO, "Radio: armed -> RUNNING");
         stateMachine_request_running();
     } else if (!armed && s_was_armed && g_state.state == STATE_RUNNING) {
+        comm_log(LOG_LEVEL_INFO, "Radio: disarmed -> STANDBY");
         stateMachine_disarm_running();
     }
     s_was_armed = armed;
 
+    static bool s_was_calib = false;
+    bool calib = alive && (ch5 > 1990);
+    if (calib && !s_was_calib && g_state.state == STATE_STANDBY) {
+        comm_log(LOG_LEVEL_INFO, "Radio: calib trigger");
+        stateMachine_request_calibration();
+    }
+    s_was_calib = calib;
+
     if (alive) {
-        float t = constrain((g_ibus.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);
+        float t = constrain((g_ibus.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);  // CH3 (1-indexed)
         param_force_set(PARAM_RADIO_HIP_CMD, t);
     }
 }

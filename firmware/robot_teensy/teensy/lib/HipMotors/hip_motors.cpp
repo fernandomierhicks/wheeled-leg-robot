@@ -2,6 +2,7 @@
 #include "config.h"
 #include "robot_state.h"
 #include "comm_protocol.h"
+#include "param_registry.h"
 #include <Arduino.h>
 #include <FlexCAN_T4.h>
 
@@ -78,8 +79,7 @@ static void pack_and_send(uint32_t id, float pos, float vel, float kp, float kd,
         if (delta < 0) delta = -delta;
         if (delta > MAX_HIP_DELTA_RAD) {
             const char* side = (id == AK45_ID_L) ? "L" : "R";
-            Serial.printf("[HipMotors] FAULT: %s hip position jump %.3f rad > %.3f limit\n",
-                          side, delta, MAX_HIP_DELTA_RAD);
+            comm_log(LOG_LEVEL_ERROR, "FAULT: hip %s pos jump %.3f rad > %.3f", side, delta, MAX_HIP_DELTA_RAD);
             g_state.fault_code = FAULT_HIP_LARGE_POS_CMD;
             g_state.state      = STATE_ESTOP;
             return;
@@ -150,6 +150,7 @@ void hip_motors_poll() {
 
     if (hm_L.mit_active && (now - last_enter_ms) >= MIT_REENTER_MS) {
         hip_motors_enter_mit();
+        comm_log(LOG_LEVEL_INFO, "Hip MIT re-enter");
     }
 
     // ESTOP or a stale (unrefreshed) setpoint both fall back to the safe ping.
@@ -201,19 +202,19 @@ void hip_motors_zero() {
     send_raw(AK45_ID_L, cmd);
     delayMicroseconds(CAN_INTER_FRAME_US);
     send_raw(AK45_ID_R, cmd);
-    Serial.println("[HipMotors] encoder zeroed");
+    comm_log(LOG_LEVEL_INFO, "Hip encoders zeroed (L+R)");
 }
 
 void hip_motor_zero_L() {
     static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE};
     send_raw(AK45_ID_L, cmd);
-    Serial.println("[HipMotors] L encoder zeroed");
+    comm_log(LOG_LEVEL_INFO, "Hip encoder zeroed (L)");
 }
 
 void hip_motor_zero_R() {
     static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE};
     send_raw(AK45_ID_R, cmd);
-    Serial.println("[HipMotors] R encoder zeroed");
+    comm_log(LOG_LEVEL_INFO, "Hip encoder zeroed (R)");
 }
 
 void hip_motors_send(float pos_L, float vel_L, float kp_L, float kd_L, float trq_L,
@@ -245,6 +246,17 @@ void hip_motors_set_setpoint_R(float pos, float vel, float kp, float kd, float t
 void hip_motors_clear_setpoints() {
     hm_sp_L.active = false;
     hm_sp_R.active = false;
+}
+
+void hip_cmd_to_setpoints(float t, float* pos_L, float* pos_R) {
+    float span_L = hm_limits_L.max_rad - hm_limits_L.min_rad;
+    float span_R = hm_limits_R.max_rad - hm_limits_R.min_rad;
+    float dir_L  = param_get(PARAM_CALIB_L_SEEK_DIR);
+    float dir_R  = param_get(PARAM_CALIB_R_SEEK_DIR);
+    *pos_L = (dir_L > 0.0f) ? (hm_limits_L.max_rad - t * span_L)
+                             : (hm_limits_L.min_rad + t * span_L);
+    *pos_R = (dir_R > 0.0f) ? (hm_limits_R.max_rad - t * span_R)
+                             : (hm_limits_R.min_rad + t * span_R);
 }
 
 bool hip_motors_ok() {

@@ -10,6 +10,7 @@ typedef enum : uint8_t {
     STATE_RUNNING      = 3,
     STATE_ESTOP        = 4,
     STATE_MANUAL       = 5,
+    STATE_CMD_REJECT   = 6,  // ~1 s transient: plays REJECT_MELODY, red blink, then returns to originating state
 } RobotStateEnum;
 
 typedef struct {

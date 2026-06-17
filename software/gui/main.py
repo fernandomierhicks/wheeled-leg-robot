@@ -22,6 +22,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
 from theme import APP_STYLE, BORDER, TEXT, DIM, GREEN, ORANGE, RED, BLUE, YELLOW, WHITE
+from robot_log_widget import RobotLogWidget
 from flash_monitor import FlashMonitorTab
 from hip_motors import HipMotorsTab
 from imu_tab import ImuTab, ImuMiniWidget
@@ -260,9 +261,25 @@ class MainWindow(QMainWindow):
         tabs.addTab(WheelMotorsTab(),     "Wheel Motors")
         tabs.addTab(RadioTab(),           "Radio")
         tabs.addTab(FlashMonitorTab(),    "Flash & Monitor")
-        self.setCentralWidget(tabs)
+        self._flash_tab_idx = tabs.count() - 1
+
+        self._log_pane = RobotLogWidget()
+        self._log_pane.setContentsMargins(8, 2, 8, 6)
+
+        central = QWidget()
+        central_lay = QVBoxLayout(central)
+        central_lay.setContentsMargins(0, 0, 0, 0)
+        central_lay.setSpacing(0)
+        central_lay.addWidget(tabs)
+        central_lay.addWidget(self._log_pane)
+        self.setCentralWidget(central)
+
+        tabs.currentChanged.connect(self._on_tab_changed)
 
         self._on_source_changed(sm.active)
+
+    def _on_tab_changed(self, idx: int):
+        self._log_pane.setVisible(idx != self._flash_tab_idx)
 
     def _on_source_changed(self, device: str):
         if device:

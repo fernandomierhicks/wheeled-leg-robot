@@ -81,3 +81,8 @@ void hip_motors_set_setpoint_R(float pos, float vel, float kp, float kd, float t
 // Drop any cached setpoints on both axes, reverting poll() to the safe
 // zero-torque ping. Call on disable, or when leaving the commanding mode.
 void hip_motors_clear_setpoints();
+
+// Convert a normalised hip extension command t ∈ [0,1] (0 = retracted,
+// 1 = fully extended) into per-motor position setpoints [rad], accounting
+// for each motor's calibrated span and seek direction.
+void hip_cmd_to_setpoints(float t, float* pos_L, float* pos_R);

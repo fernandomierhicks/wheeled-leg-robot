@@ -25,10 +25,14 @@ enum : uint8_t {
     RS_RUNNING     = 3,
     RS_ESTOP       = 4,
     RS_MANUAL      = 5,
+    RS_CMD_REJECT  = 6,
 };
 
 static CRGB leds[NUM_LEDS];
-static volatile uint8_t g_robot_state = RS_STARTUP;
+static volatile uint8_t  g_robot_state      = RS_STARTUP;
+static volatile bool     g_teensy_ever_heard = false;
+static volatile uint32_t g_last_teensy_ms   = 0;
+static volatile bool     g_display_dirty    = false;
 
 static void neo_task(void*) {
     FastLED.addLeds<WS2812B, PIN_NEO, GRB>(leds, NUM_LEDS);
@@ -37,22 +41,36 @@ static void neo_task(void*) {
     uint32_t tick = 0;
 
     for (;;) {
-        uint8_t state = g_robot_state;
+        uint8_t state  = g_robot_state;
+        bool    linked = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < 1000);
 
         CRGB base;
-        bool blink_mode = false;
-        switch (state) {
-            case RS_STARTUP:     base = CRGB(255, 255, 255); break;
-            case RS_CALIBRATION: base = CRGB(0,   0,   255); break;
-            case RS_STANDBY:     base = CRGB(255, 200,   0); break;
-            case RS_RUNNING:     base = CRGB(0,   255,   0); break;
-            case RS_ESTOP:       base = CRGB(255,   0,   0); blink_mode = true; break;
-            case RS_MANUAL:      base = CRGB(0,   200, 255); break;
-            default:             base = CRGB(255, 255, 255); break;
+        bool blink_fast = false;   // CMD_REJECT: fast orange blink
+        bool blink_slow = false;   // ESTOP: slow red blink
+
+        if (!linked) {
+            // No data from Teensy — dim white breathe
+            base = CRGB(80, 80, 80);
+        } else {
+            switch (state) {
+                case RS_STARTUP:     base = CRGB(255, 255, 255); break;
+                case RS_CALIBRATION: base = CRGB(0,   0,   255); break;
+                case RS_STANDBY:     base = CRGB(255, 200,   0); break;
+                case RS_RUNNING:     base = CRGB(0,   255,   0); break;
+                case RS_ESTOP:       base = CRGB(255,   0,   0); blink_slow = true; break;
+                case RS_MANUAL:      base = CRGB(0,   200, 255); break;
+                case RS_CMD_REJECT:  base = CRGB(255,  80,   0); blink_fast = true; break;
+                default:             base = CRGB(255, 255, 255); break;
+            }
         }
 
-        if (blink_mode) {
-            bool on = (tick % 10) < 5;
+        if (blink_slow) {
+            // ~2 Hz: 250 ms on, 250 ms off  (tick period = 20 ms → 25 ticks/cycle)
+            bool on = (tick % 25) < 12;
+            fill_solid(leds, NUM_LEDS, on ? base : CRGB::Black);
+        } else if (blink_fast) {
+            // ~8 Hz: 60 ms on, 60 ms off  (tick period = 20 ms → 6 ticks/cycle)
+            bool on = (tick % 6) < 3;
             fill_solid(leds, NUM_LEDS, on ? base : CRGB::Black);
         } else {
             uint8_t phase = (uint8_t)((tick % 100) * 256 / 100);
@@ -76,7 +94,6 @@ static CommLink g_usb(Serial,    COMM_SRC_ESP32);   // USB serial to PC
 
 // ── Telemetry state for display ───────────────────────────────────────────────
 
-static volatile uint32_t g_last_teensy_ms = 0;
 static volatile float    g_telem_test_val = 0.0f;
 static volatile uint8_t  g_fault_code     = FAULT_NONE;
 
@@ -205,13 +222,19 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
     // requires 4-byte alignment and _rx_buf may not satisfy that.
     if (type == COMM_TYPE_TELEMETRY && version == TELEM_PAYLOAD_V2
             && len >= sizeof(TelemetryPayload)) {
-        float test_val;
-        g_robot_state = payload[offsetof(TelemetryPayload, robot_state)];
-        g_fault_code  = payload[offsetof(TelemetryPayload, fault_code)];
+        float   test_val;
+        uint8_t new_state = payload[offsetof(TelemetryPayload, robot_state)];
+        uint8_t new_fault = payload[offsetof(TelemetryPayload, fault_code)];
+        if (new_state != g_robot_state || new_fault != g_fault_code)
+            g_display_dirty = true;
+        g_robot_state    = new_state;
+        g_fault_code     = new_fault;
         memcpy(&test_val, payload + offsetof(TelemetryPayload, test_val), sizeof(float));
         g_telem_test_val = test_val;
     }
-    g_last_teensy_ms = millis();
+    if (!g_teensy_ever_heard) g_display_dirty = true;  // first packet: show link active
+    g_last_teensy_ms     = millis();
+    g_teensy_ever_heard  = true;
 }
 
 // ── Display ───────────────────────────────────────────────────────────────────
@@ -226,6 +249,7 @@ static uint16_t mode_color_565(uint8_t state) {
         case RS_RUNNING:     return ST77XX_GREEN;
         case RS_ESTOP:       return ST77XX_RED;
         case RS_MANUAL:      return ST77XX_CYAN;
+        case RS_CMD_REJECT:  return tft.color565(255, 100, 0);  // orange
         default:             return ST77XX_WHITE;
     }
 }
@@ -238,6 +262,7 @@ static const char* mode_name(uint8_t state) {
         case RS_RUNNING:     return "RUNNING";
         case RS_ESTOP:       return "ESTOP";
         case RS_MANUAL:      return "MANUAL";
+        case RS_CMD_REJECT:  return "CMD REJECT";
         default:             return "UNKNOWN";
     }
 }
@@ -265,10 +290,10 @@ static void update_display() {
 
     uint8_t state  = g_robot_state;
     uint8_t fault  = g_fault_code;
-    bool    active = (millis() - g_last_teensy_ms) < 1000;
+    bool    active = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < 1000);
     float   val    = g_telem_test_val;
 
-    if (state != prev_state || fault != prev_fault) {
+    if (state != prev_state || fault != prev_fault || active != prev_active) {
         // "Mode:" label (static, but repaint on first draw)
         tft.fillRect(0, 5, 320, 80, ST77XX_BLACK);
         tft.setTextSize(2);
@@ -277,9 +302,15 @@ static void update_display() {
         tft.print("Mode:");
         tft.fillRect(0, 35, 320, 40, ST77XX_BLACK);
         tft.setTextSize(4);
-        tft.setTextColor(mode_color_565(state));
-        tft.setCursor(10, 38);
-        tft.print(mode_name(state));
+        if (active) {
+            tft.setTextColor(mode_color_565(state));
+            tft.setCursor(10, 38);
+            tft.print(mode_name(state));
+        } else {
+            tft.setTextColor(tft.color565(80, 80, 80));  // dark gray
+            tft.setCursor(10, 38);
+            tft.print("--");
+        }
 
         // Verbose fault description, shown only while latched in ESTOP
         tft.fillRect(0, 85, 320, 12, ST77XX_BLACK);
@@ -388,9 +419,10 @@ void loop() {
         }
     }
 
-    // Refresh display at ~10 Hz
+    // Refresh display: immediately on state change, otherwise at ~10 Hz
     static uint32_t last_disp_ms = 0;
-    if (millis() - last_disp_ms >= 100) {
+    if (g_display_dirty || (millis() - last_disp_ms >= 100)) {
+        g_display_dirty = false;
         update_display();
         last_disp_ms = millis();
     }

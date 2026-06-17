@@ -166,7 +166,7 @@ void calibration_update() {
 
     if (calibration_done() && !s_done_announced) {
         s_done_announced = true;
-        param_set(PARAM_CALIB_DONE, 1.0f);
+        param_force_set(PARAM_CALIB_DONE, 1.0f);
         g_buzzer.play(DONE_MELODY, sizeof(DONE_MELODY) / sizeof(DONE_MELODY[0]), 200);
     }
     if (calibration_failed() && !s_fault_announced) {

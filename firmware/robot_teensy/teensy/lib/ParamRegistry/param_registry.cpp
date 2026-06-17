@@ -25,7 +25,7 @@ static Param g_params[] = {
     {PARAM_CALIB_SAFETY_BOUND,GROUP_CALIB, "calib_safety_bound", 6.28319f, 1.0f,   25.1327f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_L_SEEK_DIR,  GROUP_CALIB, "calib_l_seek_dir",   1.0f,    -1.0f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_R_SEEK_DIR,  GROUP_CALIB, "calib_r_seek_dir",  -1.0f,    -1.0f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_DONE,        GROUP_CALIB, "calib_done",         0.0f,     0.0f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_CALIB_DONE,        GROUP_CALIB, "calib_done",         0.0f,     0.0f,    1.0f,  PARAM_FLAG_READONLY, nullptr},
 
     // GROUP_COMMAND — radio-derived setpoints (firmware-written, never persisted)
     {PARAM_RADIO_HIP_CMD, GROUP_COMMAND, "radio_hip_cmd",     0.0f,     0.0f,    1.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},

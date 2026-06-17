@@ -1,17 +1,15 @@
 """hip_motors.py — Hip Motors tab (AK45-10, MIT CAN mode).
 
 Displays live position + command for both hip axes. The "Command" trace
-shows torque command (cmd_l/cmd_r) outside MANUAL/CALIBRATION, the MIT
-position setpoint (p°, from Send MIT / test wave) while in MANUAL mode,
-or the firmware's hardstop-seek ramp (cmd_l/cmd_r, echoed in rad) while
-in CALIBRATION — so position tracking can be gauged against the actual
-position trace.
+always shows a position in degrees: the MIT setpoint (p°, from Send MIT /
+test wave) in MANUAL mode, the firmware's hardstop-seek ramp in CALIBRATION,
+or the active position command (cmd_l/cmd_r) in all other states.
 Controls: Enable / Disable / Zero per-motor and both,
           MIT position command (p°, Kp, Kd, τff).
 
 Telemetry fields used (from TelemetryPayload / comm_protocol.h):
     hip_l_pos_rad, hip_r_pos_rad       — hip encoder position [rad]
-    cmd_l, cmd_r                       — torque command sent to each hip [N·m]
+    cmd_l, cmd_r                       — hip position command [rad]
     hip_l_current_a, hip_r_current_a   — hip phase current [A]
 
 Commands are framed via the CommLink protocol (shared/comm_protocol.h) and
@@ -22,15 +20,13 @@ import math
 import struct
 import time
 from collections import deque
-from datetime import datetime
 
 import pyqtgraph as pg
 pg.setConfigOptions(antialias=False)
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (
     QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
-    QPlainTextEdit, QPushButton, QVBoxLayout, QWidget, QSizePolicy,
+    QPushButton, QVBoxLayout, QWidget,
 )
 
 from telemetry_bus import TelemetryBus
@@ -182,7 +178,7 @@ class _MotorPanel(QWidget):
         self._cmd_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
         self._cur_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
         self._latest_pos_deg = 0.0
-        self._latest_tau_nm  = 0.0
+        self._latest_cmd_rad = 0.0
         self._latest_current_a = 0.0
         self._latest_cmd_pos_deg = 0.0
         self._in_manual = False
@@ -455,33 +451,23 @@ class _MotorPanel(QWidget):
 
     # ── data update (called from HipMotorsTab._on_packet) ────────────────────
 
-    def update_data(self, pos_rad: float, tau_nm: float, current_a: float):
+    def update_data(self, pos_rad: float, cmd_rad: float, current_a: float):
         pos_deg = math.degrees(pos_rad)
         self._latest_pos_deg = pos_deg
-        self._latest_tau_nm  = tau_nm
+        self._latest_cmd_rad = cmd_rad
         self._latest_current_a = current_a
 
         self._pos_buf.append(pos_deg)
         self._cur_buf.append(current_a)
-        # In MANUAL mode the orange trace tracks the position setpoint
-        # (Send MIT / test wave) so it can be compared against actual
-        # position to gauge tracking. In CALIBRATION it tracks the
-        # firmware's hardstop-seek ramp (echoed via cmd_l/cmd_r, in rad).
-        # Otherwise it shows commanded torque.
         if self._in_manual:
             self._cmd_buf.append(self._latest_cmd_pos_deg)
-        elif self._in_calibration:
-            self._latest_cmd_pos_deg = math.degrees(tau_nm)
-            self._cmd_buf.append(self._latest_cmd_pos_deg)
         else:
-            self._cmd_buf.append(tau_nm)
+            self._latest_cmd_pos_deg = math.degrees(cmd_rad)
+            self._cmd_buf.append(self._latest_cmd_pos_deg)
 
     def _redraw_chart(self):
         self._lbl_pos.setText(f"{self._latest_pos_deg:+.1f}°")
-        if self._in_manual or self._in_calibration:
-            self._lbl_cmd.setText(f"{self._latest_cmd_pos_deg:+.1f}°")
-        else:
-            self._lbl_cmd.setText(f"{self._latest_tau_nm:+.2f} N·m")
+        self._lbl_cmd.setText(f"{self._latest_cmd_pos_deg:+.1f}°")
         self._lbl_cur.setText(f"{self._latest_current_a:+.2f} A")
 
         self._crv_pos.setData(list(self._pos_buf))
@@ -579,35 +565,11 @@ class HipMotorsTab(QWidget):
         mb_lay.addWidget(self._btn_enter)
         mb_lay.addWidget(self._btn_exit)
 
-        # ── Calibration event log ─────────────────────────────────────────────
-        log_hdr = QLabel("Calibration Log")
-        log_hdr.setStyleSheet(
-            f"color: {BLUE}; font-weight: bold; font-size: 11px;"
-        )
-        self._calib_log = QPlainTextEdit()
-        self._calib_log.setReadOnly(True)
-        self._calib_log.setMaximumBlockCount(200)
-        self._calib_log.setPlaceholderText("Waiting for calibration events…")
-        self._calib_log.setStyleSheet(
-            f"background: #0a0a14; color: {TEXT}; border: 1px solid {BORDER};"
-            f" font-family: Consolas; font-size: 11px;"
-        )
-        self._calib_log.setMaximumHeight(160)
-        self._calib_log.setMinimumHeight(70)
-
-        log_pane = QWidget()
-        log_pane_lay = QVBoxLayout(log_pane)
-        log_pane_lay.setContentsMargins(0, 4, 0, 0)
-        log_pane_lay.setSpacing(4)
-        log_pane_lay.addWidget(log_hdr)
-        log_pane_lay.addWidget(self._calib_log)
-
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(4)
         lay.addWidget(mode_bar)
         lay.addWidget(top)
-        lay.addWidget(log_pane)
 
         TelemetryBus.instance().packet.connect(self._on_packet)
 
@@ -628,29 +590,6 @@ class HipMotorsTab(QWidget):
         payload = struct.pack("<BBB", _CMD_ID_HIP, _HIP_MOTOR_BOTH, hip_sub)
         send_frame(build_frame(payload))
 
-    # ── calib log ─────────────────────────────────────────────────────────────
-
-    _AXIS_NAMES  = {0x00: "BOTH", 0x01: "L", 0x02: "R"}
-    _EVENT_NAMES = {
-        0x01: ("START",        BLUE),
-        0x02: ("BOTTOM FOUND", TEXT),
-        0x03: ("LIMITS",       GREEN),
-        0x04: ("DONE",         GREEN),
-        0x05: ("FAULT",        RED),
-    }
-
-    def _append_calib_log(self, text: str, color: str = TEXT):
-        ts  = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        fmt = QTextCharFormat()
-        fmt.setForeground(QColor(color))
-        cur = self._calib_log.textCursor()
-        cur.movePosition(QTextCursor.MoveOperation.End)
-        cur.setCharFormat(fmt)
-        cur.insertText(f"[{ts}] {text}\n")
-        self._calib_log.verticalScrollBar().setValue(
-            self._calib_log.verticalScrollBar().maximum()
-        )
-
     # ── telemetry ─────────────────────────────────────────────────────────────
 
     _STATE_LABELS = {
@@ -660,6 +599,7 @@ class HipMotorsTab(QWidget):
         3: ("RUNNING",     "#44ff88"),
         4: ("ESTOP",       "#ff4444"),
         5: ("MANUAL",      "#00ccff"),
+        6: ("CMD_REJECT",  "#ff8800"),
     }
 
     def _on_packet(self, info: dict):
@@ -668,50 +608,19 @@ class HipMotorsTab(QWidget):
         if ptype == 0x05:
             event = info.get("calib_event")
             axis  = info.get("calib_axis")
-            event_name, color = self._EVENT_NAMES.get(event, (f"0x{event:02X}", TEXT))
-            axis_name = self._AXIS_NAMES.get(axis, f"0x{axis:02X}")
-            pos = info.get("calib_pos_rad", 0.0)
-            mn  = info.get("calib_min_rad", 0.0)
-            mx  = info.get("calib_max_rad", 0.0)
-
+            mn    = info.get("calib_min_rad", 0.0)
+            mx    = info.get("calib_max_rad", 0.0)
             if event == _CALIB_EVENT_START:
-                self._calib_log.clear()
-                self._append_calib_log("── calibration started ──", BLUE)
                 self._panel_L.set_calib_limits(None, None)
                 self._panel_R.set_calib_limits(None, None)
-            elif event == _CALIB_EVENT_BOTTOM_FOUND:
-                self._append_calib_log(
-                    f"{axis_name}: bottom hardstop found, zeroed @ {pos:+.3f} rad", color)
-            elif event == _CALIB_EVENT_LIMITS:
-                self._append_calib_log(
-                    f"{axis_name}: limits [{mn:+.3f}, {mx:+.3f}] rad  (range {pos:+.3f})", color)
+            elif event in (_CALIB_EVENT_LIMITS, _CALIB_EVENT_DONE):
                 if axis == _HIP_MOTOR_L:
                     self._panel_L.set_calib_limits(mn, mx)
                 elif axis == _HIP_MOTOR_R:
                     self._panel_R.set_calib_limits(mn, mx)
-            elif event == _CALIB_EVENT_DONE:
-                self._append_calib_log(
-                    f"{axis_name}: done, holding @ {pos:+.3f} rad  limits [{mn:+.3f}, {mx:+.3f}]",
-                    color)
-                if axis == _HIP_MOTOR_L:
-                    self._panel_L.set_calib_limits(mn, mx)
-                elif axis == _HIP_MOTOR_R:
-                    self._panel_R.set_calib_limits(mn, mx)
-            elif event == _CALIB_EVENT_FAULT:
-                self._append_calib_log(
-                    f"{axis_name}: FAULT — hardstop not found @ {pos:+.3f} rad", color)
-            else:
-                self._append_calib_log(f"{axis_name}: {event_name}  pos={pos:+.3f}", color)
             return
 
         if ptype == 0x04:
-            msg = info.get("log_msg", "")
-            if "calib" in msg.lower():
-                level = info.get("log_level", "INFO")
-                log_color = {
-                    "INFO": DIM, "WARN": ORANGE, "ERROR": RED,
-                }.get(level, DIM)
-                self._append_calib_log(f"[{level}] {msg}", log_color)
             return
 
         if ptype != 0x01:
@@ -753,11 +662,11 @@ class HipMotorsTab(QWidget):
 
         pos_l = info.get("hip_l_pos_rad", 0.0)
         pos_r = info.get("hip_r_pos_rad", 0.0)
-        tau_l = info.get("cmd_l", 0.0)
-        tau_r = info.get("cmd_r", 0.0)
+        cmd_l = info.get("cmd_l", 0.0)
+        cmd_r = info.get("cmd_r", 0.0)
         cur_l = info.get("hip_l_current_a", 0.0)
         cur_r = info.get("hip_r_current_a", 0.0)
 
         # Update per-motor panels
-        self._panel_L.update_data(pos_l, tau_l, cur_l)
-        self._panel_R.update_data(pos_r, tau_r, cur_r)
+        self._panel_L.update_data(pos_l, cmd_l, cur_l)
+        self._panel_R.update_data(pos_r, cmd_r, cur_r)
