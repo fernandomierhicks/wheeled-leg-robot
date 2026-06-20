@@ -15,6 +15,14 @@
 
 // GROUP_HIP — hip motor behaviour
 #define PARAM_ESTOP_HIP_DISABLE   0x0200  // 1=exit MIT on ESTOP entry and re-enter on reset, 0=leave MIT running
+// TODO: add PARAM_HIP_RUNNING_KP (0x0201), PARAM_HIP_RUNNING_KD (0x0202), PARAM_HIP_RUNNING_TFF (0x0203)
+//       once hip-stiffness tuning experiments begin (currently hardcoded in state_machine.cpp:117-119)
+
+// GROUP_WHEEL — wheel motor settings
+// Note: ODrive PID gains (vel_gain, pos_gain, current_lim, etc.) are not exposed here because
+// ODrive 0.5.x only allows property access over USB/UART, not CAN. Tune those once via the
+// ODrive USB GUI and call save_configuration() to persist them in ODrive flash.
+#define PARAM_WM_ENC_TIMEOUT_MS   0x0300  // encoder feedback watchdog [ms]; increase if CAN is flaky
 
 // GROUP_CALIB — hardstop calibration tuning
 #define PARAM_CALIB_SEEK_SPEED    0x0100  // ramp speed toward hardstop [rad/s]

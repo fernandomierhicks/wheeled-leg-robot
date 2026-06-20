@@ -8,6 +8,7 @@
 #include "comm_protocol.h"
 #include "IMU.h"
 #include "hip_motors.h"
+#include "wheel_motors.h"
 #include "RgbLed.h"
 #include "Buzzer.h"
 #include "param_registry.h"
@@ -20,6 +21,10 @@ RgbLed   g_led(PIN_LED_R, PIN_LED_G, PIN_LED_B);
 Buzzer   g_buzzer(PIN_BUZZER);
 
 HipCmd   g_hip_cmd = {};
+
+// Latest ToF packet received from ESP32 (updated in on_command, read in state machine and telemetry)
+TofPayload g_tof         = {{0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF}, 0xFFFF, 0xFFFF};
+uint32_t   g_tof_last_ms = 0;
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +77,14 @@ static void send_param_report(uint16_t idx) {
 static void on_command(uint8_t type, uint8_t version, uint8_t source,
                        const uint8_t* payload, uint16_t len) {
     (void)version; (void)source;
+
+    // ToF packet from ESP32: store latest distances for telemetry and obstacle avoidance
+    if (type == COMM_TYPE_TOF && len >= (uint16_t)sizeof(TofPayload)) {
+        memcpy(&g_tof, payload, sizeof(TofPayload));
+        g_tof_last_ms = millis();
+        return;
+    }
+
     if (type != COMM_TYPE_COMMAND || len < 1) return;
 
     uint8_t cmd_id = payload[0];
@@ -111,6 +124,24 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             memcpy(&g_hip_cmd.tff, payload + 19, 4);
         }
         g_hip_cmd.pending = true;
+        return;
+    }
+
+    // ── Wheel command: set mode / send setpoint / clear errors ───────────────
+    // Only accepted in MANUAL mode; LQR (STATE_RUNNING) commands wheels directly.
+    if (cmd_id == CMD_ID_WHEEL && len >= 2) {
+        if (g_state.state != STATE_MANUAL) return;
+        uint8_t sub = payload[1];
+        if (sub == WHEEL_SUB_SET_MODE && len >= 3) {
+            wheel_motors_set_mode((WheelMode)payload[2]);
+        } else if (sub == WHEEL_SUB_SEND && len >= 10) {
+            float L, R;
+            memcpy(&L, payload + 2, 4);
+            memcpy(&R, payload + 6, 4);
+            wheel_motors_send(L, R);
+        } else if (sub == WHEEL_SUB_CLEAR_ERRORS) {
+            wheel_motors_clear_errors();
+        }
         return;
     }
 
@@ -194,6 +225,11 @@ void setup() {
     hip_motors_init();
     comm_log(LOG_LEVEL_INFO, "Hip CAN init OK");
     hip_motors_enter_mit();
+    wheel_motors_init();
+    wheel_motors_set_mode(WheelMode::IDLE);
+    wheel_motors_clear_errors();
+    delay(300);  // wait for ODrive to send a fresh heartbeat with cleared error state
+    comm_log(LOG_LEVEL_INFO, "Wheel CAN init OK");
     comm_log(LOG_LEVEL_INFO, "Hip MIT mode enabled");
     controlLoop_init();
     stateMachine_init();
@@ -221,8 +257,22 @@ static void send_telemetry() {
     telem.hip_r_current_a  = g_state.hip_r_current_a;
     for (uint8_t i = 1; i <= IBUS_NUM_CH; i++) telem.ibus_ch[i - 1] = g_ibus.channel(i);
     telem.ibus_alive       = g_ibus.alive() ? 1 : 0;
-    g_comm.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &telem, sizeof(telem));
-    if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &telem, sizeof(telem));
+    telem.wm_l_vel_turns_s = wm_L.vel_turns_s;
+    telem.wm_r_vel_turns_s = wm_R.vel_turns_s;
+    telem.wm_l_pos_turns   = wm_L.pos_turns;
+    telem.wm_r_pos_turns   = wm_R.pos_turns;
+    telem.wm_l_vbus        = wm_L.vbus;
+    telem.wm_r_vbus        = wm_R.vbus;
+    telem.wm_l_error       = wm_L.error;
+    telem.wm_r_error       = wm_R.error;
+    telem.wm_l_state       = wm_L.axis_state;
+    telem.wm_r_state       = wm_R.axis_state;
+    telem.wm_mode          = (uint8_t)wm_mode;
+    for (int i = 0; i < 4; i++) telem.tof_dist_mm[i] = g_tof.dist_mm[i];
+    uint32_t tof_age = millis() - g_tof_last_ms;
+    telem.tof_age_ms = (g_tof_last_ms == 0) ? 0xFFFF : (uint16_t)min(tof_age, (uint32_t)0xFFFF);
+    g_comm.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V4, &telem, sizeof(telem));
+    if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V4, &telem, sizeof(telem));
 }
 
 // ── LED ───────────────────────────────────────────────────────────────────────
@@ -271,6 +321,9 @@ static void read_sensors() {
     g_state.hip_r_pos_rad   = hm_R.pos_rad;
     g_state.hip_l_current_a = hm_L.current_A;
     g_state.hip_r_current_a = hm_R.current_A;
+
+    wheel_motors_poll();
+    wheel_motors_pet_watchdog();
 
     g_ibus.update();
     for (uint8_t i = 1; i <= IBUS_NUM_CH; i++)

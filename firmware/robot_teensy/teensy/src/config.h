@@ -47,7 +47,6 @@
 #define ODESC_NODE_L        0           // ODrive axis 0 — left wheel
 #define ODESC_NODE_R        1           // ODrive axis 1 — right wheel
 #define CAN_BAUD            1000000UL   // 1 Mbps
-#define CAN_TIMEOUT_MS      20          // encoder feedback watchdog
 #define HIP_CAN_TIMEOUT_MS  50          // AK45 MIT feedback watchdog (looser than wheel encoders)
 #define CAN_INTER_FRAME_US  500         // gap between back-to-back TX frames
 

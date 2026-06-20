@@ -30,6 +30,7 @@ from params_tab import ParamsTab
 from raw_data_tab import RawDataTab
 from robot_visualizer_tab import RobotVisualizerTab
 from radio_tab import RadioTab
+from wheel_motors import WheelMotorsTab
 from telemetry_bus import TelemetryBus
 from source_manager import SourceManager, TRANSPORT_LABEL
 from comm_commands import send_set_mode, send_reboot, STATE_STARTUP, STATE_ESTOP
@@ -86,6 +87,110 @@ class TestValMiniWidget(QWidget):
         )
         self._lbl.setText(f"~  {val:+.4f}")
 
+# ── ToF distance mini widget ─────────────────────────────────────────────────
+
+class TofMiniWidget(QWidget):
+    """Four VL53L1X distance bars: sensors 0-1 forward (green), 2-3 backward (orange)."""
+
+    _MAX_MM    = 2000   # display range [mm]
+    _WARN_MM   = 400    # highlight threshold [mm]
+    _NO_DATA   = 0xFFFF
+
+    def __init__(self):
+        super().__init__()
+        self.setMaximumWidth(200)
+
+        self._bars:   list[QFrame]  = []
+        self._labels: list[QLabel]  = []
+        self._stale_lbl = QLabel("TOF — no data")
+        self._stale_lbl.setStyleSheet(f"color: {DIM}; font-size: 10px; font-family: Consolas;")
+        self._stale_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        bar_row = QHBoxLayout()
+        bar_row.setSpacing(6)
+        bar_row.setContentsMargins(0, 0, 0, 0)
+
+        _COLORS = [GREEN, GREEN, ORANGE, ORANGE]
+        _NAMES  = ["F-L", "F-R", "R-L", "R-R"]
+        for i in range(4):
+            col = _COLORS[i]
+            name_lbl = QLabel(_NAMES[i])
+            name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            name_lbl.setStyleSheet(f"color: {DIM}; font-size: 9px;")
+
+            bar_bg = QFrame()
+            bar_bg.setFixedWidth(30)
+            bar_bg.setFixedHeight(120)
+            bar_bg.setStyleSheet(f"background: #111; border: 1px solid {BORDER};")
+
+            bar_fill = QFrame(bar_bg)
+            bar_fill.setFixedWidth(28)
+            bar_fill.move(1, 1)
+            bar_fill.setFixedHeight(0)
+            bar_fill.setStyleSheet(f"background: {col};")
+
+            dist_lbl = QLabel("—")
+            dist_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            dist_lbl.setStyleSheet(f"color: {DIM}; font-size: 9px; font-family: Consolas;")
+
+            col_lay = QVBoxLayout()
+            col_lay.setSpacing(2)
+            col_lay.setContentsMargins(0, 0, 0, 0)
+            col_lay.addWidget(name_lbl)
+            col_lay.addWidget(bar_bg)
+            col_lay.addWidget(dist_lbl)
+            bar_row.addLayout(col_lay)
+
+            self._bars.append(bar_fill)
+            self._labels.append(dist_lbl)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(4, 4, 4, 4)
+        lay.setSpacing(4)
+        lay.addLayout(bar_row)
+        lay.addWidget(self._stale_lbl)
+
+        TelemetryBus.instance().packet.connect(self._on_packet)
+
+    def _on_packet(self, info: dict):
+        dists = info.get("tof_dist_mm")
+        if dists is None:
+            return
+
+        stale = info.get("tof_stale", False)
+        age   = info.get("tof_age_ms", self._NO_DATA)
+        self._stale_lbl.setText(
+            "TOF stale" if stale else f"TOF  age {age} ms"
+        )
+        self._stale_lbl.setStyleSheet(
+            f"color: {RED if stale else DIM}; font-size: 10px; font-family: Consolas;"
+        )
+
+        _WARN_COLORS = [RED, RED, RED, RED]
+        _OK_COLORS   = [GREEN, GREEN, ORANGE, ORANGE]
+        for i, d in enumerate(dists):
+            bar    = self._bars[i]
+            lbl    = self._labels[i]
+            parent = bar.parent()
+            if d == self._NO_DATA:
+                bar.setFixedHeight(0)
+                lbl.setText("—")
+                lbl.setStyleSheet(f"color: {DIM}; font-size: 9px; font-family: Consolas;")
+            else:
+                frac   = max(0.0, 1.0 - d / TofMiniWidget._MAX_MM)
+                height = int(frac * (parent.height() - 2))
+                bar.setFixedHeight(max(1, height))
+                bar.move(1, parent.height() - 1 - bar.height())
+                warn   = d < TofMiniWidget._WARN_MM
+                color  = _WARN_COLORS[i] if warn else _OK_COLORS[i]
+                bar.setStyleSheet(f"background: {color};")
+                lbl.setText(f"{d} mm")
+                lbl.setStyleSheet(
+                    f"color: {color}; font-size: 9px; font-weight: {'bold' if warn else 'normal'};"
+                    f" font-family: Consolas;"
+                )
+
+
 # ── Placeholder tabs ──────────────────────────────────────────────────────────
 
 class _PlaceholderTab(QWidget):
@@ -102,21 +207,20 @@ class DashboardTab(QWidget):
         super().__init__()
         imu      = ImuMiniWidget()
         test_val = TestValMiniWidget()
+        tof      = TofMiniWidget()
 
         top = QHBoxLayout()
         top.setContentsMargins(8, 8, 0, 0)
         top.setSpacing(12)
         top.addWidget(imu)
         top.addWidget(test_val)
+        top.addWidget(tof)
         top.addStretch(7)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addLayout(top)
         outer.addStretch(1)
-
-class WheelMotorsTab(_PlaceholderTab):
-    def __init__(self): super().__init__("Wheel Motors")
 
 # ── Status bar ────────────────────────────────────────────────────────────────
 

@@ -4,8 +4,7 @@
 
 
 ---Fernandos note dont change below
-
-Wheel motors. GUI tab, manual mode.
+GUI adding laser broke other paramters. Need to update gui with latest comm pakcet. 
 LQR + other controllers?
 
 

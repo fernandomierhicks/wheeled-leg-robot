@@ -17,6 +17,7 @@
 #define COMM_TYPE_LOG          0x04
 #define COMM_TYPE_CALIB_EVENT  0x05
 #define COMM_TYPE_PARAM_REPORT 0x06  // Teensy→GUI: current value of one param
+#define COMM_TYPE_TOF          0x07  // ESP32→Teensy: raw ToF distances (TofPayload)
 
 // ── Calibration event sub-types ───────────────────────────────────────────────
 #define CALIB_EVENT_PAYLOAD_V1   1
@@ -66,8 +67,21 @@ typedef struct __attribute__((packed)) {
 #define FAULT_CALIBRATION_TIMEOUT 0x05 // hardstop not found within CALIB_SAFETY_BOUND_RAD
 #define FAULT_HUMAN_ESTOP        0x06  // ESTOP requested by user via GUI button
 
+// ── Payload: ToF distances (ESP32→Teensy, COMM_TYPE_TOF) ─────────────────────
+#define TOF_PAYLOAD_V1  1
+
+typedef struct __attribute__((packed)) {
+    uint16_t dist_mm[4];      // raw distance per sensor (0xFFFF = no data/invalid)
+    uint16_t front_min_mm;    // min(dist[0], dist[1]) — forward sensors
+    uint16_t rear_min_mm;     // min(dist[2], dist[3]) — backward sensors
+} TofPayload;                 // 12 bytes
+
 // ── Payload: telemetry ────────────────────────────────────────────────────────
+// IMPORTANT: when bumping the version, also update the version check in
+//   esp32/src/main.cpp  on_teensy_packet() — search for TELEM_PAYLOAD_V*
 #define TELEM_PAYLOAD_V2  2
+#define TELEM_PAYLOAD_V3  3
+#define TELEM_PAYLOAD_V4  4
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -87,7 +101,22 @@ typedef struct __attribute__((packed)) {
     float    hip_r_current_a;    // hip R phase current [A]
     uint16_t ibus_ch[14];        // RC channels 0–13, 1000–2000 µs (1500 = center)
     uint8_t  ibus_alive;         // 1 = packet received within 500 ms, 0 = link lost
-} TelemetryPayload;              // 83 bytes
+    // V3 additions — wheel motor telemetry (35 bytes, total 118)
+    float    wm_l_vel_turns_s;   // left wheel velocity  [turns/s]
+    float    wm_r_vel_turns_s;   // right wheel velocity [turns/s]
+    float    wm_l_pos_turns;     // left wheel position  [turns]
+    float    wm_r_pos_turns;     // right wheel position [turns]
+    float    wm_l_vbus;          // left ODrive bus voltage  [V]
+    float    wm_r_vbus;          // right ODrive bus voltage [V]
+    uint32_t wm_l_error;         // left ODrive Axis_Error word
+    uint32_t wm_r_error;         // right ODrive Axis_Error word
+    uint8_t  wm_l_state;         // left ODrive Axis_State  (1=IDLE, 8=CLOSED_LOOP)
+    uint8_t  wm_r_state;         // right ODrive Axis_State
+    uint8_t  wm_mode;            // current WheelMode (0=IDLE,1=VEL,2=POS,3=TRQ)
+    // V4 additions — ToF obstacle sensor data relayed from ESP32 (10 bytes, total 128)
+    uint16_t tof_dist_mm[4];     // raw distances from sensors 0-3 [mm], 0xFFFF = no data
+    uint16_t tof_age_ms;         // ms since last valid ToF packet from ESP32, 0xFFFF = never
+} TelemetryPayload;              // 128 bytes (V4)
 
 // ── Payload: command ──────────────────────────────────────────────────────────
 #define CMD_PAYLOAD_V1  1
@@ -102,6 +131,12 @@ typedef struct __attribute__((packed)) {
 #define CMD_ID_SET_MODE   0x01  // payload: uint8_t target_state (RobotStateEnum)
 #define CMD_ID_HIP        0x05  // payload: uint8_t motor_id, uint8_t sub_cmd [, 5×float]
 #define CMD_ID_REBOOT     0x06  // payload: none — triggers a full MCU reset (reruns setup())
+#define CMD_ID_WHEEL      0x07  // payload: uint8_t sub_cmd [, data]
+
+// Wheel sub-commands (CMD_ID_WHEEL payload byte 1)
+#define WHEEL_SUB_SET_MODE     0x01  // payload: uint8_t mode (WheelMode)
+#define WHEEL_SUB_SEND         0x02  // payload: float L, float R
+#define WHEEL_SUB_CLEAR_ERRORS 0x03  // no payload
 #define CMD_ID_PARAM_SET  0x10  // payload: uint16_t param_id, float value  (6 bytes after cmd_id)
 #define CMD_ID_PARAM_GET  0x11  // payload: uint16_t param_id  (0xFFFF = dump all)
 

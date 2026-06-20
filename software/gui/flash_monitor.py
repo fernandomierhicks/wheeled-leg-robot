@@ -156,7 +156,7 @@ _COMM_END    = 0xFE
 _HEADER_SZ   = 7   # start + type + version + source + seq + len_lo + len_hi
 _OVERHEAD    = 9   # header(7) + checksum(1) + end(1)
 
-_TYPE_NAMES  = {0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG", 0x05: "CALIB", 0x06: "PARAM"}
+_TYPE_NAMES  = {0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG", 0x05: "CALIB", 0x06: "PARAM", 0x07: "TOF"}
 _SRC_NAMES   = {0x01: "TEENSY", 0x02: "ESP32", 0x03: "PC"}
 _STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT"}
 _FAULT_NAMES = {
@@ -282,6 +282,35 @@ class PacketDecoder(QObject):
                         "ibus_ch":         list(ibus_raw[:14]),
                         "ibus_alive":      bool(ibus_raw[14]),
                     })
+                    if length >= 118:
+                        wm_l_vel, wm_r_vel, wm_l_pos, wm_r_pos, wm_l_vbus, wm_r_vbus, \
+                        wm_l_err, wm_r_err, wm_l_st, wm_r_st, wm_mode_val = \
+                            _struct.unpack_from("<ffffffIIBBB", payload, 83)
+                        info.update({
+                            "wm_l_vel_turns_s": wm_l_vel,
+                            "wm_r_vel_turns_s": wm_r_vel,
+                            "wm_l_pos_turns":   wm_l_pos,
+                            "wm_r_pos_turns":   wm_r_pos,
+                            "wm_l_vbus":        wm_l_vbus,
+                            "wm_r_vbus":        wm_r_vbus,
+                            "wm_l_error":       wm_l_err,
+                            "wm_r_error":       wm_r_err,
+                            "wm_l_state":       wm_l_st,
+                            "wm_r_state":       wm_r_st,
+                            "wm_mode":          wm_mode_val,
+                        })
+                    if length >= 128:
+                        # V4: ToF obstacle sensor data (4× uint16 distances + uint16 age)
+                        tof_d0, tof_d1, tof_d2, tof_d3, tof_age = \
+                            _struct.unpack_from("<5H", payload, 118)
+                        _NO_DATA = 0xFFFF
+                        info.update({
+                            "tof_dist_mm":      [tof_d0, tof_d1, tof_d2, tof_d3],
+                            "tof_front_min_mm": min(d for d in [tof_d0, tof_d1] if d != _NO_DATA) if any(d != _NO_DATA for d in [tof_d0, tof_d1]) else _NO_DATA,
+                            "tof_rear_min_mm":  min(d for d in [tof_d2, tof_d3] if d != _NO_DATA) if any(d != _NO_DATA for d in [tof_d2, tof_d3]) else _NO_DATA,
+                            "tof_age_ms":       tof_age,
+                            "tof_stale":        tof_age > 500,
+                        })
             except Exception:
                 pass
             self.packet_decoded.emit(info)

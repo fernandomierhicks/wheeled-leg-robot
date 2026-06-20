@@ -93,6 +93,13 @@ void setup() {
     UNITY_BEGIN();
     RUN_TEST(test_can_init);
     RUN_TEST(test_heartbeats_received);
+
+    // Force IDLE then clear any latched errors from previous runs or USB sessions.
+    // Wait 300 ms so the ODrive sends a fresh heartbeat with updated error/state fields.
+    wheel_motors_set_mode(WheelMode::IDLE);
+    wheel_motors_clear_errors();
+    delay(300);
+
     RUN_TEST(test_no_errors);
     RUN_TEST(test_encoder_feedback);
     test_led_done(UNITY_END());

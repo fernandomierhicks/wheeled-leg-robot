@@ -106,6 +106,13 @@ static void on_calibration() {
     }
     calibration_update();
 }
+extern TofPayload g_tof;
+extern uint32_t   g_tof_last_ms;
+
+// Obstacle avoidance thresholds — tune for robot size and speed
+static constexpr uint16_t OBSTACLE_FRONT_MM = 400;  // 40 cm
+static constexpr uint16_t OBSTACLE_REAR_MM  = 300;  // 30 cm
+
 // Soft gains for initial RUNNING mode testing — well within safe range.
 static constexpr float RUNNING_KP  = 5.0f;   // N·m/rad  (max 500)
 static constexpr float RUNNING_KD  = 0.5f;   // N·m·s/rad (max 5)
@@ -126,6 +133,13 @@ static void on_running() {
 
     hip_motors_set_setpoint_L(pos_L, 0.0f, RUNNING_KP, RUNNING_KD, RUNNING_TFF);
     hip_motors_set_setpoint_R(pos_R, 0.0f, RUNNING_KP, RUNNING_KD, RUNNING_TFF);
+
+    // Obstacle avoidance: when LQR wheel velocity reference (v_ref) is added,
+    // clamp it to zero if an obstacle is within threshold and robot is heading toward it.
+    // ToF data is valid if received within the last 500 ms.
+    //   bool tof_fresh = (g_tof_last_ms > 0) && ((millis() - g_tof_last_ms) < 500);
+    //   if (tof_fresh && g_tof.front_min_mm < OBSTACLE_FRONT_MM && v_ref > 0.0f) v_ref = 0.0f;
+    //   if (tof_fresh && g_tof.rear_min_mm  < OBSTACLE_REAR_MM  && v_ref < 0.0f) v_ref = 0.0f;
 }
 static void on_cmd_reject() {
     bool entering = (g_state.state != STATE_CMD_REJECT);

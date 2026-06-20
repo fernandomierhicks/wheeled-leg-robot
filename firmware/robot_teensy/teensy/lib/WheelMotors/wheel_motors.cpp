@@ -1,5 +1,6 @@
 #include "wheel_motors.h"
 #include "config.h"
+#include "param_registry.h"
 #include <Arduino.h>
 #include <FlexCAN_T4.h>
 
@@ -93,8 +94,9 @@ bool wheel_motors_init() {
 void wheel_motors_poll() {
     // FlexCAN_T4 interrupt-driven — no polling call needed.
     uint32_t now = millis();
-    wm_L.ok = (now - wm_L.last_fb_ms) < CAN_TIMEOUT_MS;
-    wm_R.ok = (now - wm_R.last_fb_ms) < CAN_TIMEOUT_MS;
+    uint32_t enc_timeout = (uint32_t)param_get(PARAM_WM_ENC_TIMEOUT_MS);
+    wm_L.ok = (now - wm_L.last_fb_ms) < enc_timeout;
+    wm_R.ok = (now - wm_R.last_fb_ms) < enc_timeout;
 
     bool fault = (!wm_L.ok || !wm_R.ok || wm_L.error || wm_R.error);
     if (fault && wm_mode != WheelMode::IDLE) {
