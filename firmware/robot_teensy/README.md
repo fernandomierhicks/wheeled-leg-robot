@@ -95,7 +95,8 @@ Set in `g_state.fault_code` before any transition to `STATE_ESTOP`. Transmitted 
 | `0x03` | `FAULT_HIP_FEEDBACK_LOST` | Hip CAN feedback timed out during operation (> 20 ms) |
 | `0x04` | `FAULT_HIP_LARGE_POS_CMD` | Commanded hip position jump exceeded `MAX_HIP_DELTA_RAD` |
 | `0x05` | `FAULT_CALIBRATION_TIMEOUT` | Hardstop not found within `CALIB_SAFETY_BOUND_RAD` during calibration |
-| `0x06` | `FAULT_HUMAN_ESTOP` | ESTOP requested by user via GUI button |
+| `0x06` | `FAULT_HUMAN_ESTOP` | ESTOP requested by user via GUI button or radio |
+| `0x07` | `FAULT_PARAM_OUT_OF_BOUNDS` | Param write rejected — value outside `[min, max]` |
 
 Defined in `shared/comm_protocol.h` (lines ~38-45). Mirror `_FAULT_NAMES` in `software/gui/flash_monitor.py` when adding/changing codes.
 

@@ -27,6 +27,12 @@ static Param g_params[] = {
     {PARAM_CALIB_R_SEEK_DIR,  GROUP_CALIB, "calib_r_seek_dir",  -1.0f,    -1.0f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_DONE,        GROUP_CALIB, "calib_done",         0.0f,     0.0f,    1.0f,  PARAM_FLAG_READONLY, nullptr},
 
+    // GROUP_CONTROL — LQR controller settings
+    {PARAM_LQR_ENABLE,              GROUP_CONTROL, "lqr_enable",          0.0f,    0.0f,    1.0f,  0,                     nullptr},
+    {PARAM_SIM_PITCH_RAD,           GROUP_CONTROL, "sim_pitch_rad",       0.0f,   -1.5708f, 1.5708f, 0,                  nullptr},
+    {PARAM_LQR_TORQUE_LIMIT,        GROUP_CONTROL, "lqr_torque_limit",    1.0f,    0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_WHEEL_VEL_LIMIT_TURNS_S, GROUP_CONTROL, "wm_vel_limit",        3.0f,    1.0f,   20.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+
     // GROUP_WHEEL — wheel motor settings
     {PARAM_WM_ENC_TIMEOUT_MS, GROUP_WHEEL, "wm_enc_timeout_ms", 20.0f,  5.0f, 500.0f, PARAM_FLAG_PERSISTENT, nullptr},
 

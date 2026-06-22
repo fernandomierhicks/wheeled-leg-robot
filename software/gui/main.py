@@ -270,6 +270,15 @@ class StatusBar:
 
         for w in (self._source, _vsep(), self._transport, _vsep(), self._dt, _vsep(), self._mode, _vsep(), self._test):
             sb.addWidget(w)
+        self._mismatch_lbl = QLabel("FIRMWARE MISMATCH — reflash ESP32/Teensy")
+        self._mismatch_lbl.setStyleSheet(
+            f"color: white; background: {RED}; font-weight: bold;"
+            f" padding: 2px 10px; border-radius: 3px;"
+        )
+        self._mismatch_lbl.setVisible(False)
+
+        sb.addPermanentWidget(self._mismatch_lbl)
+        sb.addPermanentWidget(_vsep())
         sb.addPermanentWidget(self._btn_estop)
         sb.addPermanentWidget(_vsep())
         sb.addPermanentWidget(self._btn_reset)
@@ -330,6 +339,16 @@ class StatusBar:
         else:
             self._conn.setStyleSheet(f"color: {RED};")
             self._conn.setText("● Disconnected")
+            self._mismatch_lbl.setVisible(False)
+
+    def set_version_mismatch(self, got: int, expected: int):
+        self._mismatch_lbl.setText(
+            f"FIRMWARE MISMATCH (telem v{got} != v{expected}) — reflash ESP32/Teensy"
+        )
+        self._mismatch_lbl.setVisible(True)
+
+    def clear_version_mismatch(self):
+        self._mismatch_lbl.setVisible(False)
 
 # ── Main window ───────────────────────────────────────────────────────────────
 
@@ -398,6 +417,14 @@ class MainWindow(QMainWindow):
 
     def _on_packet(self, info: dict):
         self.status.set_connected(True)
+        self._disconnect_timer.start()
+        if info.get("version_mismatch"):
+            self.status.set_version_mismatch(
+                info.get("got_version", "?"), info.get("expected_version", "?")
+            )
+            return
+        if info.get("ptype") == 0x01:
+            self.status.clear_version_mismatch()
         ts = info.get("timestamp_ms")
         if ts is not None and self._last_ts_ms is not None:
             self.status.set_dt(ts - self._last_ts_ms)
@@ -409,7 +436,6 @@ class MainWindow(QMainWindow):
         test_val = info.get("test_val")
         if test_val is not None:
             self.status.set_test_val(test_val)
-        self._disconnect_timer.start()
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
 

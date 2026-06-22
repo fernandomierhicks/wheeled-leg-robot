@@ -26,3 +26,8 @@ bool calibration_done();
 // True if either axis ramped CALIB_SAFETY_BOUND_RAD without finding a
 // hardstop.
 bool calibration_failed();
+
+// Abort an in-progress calibration (e.g. operator bailed out via GUI).
+// Resets internal axis state so a subsequent calibration_start() is clean.
+// Does NOT invalidate already-computed limits.
+void calibration_abort();

@@ -31,56 +31,202 @@ enum : uint8_t {
     RS_CMD_REJECT  = 6,
 };
 
+// ── Strip geometry ────────────────────────────────────────────────────────────
+// Strip wraps clockwise around a square chassis top.  FRONT face is split:
+// LEDs 0-3 at the strip head and 27-29 at the tail.
+// Order: FRONT(0-3) → RIGHT(4-11) → REAR(12-19) → LEFT(20-26) → FRONT(27-29)
+
+#define SIDE_FRONT 0
+#define SIDE_RIGHT 1
+#define SIDE_REAR  2
+#define SIDE_LEFT  3
+static const uint8_t SIDE_LENS[4] = {7, 8, 8, 7};
+
+static uint8_t side_led(uint8_t side, uint8_t i) {
+    static const uint8_t F[7] = {27, 28, 29, 0, 1, 2, 3};
+    if (side == SIDE_FRONT) return F[i];
+    if (side == SIDE_RIGHT) return  4 + i;
+    if (side == SIDE_REAR)  return 12 + i;
+    /* SIDE_LEFT */         return 20 + i;
+}
+
+static void fill_side(CRGB* buf, uint8_t side, CRGB color) {
+    for (uint8_t i = 0; i < SIDE_LENS[side]; i++) buf[side_led(side, i)] = color;
+}
+
+// ── LED globals ───────────────────────────────────────────────────────────────
+
 static CRGB leds[NUM_LEDS];
-static volatile uint8_t  g_robot_state      = RS_STARTUP;
-static volatile bool     g_teensy_ever_heard = false;
-static volatile uint32_t g_last_teensy_ms   = 0;
-static volatile bool     g_display_dirty    = false;
+static volatile uint8_t  g_robot_state       = RS_STARTUP;
+static volatile bool     g_teensy_ever_heard  = false;
+static volatile uint32_t g_last_teensy_ms    = 0;
+static volatile bool     g_display_dirty     = false;
+static volatile uint32_t g_reject_end_ms     = 0;
+static volatile uint16_t g_tof_front_min     = 0xFFFF;
+static volatile uint16_t g_tof_rear_min      = 0xFFFF;
+
+// ── Distance → color (green → yellow → red) ──────────────────────────────────
+
+static CRGB dist_to_color(uint16_t d) {
+    if (d == 0xFFFF || d > 600) return CRGB(0, 200, 0);
+    if (d >= 200) {
+        uint8_t t = (uint8_t)((600u - d) * 255u / 400u);
+        return CRGB(t, 200, 0);
+    }
+    uint8_t t = (uint8_t)((uint32_t)(200u - d) * 255u / 200u);
+    return CRGB(200, (uint8_t)(200u - (uint32_t)t * 200u / 255u), 0);
+}
+
+// ── Animations ────────────────────────────────────────────────────────────────
+
+// DISCONNECTED — dim gray ghost comet orbiting the perimeter
+static void anim_ghost_comet(CRGB* buf, uint32_t tick) {
+    fill_solid(buf, NUM_LEDS, CRGB::Black);
+    int head = (int)((tick / 4u) % NUM_LEDS);
+    const uint8_t kBri[7] = {90, 65, 48, 34, 22, 13, 6};
+    for (int t = 0; t < 7; t++)
+        buf[(head - t + NUM_LEDS) % NUM_LEDS] = CRGB(kBri[t], kBri[t], kBri[t]);
+}
+
+// STARTUP — white cascade: each side breathes with 90° phase offset (CW wave)
+static void anim_cascade_startup(CRGB* buf, uint32_t tick) {
+    for (uint8_t s = 0; s < 4; s++) {
+        uint8_t phase = (uint8_t)((tick % 200u) * 256u / 200u + s * 64u);
+        uint8_t bri   = map(sin8(phase), 0, 255, 20, 255);
+        fill_side(buf, s, CRGB(bri, bri, bri));
+    }
+}
+
+// CALIBRATION — blue scanner bar advancing around the ring
+static void anim_scanner_calibration(CRGB* buf, uint32_t tick) {
+    fill_solid(buf, NUM_LEDS, CRGB(0, 0, 25));
+    int head = (int)((tick / 2u) % NUM_LEDS);
+    const CRGB kBar[4] = {CRGB(90, 90, 255), CRGB(0, 0, 200), CRGB(0, 0, 130), CRGB(0, 0, 60)};
+    for (int t = 0; t < 4; t++)
+        buf[(head + t) % NUM_LEDS] = kBar[t];
+}
+
+// STANDBY — amber breathing (simplified to test timing)
+static void anim_marquee_standby(CRGB* buf, uint32_t tick) {
+    uint8_t phase = (uint8_t)((tick % 100u) * 256u / 100u);
+    uint8_t bri   = map(sin8(phase), 0, 255, 30, 255);
+    CRGB c = CRGB(255, 200, 0);
+    c.nscale8(bri);
+    fill_solid(buf, NUM_LEDS, c);
+}
+
+// RUNNING — green breathing on sides; front/rear show ToF proximity
+static void anim_running_tof(CRGB* buf, uint32_t tick) {
+    uint8_t bri = map(sin8((uint8_t)((tick % 300u) * 256u / 300u)), 0, 255, 50, 220);
+    fill_side(buf, SIDE_RIGHT, CRGB(0, bri, 0));
+    fill_side(buf, SIDE_LEFT,  CRGB(0, bri, 0));
+
+    uint16_t fd = g_tof_front_min;
+    CRGB fc = dist_to_color(fd);
+    if (fd != 0xFFFF && fd < 100 && (tick % 5u) >= 2u) fc.nscale8(60);
+    fill_side(buf, SIDE_FRONT, fc);
+
+    uint16_t rd = g_tof_rear_min;
+    CRGB rc = dist_to_color(rd);
+    if (rd != 0xFFFF && rd < 100 && (tick % 5u) >= 2u) rc.nscale8(60);
+    fill_side(buf, SIDE_REAR, rc);
+}
+
+// ESTOP — red strobe + white racing comet overlay
+static void anim_estop_alarm(CRGB* buf, uint32_t tick) {
+    fill_solid(buf, NUM_LEDS, (tick % 25u < 10u) ? CRGB(200, 0, 0) : CRGB::Black);
+    int head = (int)(tick % NUM_LEDS);
+    const uint8_t kW[5] = {255, 210, 155, 90, 40};
+    for (int t = 0; t < 5; t++)
+        buf[(head - t + NUM_LEDS) % NUM_LEDS] = CRGB(kW[t], kW[t], kW[t]);
+}
+
+// MANUAL — cyan knight rider ping-pong on all four sides simultaneously
+static void anim_knight_rider_manual(CRGB* buf, uint32_t tick) {
+    fill_solid(buf, NUM_LEDS, CRGB(0, 6, 18));
+    const int DOT_W = 3;
+    const uint8_t kBri[3] = {255, 150, 60};
+    uint32_t t2 = tick / 2u;
+    for (uint8_t s = 0; s < 4; s++) {
+        int L = SIDE_LENS[s];
+        int travel = L - DOT_W;
+        int period = 2 * travel;
+        int pos    = (int)(t2 % (uint32_t)period);
+        if (pos > travel) pos = period - pos;
+        for (int d = 0; d < DOT_W; d++) {
+            int local = pos + d;
+            if (local >= L) continue;
+            uint8_t b = kBri[d];
+            buf[side_led(s, (uint8_t)local)] = CRGB(0, (uint8_t)((uint16_t)b * 180u / 255u), b);
+        }
+    }
+}
+
+// CMD_REJECT — one-shot fast orange alternating strobe (overlay, 1 s)
+static void anim_reject_strobe(CRGB* buf, uint32_t tick) {
+    int offset = (int)(tick % 2u);
+    for (int i = 0; i < NUM_LEDS; i++)
+        buf[i] = ((i + offset) % 2 == 0) ? CRGB(255, 80, 0) : CRGB::Black;
+}
+
+// ── NeoPixel task ─────────────────────────────────────────────────────────────
 
 static void neo_task(void*) {
     FastLED.addLeds<WS2812B, PIN_NEO, GRB>(leds, NUM_LEDS);
     FastLED.setBrightness(BRIGHTNESS);
 
-    uint32_t tick = 0;
+    static CRGB neo_buf[NUM_LEDS];
+    static CRGB neo_snap[NUM_LEDS];
+
+    uint32_t tick          = 0;
+    uint8_t  last_state    = 0xFF;
+    bool     last_linked   = false;
+    uint32_t trans_start   = 0;
+    bool     in_transition = false;
+    const uint32_t TRANS_TICKS = 15;  // 300 ms
 
     for (;;) {
         uint8_t state  = g_robot_state;
-        bool    linked = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < 1000);
+        bool    linked = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < 3000);
 
-        CRGB base;
-        bool blink_fast = false;
-        bool blink_slow = false;
+        if (state != last_state || linked != last_linked) {
+            memcpy(neo_snap, leds, sizeof(leds));
+            trans_start   = tick;
+            in_transition = true;
+            last_state    = state;
+            last_linked   = linked;
+        }
 
+        fill_solid(neo_buf, NUM_LEDS, CRGB::Black);
         if (!linked) {
-            base = CRGB(80, 80, 80);
+            anim_ghost_comet(neo_buf, tick);
         } else {
             switch (state) {
-                case RS_STARTUP:     base = CRGB(255, 255, 255); break;
-                case RS_CALIBRATION: base = CRGB(0,   0,   255); break;
-                case RS_STANDBY:     base = CRGB(255, 200,   0); break;
-                case RS_RUNNING:     base = CRGB(0,   255,   0); break;
-                case RS_ESTOP:       base = CRGB(255,   0,   0); blink_slow = true; break;
-                case RS_MANUAL:      base = CRGB(0,   200, 255); break;
-                case RS_CMD_REJECT:  base = CRGB(255,  80,   0); blink_fast = true; break;
-                default:             base = CRGB(255, 255, 255); break;
+                case RS_STARTUP:     anim_cascade_startup(neo_buf, tick);         break;
+                case RS_CALIBRATION: anim_scanner_calibration(neo_buf, tick);     break;
+                case RS_STANDBY:     anim_marquee_standby(neo_buf, tick);         break;
+                case RS_RUNNING:     anim_running_tof(neo_buf, tick);             break;
+                case RS_ESTOP:       anim_estop_alarm(neo_buf, tick);             break;
+                case RS_MANUAL:      anim_knight_rider_manual(neo_buf, tick);     break;
+                default:             fill_solid(neo_buf, NUM_LEDS, CRGB::White);  break;
             }
         }
 
-        if (blink_slow) {
-            bool on = (tick % 25) < 12;
-            fill_solid(leds, NUM_LEDS, on ? base : CRGB::Black);
-        } else if (blink_fast) {
-            bool on = (tick % 6) < 3;
-            fill_solid(leds, NUM_LEDS, on ? base : CRGB::Black);
-        } else {
-            uint8_t phase = (uint8_t)((tick % 100) * 256 / 100);
-            uint8_t bri   = sin8(phase);
-            bri = map(bri, 0, 255, 30, 255);
-            CRGB c = base;
-            c.nscale8(bri);
-            fill_solid(leds, NUM_LEDS, c);
+        if (millis() < g_reject_end_ms)
+            anim_reject_strobe(neo_buf, tick);
+
+        if (in_transition) {
+            uint32_t age = tick - trans_start;
+            if (age >= TRANS_TICKS) {
+                in_transition = false;
+            } else {
+                uint8_t amt = (uint8_t)(age * 255u / TRANS_TICKS);
+                for (int i = 0; i < NUM_LEDS; i++)
+                    neo_buf[i] = blend(neo_snap[i], neo_buf[i], amt);
+            }
         }
 
+        memcpy(leds, neo_buf, sizeof(leds));
         FastLED.show();
         tick++;
         vTaskDelay(pdMS_TO_TICKS(20));
@@ -104,8 +250,6 @@ static bool    g_tof_sensor_ok[4] = {};
 // Individual uint16_t writes/reads are atomic on ESP32 Xtensa LX6.
 static portMUX_TYPE       g_tof_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint16_t  g_tof_dist[4]    = {0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
-static volatile uint16_t  g_tof_front_min  = 0xFFFF;
-static volatile uint16_t  g_tof_rear_min   = 0xFFFF;
 static volatile bool      g_tof_updated    = false;
 
 static bool tof_init_sensor(uint8_t i) {
@@ -189,6 +333,7 @@ static volatile uint32_t g_telem_wm_r_error = 0;
 static volatile uint8_t  g_telem_wm_l_state = 0;
 static volatile uint8_t  g_telem_wm_r_state = 0;
 static volatile uint8_t  g_telem_wm_mode    = 0;
+static volatile bool     g_version_mismatch = false;
 
 // ── WiFi / TCP / UDP ──────────────────────────────────────────────────────────
 
@@ -275,21 +420,32 @@ static void forward_to_teensy(uint8_t type, uint8_t version, uint8_t /*source*/,
 
 static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
                               const uint8_t* payload, uint16_t len) {
-    if (Serial.availableForWrite() >= (int)(len + 9))
-        g_usb.send(type, version, payload, len);
+    g_usb.send(type, version, payload, len);
     if (g_comm_tcp && g_tcp_client.connected())
         g_comm_tcp->send(type, version, payload, len);
     if (type == COMM_TYPE_TELEMETRY && g_wifi_inited)
         g_telem_udp.send(type, version, payload, len);
 
-    if (type == COMM_TYPE_TELEMETRY && version == TELEM_PAYLOAD_V4
+    if (type == COMM_TYPE_TELEMETRY && version != TELEM_VERSION) {
+        if (!g_version_mismatch) {
+            g_version_mismatch = true;
+            g_display_dirty    = true;
+            Serial.printf("[VERSION MISMATCH] Teensy telem v%u, expected v%u — reflash Teensy\n",
+                          version, TELEM_VERSION);
+        }
+    }
+
+    if (type == COMM_TYPE_TELEMETRY && version == TELEM_VERSION
             && len >= sizeof(TelemetryPayload)) {
+        if (g_version_mismatch) { g_version_mismatch = false; g_display_dirty = true; }
         TelemetryPayload pkt;
         memcpy(&pkt, payload, sizeof(TelemetryPayload));
 
         uint8_t new_state = pkt.robot_state;
         if (new_state != g_robot_state || pkt.fault_code != g_fault_code)
             g_display_dirty = true;
+        if (new_state == RS_CMD_REJECT && g_robot_state != RS_CMD_REJECT)
+            g_reject_end_ms = millis() + 1000;
 
         g_robot_state       = new_state;
         g_fault_code        = pkt.fault_code;
@@ -388,20 +544,34 @@ static const char* fault_description(uint8_t code) {
         case FAULT_HIP_LARGE_POS_CMD:  return "Hip position jump too large";
         case FAULT_CALIBRATION_TIMEOUT:return "Hardstop not found";
         case FAULT_HUMAN_ESTOP:        return "User ESTOP";
+        case FAULT_PARAM_OUT_OF_BOUNDS:return "Param out of bounds";
+        case FAULT_PITCH_WATCHDOG:     return "Pitch watchdog ESTOP";
+        case FAULT_WHEEL_RUNAWAY:      return "Wheel runaway ESTOP";
         default:                       return "Unknown fault";
     }
 }
 
 // ── Mode Banner ───────────────────────────────────────────────────────────────
 
-static void drawModeBanner(uint8_t state, bool active, uint8_t fault) {
-    static uint8_t prev_state  = 0xFF;
-    static bool    prev_active = false;
-    static uint8_t prev_fault  = 0xFF;
-    if (state == prev_state && active == prev_active && fault == prev_fault) return;
-    prev_state = state; prev_active = active; prev_fault = fault;
+static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool mismatch) {
+    static uint8_t prev_state    = 0xFF;
+    static bool    prev_active   = false;
+    static uint8_t prev_fault    = 0xFF;
+    static bool    prev_mismatch = false;
+    if (state == prev_state && active == prev_active && fault == prev_fault
+            && mismatch == prev_mismatch) return;
+    prev_state = state; prev_active = active; prev_fault = fault; prev_mismatch = mismatch;
 
     tft.fillRect(0, 0, 320, BANNER_H, tft.color565(8, 10, 20));
+
+    if (mismatch) {
+        tft.fillRect(0, 0, 5, BANNER_H, TFT_RED);
+        tft.setTextSize(2);
+        tft.setTextColor(TFT_RED, tft.color565(8, 10, 20));
+        tft.setCursor(8, (BANNER_H - 16) / 2);
+        tft.print("VER MISMATCH");
+        return;
+    }
 
     bool show_fault = active && state == RS_ESTOP && fault != FAULT_NONE;
     uint16_t col = active ? mode_color(state) : COL_DIM;
@@ -775,7 +945,7 @@ static void update_display() {
     uint8_t  wm_r_state = g_telem_wm_r_state;
     uint8_t  wm_mode    = g_telem_wm_mode;
 
-    drawModeBanner(state, active, fault);
+    drawModeBanner(state, active, fault, g_version_mismatch);
     drawArtificialHorizon(active ? pitch : 0.0f, active ? roll : 0.0f);
     drawHipBars(hip_l, hip_r, curr_l, curr_r);
     drawWheelMotors(active ? wm_l_vel : 0.0f, active ? wm_r_vel : 0.0f,
@@ -792,6 +962,9 @@ void setup() {
     Serial.begin(115200);
     Serial2.setRxBufferSize(4096);
     Serial2.begin(TEENSY_UART_BAUD, SERIAL_8N1, TEENSY_UART_RX, TEENSY_UART_TX);
+    // Fix 5: flush boot-noise before the parser starts
+    delay(10);
+    while (Serial2.available()) Serial2.read();
 
     g_teensy.onPacket(on_teensy_packet);
     g_usb.onPacket(forward_to_teensy);
@@ -805,7 +978,7 @@ void setup() {
     tft.setRotation(3);
     initDisplay();
 
-    xTaskCreatePinnedToCore(neo_task, "neo", 2048, nullptr, 1, nullptr, 0);
+    // xTaskCreatePinnedToCore(neo_task, "neo", 4096, nullptr, 1, nullptr, 0);  // disabled for UART debug
     xTaskCreatePinnedToCore(tof_task, "tof", 4096, nullptr, 1, nullptr, 0);
 
     Serial.println("[ESP32] ready");

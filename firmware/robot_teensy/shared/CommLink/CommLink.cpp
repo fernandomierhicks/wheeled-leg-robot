@@ -7,7 +7,8 @@
 #endif
 
 CommLink::CommLink(Stream& stream, uint8_t source_id)
-    : _s(stream), _src(source_id), _cb(nullptr), _seq_tx(0)
+    : _s(stream), _src(source_id), _cb(nullptr), _seq_tx(0),
+      _parse_start_ms(0), _rx_drops(0)
 {
     _reset_parser();
 }
@@ -42,11 +43,26 @@ void CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t
 }
 
 void CommLink::update() {
+    // Fix 1: timeout — if stuck mid-frame, abandon and count a drop.
+    // Protects against Teensy reboot mid-frame, FIFO overflow tail loss, etc.
+#ifdef ARDUINO
+    if (_ps != PS_IDLE &&
+        (uint32_t)(millis() - _parse_start_ms) > COMM_PARSE_TIMEOUT_MS) {
+        ++_rx_drops;
+        _reset_parser();
+    }
+#endif
+
     while (_s.available()) {
         uint8_t b = (uint8_t)_s.read();
         switch (_ps) {
             case PS_IDLE:
-                if (b == COMM_START) _ps = PS_TYPE;
+                if (b == COMM_START) {
+#ifdef ARDUINO
+                    _parse_start_ms = millis();  // start timeout clock
+#endif
+                    _ps = PS_TYPE;
+                }
                 break;
             case PS_TYPE:
                 _rx_type = b; _rx_crc  = b; _ps = PS_VER; break;
@@ -62,6 +78,13 @@ void CommLink::update() {
                 _rx_len |= ((uint16_t)b << 8);
                 _rx_crc ^= b;
                 _rx_idx  = 0;
+                // Fix 2: length guard — a corrupted length field can lock the parser
+                // in PS_PAYLOAD for up to 65535 bytes (~500 ms at 1.2 Mbaud).
+                if (_rx_len > COMM_MAX_PAYLOAD) {
+                    ++_rx_drops;
+                    _reset_parser();
+                    break;
+                }
                 _ps = (_rx_len == 0) ? PS_CHECKSUM : PS_PAYLOAD;
                 break;
             case PS_PAYLOAD:
@@ -72,11 +95,21 @@ void CommLink::update() {
                 if (++_rx_idx >= _rx_len) _ps = PS_CHECKSUM;
                 break;
             case PS_CHECKSUM:
-                _ps = (b == _rx_crc) ? PS_END : PS_IDLE;
+                // Fix 4: count bad-checksum drops explicitly
+                if (b != _rx_crc) {
+                    ++_rx_drops;
+                    _reset_parser();
+                } else {
+                    _ps = PS_END;
+                }
                 break;
             case PS_END:
-                if (b == COMM_END && _cb)
-                    _cb(_rx_type, _rx_ver, _rx_src, _rx_buf, _rx_len);
+                if (b == COMM_END) {
+                    if (_cb) _cb(_rx_type, _rx_ver, _rx_src, _rx_buf, _rx_len);
+                } else {
+                    // Fix 4: bad END byte — frame was corrupted after checksum
+                    ++_rx_drops;
+                }
                 _reset_parser();
                 break;
         }

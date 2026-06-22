@@ -39,8 +39,8 @@ static void on_ack(uint8_t type, uint8_t /*ver*/, uint8_t src,
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void test_payload_size(void) {
-    // 1×uint32 + 9×float + 1×uint8 = 4 + 36 + 1 = 41 bytes
-    TEST_ASSERT_EQUAL(41, sizeof(TelemetryPayload));
+    // Static assert in comm_protocol.h enforces this too; this catches it at runtime on-target.
+    TEST_ASSERT_EQUAL(128, sizeof(TelemetryPayload));
 }
 
 void test_frame_constants(void) {
@@ -78,7 +78,7 @@ void test_telemetry_roundtrip(void) {
     tx.wheel_vel_avg_ms = -0.5f;
     tx.robot_state      = 2;
 
-    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &tx, sizeof(tx));
+    cl.send(COMM_TYPE_TELEMETRY, TELEM_VERSION, &tx, sizeof(tx));
     cl.update();
 
     TEST_ASSERT_TRUE(s_rx_got);
@@ -102,7 +102,7 @@ void test_bad_checksum_dropped(void) {
     cl.onPacket(on_packet);
 
     TelemetryPayload tx = {};
-    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &tx, sizeof(tx));
+    cl.send(COMM_TYPE_TELEMETRY, TELEM_VERSION, &tx, sizeof(tx));
 
     uint8_t corrupt = ls.read();
     (void)corrupt;

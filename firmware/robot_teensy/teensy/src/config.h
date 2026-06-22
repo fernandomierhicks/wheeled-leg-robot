@@ -34,7 +34,7 @@
 #define PIN_ESP32_RX    21
 
 // --- ESP32 UART baud ---
-#define ESP32_BAUD      1200000UL
+#define ESP32_BAUD      4000000UL
 
 // --- Control loop ---
 #define CONTROL_HZ      500

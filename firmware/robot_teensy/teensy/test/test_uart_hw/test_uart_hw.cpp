@@ -1,10 +1,11 @@
 #include <Arduino.h>
 #include <unity.h>
+#include "config.h"
 #include "../test_led.h"
 
-// Serial5: TX=pin20 → ESP32 GPIO16(RX2), RX=pin21 ← ESP32 GPIO17(TX2)
+// Serial5: TX=PIN_ESP32_TX → ESP32 TEENSY_UART_RX, RX=PIN_ESP32_RX ← ESP32 TEENSY_UART_TX
+// Baud constant comes from config.h so this test tracks production config.
 #define LINK Serial5
-#define LINK_BAUD 115200
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -33,7 +34,7 @@ void test_uart_echo(void) {
 
 void setup() {
     Serial.begin(115200);
-    LINK.begin(LINK_BAUD);
+    LINK.begin(ESP32_BAUD);
     delay(500);
     test_led_begin();
 

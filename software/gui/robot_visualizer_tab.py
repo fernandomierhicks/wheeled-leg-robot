@@ -25,12 +25,69 @@ _LEG_Y   =  0.1430   # leg-plane Y (±) [m]
 _WHEEL_R =  0.075    # wheel radius    [m]
 _Q_NOM   = -1.082366 # (Q_RET+Q_EXT)/2 [rad]
 
+# Link tube radii [m] — from COMPONENTS.md Al tube OD
+_R_FEMUR   = 0.007   # 14 mm OD tube
+_R_TIBIA   = 0.008   # 16 mm OD tube
+_R_COUPLER = 0.005   # 10 mm OD tube
+_R_STUB    = 0.008   # same as tibia
+
+# Hip motor (CubeMars AK45-10): Φ53×43 mm — COMPONENTS.md
+_HIP_MOTOR_R = 0.0265  # 53 mm diameter / 2
+_HIP_MOTOR_L = 0.043   # 43 mm length; motor body extends inward from A along ±Y
+
+# Wheel motor (Maytech MTO5065-70-HA-C): Ø50×65 mm — COMPONENTS.md
+# The motor IS the wheel hub; the tire mounts around the bell.
+_WHEEL_MOTOR_R = 0.025   # 50 mm diameter / 2
+_WHEEL_MOTOR_L = 0.065   # 65 mm length
+_WHEEL_T       = 0.0325  # tire half-thickness = motor half-length (±32.5 mm)
+
 # Body box half-extents [m]  (approximate chassis)
 _BX, _BY, _BZ = 0.10, 0.07, 0.05
 
 # Coordinate-frame arrow lengths [m]
 _FR_BODY  = 0.09    # body/IMU frame (slightly larger)
 _FR_JOINT = 0.055   # hip & wheel frames
+
+# Motor mount transforms: local +Z is the shaft/rotation axis, which points
+# outward from the robot midplane.  Left motors → body +Y; right → body -Y.
+#   Left  Rx(-90°): maps local +Z → body +Y
+#   Right Rx(+90°): maps local +Z → body -Y
+# Body/IMU uses identity — the firmware already remaps the BNO086 gyro x/y
+# axes in IMU.cpp (_pitch_rate = gyro.y, _roll_rate = gyro.x) so that IMU
+# output arrives pre-expressed in body frame; that swap is the firmware-side
+# equivalent of this same mounting-transform concept.
+_R_MOUNT_LEFT  = np.array([[1, 0, 0], [0, 0, 1], [0,-1, 0]], dtype=float)  # Rx(-90°)
+_R_MOUNT_RIGHT = np.array([[1, 0, 0], [0, 0,-1], [0, 1, 0]], dtype=float)  # Rx(+90°)
+_R_MOUNT_IDENT = np.eye(3)
+
+# Hip motor body-frame endpoints (output shaft face at A, other end inward)
+# Left:  output at +Y=_LEG_Y, body extends in -Y direction
+# Right: output at -Y=_LEG_Y, body extends in +Y direction
+_HIP_L_P1 = np.array([0.0,  _LEG_Y,                _A_Z])
+_HIP_L_P2 = np.array([0.0,  _LEG_Y - _HIP_MOTOR_L, _A_Z])
+_HIP_R_P1 = np.array([0.0, -_LEG_Y,                _A_Z])
+_HIP_R_P2 = np.array([0.0, -_LEG_Y + _HIP_MOTOR_L, _A_Z])
+
+# Box base vertices and face indices (half-extents _BX/_BY/_BZ, unrotated)
+_BOX_VERTS_BASE = np.array([
+    [-_BX,-_BY,-_BZ],[+_BX,-_BY,-_BZ],[+_BX,+_BY,-_BZ],[-_BX,+_BY,-_BZ],
+    [-_BX,-_BY,+_BZ],[+_BX,-_BY,+_BZ],[+_BX,+_BY,+_BZ],[-_BX,+_BY,+_BZ],
+], dtype=np.float32)
+
+_BOX_FACES = np.array([
+    [0,1,2],[0,2,3],  # -Z face
+    [4,6,5],[4,7,6],  # +Z face
+    [0,5,1],[0,4,5],  # -Y face
+    [2,3,7],[2,7,6],  # +Y face
+    [0,3,7],[0,7,4],  # -X face
+    [1,2,6],[1,6,5],  # +X face
+], dtype=np.uint32)
+
+# Minimal valid mesh used as a no-op placeholder (e.g. degenerate cylinder)
+_EMPTY_MD = gl.MeshData(
+    vertexes=np.zeros((3, 3), dtype=np.float32),
+    faces=np.array([[0, 1, 2]], dtype=np.uint32),
+)
 
 
 # ── 4-bar IK (ported from simulation/mujoco/master_sim_jump/physics.py) ───────
@@ -62,11 +119,17 @@ def _solve_ik(q_hip: float) -> dict | None:
     W_z = C_z - _L_TIBIA * math.cos(alpha)
     return dict(
         A=(0.0, _A_Z), C=(C_x, C_z), E=(E_x, E_z),
-        F=(_F_X, _F_Z), W=(W_x, W_z),
+        F=(_F_X, _F_Z), W=(W_x, W_z), alpha=alpha,
     )
 
 
 # ── 3-D helpers ───────────────────────────────────────────────────────────────
+
+def _ry(q: float) -> np.ndarray:
+    """Rotation matrix around Y axis by q radians."""
+    cq, sq = math.cos(q), math.sin(q)
+    return np.array([[cq, 0, sq], [0, 1, 0], [-sq, 0, cq]])
+
 
 def _rot3(pitch: float, roll: float, yaw: float) -> np.ndarray:
     """Rotation matrix  R = Rz(yaw) @ Ry(pitch) @ Rx(roll)."""
@@ -80,30 +143,29 @@ def _rot3(pitch: float, roll: float, yaw: float) -> np.ndarray:
     ])
 
 
-def _xz_to_world(xz_pairs: list[tuple], y: float,
-                 R: np.ndarray) -> np.ndarray:
-    """Convert [(x,z), …] body-frame points → world-frame float32 array."""
-    body = np.array([[x, y, z] for x, z in xz_pairs])
-    return (R @ body.T).T.astype(np.float32)
+# ── Mesh data builder ─────────────────────────────────────────────────────────
 
-
-def _wheel_pts_body(W_xz: tuple, y: float, N: int = 28) -> np.ndarray:
-    """Wheel-rim circle in body frame (wheel spins around Y-axis)."""
-    wx, wz = W_xz
-    ang = np.linspace(0.0, 2.0 * math.pi, N + 1)
-    return np.column_stack([
-        wx + _WHEEL_R * np.sin(ang),
-        np.full(N + 1, y),
-        wz + _WHEEL_R * np.cos(ang),
-    ])
-
-
-def _line_item(view: gl.GLViewWidget, pts: np.ndarray,
-               color: tuple, width: float = 2.5) -> gl.GLLinePlotItem:
-    item = gl.GLLinePlotItem(pos=pts.astype(np.float32),
-                             color=color, width=width, antialias=True)
-    view.addItem(item)
-    return item
+def _cylinder_mesh(p1: np.ndarray, p2: np.ndarray,
+                   radius: float, n: int = 8) -> gl.MeshData:
+    """Open tube cylinder from world-frame p1 to p2 with n-sided cross-section."""
+    d = p2 - p1
+    L = float(np.linalg.norm(d))
+    if L < 1e-9:
+        return _EMPTY_MD
+    zv = d / L
+    ref = np.array([1., 0., 0.]) if abs(zv[0]) < 0.9 else np.array([0., 1., 0.])
+    xv = np.cross(zv, ref); xv /= np.linalg.norm(xv)
+    yv = np.cross(zv, xv)
+    ang = np.linspace(0., 2. * np.pi, n, endpoint=False)
+    ring = radius * (np.outer(np.cos(ang), xv) + np.outer(np.sin(ang), yv))
+    bot = (p1 + ring).astype(np.float32)
+    top = (p2 + ring).astype(np.float32)
+    verts = np.vstack([bot, top])
+    faces = []
+    for i in range(n):
+        j = (i + 1) % n
+        faces += [[i, j, n+j], [i, n+j, n+i]]
+    return gl.MeshData(vertexes=verts, faces=np.array(faces, dtype=np.uint32))
 
 
 # ── Coordinate-frame helpers ──────────────────────────────────────────────────
@@ -126,14 +188,27 @@ def _make_frame(view: gl.GLViewWidget, length: float) -> list:
     return items  # [x_item, y_item, z_item]
 
 
-def _set_frame(items: list, p_body: np.ndarray, R: np.ndarray,
-               length: float) -> None:
-    """Update frame axes at body-local position p_body using rotation R."""
-    o = R @ p_body
+def _set_frame(items: list, origin_world: np.ndarray, R_orient: np.ndarray,
+               length: float, R_mount: np.ndarray | None = None) -> None:
+    """Draw frame arrows starting at world-frame origin, oriented by R_orient @ R_mount.
+    Caller is responsible for transforming the origin to world frame (R_body @ p_body)
+    so that hip/wheel angle rotations don't accidentally shift the origin position."""
+    R_eff = R_orient @ (R_mount if R_mount is not None else _R_MOUNT_IDENT)
     for i, item in enumerate(items):
         axis = np.zeros(3)
         axis[i] = length
-        item.setData(pos=np.array([o, o + R @ axis], dtype=np.float32))
+        item.setData(pos=np.array([origin_world,
+                                   origin_world + R_eff @ axis], dtype=np.float32))
+
+
+# ── Mesh item factory ─────────────────────────────────────────────────────────
+
+def _mesh_item(view: gl.GLViewWidget, md: gl.MeshData,
+               color: tuple) -> gl.GLMeshItem:
+    item = gl.GLMeshItem(meshdata=md, smooth=True, drawEdges=False,
+                         color=color, glOptions='translucent')
+    view.addItem(item)
+    return item
 
 
 # ── Tab ───────────────────────────────────────────────────────────────────────
@@ -168,23 +243,30 @@ class RobotVisualizerTab(QWidget):
             self._gl.addItem(gl.GLLinePlotItem(
                 pos=pts.astype(np.float32), color=col, width=1.5, antialias=True))
 
-        # ── Body box (rotated each frame) ────────────────────────────────────
-        bx, by, bz = _BX, _BY, _BZ
-        v = np.array([
-            [-bx,-by,-bz],[+bx,-by,-bz],[+bx,+by,-bz],[-bx,+by,-bz],
-            [-bx,-by,+bz],[+bx,-by,+bz],[+bx,+by,+bz],[-bx,+by,+bz],
-        ])
-        BOX = (0.65, 0.65, 0.72, 0.85)
-        self._box_pairs: list[tuple[np.ndarray, gl.GLLinePlotItem]] = []
-        for edge in [v[[0,1,2,3,0]], v[[4,5,6,7,4]],
-                     v[[0,4,5,1]],   v[[2,6,7,3]]]:
-            item = _line_item(self._gl, edge, BOX, 2.0)
-            self._box_pairs.append((edge.copy(), item))
+        # ── Body box mesh ─────────────────────────────────────────────────────
+        self._box_mesh = _mesh_item(
+            self._gl,
+            gl.MeshData(vertexes=_BOX_VERTS_BASE.copy(), faces=_BOX_FACES),
+            (0.65, 0.65, 0.72, 0.40),
+        )
 
-        # ── 4-bar leg line items ──────────────────────────────────────────────
+        # ── Hip motor meshes (body-fixed, AK45-10: Φ53×43 mm) ────────────────
+        R0 = np.eye(3)
+        self._hip_motor_L = _mesh_item(
+            self._gl,
+            _cylinder_mesh(R0 @ _HIP_L_P1, R0 @ _HIP_L_P2, _HIP_MOTOR_R, n=16),
+            (0.20, 0.20, 0.24, 0.90),
+        )
+        self._hip_motor_R = _mesh_item(
+            self._gl,
+            _cylinder_mesh(R0 @ _HIP_R_P1, R0 @ _HIP_R_P2, _HIP_MOTOR_R, n=16),
+            (0.20, 0.20, 0.24, 0.90),
+        )
+
+        # ── 4-bar leg mesh items ──────────────────────────────────────────────
         nom = _solve_ik(_Q_NOM)
-        self._leg_L = self._build_leg(+1, nom)
-        self._leg_R = self._build_leg(-1, nom)
+        self._leg_L = self._build_leg(+1, nom, R0)
+        self._leg_R = self._build_leg(-1, nom, R0)
 
         # ── Coordinate frames ─────────────────────────────────────────────────
         # body/IMU at chassis origin
@@ -219,26 +301,44 @@ class RobotVisualizerTab(QWidget):
 
     # ── Builder helpers ───────────────────────────────────────────────────────
 
-    def _build_leg(self, y_sign: int, ik: dict | None) -> dict:
-        y  = y_sign * _LEG_Y
-        R0 = np.eye(3)
+    def _build_leg(self, y_sign: int, ik: dict | None,
+                   R: np.ndarray) -> dict:
+        y = y_sign * _LEG_Y
         if ik is None:
             ik = {'A': (0.0, _A_Z), 'C': (0.0, _A_Z - 0.01),
                   'E': (0.01, _A_Z + _L_STUB), 'F': (_F_X, _F_Z),
                   'W': (0.0, _A_Z - _L_TIBIA)}
+
+        def _pw(xz): return R @ np.array([xz[0], y, xz[1]])
+        def _pw3(x, yy, z): return R @ np.array([x, yy, z])
+
+        Wx, Wz = ik['W']
         return dict(
             y       = y,
-            femur   = _line_item(self._gl, _xz_to_world([ik['A'], ik['C']], y, R0),
-                                 (1.00, 0.55, 0.00, 1.0), 3.5),
-            tibia   = _line_item(self._gl, _xz_to_world([ik['C'], ik['W']], y, R0),
-                                 (0.30, 0.80, 1.00, 1.0), 3.5),
-            stub    = _line_item(self._gl, _xz_to_world([ik['C'], ik['E']], y, R0),
-                                 (0.40, 1.00, 0.40, 1.0), 2.5),
-            coupler = _line_item(self._gl, _xz_to_world([ik['F'], ik['E']], y, R0),
-                                 (0.90, 0.30, 0.90, 1.0), 2.5),
-            wheel   = _line_item(self._gl,
-                                 (_wheel_pts_body(ik['W'], y) @ R0.T).astype(np.float32),
-                                 (0.72, 0.72, 0.72, 0.80), 2.0),
+            femur   = _mesh_item(self._gl,
+                                 _cylinder_mesh(_pw(ik['A']), _pw(ik['C']), _R_FEMUR),
+                                 (1.00, 0.55, 0.00, 0.85)),
+            tibia   = _mesh_item(self._gl,
+                                 _cylinder_mesh(_pw(ik['C']), _pw(ik['W']), _R_TIBIA),
+                                 (0.30, 0.80, 1.00, 0.85)),
+            stub    = _mesh_item(self._gl,
+                                 _cylinder_mesh(_pw(ik['C']), _pw(ik['E']), _R_STUB),
+                                 (0.40, 1.00, 0.40, 0.85)),
+            coupler = _mesh_item(self._gl,
+                                 _cylinder_mesh(_pw(ik['F']), _pw(ik['E']), _R_COUPLER),
+                                 (0.90, 0.30, 0.90, 0.85)),
+            # Tire: wide cylinder along body ±Y at wheel centre W
+            wheel   = _mesh_item(self._gl,
+                                 _cylinder_mesh(_pw3(Wx, y - _WHEEL_T, Wz),
+                                                _pw3(Wx, y + _WHEEL_T, Wz),
+                                                _WHEEL_R, n=28),
+                                 (0.45, 0.45, 0.45, 0.65)),
+            # Motor hub: same axis, smaller radius (MTO5065: Ø50 mm)
+            wheel_motor = _mesh_item(self._gl,
+                                     _cylinder_mesh(_pw3(Wx, y - _WHEEL_MOTOR_L/2, Wz),
+                                                    _pw3(Wx, y + _WHEEL_MOTOR_L/2, Wz),
+                                                    _WHEEL_MOTOR_R, n=16),
+                                     (0.18, 0.18, 0.20, 0.90)),
         )
 
     def _build_panel(self) -> QWidget:
@@ -292,9 +392,9 @@ class RobotVisualizerTab(QWidget):
             f'<span style="color:#ff3838">■</span> +X fwd &nbsp;'
             f'<span style="color:#38ff38">■</span> +Y left &nbsp;'
             f'<span style="color:#388cff">■</span> +Z up<br>'
-            "• Body/IMU (large)<br>"
-            "• Hip A  L / R<br>"
-            "• Wheel W  L / R"
+            "• Body/IMU (large, body frame)<br>"
+            "• Hip A  L / R (+Z = shaft out)<br>"
+            "• Wheel W  L / R (+Z = shaft out)"
         )
         fr_legend.setStyleSheet(f"font-size: 10px; color: {DIM}; line-height: 160%;")
         lay.addWidget(fr_legend)
@@ -307,9 +407,16 @@ class RobotVisualizerTab(QWidget):
                 pitch: float, roll: float, yaw: float) -> None:
         R = _rot3(pitch, roll, yaw)
 
-        # Body box
-        for pts0, item in self._box_pairs:
-            item.setData(pos=(R @ pts0.T).T.astype(np.float32))
+        # Body box — rotate base verts and update mesh
+        rot_verts = (_BOX_VERTS_BASE @ R.T).astype(np.float32)
+        self._box_mesh.setMeshData(
+            meshdata=gl.MeshData(vertexes=rot_verts, faces=_BOX_FACES))
+
+        # Hip motors (AK45-10) — body-fixed, rotate with body only
+        self._hip_motor_L.setMeshData(
+            meshdata=_cylinder_mesh(R @ _HIP_L_P1, R @ _HIP_L_P2, _HIP_MOTOR_R, n=16))
+        self._hip_motor_R.setMeshData(
+            meshdata=_cylinder_mesh(R @ _HIP_R_P1, R @ _HIP_R_P2, _HIP_MOTOR_R, n=16))
 
         # Legs
         ik_l = _solve_ik(q_l)
@@ -320,28 +427,54 @@ class RobotVisualizerTab(QWidget):
         # Body/IMU frame at chassis origin
         _set_frame(self._fr_body, np.zeros(3), R, _FR_BODY)
 
-        # Hip motor frames (fixed in body frame at A position)
-        _set_frame(self._fr_hip_L, np.array([0.0, +_LEG_Y, _A_Z]), R, _FR_JOINT)
-        _set_frame(self._fr_hip_R, np.array([0.0, -_LEG_Y, _A_Z]), R, _FR_JOINT)
+        # Hip motor frames — origin is body-frame A rotated by body R only.
+        # R_orient = R @ Ry(q) so the axes spin with the output shaft.
+        # R_mount orients the shaft indicator along ±Y (blue = shaft out).
+        _set_frame(self._fr_hip_L,
+                   R @ np.array([0.0, +_LEG_Y, _A_Z]),
+                   R @ _ry(q_l), _FR_JOINT, _R_MOUNT_LEFT)
+        _set_frame(self._fr_hip_R,
+                   R @ np.array([0.0, -_LEG_Y, _A_Z]),
+                   R @ _ry(q_r), _FR_JOINT, _R_MOUNT_RIGHT)
 
-        # Wheel frames (move with hip angle)
+        # Wheel frames — origin is body-frame W rotated by body R only.
+        # R_orient = R @ Ry(alpha) so axes follow the tibia angle.
         if ik_l:
             _set_frame(self._fr_wheel_L,
-                       np.array([ik_l['W'][0], +_LEG_Y, ik_l['W'][1]]), R, _FR_JOINT)
+                       R @ np.array([ik_l['W'][0], +_LEG_Y, ik_l['W'][1]]),
+                       R @ _ry(ik_l['alpha']), _FR_JOINT, _R_MOUNT_LEFT)
         if ik_r:
             _set_frame(self._fr_wheel_R,
-                       np.array([ik_r['W'][0], -_LEG_Y, ik_r['W'][1]]), R, _FR_JOINT)
+                       R @ np.array([ik_r['W'][0], -_LEG_Y, ik_r['W'][1]]),
+                       R @ _ry(ik_r['alpha']), _FR_JOINT, _R_MOUNT_RIGHT)
 
     def _update_leg(self, leg: dict, ik: dict | None, R: np.ndarray) -> None:
         if ik is None:
             return
         y = leg['y']
-        leg['femur'].setData(pos=_xz_to_world([ik['A'], ik['C']], y, R))
-        leg['tibia'].setData(pos=_xz_to_world([ik['C'], ik['W']], y, R))
-        leg['stub'].setData(pos=_xz_to_world([ik['C'], ik['E']], y, R))
-        leg['coupler'].setData(pos=_xz_to_world([ik['F'], ik['E']], y, R))
-        w_body = _wheel_pts_body(ik['W'], y)
-        leg['wheel'].setData(pos=(R @ w_body.T).T.astype(np.float32))
+
+        def _pw(xz): return R @ np.array([xz[0], y, xz[1]])
+        def _pw3(x, yy, z): return R @ np.array([x, yy, z])
+
+        Wx, Wz = ik['W']
+        leg['femur'].setMeshData(
+            meshdata=_cylinder_mesh(_pw(ik['A']), _pw(ik['C']), _R_FEMUR))
+        leg['tibia'].setMeshData(
+            meshdata=_cylinder_mesh(_pw(ik['C']), _pw(ik['W']), _R_TIBIA))
+        leg['stub'].setMeshData(
+            meshdata=_cylinder_mesh(_pw(ik['C']), _pw(ik['E']), _R_STUB))
+        leg['coupler'].setMeshData(
+            meshdata=_cylinder_mesh(_pw(ik['F']), _pw(ik['E']), _R_COUPLER))
+        # Tire: axis along body ±Y, so endpoints differ only in Y
+        leg['wheel'].setMeshData(
+            meshdata=_cylinder_mesh(_pw3(Wx, y - _WHEEL_T, Wz),
+                                    _pw3(Wx, y + _WHEEL_T, Wz),
+                                    _WHEEL_R, n=28))
+        # Motor hub inside the tire
+        leg['wheel_motor'].setMeshData(
+            meshdata=_cylinder_mesh(_pw3(Wx, y - _WHEEL_MOTOR_L/2, Wz),
+                                    _pw3(Wx, y + _WHEEL_MOTOR_L/2, Wz),
+                                    _WHEEL_MOTOR_R, n=16))
 
     # ── Telemetry handler ─────────────────────────────────────────────────────
 

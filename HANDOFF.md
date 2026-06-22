@@ -1,220 +1,154 @@
-# Wheel Motors GUI Tab — Implementation Handoff
+# Safe LQR + Nested Controller Implementation Plan
 
 ## Context
-`WheelMotorsTab` in `software/gui/main.py` is currently a placeholder stub. The ODrive wheel motor CAN driver (`firmware/robot_teensy/teensy/lib/WheelMotors/`) is fully implemented but: (1) `wheel_motors_init()` is never called in `setup()`, (2) no per-wheel telemetry fields exist in `TelemetryPayload`, and (3) no `CMD_ID_WHEEL` command exists. This plan wires up the full stack: firmware init → telemetry → GUI command/display.
+
+The robot is in flatsat (benchtop) configuration — no wheels mounted, motors free-spinning. `control_loop.cpp` is an empty stub. `STATE_RUNNING` currently only sends hip PD setpoints from the radio. All controllers defined in `docs/Control.MD` need to be implemented from scratch, safely.
+
+The goal is a phased implementation where each controller is tested in isolation before the next is layered on, with explicit safety guards at every stage.
 
 ---
 
-## Data Flow
+## Safety Principles
 
+### Hardware risks
+- **Wheel motors**: free-spinning in air is safe; risk is runaway spin (no load, any torque = unlimited acceleration) or unexpectedly large torque. Must governor both torque AND velocity.
+- **Hip motors**: currently working and calibrated. Risk is full-torque extension (jump FSM). Keep jump FSM disabled until robot is secured on the ground.
+- **Personal**: no risk on flatsat from wheel motors. Hip motors can pinch fingers — never reach into the 4-bar while in STATE_RUNNING.
+
+### Software safety mechanisms to build in (all in `control_loop.cpp`)
+1. **`PARAM_LQR_TORQUE_LIMIT`** — separate, lower torque clamp for testing (default 1.0 Nm; hard max is 7.0 Nm). Adjustable from GUI without reflash.
+2. **`PARAM_SIM_PITCH_RAD`** — when non-zero, overrides `g_state.pitch_rad` with this value. Lets you inject fake pitch to verify LQR direction with zero risk of real instability.
+3. **`PARAM_LQR_ENABLE`** — master enable flag for wheel torque output (default 0). Wheels get zero torque when disabled; LQR still runs so you can log computed torque.
+4. **Wheel velocity soft-governor** — even a small constant torque will spin free wheels to infinity with no load. In the torque output path, before calling `wheel_motors_send()`, check `wm_L.vel_turns_s` and `wm_R.vel_turns_s`. If a wheel exceeds `PARAM_WHEEL_VEL_LIMIT_TURNS_S` (default 3 turns/s ≈ ~1.4 m/s for Ø150 mm wheel) *in the commanded torque direction*, clamp that wheel's torque to zero. This is a per-tick soft-governor, not an ESTOP — the LQR can still recover once speed drops.
+5. **Pitch magnitude watchdog** — if `|pitch| > 50°` for more than 200 ms, ESTOP with `FAULT_PITCH_WATCHDOG`. Prevents a tipping robot from spinning wheels into the bench.
+6. **Wheel runaway watchdog** — if `|wheel_vel_avg| > PARAM_WHEEL_VEL_LIMIT_TURNS_S * 2` (governor failed), ESTOP with `FAULT_WHEEL_RUNAWAY`. Hard backup.
+7. **Radio disarm always works** — CH10 drop triggers `stateMachine_disarm_running()`; already wired.
+
+New fault codes to add to `comm_protocol.h` / `robot_state.h`:
+- `FAULT_PITCH_WATCHDOG` — robot tipped past safe angle
+- `FAULT_WHEEL_RUNAWAY` — wheel velocity exceeded hard limit
+
+---
+
+## Implementation Phases
+
+### ~~Phase 1 — Wire up control_loop.cpp skeleton~~ ✅ COMPLETE
+
+The main `loop()` already busy-waits at the bottom (`while (micros() - t_start < 2000) {}`), giving exactly 500 Hz. `stateMachine_update()` → `on_running()` is therefore already called at 500 Hz. **No `IntervalTimer` needed.**
+
+~~Work to do:~~
+- ~~Rename / fill in `isr_500hz()` → call it `controlLoop_run()`, called from `on_running()` in `state_machine.cpp`~~
+- ~~Add the safety parameters to `param_registry`~~
+- ~~Add `FAULT_PITCH_WATCHDOG` and `FAULT_WHEEL_RUNAWAY` to fault codes~~
+- ~~Add the pitch watchdog and wheel runaway watchdog (both just call `stateMachine_request_estop()` with the right fault code)~~
+- ~~Log `tau_sym = 0` to `g_state.cmd_l/cmd_r` so GUI shows it~~
+
+**Test**: flash, arm, watch telemetry. `cmd_l` / `cmd_r` should be 0. Trigger pitch watchdog by tilting past 50°; confirm ESTOP and correct fault code visible in GUI.
+
+---
+
+### Phase 2 — LQR with fake pitch injection ✅ IMPLEMENTED — test sequence in progress
+
+Implement the 3-state LQR in `controlLoop_run()`:
 ```
-GUI (wheel_motors.py)
-  → send_wheel_*() in comm_commands.py
-    → CommLink serial frame → ESP32 → Teensy on_command()
-      → CMD_ID_WHEEL handler → wheel_motors_set_mode() / wheel_motors_send()
-        → CAN3 → ODrive (node 0 = L, node 1 = R)
-          → encoder feedback → wm_L / wm_R structs
-            → send_telemetry() → TelemetryBus → WheelMotorsTab._on_packet()
-```
-
----
-
-## Step 1 — `firmware/robot_teensy/shared/comm_protocol.h`
-
-1. Add `#define CMD_ID_WHEEL  0x07` alongside `CMD_ID_HIP`.
-2. Add wheel sub-command constants:
-   ```c
-   #define WHEEL_SUB_SET_MODE     0x01  // payload: uint8_t mode (WheelMode)
-   #define WHEEL_SUB_SEND         0x02  // payload: float L, float R
-   #define WHEEL_SUB_CLEAR_ERRORS 0x03  // no payload
-   ```
-3. Add `#define TELEM_PAYLOAD_V3  3`.
-4. Append 11 new fields to `TelemetryPayload` (new size: **118 bytes**, old was 83):
-   ```c
-   float    wm_l_vel_turns_s;   // left wheel velocity  [turns/s]
-   float    wm_r_vel_turns_s;   // right wheel velocity [turns/s]
-   float    wm_l_pos_turns;     // left wheel position  [turns]
-   float    wm_r_pos_turns;     // right wheel position [turns]
-   float    wm_l_vbus;          // left ODrive bus voltage  [V]
-   float    wm_r_vbus;          // right ODrive bus voltage [V]
-   uint32_t wm_l_error;         // left ODrive Axis_Error word
-   uint32_t wm_r_error;         // right ODrive Axis_Error word
-   uint8_t  wm_l_state;         // left ODrive Axis_State  (1=IDLE, 8=CLOSED_LOOP)
-   uint8_t  wm_r_state;         // right ODrive Axis_State
-   uint8_t  wm_mode;            // current WheelMode (0=IDLE,1=VEL,2=POS,3=TRQ)
-   ```
-
----
-
-## Step 2 — `firmware/robot_teensy/teensy/src/main.cpp`
-
-1. Add `#include "wheel_motors.h"` at the top.
-2. In `setup()`, after `hip_motors_init()`:
-   ```cpp
-   wheel_motors_init();
-   comm_log(LOG_LEVEL_INFO, "Wheel CAN init OK");
-   ```
-3. In `read_sensors()`, after hip poll:
-   ```cpp
-   wheel_motors_poll();
-   wheel_motors_pet_watchdog();
-   ```
-4. In `send_telemetry()`, fill the new fields and update version to `TELEM_PAYLOAD_V3`:
-   ```cpp
-   telem.wm_l_vel_turns_s = wm_L.vel_turns_s;
-   telem.wm_r_vel_turns_s = wm_R.vel_turns_s;
-   telem.wm_l_pos_turns   = wm_L.pos_turns;
-   telem.wm_r_pos_turns   = wm_R.pos_turns;
-   telem.wm_l_vbus        = wm_L.vbus;
-   telem.wm_r_vbus        = wm_R.vbus;
-   telem.wm_l_error       = wm_L.error;
-   telem.wm_r_error       = wm_R.error;
-   telem.wm_l_state       = wm_L.axis_state;
-   telem.wm_r_state       = wm_R.axis_state;
-   telem.wm_mode          = (uint8_t)wm_mode;
-   ```
-5. In `on_command()`, add wheel handler after the hip block:
-   ```cpp
-   if (cmd_id == CMD_ID_WHEEL && len >= 2) {
-       uint8_t sub = payload[1];
-       if (sub == WHEEL_SUB_SET_MODE && len >= 3) {
-           wheel_motors_set_mode((WheelMode)payload[2]);
-       } else if (sub == WHEEL_SUB_SEND && len >= 10) {
-           float L, R;
-           memcpy(&L, payload + 2, 4);
-           memcpy(&R, payload + 6, 4);
-           wheel_motors_send(L, R);
-       } else if (sub == WHEEL_SUB_CLEAR_ERRORS) {
-           wheel_motors_clear_errors();
-       }
-       return;
-   }
-   ```
-
----
-
-## Step 3 — `software/gui/comm_commands.py`
-
-Add constants and three send helpers:
-```python
-CMD_ID_WHEEL           = 0x07
-WHEEL_SUB_SET_MODE     = 0x01
-WHEEL_SUB_SEND         = 0x02
-WHEEL_SUB_CLEAR_ERRORS = 0x03
-
-WHEEL_MODE_IDLE     = 0
-WHEEL_MODE_VELOCITY = 1
-WHEEL_MODE_POSITION = 2
-WHEEL_MODE_TORQUE   = 3
-
-def send_wheel_set_mode(mode: int):
-    send_frame(build_frame(struct.pack("<BBB", CMD_ID_WHEEL, WHEEL_SUB_SET_MODE, mode)))
-
-def send_wheel_setpoint(L: float, R: float):
-    send_frame(build_frame(struct.pack("<BBff", CMD_ID_WHEEL, WHEEL_SUB_SEND, L, R)))
-
-def send_wheel_clear_errors():
-    send_frame(build_frame(struct.pack("<BB", CMD_ID_WHEEL, WHEEL_SUB_CLEAR_ERRORS)))
+x = [pitch - theta_ref,  pitch_rate,  wheel_vel_avg - v_ref]
+tau_sym = -(K_pitch * x[0] + K_pitch_rate * x[1] + K_vel * x[2])
+tau_sym = clamp(tau_sym, -PARAM_LQR_TORQUE_LIMIT, +PARAM_LQR_TORQUE_LIMIT)
 ```
 
+K gains (nominal hip, params.py baseline): K_pitch=−9.771, K_pitch_rate=−1.881, K_vel=−0.00713. Hardcoded `theta_ref = 0`, `v_ref = 0` for isolation.
+
+**Safe test sequence:**
+- [ ] 1. `PARAM_LQR_ENABLE = 0`. Confirm computed `tau_sym` appears in telemetry.
+- [ ] 2. `PARAM_SIM_PITCH_RAD = +0.1` (6° forward lean). Verify `tau_sym` is positive (forward wheel torque to correct). Check sign.
+- [ ] 3. `PARAM_SIM_PITCH_RAD = -0.1`. Verify `tau_sym` flips negative.
+- [ ] 4. `PARAM_SIM_PITCH_RAD = 0`, tilt robot physically. Verify real IMU pitch produces correct-sign torque in telemetry.
+- [ ] 5. `PARAM_LQR_ENABLE = 1`, 1 Nm limit. Tilt robot — confirm wheels move in the correcting direction (free-spinning).
+
 ---
 
-## Step 4 — `software/gui/flash_monitor.py` telemetry parser
+### Phase 3 — Velocity PI
 
-After the existing v2 unpack block (around line 261), extend the dict when `length >= 118`:
-```python
-if length >= 118:
-    wm_l_vel, wm_r_vel, wm_l_pos, wm_r_pos, wm_l_vbus, wm_r_vbus, \
-    wm_l_err, wm_r_err, wm_l_st, wm_r_st, wm_mode_val = \
-        _struct.unpack_from("<ffffffIIBBB", payload, 83)
-    info.update({
-        "wm_l_vel_turns_s": wm_l_vel,
-        "wm_r_vel_turns_s": wm_r_vel,
-        "wm_l_pos_turns":   wm_l_pos,
-        "wm_r_pos_turns":   wm_r_pos,
-        "wm_l_vbus":        wm_l_vbus,
-        "wm_r_vbus":        wm_r_vbus,
-        "wm_l_error":       wm_l_err,
-        "wm_r_error":       wm_r_err,
-        "wm_l_state":       wm_l_st,
-        "wm_r_state":       wm_r_st,
-        "wm_mode":          wm_mode_val,
-    })
+Implement on top of working LQR:
+```
+v_err = v_desired - wheel_vel_avg
+integral += v_err * dt  (anti-windup clamp)
+theta_ref = Kp*v_err + Ki*integral + Kff*dv_cmd_dt
+theta_ref = clamp(theta_ref, -theta_max, +theta_max)
 ```
 
----
+`wheel_vel_avg` from `wm_L.vel_turns_s` / `wm_R.vel_turns_s` × `wheel_r`. Gains from Control.MD table.
 
-## Step 5 — New file `software/gui/wheel_motors.py`
-
-Model closely on `hip_motors.py`. Key differences:
-
-### `_WheelPanel` (per-motor widget)
-
-**Readouts:**
-- Velocity shown as both turns/s and RPM (`vel * 60`)
-- Position in turns
-- Vbus in V — green if > 20 V, orange otherwise
-- ODrive state as string (1 → "IDLE", 8 → "CLOSED_LOOP", else numeric)
-- Error word decoded to flag names (bitmask); red label if non-zero
-- Freshness indicator dot derived from `wm_l_state != 0` or stale check
-
-**Chart (pyqtgraph rolling, 750 samples ~15 s at 50 Hz):**
-- Blue curve: velocity (turns/s)
-- Orange dashed: commanded setpoint
-
-**Control (enabled only in STATE_MANUAL):**
-- Setpoint spinbox — range/units adapt to mode:
-  - VELOCITY: ±20 turns/s
-  - POSITION: ±100 turns
-  - TORQUE:   ±5 N·m
-- "Send" button → `send_wheel_setpoint(val, val)`
-- Waveform: Amplitude + Frequency spinboxes, [Sine] [Square] checkable buttons (50 ms tick timer, same pattern as hip wave)
-  - For VEL/TRQ, waveform center = 0; for POS, center = current position at start
-
-**Buttons:**
-- "Clear Errors" (always enabled) → `send_wheel_clear_errors()`
-
-### `WheelMotorsTab` (main tab)
-
-**Mode bar (same style as `HipMotorsTab`):**
-- State label (mirrors robot state: STANDBY / MANUAL / ESTOP / ...)
-- ODrive mode label (IDLE / VELOCITY / POSITION / TORQUE from `wm_mode`)
-- Buttons: `Enter Manual` → `send_set_mode(STATE_MANUAL)`, `Exit Manual` → `send_set_mode(STATE_STANDBY)`
-
-**Center column (between the two motor panels):**
-- 4 mode buttons: IDLE / VEL / POS / TRQ → `send_wheel_set_mode(mode)` (enabled in MANUAL only)
-- "Clear Both" button
-
-**Differential drive helper (bonus):**
-- A single velocity slider ± 5 turns/s that sends +val to R and −val to L (spin-in-place test)
-
-**`_on_packet` handler:**
-- Gate controls on `robot_state == STATE_MANUAL` (same as hip motors, reuse `STATE_MANUAL = 5`)
-- Feed left/right panels with their respective telemetry fields
-- Update mode bar labels
+**Safe test** (flatsat, wheels free-spinning):
+1. `v_desired = 0` (BALANCE mode). Push robot by hand; confirm wheels resist.
+2. `v_desired = 0.1 m/s`. Confirm wheels spin up slowly. Watch `theta_ref` in telemetry — should be small and stable.
 
 ---
 
-## Step 6 — `software/gui/main.py`
+### Phase 4 — Yaw PI
 
-Replace:
-```python
-class WheelMotorsTab(_PlaceholderTab):
-    def __init__(self): super().__init__("Wheel Motors")
 ```
-With:
-```python
-from wheel_motors import WheelMotorsTab
+tau_yaw = Kp*(omega_desired - imu_yaw_rate()) + Ki*integral
+tau_L = tau_sym + tau_yaw
+tau_R = tau_sym - tau_yaw
 ```
 
+Need `imu_yaw_rate()` getter added to `IMU.h` (BNO086 already outputs it).
+
+**Safe test** (flatsat): Command `omega_desired = 0.5 rad/s`. Confirm left wheel faster than right (verify sign vs. robot frame: +Y = left, +Z = up, right-hand rule → positive yaw = counterclockwise from above → left wheel slower, right faster). Adjust sign if needed.
+
 ---
 
-## Verification Checklist
+### Phase 5 — Hip gain scheduling
 
-1. Flash firmware; check serial log for `"Wheel CAN init OK"`.
-2. Power on ODrive; confirm heartbeat arrives (green freshness dots in GUI).
-3. Enter MANUAL mode; select VELOCITY; set 0.5 turns/s → both wheels spin.
-4. Enable Sine waveform at 0.2 Hz, amplitude 1.0 turns/s → smooth chart oscillation.
-5. Trigger ODrive fault; confirm red error label with decoded name.
-6. Press Clear Errors; label goes green.
-7. Verify hip motors tab still functions (v2 parser path untouched).
+Implement 3-point LQR gain interpolation from Control.MD:
+```
+alpha = (q_hip_avg - Q_RET) / (Q_EXT - Q_RET)
+K = (1 - alpha) * K_retracted + alpha * K_extended
+```
+
+**Safe test** (flatsat): sweep hip position via radio CH3, confirm K values in telemetry change with leg height.
+
+---
+
+### Phase 6 — Feedforward terms (FF1, FF2)
+
+Add after LQR + yaw verified:
+- **FF2 first** (gravity comp, pitch angle only). Start `ff2_alpha = 0`, ramp up.
+- **FF1 second** (hip reaction cancel, needs hip torque readback from CAN).
+- FF4 stays `alpha = 0` until driving on floor.
+
+**Safe test**: compare `tau_sym` in telemetry with and without FF terms at a fixed fake pitch angle.
+
+---
+
+### Phase 7 — Jump FSM (NOT on flatsat)
+
+Only implement and test once:
+- Robot is on the floor, secured or in a cradle
+- You are behind a barrier or at arm's length
+- Start with CROUCH phase only (slow, controlled). Add EXTEND only after CROUCH is verified.
+- Use low `max_torque` parameter initially.
+
+---
+
+## Critical Files to Modify
+
+| File | Changes |
+|------|---------|
+| `firmware/robot_teensy/teensy/src/control_loop.cpp` | All controller logic |
+| `firmware/robot_teensy/shared/comm_protocol.h` | Add `FAULT_PITCH_WATCHDOG`, `FAULT_WHEEL_RUNAWAY`; telemetry fields for `tau_sym`, `theta_ref`, `tau_yaw` |
+| `firmware/robot_teensy/teensy/src/param_registry` | Add `PARAM_LQR_ENABLE`, `PARAM_SIM_PITCH_RAD`, `PARAM_LQR_TORQUE_LIMIT`, `PARAM_WHEEL_VEL_LIMIT_TURNS_S` |
+| `firmware/robot_teensy/teensy/src/state_machine.cpp` | `on_running()` calls `controlLoop_run()` instead of sending hip directly |
+| `firmware/robot_teensy/teensy/src/IMU.h/.cpp` | Add `imu_yaw_rate()` getter |
+
+## End-to-End Verification Checklist
+
+- [ ] Flash firmware. Boot. Calibrate. Arm via CH10.
+- [ ] GUI shows `tau_sym` in telemetry at 50 Hz = 0 when upright.
+- [ ] With `SIM_PITCH = 0.1`, tau is positive and proportional to gain × error.
+- [ ] With `LQR_ENABLE = 1`, `TORQUE_LIMIT = 1 Nm`: tilt robot — wheels spin in correcting direction.
+- [ ] ESTOP from radio disarm (CH10 drop): fault code = none / normal disarm.
+- [ ] ESTOP from pitch watchdog (tilt past 50°): fault code = `FAULT_PITCH_WATCHDOG` visible in GUI.
+- [ ] ESTOP from wheel runaway: fault code = `FAULT_WHEEL_RUNAWAY`.
+- [ ] No runaway: release upright robot → wheels settle to zero torque within ~1 s.

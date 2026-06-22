@@ -1,10 +1,9 @@
 #include <Arduino.h>
 #include <unity.h>
+#include "config.h"
 
-// Serial2: RX=GPIO16 ← Teensy pin20, TX=GPIO17 → Teensy pin21
-#define LINK_RX   16
-#define LINK_TX   17
-#define LINK_BAUD 115200
+// Serial2: RX=TEENSY_UART_RX ← Teensy pin20, TX=TEENSY_UART_TX → Teensy pin21
+// Baud, RX, TX pin constants come from config.h so this test tracks production config.
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -26,7 +25,8 @@ void test_uart_echo(void) {
 
 void setup() {
     Serial.begin(115200);
-    Serial2.begin(LINK_BAUD, SERIAL_8N1, LINK_RX, LINK_TX);
+    Serial2.setRxBufferSize(1024);
+    Serial2.begin(TEENSY_UART_BAUD, SERIAL_8N1, TEENSY_UART_RX, TEENSY_UART_TX);
     delay(500);
 
     UNITY_BEGIN();

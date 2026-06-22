@@ -19,7 +19,19 @@ public:
 #endif
 
 #ifndef COMM_MAX_PAYLOAD
-#define COMM_MAX_PAYLOAD 128
+// Must be > sizeof(TelemetryPayload) + 9 (frame overhead).  See propagation checklist in
+// comm_protocol.h before the TELEM_VERSION define.  Current V4 payload = 128 bytes.
+// DANGER: if this is <= sizeof(TelemetryPayload), CommLink::send() overflows its stack frame
+// buffer and the ESP32 USB forward silently drops every telemetry packet.
+#define COMM_MAX_PAYLOAD 256
+#endif
+
+// If a frame start is seen but the frame does not complete within this many ms, the
+// parser resets and increments rx_drops().  Must be > (frame_bytes * 10 / baud_bps * 1000)
+// for the slowest expected baud.  At 1.2 Mbaud a max frame (137 B) takes ~1.1 ms; 10 ms
+// gives ~9× margin while recovering within one 2 ms telemetry interval.
+#ifndef COMM_PARSE_TIMEOUT_MS
+#define COMM_PARSE_TIMEOUT_MS 10
 #endif
 
 typedef void (*CommPacketCb)(uint8_t type, uint8_t version, uint8_t source,
@@ -39,6 +51,9 @@ public:
     // Register callback invoked on every fully-validated received packet.
     void onPacket(CommPacketCb cb);
 
+    // Count of frames discarded due to bad checksum, bad framing, length overflow, or timeout.
+    uint32_t rx_drops() const { return _rx_drops; }
+
 private:
     Stream&      _s;
     uint8_t      _src;
@@ -55,6 +70,8 @@ private:
     uint16_t    _rx_len, _rx_idx;
     uint8_t     _rx_crc;
     uint8_t     _rx_buf[COMM_MAX_PAYLOAD];
+    uint32_t    _parse_start_ms;  // millis() when current frame start was seen
+    uint32_t    _rx_drops;        // total frames discarded (never reset)
 
-    void _reset_parser();
+    void _reset_parser();         // resets state machine; does NOT touch _rx_drops
 };

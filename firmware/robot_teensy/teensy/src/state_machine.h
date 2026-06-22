@@ -28,3 +28,8 @@ void stateMachine_request_estop();
 // Trigger a ~1 s CMD_REJECT transient (buzzer + red blink) then auto-return to
 // the originating state. Called internally by req_running() on denied arm attempt.
 void stateMachine_request_cmd_reject();
+
+// Called by the command handler each time a GUI command packet arrives.
+// Feeds the MANUAL-mode watchdog: if no call for >500 ms while in MANUAL,
+// the state machine auto-exits back to STANDBY.
+void stateMachine_ping_gui_watchdog();

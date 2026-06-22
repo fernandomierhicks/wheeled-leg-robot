@@ -65,7 +65,10 @@ typedef struct __attribute__((packed)) {
 #define FAULT_HIP_FEEDBACK_LOST  0x03  // hip CAN feedback timed out during operation
 #define FAULT_HIP_LARGE_POS_CMD  0x04  // commanded position jump exceeded MAX_HIP_DELTA_RAD
 #define FAULT_CALIBRATION_TIMEOUT 0x05 // hardstop not found within CALIB_SAFETY_BOUND_RAD
-#define FAULT_HUMAN_ESTOP        0x06  // ESTOP requested by user via GUI button
+#define FAULT_HUMAN_ESTOP        0x06  // ESTOP requested by user via GUI button or radio
+#define FAULT_PARAM_OUT_OF_BOUNDS 0x07 // param write rejected — value outside [min, max]
+#define FAULT_PITCH_WATCHDOG     0x08  // |pitch| > 50° for > 200 ms
+#define FAULT_WHEEL_RUNAWAY      0x09  // wheel velocity exceeded 2× soft governor limit
 
 // ── Payload: ToF distances (ESP32→Teensy, COMM_TYPE_TOF) ─────────────────────
 #define TOF_PAYLOAD_V1  1
@@ -77,11 +80,53 @@ typedef struct __attribute__((packed)) {
 } TofPayload;                 // 12 bytes
 
 // ── Payload: telemetry ────────────────────────────────────────────────────────
-// IMPORTANT: when bumping the version, also update the version check in
-//   esp32/src/main.cpp  on_teensy_packet() — search for TELEM_PAYLOAD_V*
-#define TELEM_PAYLOAD_V2  2
-#define TELEM_PAYLOAD_V3  3
-#define TELEM_PAYLOAD_V4  4
+//
+// PROPAGATION CHECKLIST — touch ALL of these when adding/removing fields or bumping version:
+//
+//  1. shared/CommLink/CommLink.h
+//       COMM_MAX_PAYLOAD must be > sizeof(TelemetryPayload) + 9 (frame overhead).
+//       Failing this silently drops every telemetry packet on the ESP32 USB forward path
+//       because Serial.write() may block and the ESP32 UART HW FIFO is only 128 bytes.
+//       Current V4 payload = 128 bytes; COMM_MAX_PAYLOAD is currently 256.
+//
+//  2. esp32/src/main.cpp  on_teensy_packet()
+//       a) Bump TELEM_VERSION here — the version check in on_teensy_packet() is automatic.
+//       b) `len >= sizeof(TelemetryPayload)` guard — automatically correct if struct grows.
+//       c) Add a new volatile g_telem_* variable for each new field.
+//       d) Copy the field out of `pkt` into the new g_telem_* variable.
+//       e) Pass the variable to the relevant draw function in update_display().
+//
+//  3. teensy/src/main.cpp  send_telemetry()
+//       Fill the new struct field from the appropriate g_state / sensor variable.
+//
+//  4. software/gui/flash_monitor.py  PacketDecoder._parse()
+//       a) Add a new `if length >= N:` block (N = new total struct size) to unpack
+//          the new fields with struct.unpack_from() at the correct byte offset.
+//       b) Add the new key(s) to the info dict so tabs can consume them via TelemetryBus.
+//       c) For field additions: add a new `if length >= N:` block at the correct offset.
+//          For breaking changes (remove/reorder fields): bump TELEM_VERSION — the GUI and
+//          ESP32 will reject mismatched packets with a clear error until both are reflashed.
+//          Also update _TELEM_VERSION in flash_monitor.py (search "must match TELEM_VERSION").
+//
+//  5. (optional) software/gui/raw_data_tab.py
+//       Add new field rows to the "Telemetry Payload" grid if you want live inspection.
+//
+// Byte-offset map (packed, no padding — verify with static_assert or python struct.calcsize):
+//   [0]    uint32  timestamp_ms
+//   [4]    float×9 pitch_rad … yaw_rad
+//   [40]   uint8   robot_state
+//   [41]   uint8   fault_code
+//   [42]   float×3 test_val, hip_l_current_a, hip_r_current_a
+//   [54]   uint16×14 ibus_ch[14]
+//   [82]   uint8   ibus_alive
+//   [83]   float×6 wm_l_vel … wm_r_vbus    ← V3 start
+//   [107]  uint32×2 wm_l_error, wm_r_error
+//   [115]  uint8×3  wm_l_state, wm_r_state, wm_mode
+//   [118]  uint16×4 tof_dist_mm[4]          ← V4 start
+//   [126]  uint16   tof_age_ms
+//   [128]  ← end, sizeof = 128 bytes
+//
+#define TELEM_VERSION  4  // bump when adding/removing struct fields; triggers mismatch errors
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -116,7 +161,11 @@ typedef struct __attribute__((packed)) {
     // V4 additions — ToF obstacle sensor data relayed from ESP32 (10 bytes, total 128)
     uint16_t tof_dist_mm[4];     // raw distances from sensors 0-3 [mm], 0xFFFF = no data
     uint16_t tof_age_ms;         // ms since last valid ToF packet from ESP32, 0xFFFF = never
-} TelemetryPayload;              // 128 bytes (V4)
+} TelemetryPayload;  // 128 bytes — TELEM_VERSION 4
+#ifdef __cplusplus
+static_assert(sizeof(TelemetryPayload) == 128,
+    "TelemetryPayload size changed — bump TELEM_VERSION, update COMM_MAX_PAYLOAD, and see PROPAGATION CHECKLIST");
+#endif
 
 // ── Payload: command ──────────────────────────────────────────────────────────
 #define CMD_PAYLOAD_V1  1

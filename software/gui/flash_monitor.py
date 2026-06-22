@@ -155,6 +155,7 @@ _COMM_START  = 0xFF
 _COMM_END    = 0xFE
 _HEADER_SZ   = 7   # start + type + version + source + seq + len_lo + len_hi
 _OVERHEAD    = 9   # header(7) + checksum(1) + end(1)
+_TELEM_VERSION = 4  # must match TELEM_VERSION in shared/comm_protocol.h
 
 _TYPE_NAMES  = {0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG", 0x05: "CALIB", 0x06: "PARAM", 0x07: "TOF"}
 _SRC_NAMES   = {0x01: "TEENSY", 0x02: "ESP32", 0x03: "PC"}
@@ -167,6 +168,9 @@ _FAULT_NAMES = {
     0x04: "HIP_LARGE_POS_CMD",
     0x05: "CALIBRATION_TIMEOUT",
     0x06: "HUMAN_ESTOP",
+    0x07: "PARAM_OUT_OF_BOUNDS",
+    0x08: "PITCH_WATCHDOG",
+    0x09: "WHEEL_RUNAWAY",
 }
 _FAULT_DESCRIPTIONS = {
     0x00: "",
@@ -176,6 +180,9 @@ _FAULT_DESCRIPTIONS = {
     0x04: "Commanded hip position jump exceeded MAX_HIP_DELTA_RAD",
     0x05: "Hardstop not found within CALIB_SAFETY_BOUND_RAD",
     0x06: "Human triggered ESTOP",
+    0x07: "Param write out of bounds — value outside [min, max]",
+    0x08: "|pitch| > 50° for > 200 ms — robot tipped",
+    0x09: "Wheel velocity exceeded 2× soft governor limit",
 }
 _LOG_LEVELS  = {0x01: "INFO", 0x02: "WARN", 0x03: "ERROR"}
 
@@ -256,61 +263,65 @@ class PacketDecoder(QObject):
                         "calib_max_rad": mx,
                     })
                 elif ptype == 0x01 and length >= 83:
-                    ts, pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw, state, fault, test_val, \
-                        hip_l_current, hip_r_current = \
-                        _struct.unpack_from("<IfffffffffBBfff", payload)
-                    ibus_raw = _struct.unpack_from("<14HB", payload, 54)
-                    info.update({
-                        "timestamp_ms":    ts,
-                        "pitch_rad":       pitch,
-                        "pitch_rate_rads": pitch_rate,
-                        "wheel_vel_avg":   wheel_vel,
-                        "hip_l_pos_rad":   hip_l,
-                        "hip_r_pos_rad":   hip_r,
-                        "cmd_l":           cmd_l,
-                        "cmd_r":           cmd_r,
-                        "roll_rad":        roll,
-                        "yaw_rad":         yaw,
-                        "robot_state":     state,
-                        "state_name":      _STATE_NAMES.get(state, str(state)),
-                        "fault_code":      fault,
-                        "fault_name":      _FAULT_NAMES.get(fault, f"0x{fault:02X}"),
-                        "fault_description": _FAULT_DESCRIPTIONS.get(fault, "Unknown fault"),
-                        "test_val":        test_val,
-                        "hip_l_current_a": hip_l_current,
-                        "hip_r_current_a": hip_r_current,
-                        "ibus_ch":         list(ibus_raw[:14]),
-                        "ibus_alive":      bool(ibus_raw[14]),
-                    })
-                    if length >= 118:
-                        wm_l_vel, wm_r_vel, wm_l_pos, wm_r_pos, wm_l_vbus, wm_r_vbus, \
-                        wm_l_err, wm_r_err, wm_l_st, wm_r_st, wm_mode_val = \
-                            _struct.unpack_from("<ffffffIIBBB", payload, 83)
+                    if version != _TELEM_VERSION:
+                        info["version_mismatch"] = True
+                        info["got_version"]       = version
+                        info["expected_version"]  = _TELEM_VERSION
+                    else:
+                        ts, pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw, state, fault, test_val, \
+                            hip_l_current, hip_r_current = \
+                            _struct.unpack_from("<IfffffffffBBfff", payload)
+                        ibus_raw = _struct.unpack_from("<14HB", payload, 54)
                         info.update({
-                            "wm_l_vel_turns_s": wm_l_vel,
-                            "wm_r_vel_turns_s": wm_r_vel,
-                            "wm_l_pos_turns":   wm_l_pos,
-                            "wm_r_pos_turns":   wm_r_pos,
-                            "wm_l_vbus":        wm_l_vbus,
-                            "wm_r_vbus":        wm_r_vbus,
-                            "wm_l_error":       wm_l_err,
-                            "wm_r_error":       wm_r_err,
-                            "wm_l_state":       wm_l_st,
-                            "wm_r_state":       wm_r_st,
-                            "wm_mode":          wm_mode_val,
+                            "timestamp_ms":    ts,
+                            "pitch_rad":       pitch,
+                            "pitch_rate_rads": pitch_rate,
+                            "wheel_vel_avg":   wheel_vel,
+                            "hip_l_pos_rad":   hip_l,
+                            "hip_r_pos_rad":   hip_r,
+                            "cmd_l":           cmd_l,
+                            "cmd_r":           cmd_r,
+                            "roll_rad":        roll,
+                            "yaw_rad":         yaw,
+                            "robot_state":     state,
+                            "state_name":      _STATE_NAMES.get(state, str(state)),
+                            "fault_code":      fault,
+                            "fault_name":      _FAULT_NAMES.get(fault, f"0x{fault:02X}"),
+                            "fault_description": _FAULT_DESCRIPTIONS.get(fault, "Unknown fault"),
+                            "test_val":        test_val,
+                            "hip_l_current_a": hip_l_current,
+                            "hip_r_current_a": hip_r_current,
+                            "ibus_ch":         list(ibus_raw[:14]),
+                            "ibus_alive":      bool(ibus_raw[14]),
                         })
-                    if length >= 128:
-                        # V4: ToF obstacle sensor data (4× uint16 distances + uint16 age)
-                        tof_d0, tof_d1, tof_d2, tof_d3, tof_age = \
-                            _struct.unpack_from("<5H", payload, 118)
-                        _NO_DATA = 0xFFFF
-                        info.update({
-                            "tof_dist_mm":      [tof_d0, tof_d1, tof_d2, tof_d3],
-                            "tof_front_min_mm": min(d for d in [tof_d0, tof_d1] if d != _NO_DATA) if any(d != _NO_DATA for d in [tof_d0, tof_d1]) else _NO_DATA,
-                            "tof_rear_min_mm":  min(d for d in [tof_d2, tof_d3] if d != _NO_DATA) if any(d != _NO_DATA for d in [tof_d2, tof_d3]) else _NO_DATA,
-                            "tof_age_ms":       tof_age,
-                            "tof_stale":        tof_age > 500,
-                        })
+                        if length >= 118:
+                            wm_l_vel, wm_r_vel, wm_l_pos, wm_r_pos, wm_l_vbus, wm_r_vbus, \
+                            wm_l_err, wm_r_err, wm_l_st, wm_r_st, wm_mode_val = \
+                                _struct.unpack_from("<ffffffIIBBB", payload, 83)
+                            info.update({
+                                "wm_l_vel_turns_s": wm_l_vel,
+                                "wm_r_vel_turns_s": wm_r_vel,
+                                "wm_l_pos_turns":   wm_l_pos,
+                                "wm_r_pos_turns":   wm_r_pos,
+                                "wm_l_vbus":        wm_l_vbus,
+                                "wm_r_vbus":        wm_r_vbus,
+                                "wm_l_error":       wm_l_err,
+                                "wm_r_error":       wm_r_err,
+                                "wm_l_state":       wm_l_st,
+                                "wm_r_state":       wm_r_st,
+                                "wm_mode":          wm_mode_val,
+                            })
+                        if length >= 128:
+                            tof_d0, tof_d1, tof_d2, tof_d3, tof_age = \
+                                _struct.unpack_from("<5H", payload, 118)
+                            _NO_DATA = 0xFFFF
+                            info.update({
+                                "tof_dist_mm":      [tof_d0, tof_d1, tof_d2, tof_d3],
+                                "tof_front_min_mm": min(d for d in [tof_d0, tof_d1] if d != _NO_DATA) if any(d != _NO_DATA for d in [tof_d0, tof_d1]) else _NO_DATA,
+                                "tof_rear_min_mm":  min(d for d in [tof_d2, tof_d3] if d != _NO_DATA) if any(d != _NO_DATA for d in [tof_d2, tof_d3]) else _NO_DATA,
+                                "tof_age_ms":       tof_age,
+                                "tof_stale":        tof_age > 500,
+                            })
             except Exception:
                 pass
             self.packet_decoded.emit(info)

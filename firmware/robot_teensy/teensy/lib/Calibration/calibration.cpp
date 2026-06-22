@@ -182,3 +182,11 @@ bool calibration_done() {
 bool calibration_failed() {
     return ax_L.state == CAL_FAULT || ax_R.state == CAL_FAULT;
 }
+
+void calibration_abort() {
+    ax_L.state        = CAL_SEEK_BOTTOM;
+    ax_R.state        = CAL_SEEK_BOTTOM;
+    s_done_announced  = false;
+    s_fault_announced = false;
+    comm_log(LOG_LEVEL_INFO, "Calib: aborted");
+}

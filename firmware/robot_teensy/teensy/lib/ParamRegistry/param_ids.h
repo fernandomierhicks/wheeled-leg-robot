@@ -39,6 +39,12 @@
 #define PARAM_CALIB_R_SEEK_DIR    0x010B  // sign (+1/-1) toward right hip bottom hardstop
 #define PARAM_CALIB_DONE          0x010C  // 1.0 = calibration completed at least once (persisted across reboots)
 
+// GROUP_CONTROL — LQR controller settings
+#define PARAM_LQR_ENABLE              0x0400  // 1 = wheel torque output active; 0 = LQR runs but outputs zero
+#define PARAM_SIM_PITCH_RAD           0x0401  // when non-zero, overrides real pitch (bench safety injection)
+#define PARAM_LQR_TORQUE_LIMIT        0x0402  // |tau_sym| clamp [N·m]; default 1.0, hard max 7.0
+#define PARAM_WHEEL_VEL_LIMIT_TURNS_S 0x0403  // per-tick soft governor [turns/s]; ESTOP at 2×
+
 // GROUP_COMMAND — high-freq setpoints from radio/GUI
 #define PARAM_RADIO_HIP_CMD       0x0500  // hip extension command from CH3 [0=retracted, 1=extended]; stale when radio dead
 

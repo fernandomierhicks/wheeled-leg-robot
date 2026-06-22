@@ -87,6 +87,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
 
     if (type != COMM_TYPE_COMMAND || len < 1) return;
 
+    stateMachine_ping_gui_watchdog();  // feed MANUAL-mode GUI watchdog
     uint8_t cmd_id = payload[0];
 
     // ── Mode change: signal the state machine ─────────────────────────────────
@@ -154,6 +155,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         ParamSetResult res = param_set(id, val);
         if (res == ParamSetResult::FAULT) {
             comm_log(LOG_LEVEL_ERROR, "Param 0x%04X out of bounds — ESTOP", id);
+            g_state.fault_code = FAULT_PARAM_OUT_OF_BOUNDS;
             stateMachine_request_estop();
         }
         // Echo back actual (possibly clamped) value
@@ -181,6 +183,9 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
 void setup() {
     Serial.begin(115200);
     Serial5.begin(ESP32_BAUD);
+    // Fix 5: flush any boot-noise that arrived before the parser was ready
+    delay(10);
+    while (Serial5.available()) Serial5.read();
     g_comm.onPacket(on_command);
     g_comm_usb.onPacket(on_command);
 
@@ -271,8 +276,8 @@ static void send_telemetry() {
     for (int i = 0; i < 4; i++) telem.tof_dist_mm[i] = g_tof.dist_mm[i];
     uint32_t tof_age = millis() - g_tof_last_ms;
     telem.tof_age_ms = (g_tof_last_ms == 0) ? 0xFFFF : (uint16_t)min(tof_age, (uint32_t)0xFFFF);
-    g_comm.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V4, &telem, sizeof(telem));
-    if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V4, &telem, sizeof(telem));
+    g_comm.send(COMM_TYPE_TELEMETRY, TELEM_VERSION, &telem, sizeof(telem));
+    if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_VERSION, &telem, sizeof(telem));
 }
 
 // ── LED ───────────────────────────────────────────────────────────────────────
@@ -331,6 +336,10 @@ static void read_sensors() {
     param_force_set(PARAM_IBUS_ALIVE, g_ibus.alive() ? 1.0f : 0.0f);
 }
 
+// ── Radio melodies ────────────────────────────────────────────────────────────
+static const BuzzerNote RADIO_ACQ_MELODY[]  = {{76, 80, 0}};             // E5 — single: "link up"
+static const BuzzerNote RADIO_LOST_MELODY[] = {{64, 100, 30}, {60, 150, 0}}; // E4→C4 desc: "link lost"
+
 // ── Radio interpretation ───────────────────────────────────────────────────────
 // CH10 > 1990: arm into RUNNING (requires prior calibration).
 // CH10 drop:   disarm back to STANDBY.
@@ -344,8 +353,14 @@ static void radio_update() {
     uint16_t ch5  = g_ibus.channel(5);
 
     static bool s_was_alive = false;
-    if (alive && !s_was_alive) comm_log(LOG_LEVEL_INFO, "Radio: signal OK");
-    if (!alive && s_was_alive) comm_log(LOG_LEVEL_WARN, "Radio: signal lost");
+    if (alive && !s_was_alive) {
+        comm_log(LOG_LEVEL_INFO, "Radio: signal OK");
+        g_buzzer.play(RADIO_ACQ_MELODY, 1, 120);
+    }
+    if (!alive && s_was_alive) {
+        comm_log(LOG_LEVEL_WARN, "Radio: signal lost");
+        g_buzzer.play(RADIO_LOST_MELODY, 2, 120);
+    }
     s_was_alive = alive;
 
     static bool s_was_armed = false;

@@ -24,9 +24,11 @@ public:
 
 // ── Cross-device link (Serial2: GPIO16=RX2←Teensy pin20, GPIO17=TX2→Teensy pin21) ────
 
-#define TEENSY_LINK_BAUD  1200000UL
-#define TEENSY_LINK_RX    16   // GPIO16 (RX2) ← Teensy pin 20
-#define TEENSY_LINK_TX    17   // GPIO17 (TX2) → Teensy pin 21
+// Pin/baud constants from config.h so the test tracks production config.
+#include "config.h"
+#define TEENSY_LINK_BAUD  TEENSY_UART_BAUD
+#define TEENSY_LINK_RX    TEENSY_UART_RX
+#define TEENSY_LINK_TX    TEENSY_UART_TX
 
 static CommLink*  s_link     = nullptr;
 static uint32_t   s_rx_count = 0;
@@ -59,8 +61,8 @@ static void init_uart_link() {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void test_payload_size(void) {
-    // 1×uint32 + 9×float + 1×uint8 = 4 + 36 + 1 = 41 bytes
-    TEST_ASSERT_EQUAL(41, sizeof(TelemetryPayload));
+    // Static assert in comm_protocol.h enforces this too; this catches it at runtime on-target.
+    TEST_ASSERT_EQUAL(128, sizeof(TelemetryPayload));
 }
 
 void test_frame_constants(void) {
@@ -94,7 +96,7 @@ void test_telemetry_roundtrip(void) {
     tx.timestamp_ms = 42000;
     tx.pitch_rad    = -0.25f;
 
-    cl.send(COMM_TYPE_TELEMETRY, TELEM_PAYLOAD_V2, &tx, sizeof(tx));
+    cl.send(COMM_TYPE_TELEMETRY, TELEM_VERSION, &tx, sizeof(tx));
     cl.update();
 
     TEST_ASSERT_TRUE(s_rx_got);

@@ -15,11 +15,11 @@ void test_baud_config(void) {
 }
 
 void test_frame_size(void) {
-    // TelemetryPayload: 1×uint32 + 9×float + 1×uint8 = 4 + 36 + 1 = 41 B
+    // TelemetryPayload V4: 128 B (see static_assert in comm_protocol.h)
     // Frame overhead: start + type + ver + src + seq + len×2 + crc + end = 9 B
-    // Total on wire: 50 B → at 1.2 Mbaud ≈ 417 µs < 2000 µs loop budget
-    TEST_ASSERT_EQUAL(41, sizeof(TelemetryPayload));
-    TEST_ASSERT_EQUAL(50, 9 + (int)sizeof(TelemetryPayload));
+    // Total on wire: 137 B → at 1.2 Mbaud ≈ 1.14 ms < 2000 µs loop budget
+    TEST_ASSERT_EQUAL(128, sizeof(TelemetryPayload));
+    TEST_ASSERT_EQUAL(137, 9 + (int)sizeof(TelemetryPayload));
 }
 
 void test_serial5_init(void) {
