@@ -15,18 +15,32 @@ typedef enum : uint8_t {
 } RobotStateEnum;
 
 typedef struct {
+    // ── Sensors ───────────────────────────────────────────────────────────────
     float          pitch_rad;
     float          pitch_rate_rads;
     float          wheel_vel_avg_ms;
     float          hip_l_pos_rad;
     float          hip_r_pos_rad;
-    float          cmd_l;
-    float          cmd_r;
     float          hip_l_current_a;
     float          hip_r_current_a;
+    // ── Robot meta ────────────────────────────────────────────────────────────
     RobotStateEnum state;
-    uint8_t        fault_code;   // FAULT_* from comm_protocol.h; set before entering ESTOP
+    uint8_t        fault_code;        // FAULT_* from comm_protocol.h; set before entering ESTOP
     uint32_t       loop_count;
+    // ── Controller outputs (written by control_loop.cpp / future phases) ──────
+    float          cmd_l;             // final left  wheel command [N·m] = tau_sym + tau_yaw
+    float          cmd_r;             // final right wheel command [N·m] = tau_sym - tau_yaw
+    float          tau_sym;           // unclamped LQR symmetric torque [N·m]
+    float          tau_yaw;           // yaw PI differential torque [N·m] — Phase 4; 0 until then
+    float          theta_ref;         // velocity PI lean setpoint [rad]  — Phase 3; 0 until then
+    float          v_ref;             // velocity reference [m/s]          — Phase 3; 0 until then
+    float          vel_err_integral;  // velocity PI integrator state      — Phase 3; 0 until then
+    float          yaw_err_integral;  // yaw PI integrator state           — Phase 4; 0 until then
+    float          gain_sched_alpha;  // hip gain interpolation [0-1]      — Phase 5; 0 until then
+    float          ff1_out;           // hip reaction FF torque [N·m]      — Phase 6; 0 until then
+    float          ff2_out;           // gravity compensation FF [N·m]     — Phase 6; 0 until then
+    float          ff4_out;           // centripetal lean offset [rad]     — Phase 6; 0 until then
+    uint8_t        jump_state;        // Jump FSM phase                    — Phase 7; 0 until then
 } RobotState;
 
 // Pending hip command queued by the comm handler; consumed by on_manual().

@@ -58,9 +58,9 @@ FLASH_ACTIONS: dict[str, dict] = {
 
 DEVICE_COLOR = {"teensy": BLUE,   "esp32": ORANGE}
 DEVICE_LABEL = {"teensy": "TEENSY 4.1", "esp32": "ESP32 DevKit V1"}
-DEVICE_BAUD  = {"teensy": "115200",     "esp32": "115200"}
+DEVICE_BAUD  = {"teensy": "115200",     "esp32": "921600"}
 
-BAUD_OPTIONS = ["9600", "115200", "230400", "460800", "1000000", "1200000"]
+BAUD_OPTIONS = ["9600", "115200", "230400", "460800", "921600", "1000000", "1200000"]
 
 # ── Serial reader thread ──────────────────────────────────────────────────────
 
@@ -151,15 +151,21 @@ class PioRunner(QObject):
 
 # ── Packet decoder ───────────────────────────────────────────────────────────
 
-_COMM_START  = 0xFF
-_COMM_END    = 0xFE
-_HEADER_SZ   = 7   # start + type + version + source + seq + len_lo + len_hi
-_OVERHEAD    = 9   # header(7) + checksum(1) + end(1)
-_TELEM_VERSION = 4  # must match TELEM_VERSION in shared/comm_protocol.h
+_COMM_MAGIC    = bytes([0xAA, 0x55])  # two-byte start marker
+_COMM_END      = 0xEF
+_HEADER_SZ     = 8   # magic(2) + type + version + source + seq + len_lo + len_hi
+_OVERHEAD      = 10  # header(8) + checksum(1) + end(1)
+_TELEM_VERSION = 6   # must match TELEM_VERSION in shared/comm_protocol.h
+_TELEM_A_LEN   = 118
+_TELEM_B_LEN   = 120
 
-_TYPE_NAMES  = {0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG", 0x05: "CALIB", 0x06: "PARAM", 0x07: "TOF"}
+_TYPE_NAMES  = {
+    0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG",
+    0x05: "CALIB", 0x06: "PARAM", 0x07: "TOF",
+    0x10: "TELEM_A", 0x11: "TELEM_B",
+}
 _SRC_NAMES   = {0x01: "TEENSY", 0x02: "ESP32", 0x03: "PC"}
-_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT"}
+_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING"}
 _FAULT_NAMES = {
     0x00: "NONE",
     0x01: "IMU_ERROR",
@@ -186,14 +192,120 @@ _FAULT_DESCRIPTIONS = {
 }
 _LOG_LEVELS  = {0x01: "INFO", 0x02: "WARN", 0x03: "ERROR"}
 
+# Struct formats for split telemetry (V6, packed, little-endian)
+# TELEM_A: bytes 0-117 of TelemetryPayload
+_FMT_TELEM_A = "<I9fBB3f14HB6f2I3B"
+# TELEM_B: bytes 118-237 of TelemetryPayload
+# 4H tof_dist, 2f rates, 3f accel, 2f hip_vel, 10f hip_cmd, 6f ctrl, 3f ff, H health, BB diag, I loop
+_FMT_TELEM_B = "<4H2f3f2f10f6f3fHBBI"
+
+
+def _decode_telem_a(payload: bytes) -> dict:
+    (ts,
+     pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw,
+     state, fault,
+     test_val, hip_l_curr, hip_r_curr,
+     *ibus_and_alive,
+     wm_l_vel, wm_r_vel, wm_l_pos, wm_r_pos, wm_l_vbus, wm_r_vbus,
+     wm_l_err, wm_r_err,
+     wm_l_st, wm_r_st, wm_mode) = _struct.unpack(_FMT_TELEM_A, payload)
+    ibus_ch   = list(ibus_and_alive[:14])
+    ibus_alive = bool(ibus_and_alive[14])
+    _NO_DATA = 0xFFFF
+    return {
+        "timestamp_ms":    ts,
+        "pitch_rad":       pitch,
+        "pitch_rate_rads": pitch_rate,
+        "wheel_vel_avg":   wheel_vel,
+        "hip_l_pos_rad":   hip_l,
+        "hip_r_pos_rad":   hip_r,
+        "cmd_l":           cmd_l,
+        "cmd_r":           cmd_r,
+        "roll_rad":        roll,
+        "yaw_rad":         yaw,
+        "robot_state":     state,
+        "state_name":      _STATE_NAMES.get(state, str(state)),
+        "fault_code":      fault,
+        "fault_name":      _FAULT_NAMES.get(fault, f"0x{fault:02X}"),
+        "fault_description": _FAULT_DESCRIPTIONS.get(fault, "Unknown fault"),
+        "test_val":        test_val,
+        "hip_l_current_a": hip_l_curr,
+        "hip_r_current_a": hip_r_curr,
+        "ibus_ch":         ibus_ch,
+        "ibus_alive":      ibus_alive,
+        "wm_l_vel_turns_s": wm_l_vel,
+        "wm_r_vel_turns_s": wm_r_vel,
+        "wm_l_pos_turns":   wm_l_pos,
+        "wm_r_pos_turns":   wm_r_pos,
+        "wm_l_vbus":        wm_l_vbus,
+        "wm_r_vbus":        wm_r_vbus,
+        "wm_l_error":       wm_l_err,
+        "wm_r_error":       wm_r_err,
+        "wm_l_state":       wm_l_st,
+        "wm_r_state":       wm_r_st,
+        "wm_mode":          wm_mode,
+    }
+
+
+def _decode_telem_b(payload: bytes) -> dict:
+    (tof0, tof1, tof2, tof3,
+     roll_rate, yaw_rate,
+     accel_x, accel_y, accel_z,
+     hip_l_vel, hip_r_vel,
+     hip_l_cmd_p, hip_r_cmd_p, hip_l_cmd_v, hip_r_cmd_v,
+     hip_l_cmd_kp, hip_r_cmd_kp, hip_l_cmd_kd, hip_r_cmd_kd,
+     hip_l_cmd_tff, hip_r_cmd_tff,
+     theta_ref, v_ref, tau_sym, tau_yaw, vel_err_int, yaw_err_int,
+     ff1, ff2, ff4,
+     health_flags, imu_loss_pct, jump_state, loop_count) = _struct.unpack(_FMT_TELEM_B, payload)
+    _NO_DATA = 0xFFFF
+    tof_front = min((d for d in [tof0, tof1] if d != _NO_DATA), default=_NO_DATA)
+    tof_rear  = min((d for d in [tof2, tof3] if d != _NO_DATA), default=_NO_DATA)
+    return {
+        "tof_dist_mm":         [tof0, tof1, tof2, tof3],
+        "tof_front_min_mm":    tof_front,
+        "tof_rear_min_mm":     tof_rear,
+        "roll_rate_rads":      roll_rate,
+        "yaw_rate_rads":       yaw_rate,
+        "accel_x_ms2":         accel_x,
+        "accel_y_ms2":         accel_y,
+        "accel_z_ms2":         accel_z,
+        "hip_l_vel_rads":      hip_l_vel,
+        "hip_r_vel_rads":      hip_r_vel,
+        "hip_l_cmd_pos_rad":   hip_l_cmd_p,
+        "hip_r_cmd_pos_rad":   hip_r_cmd_p,
+        "hip_l_cmd_vel_rads":  hip_l_cmd_v,
+        "hip_r_cmd_vel_rads":  hip_r_cmd_v,
+        "hip_l_cmd_kp":        hip_l_cmd_kp,
+        "hip_r_cmd_kp":        hip_r_cmd_kp,
+        "hip_l_cmd_kd":        hip_l_cmd_kd,
+        "hip_r_cmd_kd":        hip_r_cmd_kd,
+        "hip_l_cmd_tff":       hip_l_cmd_tff,
+        "hip_r_cmd_tff":       hip_r_cmd_tff,
+        "theta_ref":           theta_ref,
+        "v_ref":               v_ref,
+        "tau_sym":             tau_sym,
+        "tau_yaw":             tau_yaw,
+        "vel_err_integral":    vel_err_int,
+        "yaw_err_integral":    yaw_err_int,
+        "ff1_out":             ff1,
+        "ff2_out":             ff2,
+        "ff4_out":             ff4,
+        "health_flags":        health_flags,
+        "imu_packet_loss_pct": imu_loss_pct,
+        "jump_state":          jump_state,
+        "loop_count":          loop_count,
+    }
+
 
 class PacketDecoder(QObject):
     packet_decoded = pyqtSignal(dict)
 
     def __init__(self, device: str = "", parent=None):
         super().__init__(parent)
-        self._device = device
-        self._buf = b""
+        self._device      = device
+        self._buf         = b""
+        self._telem_a_buf: dict | None = None  # holds decoded TELEM_A waiting for TELEM_B
 
     def feed(self, data: bytes):
         self._buf += data
@@ -201,29 +313,30 @@ class PacketDecoder(QObject):
 
     def _parse(self):
         while True:
-            idx = self._buf.find(bytes([_COMM_START]))
+            idx = self._buf.find(_COMM_MAGIC)
             if idx < 0:
-                self._buf = b""
+                # Keep the last byte — could be start of a magic pair
+                self._buf = self._buf[-1:] if self._buf else b""
                 return
             if idx > 0:
                 self._buf = self._buf[idx:]
             if len(self._buf) < _HEADER_SZ:
                 return
-            ptype   = self._buf[1]
-            version = self._buf[2]
-            source  = self._buf[3]
-            seq     = self._buf[4]
-            length  = self._buf[5] | (self._buf[6] << 8)
+            ptype   = self._buf[2]
+            version = self._buf[3]
+            source  = self._buf[4]
+            seq     = self._buf[5]
+            length  = self._buf[6] | (self._buf[7] << 8)
             total   = _OVERHEAD + length
             if len(self._buf) < total:
                 return
-            payload  = self._buf[7:7 + length]
-            checksum = self._buf[7 + length]
-            end_byte = self._buf[7 + length + 1]
+            payload  = self._buf[8:8 + length]
+            checksum = self._buf[8 + length]
+            end_byte = self._buf[9 + length]
             if end_byte != _COMM_END:
                 self._buf = self._buf[1:]
                 continue
-            xor = ptype ^ version ^ source ^ seq ^ self._buf[5] ^ self._buf[6]
+            xor = ptype ^ version ^ source ^ seq ^ self._buf[6] ^ self._buf[7]
             for b in payload:
                 xor ^= b
             info: dict = {
@@ -242,86 +355,36 @@ class PacketDecoder(QObject):
                     info["log_level"] = _LOG_LEVELS.get(payload[0], f"L{payload[0]}")
                     info["log_msg"]   = payload[1:].decode("utf-8", errors="replace")
                 elif ptype == 0x06 and length >= 35:
-                    # ParamReportPayload: uint16 id, float value, float min, float max, uint8 flags, char name[20]
                     param_id, value, min_val, max_val, flags = _struct.unpack_from("<HfffB", payload)
                     name = payload[15:35].rstrip(b'\x00').decode("utf-8", errors="replace")
                     info.update({
-                        "param_id":    param_id,
-                        "param_value": value,
-                        "param_min":   min_val,
-                        "param_max":   max_val,
-                        "param_flags": flags,
-                        "param_name":  name,
+                        "param_id": param_id, "param_value": value,
+                        "param_min": min_val, "param_max": max_val,
+                        "param_flags": flags, "param_name": name,
                     })
                 elif ptype == 0x05 and length >= 14:
                     axis, event, pos, mn, mx = _struct.unpack_from("<BBfff", payload)
                     info.update({
-                        "calib_axis":    axis,
-                        "calib_event":   event,
-                        "calib_pos_rad": pos,
-                        "calib_min_rad": mn,
-                        "calib_max_rad": mx,
+                        "calib_axis": axis, "calib_event": event,
+                        "calib_pos_rad": pos, "calib_min_rad": mn, "calib_max_rad": mx,
                     })
-                elif ptype == 0x01 and length >= 83:
+                elif ptype == 0x10 and length == _TELEM_A_LEN:
+                    # TELEM_A — store and wait for TELEM_B before emitting
                     if version != _TELEM_VERSION:
                         info["version_mismatch"] = True
                         info["got_version"]       = version
                         info["expected_version"]  = _TELEM_VERSION
                     else:
-                        ts, pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw, state, fault, test_val, \
-                            hip_l_current, hip_r_current = \
-                            _struct.unpack_from("<IfffffffffBBfff", payload)
-                        ibus_raw = _struct.unpack_from("<14HB", payload, 54)
-                        info.update({
-                            "timestamp_ms":    ts,
-                            "pitch_rad":       pitch,
-                            "pitch_rate_rads": pitch_rate,
-                            "wheel_vel_avg":   wheel_vel,
-                            "hip_l_pos_rad":   hip_l,
-                            "hip_r_pos_rad":   hip_r,
-                            "cmd_l":           cmd_l,
-                            "cmd_r":           cmd_r,
-                            "roll_rad":        roll,
-                            "yaw_rad":         yaw,
-                            "robot_state":     state,
-                            "state_name":      _STATE_NAMES.get(state, str(state)),
-                            "fault_code":      fault,
-                            "fault_name":      _FAULT_NAMES.get(fault, f"0x{fault:02X}"),
-                            "fault_description": _FAULT_DESCRIPTIONS.get(fault, "Unknown fault"),
-                            "test_val":        test_val,
-                            "hip_l_current_a": hip_l_current,
-                            "hip_r_current_a": hip_r_current,
-                            "ibus_ch":         list(ibus_raw[:14]),
-                            "ibus_alive":      bool(ibus_raw[14]),
-                        })
-                        if length >= 118:
-                            wm_l_vel, wm_r_vel, wm_l_pos, wm_r_pos, wm_l_vbus, wm_r_vbus, \
-                            wm_l_err, wm_r_err, wm_l_st, wm_r_st, wm_mode_val = \
-                                _struct.unpack_from("<ffffffIIBBB", payload, 83)
-                            info.update({
-                                "wm_l_vel_turns_s": wm_l_vel,
-                                "wm_r_vel_turns_s": wm_r_vel,
-                                "wm_l_pos_turns":   wm_l_pos,
-                                "wm_r_pos_turns":   wm_r_pos,
-                                "wm_l_vbus":        wm_l_vbus,
-                                "wm_r_vbus":        wm_r_vbus,
-                                "wm_l_error":       wm_l_err,
-                                "wm_r_error":       wm_r_err,
-                                "wm_l_state":       wm_l_st,
-                                "wm_r_state":       wm_r_st,
-                                "wm_mode":          wm_mode_val,
-                            })
-                        if length >= 128:
-                            tof_d0, tof_d1, tof_d2, tof_d3, tof_age = \
-                                _struct.unpack_from("<5H", payload, 118)
-                            _NO_DATA = 0xFFFF
-                            info.update({
-                                "tof_dist_mm":      [tof_d0, tof_d1, tof_d2, tof_d3],
-                                "tof_front_min_mm": min(d for d in [tof_d0, tof_d1] if d != _NO_DATA) if any(d != _NO_DATA for d in [tof_d0, tof_d1]) else _NO_DATA,
-                                "tof_rear_min_mm":  min(d for d in [tof_d2, tof_d3] if d != _NO_DATA) if any(d != _NO_DATA for d in [tof_d2, tof_d3]) else _NO_DATA,
-                                "tof_age_ms":       tof_age,
-                                "tof_stale":        tof_age > 500,
-                            })
+                        self._telem_a_buf = {**info, **_decode_telem_a(payload)}
+                    self._buf = self._buf[total:]
+                    continue  # don't emit yet
+                elif ptype == 0x11 and length == _TELEM_B_LEN and self._telem_a_buf is not None:
+                    # TELEM_B — complete the packet and emit as a unified telemetry dict
+                    if version == _TELEM_VERSION:
+                        info = {**self._telem_a_buf, **info, **_decode_telem_b(payload)}
+                        info["ptype"]     = 0x01   # appear as TELEM to PacketInspector
+                        info["type_name"] = "TELEM"
+                    self._telem_a_buf = None
             except Exception:
                 pass
             self.packet_decoded.emit(info)
@@ -652,7 +715,7 @@ class DevicePanel(QWidget):
 
     def _on_disconnected(self):
         self._append("[disconnected]", RED)
-        self._close_port("Disconnected", external=True)
+        self._close_port("Disconnected", external=False)
 
     # ── Flash ─────────────────────────────────────────────────────────────────
 

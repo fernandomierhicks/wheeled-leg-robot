@@ -29,6 +29,7 @@ class SourceManager(QObject):
         super().__init__()
         self._connected: set[str] = set()
         self._active: str = ""
+        self._override: str | None = None
         pm = SerialPortManager.instance()
         pm.port_opened.connect(self._on_opened)
         pm.port_released.connect(self._on_released)
@@ -42,10 +43,30 @@ class SourceManager(QObject):
         self._update()
 
     def _update(self):
-        new_active = next((d for d in PRIORITY if d in self._connected), "")
+        if self._override is not None:
+            new_active = self._override
+        else:
+            new_active = next((d for d in PRIORITY if d in self._connected), "")
         if new_active != self._active:
             self._active = new_active
             self.source_changed.emit(new_active)
+
+    def set_override(self, device: str | None):
+        """Pin a specific source (None = revert to auto-priority)."""
+        self._override = device
+        prev = self._active
+        self._update()
+        if self._active == prev:
+            # active didn't change but override flag did — still notify so UI updates
+            self.source_changed.emit(self._active)
+
+    @property
+    def override(self) -> str | None:
+        return self._override
+
+    @property
+    def connected(self) -> set[str]:
+        return set(self._connected)
 
     @property
     def active(self) -> str:

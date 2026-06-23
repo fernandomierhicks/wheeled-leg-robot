@@ -1,9 +1,20 @@
 #pragma once
 #include <stdint.h>
 
+// ── Bandwidth budget ─────────────────────────────────────────────────────────
+// Teensy→ESP32 (UART, 4 Mbaud):  50 Hz × 2 frames × 130 bytes ≈  13 kB/s  — UART easily handles this.
+// ESP32→PC     (USB serial CP2102): same 13 kB/s forwarded over Serial.
+//   CP2102 max is 921600 baud = 92 kB/s.  Serial.begin() must be ≥ 921600 or the TX buffer
+//   backs up, blocks CommLink::update(), starves the UART RX ring buffer, and causes CRC drops + lag.
+//   If TelemetryPayload grows significantly, recalculate: bytes/frame × 50 Hz × 2 < 92 kB/s.
+//   CP2102N supports up to 3 Mbaud if more headroom is ever needed.
+//
 // ── Frame constants ───────────────────────────────────────────────────────────
-#define COMM_START  0xFF
-#define COMM_END    0xFE
+#define COMM_START_A 0xAA  // two-byte magic reduces false-sync probability to ~1/65536
+#define COMM_START_B 0x55
+#define COMM_END     0xEF
+// Legacy aliases — remove after all unit tests are updated
+#define COMM_START   COMM_START_A
 
 // ── Source IDs ────────────────────────────────────────────────────────────────
 #define COMM_SRC_TEENSY  0x01
@@ -11,13 +22,15 @@
 #define COMM_SRC_PC      0x03
 
 // ── Packet types ──────────────────────────────────────────────────────────────
-#define COMM_TYPE_TELEMETRY    0x01
+#define COMM_TYPE_TELEMETRY    0x01  // deprecated — replaced by TELEM_A + TELEM_B
 #define COMM_TYPE_COMMAND      0x02
 #define COMM_TYPE_ACK          0x03
 #define COMM_TYPE_LOG          0x04
 #define COMM_TYPE_CALIB_EVENT  0x05
 #define COMM_TYPE_PARAM_REPORT 0x06  // Teensy→GUI: current value of one param
 #define COMM_TYPE_TOF          0x07  // ESP32→Teensy: raw ToF distances (TofPayload)
+#define COMM_TYPE_TELEM_A      0x10  // first 118 bytes of TelemetryPayload (frame = 128 bytes)
+#define COMM_TYPE_TELEM_B      0x11  // next  120 bytes of TelemetryPayload (frame = 130 bytes)
 
 // ── Calibration event sub-types ───────────────────────────────────────────────
 #define CALIB_EVENT_PAYLOAD_V1   1
@@ -42,9 +55,10 @@ typedef struct __attribute__((packed)) {
 #define LOG_PAYLOAD_V1   1
 // Log payload: uint8_t level, char msg[] (variable, no null terminator)
 
-// ── Frame layout (9 bytes overhead) ──────────────────────────────────────────
+// ── Frame layout (10 bytes overhead) ─────────────────────────────────────────
 //
-//   [COMM_START]          1 byte  — 0xFF
+//   [COMM_START_A]        1 byte  — 0xAA  ┐ two-byte magic; false-sync prob ~1/65536
+//   [COMM_START_B]        1 byte  — 0x55  ┘
 //   [type]                1 byte  — COMM_TYPE_*
 //   [version]             1 byte  — payload struct version for this type
 //   [source]              1 byte  — COMM_SRC_*
@@ -52,7 +66,7 @@ typedef struct __attribute__((packed)) {
 //   [len_lo][len_hi]      2 bytes — payload length, little-endian
 //   [...payload...]       len bytes
 //   [checksum]            1 byte  — XOR(type,version,source,seq,len_lo,len_hi,payload[0..n-1])
-//   [COMM_END]            1 byte  — 0xFE
+//   [COMM_END]            1 byte  — 0xEF
 
 // ── Fault codes (robot_state == STATE_ESTOP → fault_code says why) ────────────
 // IMPORTANT: when adding/changing a fault code below, also update:
@@ -110,7 +124,7 @@ typedef struct __attribute__((packed)) {
 //       COMM_MAX_PAYLOAD must be > sizeof(TelemetryPayload) + 9 (frame overhead).
 //       Failing this silently drops every telemetry packet on the ESP32 USB forward path
 //       because Serial.write() may block and the ESP32 UART HW FIFO is only 128 bytes.
-//       Current V4 payload = 128 bytes; COMM_MAX_PAYLOAD is currently 256.
+//       Current V5 payload = 244 bytes; COMM_MAX_PAYLOAD is currently 512.
 //
 //  2. esp32/src/main.cpp  on_teensy_packet()
 //       a) Bump TELEM_VERSION here — the version check in on_teensy_packet() is automatic.
@@ -146,10 +160,19 @@ typedef struct __attribute__((packed)) {
 //   [107]  uint32×2 wm_l_error, wm_r_error
 //   [115]  uint8×3  wm_l_state, wm_r_state, wm_mode
 //   [118]  uint16×4 tof_dist_mm[4]          ← V4 start
-//   [126]  uint16   tof_age_ms
-//   [128]  ← end, sizeof = 128 bytes
+//   [126]  float×2  roll_rate_rads, yaw_rate_rads            ← V6 start (tof_age_ms removed)
+//   [134]  float×3  accel_x_ms2, accel_y_ms2, accel_z_ms2
+//   [146]  float×2  hip_l_vel_rads, hip_r_vel_rads
+//   [154]  float×10 hip_l/r_cmd_pos, hip_l/r_cmd_vel, hip_l/r_cmd_kp, hip_l/r_cmd_kd, hip_l/r_cmd_tff
+//   [194]  float×6  theta_ref, v_ref, tau_sym, tau_yaw, vel_err_integral, yaw_err_integral  (gain_sched_alpha removed)
+//   [218]  float×3  ff1_out, ff2_out, ff4_out
+//   [230]  uint16   health_flags
+//   [232]  uint8    imu_packet_loss_pct
+//   [233]  uint8    jump_state
+//   [234]  uint32   loop_count
+//   [238]  ← end, sizeof = 238 bytes
 //
-#define TELEM_VERSION  4  // bump when adding/removing struct fields; triggers mismatch errors
+#define TELEM_VERSION  6  // bump when adding/removing struct fields; triggers mismatch errors
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -183,12 +206,69 @@ typedef struct __attribute__((packed)) {
     uint8_t  wm_mode;            // current WheelMode (0=IDLE,1=VEL,2=POS,3=TRQ)
     // V4 additions — ToF obstacle sensor data relayed from ESP32 (10 bytes, total 128)
     uint16_t tof_dist_mm[4];     // raw distances from sensors 0-3 [mm], 0xFFFF = no data
-    uint16_t tof_age_ms;         // ms since last valid ToF packet from ESP32, 0xFFFF = never
-} TelemetryPayload;  // 128 bytes — TELEM_VERSION 4
+    // V6: tof_age_ms removed (8 bytes saved with gain_sched_alpha; GUI timestamps arrival)
+    // V5 additions — IMU rates + accel (20 bytes)
+    float    roll_rate_rads;     // roll  angular rate [rad/s] (gyro X)
+    float    yaw_rate_rads;      // yaw   angular rate [rad/s] (gyro Z) — needed for Yaw PI
+    float    accel_x_ms2;        // linear accel X (forward)  [m/s²]
+    float    accel_y_ms2;        // linear accel Y (left)     [m/s²]
+    float    accel_z_ms2;        // linear accel Z (up)       [m/s²] — freefall/landing detection
+    // V5 additions — hip motor velocity feedback (8 bytes)
+    float    hip_l_vel_rads;     // hip L rotor velocity [rad/s]
+    float    hip_r_vel_rads;     // hip R rotor velocity [rad/s]
+    // V5 additions — hip motor MIT setpoints — cmd vs feedback enables tracking quality plot (40 bytes)
+    float    hip_l_cmd_pos_rad;  // commanded position  L [rad] (hm_sp_L.p)
+    float    hip_r_cmd_pos_rad;  // commanded position  R [rad] (hm_sp_R.p)
+    float    hip_l_cmd_vel_rads; // commanded velocity  L [rad/s] (hm_sp_L.v)
+    float    hip_r_cmd_vel_rads; // commanded velocity  R [rad/s] (hm_sp_R.v)
+    float    hip_l_cmd_kp;       // position gain       L [N·m/rad] (hm_sp_L.kp)
+    float    hip_r_cmd_kp;       // position gain       R (hm_sp_R.kp)
+    float    hip_l_cmd_kd;       // damping gain        L [N·m·s/rad] (hm_sp_L.kd)
+    float    hip_r_cmd_kd;       // damping gain        R (hm_sp_R.kd)
+    float    hip_l_cmd_tff;      // torque feedforward  L [N·m] (hm_sp_L.tff)
+    float    hip_r_cmd_tff;      // torque feedforward  R [N·m] (hm_sp_R.tff)
+    // V5 additions — balance controller internals (28 bytes); 0 until respective phase
+    float    theta_ref;          // velocity PI lean setpoint [rad] — Phase 3
+    float    v_ref;              // velocity reference fed into LQR [m/s] — Phase 3
+    float    tau_sym;            // unclamped LQR symmetric torque [N·m] — shows saturation
+    float    tau_yaw;            // yaw PI differential torque [N·m] — Phase 4
+    float    vel_err_integral;   // velocity PI integrator state — Phase 3
+    float    yaw_err_integral;   // yaw PI integrator state — Phase 4
+    // V6: gain_sched_alpha removed — add back when Phase 5 is implemented
+    // V5 additions — feedforward outputs (12 bytes); 0 until Phase 6
+    float    ff1_out;            // hip reaction torque cancellation [N·m]
+    float    ff2_out;            // gravity compensation [N·m]
+    float    ff4_out;            // centripetal coupling lean offset [rad]
+    // V5 additions — diagnostics (8 bytes)
+    uint16_t health_flags;       // packed health bits — see HEALTH_FLAG_* below
+    uint8_t  imu_packet_loss_pct;// IMU link loss 0-100% (imu_packet_loss() × 100)
+    uint8_t  jump_state;         // Jump FSM phase (0=BALANCE/inactive) — Phase 7
+    uint32_t loop_count;         // control loop counter; GUI uses delta to detect dropped frames
+} TelemetryPayload;  // 238 bytes — TELEM_VERSION 6
+
+// Split offsets for two-packet telemetry (TELEM_A + TELEM_B)
+// Each frame ≤130 bytes — both drain safely with UART FIFO threshold=32
+#define TELEM_A_LEN  118u  // bytes   0-117: IMU, hip pos, RC, wheel motors
+#define TELEM_B_LEN  120u  // bytes 118-237: ToF, rates, accel, hip cmd, control internals
+
 #ifdef __cplusplus
-static_assert(sizeof(TelemetryPayload) == 128,
+static_assert(sizeof(TelemetryPayload) == 238,
     "TelemetryPayload size changed — bump TELEM_VERSION, update COMM_MAX_PAYLOAD, and see PROPAGATION CHECKLIST");
+static_assert(TELEM_A_LEN + TELEM_B_LEN == 238, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
 #endif
+
+// ── Health flag bits (TelemetryPayload::health_flags) ────────────────────────
+#define HEALTH_HIP_L_OK          (1u << 0)  // hm_L.ok — CAN feedback fresh
+#define HEALTH_HIP_R_OK          (1u << 1)  // hm_R.ok
+#define HEALTH_WM_L_OK           (1u << 2)  // wm_L.ok — encoder feedback fresh
+#define HEALTH_WM_R_OK           (1u << 3)  // wm_R.ok
+#define HEALTH_HIP_LIMITS_VALID  (1u << 4)  // hm_limits_L.valid && hm_limits_R.valid
+#define HEALTH_IMU_NOMINAL       (1u << 5)  // imu_state() == ImuState::NOMINAL
+#define HEALTH_LQR_ACTIVE        (1u << 6)  // PARAM_LQR_ENABLE && STATE_RUNNING
+#define HEALTH_VEL_PI_SAT        (1u << 7)  // theta_ref clamped at theta_max this tick
+#define HEALTH_YAW_PI_SAT        (1u << 8)  // tau_yaw clamped at torque_max this tick
+#define HEALTH_WM_L_VEL_LIMITED  (1u << 9)  // soft governor clamping left wheel
+#define HEALTH_WM_R_VEL_LIMITED  (1u << 10) // soft governor clamping right wheel
 
 // ── Payload: command ──────────────────────────────────────────────────────────
 #define CMD_PAYLOAD_V1  1

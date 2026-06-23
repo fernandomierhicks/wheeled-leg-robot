@@ -83,6 +83,33 @@ _BOX_FACES = np.array([
     [1,2,6],[1,6,5],  # +X face
 ], dtype=np.uint32)
 
+# ── ToF sensor geometry (body-frame, four VL53L1X sensors) ──────────────────
+_TOF_DOWN_ANGLE = math.radians(20)          # angled sensors tilt below horizontal
+_TOF_HALF_SQ    = 0.0085                    # sensor body square half-size [m]
+_TOF_MAX_RANGE  = 4.0                       # beam display clamp [m]
+_TOF_NO_DATA    = 0xFFFF
+
+# Each entry: (body_pos [m], beam_unit_vec) — sensors 0,1 on +X face, 2,3 on -X face
+# Horiz sensor at Z=+0.015; down sensor directly below at Z=-0.015, same Y
+_TOF_DEFS = (
+    (np.array([+_BX,  0.0,  0.015]),
+     np.array([1.0, 0.0, 0.0])),                                                   # 0 front-horiz
+    (np.array([+_BX,  0.0, -0.015]),
+     np.array([math.cos(_TOF_DOWN_ANGLE), 0.0, -math.sin(_TOF_DOWN_ANGLE)])),      # 1 front-down
+    (np.array([-_BX,  0.0,  0.015]),
+     np.array([-1.0, 0.0, 0.0])),                                                  # 2 rear-horiz
+    (np.array([-_BX,  0.0, -0.015]),
+     np.array([-math.cos(_TOF_DOWN_ANGLE), 0.0, -math.sin(_TOF_DOWN_ANGLE)])),     # 3 rear-down
+)
+_TOF_BEAM_COLORS = (
+    (1.00, 1.00, 0.30, 1.0),   # front-h  yellow
+    (1.00, 0.65, 0.10, 1.0),   # front-d  orange
+    (0.30, 1.00, 1.00, 1.0),   # rear-h   cyan
+    (0.20, 0.70, 1.00, 1.0),   # rear-d   sky-blue
+)
+_TOF_SQ_COLOR    = (1.00, 0.85, 0.35, 1.0)  # gold outline for sensor body squares
+_TOF_LABEL_NAMES = ("F-Horiz", "F-Down", "R-Horiz", "R-Down")
+
 # Minimal valid mesh used as a no-op placeholder (e.g. degenerate cylinder)
 _EMPTY_MD = gl.MeshData(
     vertexes=np.zeros((3, 3), dtype=np.float32),
@@ -284,8 +311,29 @@ class RobotVisualizerTab(QWidget):
         self._fr_wheel_L = _make_frame(self._gl, _FR_JOINT)
         self._fr_wheel_R = _make_frame(self._gl, _FR_JOINT)
 
+        # ToF state must exist before _redraw (which calls _update_tof_items)
+        self._tof_dist_mm: list[int] = [_TOF_NO_DATA] * 4
+        self._tof_squares: list[gl.GLLinePlotItem] = []
+        self._tof_beams:   list[gl.GLLinePlotItem] = []
+
         # Initial draw at identity rotation, nominal hip angle
         self._redraw(_Q_NOM, _Q_NOM, 0.0, 0.0, 0.0)
+
+        # ── ToF sensor visualizations ─────────────────────────────────────────
+        for i in range(len(_TOF_DEFS)):
+            sq = gl.GLLinePlotItem(
+                pos=np.zeros((5, 3), dtype=np.float32),
+                color=_TOF_SQ_COLOR, width=2.0, antialias=True,
+            )
+            self._gl.addItem(sq)
+            self._tof_squares.append(sq)
+            beam = gl.GLLinePlotItem(
+                pos=np.zeros((2, 3), dtype=np.float32),
+                color=_TOF_BEAM_COLORS[i], width=2.5, antialias=True,
+            )
+            self._gl.addItem(beam)
+            self._tof_beams.append(beam)
+        self._update_tof_items(np.eye(3))
 
         # ── Right info panel ─────────────────────────────────────────────────
         self._lbl: dict[str, QLabel] = {}
@@ -381,6 +429,27 @@ class RobotVisualizerTab(QWidget):
             lay.addLayout(row)
             self._lbl[name] = v
 
+        tof_hdr = QLabel("ToF Ranges")
+        tof_hdr.setStyleSheet(
+            f"color: {DIM}; font-size: 10px; font-weight: bold; margin-top: 4px;")
+        lay.addWidget(tof_hdr)
+
+        for name in _TOF_LABEL_NAMES:
+            row = QHBoxLayout()
+            row.setSpacing(4)
+            k = QLabel(name + ":")
+            k.setStyleSheet(f"color: {DIM}; font-size: 11px;")
+            v = QLabel("—")
+            v.setStyleSheet(
+                f"color: {TEXT}; font-size: 12px; font-weight: bold;"
+                f" font-family: Consolas;"
+            )
+            row.addWidget(k)
+            row.addStretch()
+            row.addWidget(v)
+            lay.addLayout(row)
+            self._lbl[name] = v
+
         lay.addStretch()
 
         link_legend = QLabel(
@@ -454,6 +523,8 @@ class RobotVisualizerTab(QWidget):
                        R @ np.array([ik_r['W'][0], -_LEG_Y, ik_r['W'][1]]),
                        R @ _ry(ik_r['alpha']), _FR_JOINT, _R_MOUNT_RIGHT)
 
+        self._update_tof_items(R)
+
     def _update_leg(self, leg: dict, ik: dict | None, R: np.ndarray) -> None:
         if ik is None:
             return
@@ -482,6 +553,34 @@ class RobotVisualizerTab(QWidget):
                                     _pw3(Wx, y + _WHEEL_MOTOR_L/2, Wz),
                                     _WHEEL_MOTOR_R, n=16))
 
+    def _update_tof_items(self, R: np.ndarray) -> None:
+        if not self._tof_squares:
+            return
+        for i, (p_body, d_body) in enumerate(_TOF_DEFS):
+            p_world = R @ p_body
+            n_world = R @ d_body
+
+            # sensor square — outline in the plane perpendicular to the beam
+            ref = np.array([0., 0., 1.]) if abs(n_world[2]) < 0.9 else np.array([0., 1., 0.])
+            t1 = np.cross(n_world, ref); t1 /= np.linalg.norm(t1)
+            t2 = np.cross(n_world, t1);  t2 /= np.linalg.norm(t2)
+            s  = _TOF_HALF_SQ
+            sq_pts = np.array([
+                p_world + s*t1 + s*t2,
+                p_world - s*t1 + s*t2,
+                p_world - s*t1 - s*t2,
+                p_world + s*t1 - s*t2,
+                p_world + s*t1 + s*t2,   # close the loop
+            ], dtype=np.float32)
+            self._tof_squares[i].setData(pos=sq_pts)
+
+            # range beam
+            d_mm   = self._tof_dist_mm[i]
+            dist_m = min(d_mm * 1e-3, _TOF_MAX_RANGE) if d_mm != _TOF_NO_DATA else 0.30
+            end    = (p_world + dist_m * n_world).astype(np.float32)
+            self._tof_beams[i].setData(
+                pos=np.array([p_world, end], dtype=np.float32))
+
     # ── Telemetry handler ─────────────────────────────────────────────────────
 
     def _on_packet(self, info: dict) -> None:
@@ -494,6 +593,10 @@ class RobotVisualizerTab(QWidget):
         roll  = info.get("roll_rad",      0.0)
         yaw   = info.get("yaw_rad",       0.0)
         state = info.get("state_name",    "—")
+
+        tof = info.get("tof_dist_mm")
+        if isinstance(tof, (list, tuple)) and len(tof) == 4:
+            self._tof_dist_mm = list(tof)
 
         self._redraw(q_l, q_r, pitch, roll, yaw)
 
@@ -517,3 +620,7 @@ class RobotVisualizerTab(QWidget):
             f" font-family: Consolas;"
         )
         self._lbl["State"].setText(state)
+
+        for i, lname in enumerate(_TOF_LABEL_NAMES):
+            d = self._tof_dist_mm[i]
+            self._lbl[lname].setText("—" if d == _TOF_NO_DATA else f"{d} mm")

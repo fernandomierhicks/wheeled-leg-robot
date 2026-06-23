@@ -16,7 +16,7 @@ static constexpr uint32_t TIMEOUT_MS        = 100;   // silence before ERROR (me
 static constexpr uint32_t RETRY_INTERVAL_MS = 1000;
 static constexpr uint32_t LOSS_WINDOW_MS    = 1000;
 static constexpr float    LOSS_THRESHOLD    = 0.10f;
-static constexpr uint8_t  MAX_DRAIN_EVENTS  = 6;     // GRV + RV + Gyro per cycle
+static constexpr uint8_t  MAX_DRAIN_EVENTS  = 8;     // GRV + RV + Gyro + LinAccel per cycle
 
 // ── Module state ─────────────────────────────────────────────────────────────
 static Adafruit_BNO08x   _sensor(PIN_IMU_RST);
@@ -32,6 +32,9 @@ static float     _yaw_mag        = 0.0f;
 static float     _pitch_rate     = 0.0f;
 static float     _roll_rate      = 0.0f;
 static float     _yaw_rate       = 0.0f;
+static float     _accel_x        = 0.0f;
+static float     _accel_y        = 0.0f;
+static float     _accel_z        = 0.0f;
 static float     _packet_loss    = 0.0f;
 static uint32_t  _last_update_ms = 0;
 static uint32_t  _last_poll_ms   = 0;
@@ -82,6 +85,10 @@ static bool enable_reports() {
     }
     if (!_sensor.enableReport(SH2_GYROSCOPE_CALIBRATED, interval_us)) {
         Serial.println("[IMU] Failed to enable Gyro");
+        return false;
+    }
+    if (!_sensor.enableReport(SH2_LINEAR_ACCELERATION, interval_us)) {
+        Serial.println("[IMU] Failed to enable Linear Acceleration");
         return false;
     }
     return true;
@@ -204,6 +211,10 @@ void imu_update() {
             _pitch_rate = _sv.un.gyroscope.y;
             _roll_rate  = _sv.un.gyroscope.x;
             _yaw_rate   = _sv.un.gyroscope.z;
+        } else if (_sv.sensorId == SH2_LINEAR_ACCELERATION) {
+            _accel_x = _sv.un.linearAcceleration.x;
+            _accel_y = _sv.un.linearAcceleration.y;
+            _accel_z = _sv.un.linearAcceleration.z;
         }
     }
 
@@ -229,5 +240,8 @@ float    imu_yaw_mag()        { return _yaw_mag; }
 float    imu_pitch_rate()     { return _pitch_rate; }
 float    imu_roll_rate()      { return _roll_rate; }
 float    imu_yaw_rate()       { return _yaw_rate; }
+float    imu_accel_x()        { return _accel_x; }
+float    imu_accel_y()        { return _accel_y; }
+float    imu_accel_z()        { return _accel_z; }
 float    imu_packet_loss()    { return _packet_loss; }
 uint32_t imu_last_update_ms() { return _last_update_ms; }

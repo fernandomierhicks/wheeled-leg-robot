@@ -16,7 +16,7 @@ def _kill_other_instances():
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget,
-    QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame, QMessageBox,
+    QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame, QMessageBox, QMenu,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
@@ -245,7 +245,16 @@ def _vsep() -> QFrame:
 
 class StatusBar:
     def __init__(self, sb):
-        self._source    = QLabel("● —")
+        self._source = QPushButton("● —")
+        self._source.setFlat(True)
+        self._source.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._source.setToolTip("Click to select telemetry source")
+        self._source.setStyleSheet(
+            f"QPushButton{{color:{DIM};background:transparent;border:none;"
+            f"font-size:13px;padding:0 4px}}"
+            f"QPushButton:hover{{color:{TEXT};text-decoration:underline}}"
+        )
+        self._source.clicked.connect(self._on_source_clicked)
         self._transport = QLabel("—")
         self._dt        = QLabel("dt: —")
         self._mode      = QLabel("—")
@@ -355,13 +364,60 @@ class StatusBar:
         if reply == QMessageBox.StandardButton.Yes:
             send_reboot()
 
+    def _on_source_clicked(self):
+        from source_manager import SourceManager, PRIORITY
+        sm = SourceManager.instance()
+        menu = QMenu()
+        menu.setStyleSheet(
+            f"QMenu{{background:#1a1a2e;color:{TEXT};border:1px solid {BORDER};"
+            f"font-size:13px}}"
+            f"QMenu::item:selected{{background:{BORDER}}}"
+            f"QMenu::item:disabled{{color:{DIM}}}"
+        )
+
+        auto_action = menu.addAction("Auto (priority order)")
+        auto_action.setCheckable(True)
+        auto_action.setChecked(sm.override is None)
+        menu.addSeparator()
+
+        for device in PRIORITY:
+            label = device.upper()
+            connected = device in sm.connected
+            action = menu.addAction(f"● {label}" if connected else f"○ {label} (not connected)")
+            action.setCheckable(True)
+            action.setChecked(sm.override == device)
+            action.setEnabled(connected)
+            action.setData(device)
+
+        chosen = menu.exec(self._source.mapToGlobal(self._source.rect().bottomLeft()))
+        if chosen is None:
+            return
+        if chosen is auto_action:
+            sm.set_override(None)
+        elif chosen.data():
+            sm.set_override(chosen.data())
+
     def set_source(self, src: str):
+        from source_manager import SourceManager
+        sm = SourceManager.instance()
         color = {
             "TEENSY": BLUE,
             "ESP32":  ORANGE,
         }.get(src, DIM)
-        self._source.setStyleSheet(f"color: {color};")
-        self._source.setText(f"● {src}" if src != "—" else "● —")
+        is_override = sm.override is not None
+        label = f"● {src}" if src != "—" else "● —"
+        if is_override:
+            label += " ✎"
+        self._source.setStyleSheet(
+            f"QPushButton{{color:{color};background:transparent;border:none;"
+            f"font-size:13px;padding:0 4px}}"
+            f"QPushButton:hover{{color:{color};text-decoration:underline}}"
+        )
+        self._source.setText(label)
+        tip = "Click to select telemetry source"
+        if is_override:
+            tip += f" (override active — Auto uses {', '.join(p.upper() for p in ['esp32','teensy'])} priority)"
+        self._source.setToolTip(tip)
 
     def set_transport(self, transport: str):
         self._transport.setText(transport)

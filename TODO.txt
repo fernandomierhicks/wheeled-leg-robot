@@ -9,15 +9,6 @@
 
 LQR + other controllers as per handoff.md
 
-Plan for data fields that can fit in UART packagtel
-
-
-
-
-
-
-
-
 
 
 
@@ -26,7 +17,7 @@ Plan for data fields that can fit in UART packagtel
 ------------------------------------------------------firmware
 WIFI passthourgh
 Easy to rotate frames around, IMU and screen
-Robot visualizer, leg angle, lasers wheel angles
+
 
 
 

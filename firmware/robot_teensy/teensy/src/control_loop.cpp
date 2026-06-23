@@ -77,22 +77,22 @@ void controlLoop_run() {
     float x1 = g_state.pitch_rate_rads;
     float x2 = vel_avg_ms;              // wheel_vel_avg - v_ref
 
-    float tau_sym = -(K_PITCH * x0 + K_PITCH_RATE * x1 + K_VEL * x2);
+    g_state.tau_sym = -(K_PITCH * x0 + K_PITCH_RATE * x1 + K_VEL * x2);
 
     // Clamp to adjustable test limit
     float torque_limit = param_get(PARAM_LQR_TORQUE_LIMIT);
-    if (tau_sym >  torque_limit) tau_sym =  torque_limit;
-    if (tau_sym < -torque_limit) tau_sym = -torque_limit;
+    if (g_state.tau_sym >  torque_limit) g_state.tau_sym =  torque_limit;
+    if (g_state.tau_sym < -torque_limit) g_state.tau_sym = -torque_limit;
 
-    // Log computed torque regardless of enable flag
-    g_state.cmd_l = tau_sym;
-    g_state.cmd_r = tau_sym;
+    // Log computed torque regardless of enable flag (tau_yaw = 0 until Phase 4)
+    g_state.cmd_l = g_state.tau_sym + g_state.tau_yaw;
+    g_state.cmd_r = g_state.tau_sym - g_state.tau_yaw;
 
     // ── Wheel torque output ───────────────────────────────────────────────────
     if (param_get(PARAM_LQR_ENABLE) >= 0.5f) {
         float soft_limit = param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
-        float tau_L = tau_sym;
-        float tau_R = tau_sym;
+        float tau_L = g_state.cmd_l;
+        float tau_R = g_state.cmd_r;
         // Per-wheel soft governor: zero torque if spinning beyond limit in the commanded direction
         if ((wm_L.vel_turns_s >  soft_limit && tau_L > 0.0f) ||
             (wm_L.vel_turns_s < -soft_limit && tau_L < 0.0f)) tau_L = 0.0f;

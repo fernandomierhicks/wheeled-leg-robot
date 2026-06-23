@@ -20,8 +20,8 @@ public:
 
 #ifndef COMM_MAX_PAYLOAD
 // Must be >= sizeof(TelemetryPayload).  See propagation checklist in comm_protocol.h.
-// Current V4 payload = 128 bytes.  Bump this BEFORE growing any payload struct.
-#define COMM_MAX_PAYLOAD 256
+// Current V5 payload = 244 bytes.  Bump this BEFORE growing any payload struct.
+#define COMM_MAX_PAYLOAD 512
 #endif
 #ifdef __cplusplus
 static_assert(COMM_MAX_PAYLOAD >= sizeof(TelemetryPayload),
@@ -63,7 +63,7 @@ private:
     uint8_t      _seq_tx;
 
     enum ParserState : uint8_t {
-        PS_IDLE, PS_TYPE, PS_VER, PS_SRC, PS_SEQ,
+        PS_IDLE, PS_MAGIC2, PS_TYPE, PS_VER, PS_SRC, PS_SEQ,
         PS_LEN0, PS_LEN1, PS_PAYLOAD, PS_CHECKSUM, PS_END
     };
 

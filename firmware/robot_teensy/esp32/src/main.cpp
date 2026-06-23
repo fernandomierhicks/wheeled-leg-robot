@@ -6,6 +6,7 @@
 #include <Wire.h>
 #include <VL53L1X.h>
 #include <driver/dac.h>
+#include <driver/uart.h>
 #include <string.h>
 #include <math.h>
 #include "config.h"
@@ -361,6 +362,13 @@ static volatile uint8_t  g_telem_wm_r_state = 0;
 static volatile uint8_t  g_telem_wm_mode    = 0;
 static volatile bool     g_version_mismatch = false;
 
+// ── UART health (written core 1 on_teensy_packet / display_task, read display_task core 0)
+// 32-bit reads/writes are atomic on Xtensa — no mutex needed for these counters.
+static volatile uint32_t g_uart_crc_drops  = 0;  // lifetime CommLink CRC/frame errors
+static volatile uint32_t g_uart_seq_gaps   = 0;  // lifetime packets lost (loop_count jumps)
+static volatile uint8_t  g_uart_crc_rate   = 0;  // CRC drops in last 2 s window
+static volatile uint8_t  g_uart_gap_rate   = 0;  // seq gaps  in last 2 s window
+
 // ── WiFi / TCP / UDP ──────────────────────────────────────────────────────────
 
 static WiFiServer  g_tcp_server(CMD_TCP_PORT);
@@ -442,58 +450,50 @@ static void forward_to_teensy(uint8_t type, uint8_t version, uint8_t /*source*/,
     }
 }
 
+// ── Telemetry snapshot (written by on_teensy_packet on core 1, read by loop on core 1)
+// Both accesses are on the same core so no mutex is needed.
+static TelemetryPayload s_telem_snap;
+static bool             s_telem_a_rx   = false;  // TELEM_A received, waiting for B
+static bool             s_telem_fresh  = false;  // complete A+B pair ready in s_telem_snap
+
 // ── Teensy → all outputs ──────────────────────────────────────────────────────
 
 static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
                               const uint8_t* payload, uint16_t len) {
+    // Forward every packet upstream regardless of type
     g_usb.send(type, version, payload, len);
+#if WIFI_ENABLED
     if (g_comm_tcp && g_tcp_client.connected())
         g_comm_tcp->send(type, version, payload, len);
-    if (type == COMM_TYPE_TELEMETRY && g_wifi_inited)
+    if ((type == COMM_TYPE_TELEM_A || type == COMM_TYPE_TELEM_B) && g_wifi_inited)
         g_telem_udp.send(type, version, payload, len);
+#endif
 
-    if (type == COMM_TYPE_TELEMETRY && version != TELEM_VERSION) {
+    // Version mismatch: flag on either half so display updates immediately
+    if ((type == COMM_TYPE_TELEM_A || type == COMM_TYPE_TELEM_B) && version != TELEM_VERSION) {
         if (!g_version_mismatch) {
             g_version_mismatch = true;
             g_display_dirty    = true;
-            Serial.printf("[VERSION MISMATCH] Teensy telem v%u, expected v%u — reflash Teensy\n",
+            Serial.printf("[VERSION MISMATCH] Teensy telem v%u, expected v%u — reflash both boards\n",
                           version, TELEM_VERSION);
         }
+        if (!g_teensy_ever_heard) g_display_dirty = true;
+        g_last_teensy_ms    = millis();
+        g_teensy_ever_heard = true;
+        return;
     }
 
-    if (type == COMM_TYPE_TELEMETRY && version == TELEM_VERSION
-            && len >= sizeof(TelemetryPayload)) {
-        if (g_version_mismatch) { g_version_mismatch = false; g_display_dirty = true; }
-        TelemetryPayload pkt;
-        memcpy(&pkt, payload, sizeof(TelemetryPayload));
-
-        uint8_t new_state = pkt.robot_state;
-        if (new_state != g_robot_state || pkt.fault_code != g_fault_code)
-            g_display_dirty = true;
-        if (new_state == RS_CMD_REJECT && g_robot_state != RS_CMD_REJECT)
-            g_reject_end_ms = millis() + 1000;
-
-        g_robot_state       = new_state;
-        g_fault_code        = pkt.fault_code;
-        g_telem_pitch_rad   = pkt.pitch_rad;
-        g_telem_roll_rad    = pkt.roll_rad;
-        g_telem_pitch_rate  = pkt.pitch_rate_rads;
-        g_telem_wheel_vel   = pkt.wheel_vel_avg_ms;
-        g_telem_hip_l_rad   = pkt.hip_l_pos_rad;
-        g_telem_hip_r_rad   = pkt.hip_r_pos_rad;
-        g_telem_hip_l_curr  = pkt.hip_l_current_a;
-        g_telem_hip_r_curr  = pkt.hip_r_current_a;
-        g_telem_ibus_alive  = pkt.ibus_alive;
-        g_telem_wm_l_vel    = pkt.wm_l_vel_turns_s;
-        g_telem_wm_r_vel    = pkt.wm_r_vel_turns_s;
-        g_telem_wm_l_vbus   = pkt.wm_l_vbus;
-        g_telem_wm_r_vbus   = pkt.wm_r_vbus;
-        g_telem_wm_l_error  = pkt.wm_l_error;
-        g_telem_wm_r_error  = pkt.wm_r_error;
-        g_telem_wm_l_state  = pkt.wm_l_state;
-        g_telem_wm_r_state  = pkt.wm_r_state;
-        g_telem_wm_mode     = pkt.wm_mode;
+    // Reassemble split telemetry into s_telem_snap; signal loop() to process once.
+    // All global updates happen in loop() so only the freshest snapshot is acted on.
+    if (type == COMM_TYPE_TELEM_A && len == TELEM_A_LEN) {
+        memcpy(&s_telem_snap, payload, TELEM_A_LEN);
+        s_telem_a_rx = true;
+    } else if (type == COMM_TYPE_TELEM_B && len == TELEM_B_LEN && s_telem_a_rx) {
+        memcpy(((uint8_t*)&s_telem_snap) + TELEM_A_LEN, payload, TELEM_B_LEN);
+        s_telem_a_rx  = false;
+        s_telem_fresh = true;   // loop() will pick this up after draining the UART buffer
     }
+
     if (!g_teensy_ever_heard) g_display_dirty = true;
     g_last_teensy_ms    = millis();
     g_teensy_ever_heard = true;
@@ -879,6 +879,26 @@ static void drawFooter(uint8_t state, bool active, bool rc_alive,
     tft.setCursor(186, fy + 7);
     tft.print("WiFi");
 
+    // UART health — right side of footer top strip (x 214-316), only shown when non-zero.
+    // Orange = historical errors, Red = errors happening right now (last 2 s).
+    tft.fillRect(214, fy + 5, 104, 14, COL_FOOTER_BG);
+    uint32_t crc_tot = g_uart_crc_drops;
+    uint32_t gap_tot = g_uart_seq_gaps;
+    if (crc_tot || gap_tot) {
+        bool     active = (g_uart_crc_rate > 0 || g_uart_gap_rate > 0);
+        uint16_t ucol   = active ? TFT_RED : tft.color565(255, 120, 0);
+        tft.setTextSize(1);
+        tft.setTextColor(ucol, COL_FOOTER_BG);
+        tft.setCursor(214, fy + 7);
+        // Format: "CRC:5 GAP:2" or "CRC:5!" (! = active)
+        if (crc_tot && gap_tot)
+            tft.printf("CRC:%lu GAP:%lu%s", crc_tot, gap_tot, active ? "!" : "");
+        else if (crc_tot)
+            tft.printf("CRC:%lu%s", crc_tot, active ? "!" : "");
+        else
+            tft.printf("GAP:%lu%s", gap_tot, active ? "!" : "");
+    }
+
     // Wheel velocity bar
     const float VEL_MAX = 2.0f;
     const int   bar_x   = 4;
@@ -984,12 +1004,53 @@ static void update_display() {
     drawFooter(state, active, rc_alive, active ? wheel_vel : 0.0f, pkt_age);
 }
 
+// ── Display task (core 0) ─────────────────────────────────────────────────────
+// Owns all TFT SPI operations. loop() on core 1 never touches the display,
+// so UART parsing runs uninterrupted regardless of render time.
+
+static void display_task(void*) {
+    pinMode(TFT_BLK, OUTPUT);
+    digitalWrite(TFT_BLK, HIGH);
+    tft.init();
+    tft.setRotation(3);
+    initDisplay();
+
+    uint32_t last_disp_ms   = 0;
+    uint32_t last_health_ms = 0;
+    uint32_t prev_crc_drops = 0;
+    uint32_t prev_seq_gaps  = 0;
+    for (;;) {
+        uint32_t now = millis();
+
+        // Refresh UART health rates every 2 s
+        if (now - last_health_ms >= 2000) {
+            uint32_t cur_crc = g_teensy.rx_drops();
+            uint32_t cur_gap = g_uart_seq_gaps;
+            g_uart_crc_drops = cur_crc;
+            g_uart_crc_rate  = (uint8_t)min((uint32_t)255, cur_crc - prev_crc_drops);
+            g_uart_gap_rate  = (uint8_t)min((uint32_t)255, cur_gap - prev_seq_gaps);
+            prev_crc_drops   = cur_crc;
+            prev_seq_gaps    = cur_gap;
+            last_health_ms   = now;
+            if (g_uart_crc_rate || g_uart_gap_rate) g_display_dirty = true;
+        }
+
+        if (g_display_dirty || (now - last_disp_ms >= 100)) {
+            g_display_dirty = false;
+            update_display();
+            last_disp_ms = millis();
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
 // ── Setup / loop ──────────────────────────────────────────────────────────────
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(921600);
     Serial2.setRxBufferSize(4096);
     Serial2.begin(TEENSY_UART_BAUD, SERIAL_8N1, TEENSY_UART_RX, TEENSY_UART_TX);
+    uart_set_rx_full_threshold(UART_NUM_2, 32);  // fire ISR every 32 bytes (80 µs at 4 Mbaud) leaving 96 bytes / 192 µs of headroom vs the default 120-byte threshold (8 bytes / 16 µs)
     // Fix 5: flush boot-noise before the parser starts
     delay(10);
     while (Serial2.available()) Serial2.read();
@@ -997,17 +1058,14 @@ void setup() {
     g_teensy.onPacket(on_teensy_packet);
     g_usb.onPacket(forward_to_teensy);
 
+#if WIFI_ENABLED
     WiFi.setSleep(false);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
+#endif
 
-    pinMode(TFT_BLK, OUTPUT);
-    digitalWrite(TFT_BLK, HIGH);
-    tft.init();
-    tft.setRotation(3);
-    initDisplay();
-
-    xTaskCreatePinnedToCore(neo_task, "neo", 4096, nullptr, 1, nullptr, 0);
-    xTaskCreatePinnedToCore(tof_task, "tof", 4096, nullptr, 1, nullptr, 0);
+    xTaskCreatePinnedToCore(neo_task,     "neo",  4096, nullptr, 1, nullptr, 0);
+    xTaskCreatePinnedToCore(tof_task,     "tof",  4096, nullptr, 1, nullptr, 0);
+    xTaskCreatePinnedToCore(display_task, "disp", 6144, nullptr, 1, nullptr, 0);
 
     Serial.println("[ESP32] ready");
 }
@@ -1016,6 +1074,54 @@ void loop() {
     g_teensy.update();
     g_usb.update();
 
+    // Process freshest complete telemetry snapshot. If multiple A+B pairs arrived
+    // during the previous loop() iteration, all but the last are already overwritten
+    // in s_telem_snap — we only act on what's there now.
+    if (s_telem_fresh) {
+        s_telem_fresh = false;
+        const TelemetryPayload& pkt = s_telem_snap;
+
+        if (g_version_mismatch) { g_version_mismatch = false; g_display_dirty = true; }
+
+        uint8_t new_state = pkt.robot_state;
+        if (new_state != g_robot_state || pkt.fault_code != g_fault_code)
+            g_display_dirty = true;
+        if (new_state == RS_CMD_REJECT && g_robot_state != RS_CMD_REJECT)
+            g_reject_end_ms = millis() + 1000;
+
+        g_robot_state       = new_state;
+        g_fault_code        = pkt.fault_code;
+        g_telem_pitch_rad   = pkt.pitch_rad;
+        g_telem_roll_rad    = pkt.roll_rad;
+        g_telem_pitch_rate  = pkt.pitch_rate_rads;
+        g_telem_wheel_vel   = pkt.wheel_vel_avg_ms;
+        g_telem_hip_l_rad   = pkt.hip_l_pos_rad;
+        g_telem_hip_r_rad   = pkt.hip_r_pos_rad;
+        g_telem_hip_l_curr  = pkt.hip_l_current_a;
+        g_telem_hip_r_curr  = pkt.hip_r_current_a;
+        g_telem_ibus_alive  = pkt.ibus_alive;
+        g_telem_wm_l_vel    = pkt.wm_l_vel_turns_s;
+        g_telem_wm_r_vel    = pkt.wm_r_vel_turns_s;
+        g_telem_wm_l_vbus   = pkt.wm_l_vbus;
+        g_telem_wm_r_vbus   = pkt.wm_r_vbus;
+        g_telem_wm_l_error  = pkt.wm_l_error;
+        g_telem_wm_r_error  = pkt.wm_r_error;
+        g_telem_wm_l_state  = pkt.wm_l_state;
+        g_telem_wm_r_state  = pkt.wm_r_state;
+        g_telem_wm_mode     = pkt.wm_mode;
+
+        // Gap detection via loop_count (in TELEM_B): each pair should advance by ~10
+        static uint32_t s_last_lc  = 0;
+        static bool     s_lc_valid = false;
+        if (s_lc_valid) {
+            uint32_t delta = pkt.loop_count - s_last_lc;
+            if (delta > 15) g_uart_seq_gaps += (delta / 10) - 1;
+        }
+        s_last_lc  = pkt.loop_count;
+        s_lc_valid = true;
+    }
+
+#if WIFI_ENABLED
     if (g_comm_tcp && g_tcp_client.connected())
         g_comm_tcp->update();
 
@@ -1035,6 +1141,7 @@ void loop() {
             last_reconnect_ms = millis();
         }
     }
+#endif
 
     // Send ToF packet to Teensy (and USB) at 20 Hz when new sensor data is ready
     static uint32_t last_tof_ms = 0;
@@ -1050,13 +1157,7 @@ void loop() {
         g_teensy.send(COMM_TYPE_TOF, TOF_PAYLOAD_V1, &tpkt, sizeof(tpkt));
     }
 
-    static uint32_t last_disp_ms = 0;
-    if (g_display_dirty || (millis() - last_disp_ms >= 100)) {
-        g_display_dirty = false;
-        update_display();
-        last_disp_ms = millis();
-    }
-
+#if WIFI_ENABLED
     if (g_wifi_inited && g_tcp_server.hasClient()) {
         WiFiClient c = g_tcp_server.available();
         if (c) {
@@ -1068,4 +1169,5 @@ void loop() {
             Serial.println(g_tcp_client.remoteIP());
         }
     }
+#endif
 }

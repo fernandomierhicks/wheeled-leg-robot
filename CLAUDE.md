@@ -5,11 +5,17 @@
 
 ## Working Rules (always follow these)
 
-- **Ask when in doubt.** Never go deep into an approach if something is ambiguous — ask first.
-- **3-minute rule.** Every interaction must complete in under 3 minutes of work. If a task will take longer, stop and propose smaller intermediate steps so the user can confirm progress at each stage before continuing.
-- Always run the file you are working with after you are done editing it.
-- **Commit checkpoint.** After any meaningful step that took ~10–20 min of work, prompt the user to commit and push so progress is never lost.
+- Ask, don't assume. If something is unclear, ask before writing a single line. Never make silent assumptions about intent, architecture, or requirements.
 
+- Simplest solution first. Always implement the simplest thing that could work. Do not add abstractions or flexibility that weren't explicitly requested.
+
+- Don't touch unrelated code. If a file or function is not directly part of the current task, do not modify it, even if you think it could be improved.
+
+- When done changing code always run file or try to compile to look for errors and fix them yourself. 
+
+- Flag uncertainty explicitly. If you are not confident about an approach or technical detail, say so before proceeding. Confidence without certainty causes more damage than admitting a gap.
+
+- I'm always open to ideas on better ways to do things. Please don't hesitate to suggest a better way, or one that has long lasting impact over a tactical change. (as a few examples)"
 ---
 
 ## Control Architecture
@@ -35,14 +41,11 @@ This matches MuJoCo's default world frame. All simulation files, firmware, and C
 Home-built two-wheeled bipedal balancing robot. Balances as an inverted pendulum on two wheels,
 with 4-bar linkage legs for terrain clearance and jumping.
 
-Reference: Impulse by Aaed Musa (aaedmusa.com/projects/impulse) — our design targets ~11× better
-jump height (~283 mm vs ~26 mm) via AK45-10 hip motors replacing GIM6010-8 + ODrive Micro.
-
 ---
 
 ## Architecture — Baseline 1
 
-Geometry from evolutionary optimisation (run_id 51167, jump = 282.65 mm).
+Geometry from evolutionary optimisation (
 See `components/COMPONENTS.md` for full geometry table, BOM, and mass breakdown.
 
 ### 4-bar Leg Topology
@@ -71,15 +74,5 @@ See `components/COMPONENTS.md` for full geometry table, BOM, and mass breakdown.
 ## Components
 
 Shopping list and best-estimate specs: `components/COMPONENTS.md`.
-Each simulation folder owns its own parameters — sims may deviate from COMPONENTS.md intentionally.
 
----
-
-## Software Stack
-
-- **Firmware:** PlatformIO, Arduino framework, UNO R4 WiFi
-- **OTA:** ESP32-S3 handles WiFi OTA (`upload_protocol = espota`)
-- **Simulation:** Python + MuJoCo (Windows native, `pip install mujoco`)
-- **Balance algorithm:** LQR on linearised inverted pendulum, 500 Hz, 3-state: [pitch−θ_ref, pitch_rate, wheel_vel_avg−v_ref] — fully tuned in simulation
-- **Wheel odometry:** ODESC encoder feedback via CAN
 

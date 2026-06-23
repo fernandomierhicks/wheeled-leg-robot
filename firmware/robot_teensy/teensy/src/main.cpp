@@ -187,6 +187,10 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
 
 void setup() {
     Serial.begin(115200);
+    // 512-byte TX buffer: write(253-byte frame) returns immediately at 1.2 Mbaud
+    // instead of blocking ~1.6 ms and adding jitter to the 2 ms control loop.
+    static uint8_t s_esp32_tx_buf[512];
+    Serial5.addMemoryForWrite(s_esp32_tx_buf, sizeof(s_esp32_tx_buf));
     Serial5.begin(ESP32_BAUD);
     // Fix 5: flush any boot-noise that arrived before the parser was ready
     delay(10);
@@ -248,6 +252,23 @@ void setup() {
 
 // ── Telemetry ─────────────────────────────────────────────────────────────────
 
+static uint16_t build_health_flags() {
+    float soft_lim = param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
+    uint16_t f = 0;
+    if (hm_L.ok)                                    f |= HEALTH_HIP_L_OK;
+    if (hm_R.ok)                                    f |= HEALTH_HIP_R_OK;
+    if (wm_L.ok)                                    f |= HEALTH_WM_L_OK;
+    if (wm_R.ok)                                    f |= HEALTH_WM_R_OK;
+    if (hm_limits_L.valid && hm_limits_R.valid)     f |= HEALTH_HIP_LIMITS_VALID;
+    if (imu_state() == ImuState::NOMINAL)            f |= HEALTH_IMU_NOMINAL;
+    if (param_get(PARAM_LQR_ENABLE) >= 0.5f
+        && g_state.state == STATE_RUNNING)           f |= HEALTH_LQR_ACTIVE;
+    if (fabsf(wm_L.vel_turns_s) > soft_lim)         f |= HEALTH_WM_L_VEL_LIMITED;
+    if (fabsf(wm_R.vel_turns_s) > soft_lim)         f |= HEALTH_WM_R_VEL_LIMITED;
+    // HEALTH_VEL_PI_SAT and HEALTH_YAW_PI_SAT set by their controllers in Phase 3/4
+    return f;
+}
+
 static void send_telemetry() {
     TelemetryPayload telem;
     telem.timestamp_ms     = millis();
@@ -279,10 +300,48 @@ static void send_telemetry() {
     telem.wm_r_state       = wm_R.axis_state;
     telem.wm_mode          = (uint8_t)wm_mode;
     for (int i = 0; i < 4; i++) telem.tof_dist_mm[i] = g_tof.dist_mm[i];
-    uint32_t tof_age = millis() - g_tof_last_ms;
-    telem.tof_age_ms = (g_tof_last_ms == 0) ? 0xFFFF : (uint16_t)min(tof_age, (uint32_t)0xFFFF);
-    g_comm.send(COMM_TYPE_TELEMETRY, TELEM_VERSION, &telem, sizeof(telem));
-    if (Serial) g_comm_usb.send(COMM_TYPE_TELEMETRY, TELEM_VERSION, &telem, sizeof(telem));
+    // V5 — IMU rates + linear acceleration
+    telem.roll_rate_rads        = imu_roll_rate();
+    telem.yaw_rate_rads         = imu_yaw_rate();
+    telem.accel_x_ms2           = imu_accel_x();
+    telem.accel_y_ms2           = imu_accel_y();
+    telem.accel_z_ms2           = imu_accel_z();
+    // V5 — hip velocity feedback
+    telem.hip_l_vel_rads        = hm_L.vel_rad_s;
+    telem.hip_r_vel_rads        = hm_R.vel_rad_s;
+    // V5 — hip motor MIT setpoints (cmd vs feedback enables tracking quality plots)
+    telem.hip_l_cmd_pos_rad     = hm_sp_L.p;
+    telem.hip_r_cmd_pos_rad     = hm_sp_R.p;
+    telem.hip_l_cmd_vel_rads    = hm_sp_L.v;
+    telem.hip_r_cmd_vel_rads    = hm_sp_R.v;
+    telem.hip_l_cmd_kp          = hm_sp_L.kp;
+    telem.hip_r_cmd_kp          = hm_sp_R.kp;
+    telem.hip_l_cmd_kd          = hm_sp_L.kd;
+    telem.hip_r_cmd_kd          = hm_sp_R.kd;
+    telem.hip_l_cmd_tff         = hm_sp_L.tff;
+    telem.hip_r_cmd_tff         = hm_sp_R.tff;
+    // V5 — balance controller internals (0 until respective phase is implemented)
+    telem.theta_ref             = g_state.theta_ref;
+    telem.v_ref                 = g_state.v_ref;
+    telem.tau_sym               = g_state.tau_sym;
+    telem.tau_yaw               = g_state.tau_yaw;
+    telem.vel_err_integral      = g_state.vel_err_integral;
+    telem.yaw_err_integral      = g_state.yaw_err_integral;
+    telem.ff1_out               = g_state.ff1_out;
+    telem.ff2_out               = g_state.ff2_out;
+    telem.ff4_out               = g_state.ff4_out;
+    // V5 — diagnostics
+    telem.health_flags          = build_health_flags();
+    telem.imu_packet_loss_pct   = (uint8_t)(imu_packet_loss() * 100.0f + 0.5f);
+    telem.jump_state            = g_state.jump_state;
+    telem.loop_count            = g_state.loop_count;
+    const uint8_t* tp = (const uint8_t*)&telem;
+    g_comm.send(COMM_TYPE_TELEM_A, TELEM_VERSION, tp,               TELEM_A_LEN);
+    g_comm.send(COMM_TYPE_TELEM_B, TELEM_VERSION, tp + TELEM_A_LEN, TELEM_B_LEN);
+    if (Serial) {
+        g_comm_usb.send(COMM_TYPE_TELEM_A, TELEM_VERSION, tp,               TELEM_A_LEN);
+        g_comm_usb.send(COMM_TYPE_TELEM_B, TELEM_VERSION, tp + TELEM_A_LEN, TELEM_B_LEN);
+    }
 }
 
 // ── LED ───────────────────────────────────────────────────────────────────────

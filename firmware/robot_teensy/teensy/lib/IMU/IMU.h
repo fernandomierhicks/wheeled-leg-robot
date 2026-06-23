@@ -33,5 +33,8 @@ float    imu_yaw_mag();         // rad
 float    imu_pitch_rate();      // rad/s (gyro Y)
 float    imu_roll_rate();       // rad/s (gyro X)
 float    imu_yaw_rate();        // rad/s (gyro Z)
+float    imu_accel_x();         // linear accel X (forward)  [m/s²] — BNO086 SH2_LINEAR_ACCELERATION
+float    imu_accel_y();         // linear accel Y (left)     [m/s²]
+float    imu_accel_z();         // linear accel Z (up)       [m/s²]
 float    imu_packet_loss();     // 0.0–1.0, rolling 1-second window
 uint32_t imu_last_update_ms();  // millis() of last good GRV packet

@@ -19,7 +19,7 @@ void CommLink::onPacket(CommPacketCb cb) {
 
 void CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t len) {
     if (len > COMM_MAX_PAYLOAD) return;  // overflow guard — caller passed oversized payload
-    uint8_t frame[9 + COMM_MAX_PAYLOAD];
+    uint8_t frame[10 + COMM_MAX_PAYLOAD];
 
     uint8_t seq    = _seq_tx++;
     uint8_t len_lo = (uint8_t)(len & 0xFF);
@@ -29,18 +29,19 @@ void CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t
     const uint8_t* p = (const uint8_t*)payload;
     for (uint16_t i = 0; i < len; i++) crc ^= p[i];
 
-    frame[0] = COMM_START;
-    frame[1] = type;
-    frame[2] = version;
-    frame[3] = _src;
-    frame[4] = seq;
-    frame[5] = len_lo;
-    frame[6] = len_hi;
-    memcpy(frame + 7, p, len);
-    frame[7 + len] = crc;
-    frame[8 + len] = COMM_END;
+    frame[0] = COMM_START_A;
+    frame[1] = COMM_START_B;
+    frame[2] = type;
+    frame[3] = version;
+    frame[4] = _src;
+    frame[5] = seq;
+    frame[6] = len_lo;
+    frame[7] = len_hi;
+    memcpy(frame + 8, p, len);
+    frame[8 + len] = crc;
+    frame[9 + len] = COMM_END;
 
-    _s.write(frame, 9 + len);
+    _s.write(frame, 10 + len);
 }
 
 void CommLink::update() {
@@ -58,11 +59,21 @@ void CommLink::update() {
         uint8_t b = (uint8_t)_s.read();
         switch (_ps) {
             case PS_IDLE:
-                if (b == COMM_START) {
+                if (b == COMM_START_A) {
 #ifdef ARDUINO
                     _parse_start_ms = millis();  // start timeout clock
 #endif
+                    _ps = PS_MAGIC2;
+                }
+                break;
+            case PS_MAGIC2:
+                if (b == COMM_START_B) {
                     _ps = PS_TYPE;
+                } else {
+                    ++_rx_drops;
+                    _reset_parser();
+                    // if this byte is itself a start byte, don't discard it
+                    if (b == COMM_START_A) _ps = PS_MAGIC2;
                 }
                 break;
             case PS_TYPE:
