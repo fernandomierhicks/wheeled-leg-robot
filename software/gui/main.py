@@ -33,7 +33,7 @@ from radio_tab import RadioTab
 from wheel_motors import WheelMotorsTab
 from telemetry_bus import TelemetryBus
 from source_manager import SourceManager, TRANSPORT_LABEL
-from comm_commands import send_set_mode, send_reboot, STATE_STARTUP, STATE_ESTOP
+from comm_commands import send_set_mode, send_reboot, send_soft_clear, STATE_STARTUP, STATE_STANDBY, STATE_ESTOP
 
 _BG = "#0b0b18"
 
@@ -222,6 +222,19 @@ class DashboardTab(QWidget):
         outer.addLayout(top)
         outer.addStretch(1)
 
+# ── Fault severity (mirrors comm_protocol.h fault_severity()) ─────────────────
+_FAULT_SEVERITY = {
+    0x06: "SOFT",        # HUMAN_ESTOP
+    0x09: "SOFT",        # WHEEL_RUNAWAY
+    0x08: "REPOSITION",  # PITCH_WATCHDOG
+    0x05: "RECALIBRATE", # CALIBRATION_TIMEOUT (reposition + re-run calib)
+    0x07: "GUI_FIX",     # PARAM_OUT_OF_BOUNDS
+    0x04: "GUI_FIX",     # HIP_LARGE_POS_CMD
+    0x01: "REBOOT",      # IMU_ERROR
+    0x02: "REBOOT",      # HIP_INIT_TIMEOUT
+    0x03: "REBOOT",      # HIP_FEEDBACK_LOST
+}
+
 # ── Status bar ────────────────────────────────────────────────────────────────
 
 def _vsep() -> QFrame:
@@ -242,6 +255,9 @@ class StatusBar:
         self._conn      = QLabel("● Disconnected")
         self._conn.setStyleSheet(f"color: {RED};")
 
+        self._current_state      = ""
+        self._current_fault_code = 0
+
         self._btn_estop = QPushButton("ESTOP")
         self._btn_estop.setStyleSheet(
             f"QPushButton{{background:{RED};color:white;font-weight:bold;font-size:14px;"
@@ -252,7 +268,9 @@ class StatusBar:
         self._btn_estop.clicked.connect(lambda: send_set_mode(STATE_ESTOP))
 
         self._btn_reset = QPushButton("Reset")
-        self._btn_reset.setStyleSheet(
+        self._btn_reset.setEnabled(False)
+        self._btn_reset.clicked.connect(self._on_reset_clicked)
+        self._reset_style_normal = (
             f"QPushButton{{background:#4a1a1a;color:white;"
             f"border:1px solid {BORDER};border-radius:3px;padding:2px 10px}}"
             f"QPushButton:hover{{background:#4a1a1acc}}"
@@ -260,8 +278,19 @@ class StatusBar:
             f"QPushButton:disabled{{background:transparent;color:{DIM};"
             f"border:1px solid {BORDER}}}"
         )
-        self._btn_reset.setEnabled(False)
-        self._btn_reset.clicked.connect(lambda: send_set_mode(STATE_STARTUP))
+        self._reset_style_soft = (
+            f"QPushButton{{background:#1a4a1a;color:white;font-weight:bold;"
+            f"border:1px solid {GREEN};border-radius:3px;padding:2px 10px}}"
+            f"QPushButton:hover{{background:#1a6a1a}}"
+            f"QPushButton:pressed{{background:#0f3a0f}}"
+        )
+        self._reset_style_orange = (
+            f"QPushButton{{background:#4a2a00;color:white;"
+            f"border:1px solid {ORANGE};border-radius:3px;padding:2px 10px}}"
+            f"QPushButton:hover{{background:#6a3a00}}"
+            f"QPushButton:pressed{{background:#3a1a00}}"
+        )
+        self._btn_reset.setStyleSheet(self._reset_style_normal)
 
         self._btn_reboot = QPushButton("Reboot")
         self._btn_reboot.setStyleSheet(self._btn_reset.styleSheet())
@@ -285,6 +314,35 @@ class StatusBar:
         sb.addPermanentWidget(self._btn_reboot)
         sb.addPermanentWidget(_vsep())
         sb.addPermanentWidget(self._conn)
+
+    def _on_reset_clicked(self):
+        if self._current_state != "ESTOP":
+            return
+        severity = _FAULT_SEVERITY.get(self._current_fault_code, "REBOOT")
+        if severity == "SOFT":
+            send_soft_clear()
+        elif severity in ("REPOSITION", "RECALIBRATE"):
+            extra = ("\n\nYou will need to re-trigger calibration (CH5 or GUI) after reset."
+                     if severity == "RECALIBRATE" else "")
+            reply = QMessageBox.question(
+                None, "Confirm Reset",
+                f"Robot fell. Stand it upright, then click Yes to reset.{extra}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                send_set_mode(STATE_STARTUP)
+        elif severity == "GUI_FIX":
+            reply = QMessageBox.question(
+                None, "Fix Parameter First",
+                "A parameter value caused this ESTOP.\n"
+                "Please fix the offending parameter in the Params tab, then click Yes to reset.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                send_set_mode(STATE_STARTUP)
+        # REBOOT: button is disabled; should not be reached
 
     def _on_reboot_clicked(self):
         reply = QMessageBox.question(
@@ -311,11 +369,15 @@ class StatusBar:
     def set_dt(self, dt_ms: float):
         self._dt.setText(f"dt: {dt_ms:.1f} ms")
 
-    def set_mode(self, state: str, fault: str = "", fault_description: str = ""):
+    def set_mode(self, state: str, fault: str = "", fault_description: str = "", fault_code: int = 0):
+        self._current_state      = state
+        self._current_fault_code = fault_code
         if state == "—":
             self._mode.setStyleSheet(f"color: {DIM};")
             self._mode.setText("—")
             self._mode.setToolTip("")
+            self._btn_reset.setText("Reset")
+            self._btn_reset.setStyleSheet(self._reset_style_normal)
             self._btn_reset.setEnabled(False)
             self._btn_reboot.setEnabled(False)
             return
@@ -325,8 +387,38 @@ class StatusBar:
         label = f"{state}  [{fault}]" if is_fault else state
         self._mode.setText(label)
         self._mode.setToolTip(fault_description if is_fault else "")
-        self._btn_reset.setEnabled(state == "ESTOP")
         self._btn_reboot.setEnabled(True)
+
+        if state != "ESTOP":
+            self._btn_reset.setText("Reset")
+            self._btn_reset.setStyleSheet(self._reset_style_normal)
+            self._btn_reset.setEnabled(False)
+            self._btn_reset.setToolTip("")
+            return
+
+        severity = _FAULT_SEVERITY.get(fault_code, "REBOOT")
+        if severity == "SOFT":
+            self._btn_reset.setText("Clear ESTOP")
+            self._btn_reset.setStyleSheet(self._reset_style_soft)
+            self._btn_reset.setEnabled(True)
+            self._btn_reset.setToolTip("Click to clear ESTOP and return to STANDBY (no re-init)")
+        elif severity in ("REPOSITION", "RECALIBRATE"):
+            self._btn_reset.setText("Reset")
+            self._btn_reset.setStyleSheet(self._reset_style_orange)
+            self._btn_reset.setEnabled(True)
+            tip = ("Stand robot upright first, then click Reset" +
+                   (" — recalibration required after reset" if severity == "RECALIBRATE" else ""))
+            self._btn_reset.setToolTip(tip)
+        elif severity == "GUI_FIX":
+            self._btn_reset.setText("Reset")
+            self._btn_reset.setStyleSheet(self._reset_style_orange)
+            self._btn_reset.setEnabled(True)
+            self._btn_reset.setToolTip("Fix the offending parameter in the Params tab before resetting")
+        else:  # REBOOT
+            self._btn_reset.setText("Reset")
+            self._btn_reset.setStyleSheet(self._reset_style_normal)
+            self._btn_reset.setEnabled(False)
+            self._btn_reset.setToolTip("Hardware fault — power cycle robot and reboot required")
 
     def set_test_val(self, val: float):
         self._test.setStyleSheet(f"color: {TEXT}; font-family: Consolas;")
@@ -432,7 +524,8 @@ class MainWindow(QMainWindow):
             self._last_ts_ms = ts
         state = info.get("state_name")
         if state:
-            self.status.set_mode(state, info.get("fault_name", ""), info.get("fault_description", ""))
+            self.status.set_mode(state, info.get("fault_name", ""), info.get("fault_description", ""),
+                                 info.get("fault_code", 0))
         test_val = info.get("test_val")
         if test_val is not None:
             self.status.set_test_val(test_val)

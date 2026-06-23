@@ -95,7 +95,12 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         uint8_t target = payload[1];
         comm_log(LOG_LEVEL_INFO, "CMD set_mode -> %d", target);
         if (target == STATE_MANUAL)      stateMachine_request_manual();
-        if (target == STATE_STANDBY)     stateMachine_exit_manual();
+        if (target == STATE_STANDBY) {
+            // From ESTOP: attempt soft-clear (ESTOP→STANDBY directly for SOFT faults).
+            // From any other state: exit MANUAL back to STANDBY.
+            if (g_state.state == STATE_ESTOP) stateMachine_request_soft_clear();
+            else                              stateMachine_exit_manual();
+        }
         if (target == STATE_STARTUP)     stateMachine_request_reset();
         if (target == STATE_CALIBRATION) stateMachine_request_calibration();
         if (target == STATE_ESTOP)       stateMachine_request_estop();
@@ -301,6 +306,7 @@ static void update_led() {
             case STATE_CALIBRATION: g_led.pulse(0,   0,   255, 2000);      break;
             case STATE_STANDBY:     g_led.pulse(255, 200,   0, 2000);      break;
             case STATE_RUNNING:     g_led.blink(0,   255,   0,  167, 167); break;
+            case STATE_JUMPING:     g_led.blink(255, 100,   0,   80,  80); break;  // fast orange: "launching"
             case STATE_MANUAL:      g_led.pulse(0,   200, 255, 2000);      break;
             case STATE_ESTOP:       g_led.blink(255,   0,   0,  100, 100); break;
             case STATE_CMD_REJECT:  g_led.blink(255,   0,   0,  300, 300); break;
@@ -351,6 +357,7 @@ static void radio_update() {
     bool alive = g_ibus.alive();
     uint16_t ch10 = g_ibus.channel(10);
     uint16_t ch5  = g_ibus.channel(5);
+    uint16_t ch6  = g_ibus.channel(6);
 
     static bool s_was_alive = false;
     if (alive && !s_was_alive) {
@@ -366,8 +373,14 @@ static void radio_update() {
     static bool s_was_armed = false;
     bool armed = alive && (ch10 > 1990);
     if (armed && !s_was_armed) {
-        comm_log(LOG_LEVEL_INFO, "Radio: armed -> RUNNING");
-        stateMachine_request_running();
+        if (g_state.state == STATE_ESTOP &&
+            fault_severity(g_state.fault_code) == FAULT_SEVERITY_SOFT) {
+            comm_log(LOG_LEVEL_INFO, "Radio: soft-clear ESTOP [0x%02X]", g_state.fault_code);
+            stateMachine_request_soft_clear();
+        } else {
+            comm_log(LOG_LEVEL_INFO, "Radio: armed -> RUNNING");
+            stateMachine_request_running();
+        }
     } else if (!armed && s_was_armed && g_state.state == STATE_RUNNING) {
         comm_log(LOG_LEVEL_INFO, "Radio: disarmed -> STANDBY");
         stateMachine_disarm_running();
@@ -381,6 +394,14 @@ static void radio_update() {
         stateMachine_request_calibration();
     }
     s_was_calib = calib;
+
+    static bool s_was_jump = false;
+    bool jump_sw = alive && (ch6 > 1990);
+    if (jump_sw && !s_was_jump && g_state.state == STATE_RUNNING) {
+        comm_log(LOG_LEVEL_INFO, "Radio: CH6 -> JUMPING");
+        stateMachine_request_jump();
+    }
+    s_was_jump = jump_sw;
 
     if (alive) {
         float t = constrain((g_ibus.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);  // CH3 (1-indexed)

@@ -30,6 +30,25 @@ static const BuzzerNote ESTOP_MELODY[] = {
     {72, 80,  20},  // C5
     {60, 400,  0},  // C4 — three short blasts then low long: "danger"
 };
+static const BuzzerNote JUMP_MELODY[] = {
+    // Launch countdown: quick ascending run
+    {72,  80, 30},  // C5
+    {74,  80, 30},  // D5
+    {76,  80, 30},  // E5
+    {79,  80, 30},  // G5
+    // Power-up hits
+    {84, 150, 40},  // C6
+    {83, 150, 40},  // B5
+    {84, 150, 40},  // C6
+    // Big launch arc
+    {86, 250, 50},  // D6
+    {84, 250, 50},  // C6
+    {81, 250, 50},  // A5
+    // Victory fanfare
+    {79, 120, 20},  // G5
+    {84, 120, 20},  // C6
+    {88, 400,  0},  // E6 — hold: ~2.6 s total, state timer holds to 3 s
+};
 
 // ── State machine ─────────────────────────────────────────────────────────────
 
@@ -42,6 +61,7 @@ static State* S_CALIBRATION;
 static State* S_RUNNING;
 static State* S_ESTOP;
 static State* S_CMD_REJECT;
+static State* S_JUMPING;
 
 // ── ESTOP hip-disable tracking ────────────────────────────────────────────────
 static bool s_estop_hip_disabled = false;  // set when MIT was killed on ESTOP entry
@@ -55,9 +75,14 @@ static volatile bool s_req_running       = false;
 static volatile bool s_req_disarm_running = false;
 static volatile bool s_req_estop         = false;
 static volatile bool s_req_cmd_reject    = false;
+static volatile bool s_req_soft_clear    = false;
+static volatile bool s_req_jump          = false;
 
 // ── CMD_REJECT auto-exit timer ────────────────────────────────────────────────
 static uint32_t s_cmd_reject_deadline_ms = 0;
+
+// ── JUMPING auto-exit timer ───────────────────────────────────────────────────
+static uint32_t s_jump_deadline_ms = 0;
 
 // ── MANUAL GUI watchdog ───────────────────────────────────────────────────────
 static uint32_t s_last_gui_packet_ms  = 0;
@@ -81,6 +106,7 @@ static void on_standby()  {
     bool entering      = (g_state.state != STATE_STANDBY);
     bool from_running  = (g_state.state == STATE_RUNNING);
     bool from_calib    = (g_state.state == STATE_CALIBRATION);
+    bool from_estop    = (g_state.state == STATE_ESTOP);  // soft-clear path
     g_state.state = STATE_STANDBY;
     hip_motors_clear_setpoints();  // revert to zero-torque ping (e.g. after CALIBRATION)
     g_state.cmd_l = 0.0f;          // clear calibration ramp echo from cmd_l/cmd_r
@@ -88,6 +114,14 @@ static void on_standby()  {
     if (from_calib) calibration_abort();
     if (entering) comm_log(LOG_LEVEL_INFO, "-> STANDBY");
     if (from_running) g_buzzer.play(DISARMED_MELODY, sizeof(DISARMED_MELODY) / sizeof(DISARMED_MELODY[0]), 200);
+    if (from_estop) {
+        // Soft-clear: clear fault and restore hip MIT mode skipped by bypassing STARTUP.
+        g_state.fault_code = FAULT_NONE;
+        if (s_estop_hip_disabled) {
+            s_estop_hip_disabled = false;
+            if (param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) hip_motors_enter_mit();
+        }
+    }
 }
 static void on_manual() {
     bool entering = (g_state.state != STATE_MANUAL);
@@ -140,6 +174,15 @@ static void on_cmd_reject() {
         comm_log(LOG_LEVEL_WARN, "-> CMD_REJECT");
         g_buzzer.play(REJECT_MELODY, sizeof(REJECT_MELODY) / sizeof(REJECT_MELODY[0]), 200);
         s_cmd_reject_deadline_ms = millis() + 1000;
+    }
+}
+static void on_jumping() {
+    bool entering = (g_state.state != STATE_JUMPING);
+    g_state.state = STATE_JUMPING;
+    if (entering) {
+        comm_log(LOG_LEVEL_INFO, "-> JUMPING");
+        g_buzzer.play(JUMP_MELODY, sizeof(JUMP_MELODY) / sizeof(JUMP_MELODY[0]), 200);
+        s_jump_deadline_ms = millis() + 3000;
     }
 }
 static void on_estop() {
@@ -209,10 +252,22 @@ static bool req_running() {
     return true;
 }
 static bool req_disarm_running() { bool v = s_req_disarm_running; s_req_disarm_running = false; return v; }
+static bool req_jump()           { bool v = s_req_jump;           s_req_jump           = false; return v; }
+static bool jump_done()          { return (millis() >= s_jump_deadline_ms); }
 static bool req_estop() {
     if (!s_req_estop) return false;
     s_req_estop = false;
     if (g_state.fault_code == FAULT_NONE) g_state.fault_code = FAULT_HUMAN_ESTOP;
+    return true;
+}
+static bool req_soft_clear() {
+    if (!s_req_soft_clear) return false;
+    s_req_soft_clear = false;
+    if (fault_severity(g_state.fault_code) != FAULT_SEVERITY_SOFT) {
+        comm_log(LOG_LEVEL_WARN, "Soft clear denied: fault 0x%02X is not SOFT severity", g_state.fault_code);
+        return false;
+    }
+    comm_log(LOG_LEVEL_INFO, "Soft clear ESTOP [0x%02X] -> STANDBY", g_state.fault_code);
     return true;
 }
 
@@ -235,6 +290,7 @@ void stateMachine_init() {
     S_RUNNING     = sm.addState(on_running);
     S_ESTOP       = sm.addState(on_estop);
     S_CMD_REJECT  = sm.addState(on_cmd_reject);
+    S_JUMPING     = sm.addState(on_jumping);
 
     S_STARTUP->addTransition(req_estop,    S_ESTOP);
     S_STARTUP->addTransition(startup_ok,   S_STANDBY);
@@ -261,8 +317,14 @@ void stateMachine_init() {
     S_RUNNING->addTransition(req_estop,          S_ESTOP);
     S_RUNNING->addTransition(standby_hip_fault,  S_ESTOP);
     S_RUNNING->addTransition(req_disarm_running, S_STANDBY);
+    S_RUNNING->addTransition(req_jump,           S_JUMPING);
 
-    S_ESTOP  ->addTransition(req_reset,         S_STARTUP);
+    S_JUMPING->addTransition(req_estop,         S_ESTOP);
+    S_JUMPING->addTransition(standby_hip_fault, S_ESTOP);
+    S_JUMPING->addTransition(jump_done,         S_RUNNING);
+
+    S_ESTOP  ->addTransition(req_soft_clear,     S_STANDBY);
+    S_ESTOP  ->addTransition(req_reset,          S_STARTUP);
 
     S_CMD_REJECT->addTransition(cmd_reject_done, S_STANDBY);
 
@@ -283,4 +345,6 @@ void stateMachine_request_running()     { s_req_running        = true; }
 void stateMachine_disarm_running()      { s_req_disarm_running = true; }
 void stateMachine_request_estop()       { s_req_estop          = true; }
 void stateMachine_request_cmd_reject()  { s_req_cmd_reject     = true; }
+void stateMachine_request_soft_clear()  { s_req_soft_clear     = true; }
+void stateMachine_request_jump()        { s_req_jump           = true; }
 void stateMachine_ping_gui_watchdog()   { s_last_gui_packet_ms = millis(); }

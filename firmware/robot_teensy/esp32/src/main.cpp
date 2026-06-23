@@ -29,6 +29,7 @@ enum : uint8_t {
     RS_ESTOP       = 4,
     RS_MANUAL      = 5,
     RS_CMD_REJECT  = 6,
+    RS_JUMPING     = 7,
 };
 
 // ── Strip geometry ────────────────────────────────────────────────────────────
@@ -106,13 +107,12 @@ static void anim_scanner_calibration(CRGB* buf, uint32_t tick) {
         buf[(head + t) % NUM_LEDS] = kBar[t];
 }
 
-// STANDBY — amber breathing (simplified to test timing)
+// STANDBY — cinema marquee: alternating yellow LEDs chase around the ring
 static void anim_marquee_standby(CRGB* buf, uint32_t tick) {
-    uint8_t phase = (uint8_t)((tick % 100u) * 256u / 100u);
-    uint8_t bri   = map(sin8(phase), 0, 255, 30, 255);
-    CRGB c = CRGB(255, 200, 0);
-    c.nscale8(bri);
-    fill_solid(buf, NUM_LEDS, c);
+    fill_solid(buf, NUM_LEDS, CRGB::Black);
+    int phase = (int)((tick / 15u) % 2);  // alternates every 300 ms
+    for (int i = phase; i < NUM_LEDS; i += 2)
+        buf[i] = CRGB(255, 200, 0);
 }
 
 // RUNNING — green breathing on sides; front/rear show ToF proximity
@@ -169,6 +169,31 @@ static void anim_reject_strobe(CRGB* buf, uint32_t tick) {
         buf[i] = ((i + offset) % 2 == 0) ? CRGB(255, 80, 0) : CRGB::Black;
 }
 
+// JUMPING — full rainbow wheel spinning fast + dual counter-rotating white comets + sparkles
+static void anim_rainbow_jump(CRGB* buf, uint32_t tick) {
+    // Full-spectrum rainbow wheel: 2+ rotations/sec (10 hue units × 50 fps = 500 hue/s)
+    uint8_t base_hue = (uint8_t)(tick * 10u);
+    for (int i = 0; i < NUM_LEDS; i++) {
+        uint8_t hue = base_hue + (uint8_t)((uint32_t)i * 256u / NUM_LEDS);
+        buf[i] = CHSV(hue, 255, 255);
+    }
+    // Two white comets orbiting in opposite directions at different speeds
+    const uint8_t kCW[6] = {255, 220, 170, 110, 60, 20};
+    int cw  = (int)((tick * 3u) % NUM_LEDS);
+    int ccw = (int)(NUM_LEDS - (tick * 2u) % NUM_LEDS) % NUM_LEDS;
+    for (int t = 0; t < 6; t++) {
+        buf[(cw  + t)              % NUM_LEDS] = CRGB(kCW[t], kCW[t], kCW[t]);
+        buf[(ccw - t + NUM_LEDS)   % NUM_LEDS] = CRGB(kCW[t], kCW[t], kCW[t]);
+    }
+    // Sparkles: pseudo-random positions flash full white every 2 ticks
+    if (tick % 2u == 0) {
+        buf[(tick * 7u  +  3u) % NUM_LEDS] = CRGB::White;
+        buf[(tick * 13u + 11u) % NUM_LEDS] = CRGB::White;
+        buf[(tick * 5u  + 17u) % NUM_LEDS] = CRGB::White;
+        buf[(tick * 11u +  7u) % NUM_LEDS] = CRGB::White;
+    }
+}
+
 // ── NeoPixel task ─────────────────────────────────────────────────────────────
 
 static void neo_task(void*) {
@@ -208,6 +233,7 @@ static void neo_task(void*) {
                 case RS_RUNNING:     anim_running_tof(neo_buf, tick);             break;
                 case RS_ESTOP:       anim_estop_alarm(neo_buf, tick);             break;
                 case RS_MANUAL:      anim_knight_rider_manual(neo_buf, tick);     break;
+                case RS_JUMPING:     anim_rainbow_jump(neo_buf, tick);            break;
                 default:             fill_solid(neo_buf, NUM_LEDS, CRGB::White);  break;
             }
         }
@@ -518,6 +544,7 @@ static uint16_t mode_color(uint8_t state) {
         case RS_ESTOP:       return TFT_RED;
         case RS_MANUAL:      return TFT_CYAN;
         case RS_CMD_REJECT:  return tft.color565(255, 100, 0);
+        case RS_JUMPING:     return tft.color565(200, 0, 255);  // magenta
         default:             return TFT_WHITE;
     }
 }
@@ -531,6 +558,7 @@ static const char* mode_name(uint8_t state) {
         case RS_ESTOP:       return "ESTOP";
         case RS_MANUAL:      return "MANUAL";
         case RS_CMD_REJECT:  return "REJECTED";
+        case RS_JUMPING:     return "JUMP!";
         default:             return "UNKNOWN";
     }
 }
@@ -978,7 +1006,7 @@ void setup() {
     tft.setRotation(3);
     initDisplay();
 
-    // xTaskCreatePinnedToCore(neo_task, "neo", 4096, nullptr, 1, nullptr, 0);  // disabled for UART debug
+    xTaskCreatePinnedToCore(neo_task, "neo", 4096, nullptr, 1, nullptr, 0);
     xTaskCreatePinnedToCore(tof_task, "tof", 4096, nullptr, 1, nullptr, 0);
 
     Serial.println("[ESP32] ready");

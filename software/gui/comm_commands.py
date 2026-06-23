@@ -73,6 +73,12 @@ def send_set_mode(target: int):
     send_frame(build_frame(struct.pack("<BB", CMD_ID_SET_MODE, target)))
 
 
+def send_soft_clear():
+    """Send soft-clear: ESTOP → STANDBY directly for SOFT severity faults.
+    Firmware ignores this if the current fault is not SOFT severity."""
+    send_set_mode(STATE_STANDBY)
+
+
 def send_reboot():
     """Send CMD_ID_REBOOT — triggers a full Teensy MCU reset (reruns setup())."""
     import struct

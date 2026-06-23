@@ -18,6 +18,7 @@ void CommLink::onPacket(CommPacketCb cb) {
 }
 
 void CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t len) {
+    if (len > COMM_MAX_PAYLOAD) return;  // overflow guard — caller passed oversized payload
     uint8_t frame[9 + COMM_MAX_PAYLOAD];
 
     uint8_t seq    = _seq_tx++;

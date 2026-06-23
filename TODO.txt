@@ -5,36 +5,13 @@
 
 ---Fernandos note dont change below
 
-Commit and push with all major systems working. 
-
-Reenable neopixel on ESP32
 
 
 LQR + other controllers as per handoff.md
-ESTOPS
-Fix right leg on visualizer
-*********************************
-3. CommLink::send() has NO overflow guard — danger zone
-CommLink.cpp:21:
-
-uint8_t frame[9 + COMM_MAX_PAYLOAD];  // 265 bytes on the stack
-...
-memcpy(frame + 7, p, len);             // no check: len <= COMM_MAX_PAYLOAD??
-If len > COMM_MAX_PAYLOAD, this is a stack buffer overflow → hard fault. The static_assert(sizeof(TelemetryPayload) == 128) at comm_protocol.h:166 protects against this for the telemetry struct at compile time, but if COMM_MAX_PAYLOAD is bumped without bumping the assert, or if another packet type (like a future variable-length one) passes a too-large len, you get silent corruption on both Teensy and ESP32.
-
-Rule: always bump COMM_MAX_PAYLOAD before the struct grows past it, not after.
-*********************************************
-
-
 
 Plan for data fields that can fit in UART packagtel
 
 
-
-Baud	Bytes/2ms slot	Telemetry headroom (80%)	Headroom (absolute)
-1.2 Mbaud (now)	240	+55 bytes	+103 bytes
-4 Mbaud	800	+583 bytes	+671 bytes
-5 Mbaud	1000	+783 bytes	+871 bytes
 
 
 

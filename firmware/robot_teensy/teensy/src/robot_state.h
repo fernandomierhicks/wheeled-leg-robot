@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-// MIRROR: software/gui/flash_monitor.py  _STATE_NAMES dict and
+// MIRROR: software/gui/flash_monitor.py  _STATE_NAMES dict (add STATE_JUMPING=7) and
 //         software/gui/hip_motors.py  _STATE_LABELS + _STATE_STANDBY/_STATE_MANUAL must stay in sync
 typedef enum : uint8_t {
     STATE_STARTUP      = 0,
@@ -11,6 +11,7 @@ typedef enum : uint8_t {
     STATE_ESTOP        = 4,
     STATE_MANUAL       = 5,
     STATE_CMD_REJECT   = 6,  // ~1 s transient: plays REJECT_MELODY, red blink, then returns to originating state
+    STATE_JUMPING      = 7,  // ~3 s transient from RUNNING: plays jump melody, then returns to RUNNING
 } RobotStateEnum;
 
 typedef struct {

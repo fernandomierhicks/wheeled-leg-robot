@@ -70,6 +70,29 @@ typedef struct __attribute__((packed)) {
 #define FAULT_PITCH_WATCHDOG     0x08  // |pitch| > 50° for > 200 ms
 #define FAULT_WHEEL_RUNAWAY      0x09  // wheel velocity exceeded 2× soft governor limit
 
+// ── Fault severity tiers (used by state machine + GUI recovery panel) ────────
+// IMPORTANT: when adding fault codes, update fault_severity() below too.
+typedef enum {
+    FAULT_SEVERITY_SOFT,        // ESTOP → STANDBY directly, no re-init required
+    FAULT_SEVERITY_REPOSITION,  // robot fell or calib failed; reposition then reset
+    FAULT_SEVERITY_GUI_FIX,     // bad param; fix in GUI before reset
+    FAULT_SEVERITY_REBOOT,      // hardware dropout; power-cycle required
+} fault_severity_t;
+
+#ifdef __cplusplus
+inline fault_severity_t fault_severity(uint8_t code) {
+    switch (code) {
+        case FAULT_HUMAN_ESTOP:
+        case FAULT_WHEEL_RUNAWAY:         return FAULT_SEVERITY_SOFT;
+        case FAULT_PITCH_WATCHDOG:
+        case FAULT_CALIBRATION_TIMEOUT:   return FAULT_SEVERITY_REPOSITION;
+        case FAULT_PARAM_OUT_OF_BOUNDS:
+        case FAULT_HIP_LARGE_POS_CMD:     return FAULT_SEVERITY_GUI_FIX;
+        default:                          return FAULT_SEVERITY_REBOOT;
+    }
+}
+#endif
+
 // ── Payload: ToF distances (ESP32→Teensy, COMM_TYPE_TOF) ─────────────────────
 #define TOF_PAYLOAD_V1  1
 

@@ -19,11 +19,13 @@ public:
 #endif
 
 #ifndef COMM_MAX_PAYLOAD
-// Must be > sizeof(TelemetryPayload) + 9 (frame overhead).  See propagation checklist in
-// comm_protocol.h before the TELEM_VERSION define.  Current V4 payload = 128 bytes.
-// DANGER: if this is <= sizeof(TelemetryPayload), CommLink::send() overflows its stack frame
-// buffer and the ESP32 USB forward silently drops every telemetry packet.
+// Must be >= sizeof(TelemetryPayload).  See propagation checklist in comm_protocol.h.
+// Current V4 payload = 128 bytes.  Bump this BEFORE growing any payload struct.
 #define COMM_MAX_PAYLOAD 256
+#endif
+#ifdef __cplusplus
+static_assert(COMM_MAX_PAYLOAD >= sizeof(TelemetryPayload),
+    "COMM_MAX_PAYLOAD is smaller than TelemetryPayload — CommLink::send() would overflow its stack buffer");
 #endif
 
 // If a frame start is seen but the frame does not complete within this many ms, the

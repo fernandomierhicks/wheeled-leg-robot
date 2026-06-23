@@ -123,6 +123,12 @@ def _solve_ik(q_hip: float) -> dict | None:
     )
 
 
+def _solve_ik_right(q_r: float) -> dict | None:
+    """FK for the right leg. The right motor shaft faces -Y so its angle sign
+    is physically reversed relative to the left; negate before solving."""
+    return _solve_ik(-q_r)
+
+
 # ── 3-D helpers ───────────────────────────────────────────────────────────────
 
 def _ry(q: float) -> np.ndarray:
@@ -420,7 +426,7 @@ class RobotVisualizerTab(QWidget):
 
         # Legs
         ik_l = _solve_ik(q_l)
-        ik_r = _solve_ik(q_r)
+        ik_r = _solve_ik_right(q_r)
         self._update_leg(self._leg_L, ik_l, R)
         self._update_leg(self._leg_R, ik_r, R)
 
@@ -435,7 +441,7 @@ class RobotVisualizerTab(QWidget):
                    R @ _ry(q_l), _FR_JOINT, _R_MOUNT_LEFT)
         _set_frame(self._fr_hip_R,
                    R @ np.array([0.0, -_LEG_Y, _A_Z]),
-                   R @ _ry(q_r), _FR_JOINT, _R_MOUNT_RIGHT)
+                   R @ _ry(-q_r), _FR_JOINT, _R_MOUNT_RIGHT)
 
         # Wheel frames — origin is body-frame W rotated by body R only.
         # R_orient = R @ Ry(alpha) so axes follow the tibia angle.
