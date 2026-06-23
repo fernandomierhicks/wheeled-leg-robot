@@ -86,7 +86,8 @@ _BOX_FACES = np.array([
 # ── ToF sensor geometry (body-frame, four VL53L1X sensors) ──────────────────
 _TOF_DOWN_ANGLE = math.radians(20)          # angled sensors tilt below horizontal
 _TOF_HALF_SQ    = 0.0085                    # sensor body square half-size [m]
-_TOF_MAX_RANGE  = 4.0                       # beam display clamp [m]
+_TOF_MAX_MM     = 2000                      # beam fades to invisible at this distance [mm]
+_TOF_WARN_MM    = 400                       # beam turns red below this distance [mm]
 _TOF_NO_DATA    = 0xFFFF
 
 # Each entry: (body_pos [m], beam_unit_vec) — sensors 0,1 on +X face, 2,3 on -X face
@@ -574,12 +575,25 @@ class RobotVisualizerTab(QWidget):
             ], dtype=np.float32)
             self._tof_squares[i].setData(pos=sq_pts)
 
-            # range beam
-            d_mm   = self._tof_dist_mm[i]
-            dist_m = min(d_mm * 1e-3, _TOF_MAX_RANGE) if d_mm != _TOF_NO_DATA else 0.30
-            end    = (p_world + dist_m * n_world).astype(np.float32)
+            # range beam — alpha fades with distance, red when close
+            d_mm    = self._tof_dist_mm[i]
+            no_data = (d_mm == _TOF_NO_DATA)
+            if no_data or d_mm >= _TOF_MAX_MM:
+                alpha  = 0.0
+                dist_m = 0.5
+            else:
+                alpha  = 1.0 - d_mm / _TOF_MAX_MM
+                dist_m = d_mm * 1e-3
+            if not no_data and d_mm < _TOF_WARN_MM:
+                beam_color = (1.0, 0.25, 0.25, 1.0)   # red when close
+            else:
+                r, g, b, _ = _TOF_BEAM_COLORS[i]
+                beam_color = (r, g, b, alpha)
+            end = (p_world + dist_m * n_world).astype(np.float32)
             self._tof_beams[i].setData(
-                pos=np.array([p_world, end], dtype=np.float32))
+                pos=np.array([p_world, end], dtype=np.float32),
+                color=beam_color,
+            )
 
     # ── Telemetry handler ─────────────────────────────────────────────────────
 

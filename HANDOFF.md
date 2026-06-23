@@ -59,11 +59,11 @@ tau_sym = clamp(tau_sym, -PARAM_LQR_TORQUE_LIMIT, +PARAM_LQR_TORQUE_LIMIT)
 K gains (nominal hip, params.py baseline): K_pitch=−9.771, K_pitch_rate=−1.881, K_vel=−0.00713. Hardcoded `theta_ref = 0`, `v_ref = 0` for isolation.
 
 **Safe test sequence:**
-- [ ] 1. `PARAM_LQR_ENABLE = 0`. Confirm computed `tau_sym` appears in telemetry.
-- [ ] 2. `PARAM_SIM_PITCH_RAD = +0.1` (6° forward lean). Verify `tau_sym` is positive (forward wheel torque to correct). Check sign.
-- [ ] 3. `PARAM_SIM_PITCH_RAD = -0.1`. Verify `tau_sym` flips negative.
-- [ ] 4. `PARAM_SIM_PITCH_RAD = 0`, tilt robot physically. Verify real IMU pitch produces correct-sign torque in telemetry.
-- [ ] 5. `PARAM_LQR_ENABLE = 1`, 1 Nm limit. Tilt robot — confirm wheels move in the correcting direction (free-spinning).
+- [x] 1. `PARAM_LQR_ENABLE = 0`. Confirm computed `tau_sym` appears in telemetry.
+- [x] 2. `PARAM_SIM_PITCH_RAD = +0.1` (6° forward lean). Verify `tau_sym` is positive (forward wheel torque to correct). Check sign.
+- [x] 3. `PARAM_SIM_PITCH_RAD = -0.1`. Verify `tau_sym` flips negative.
+- [x] 4. `PARAM_SIM_PITCH_RAD = 0`, tilt robot physically. Verify real IMU pitch produces correct-sign torque in telemetry.
+- [x] 5. `PARAM_LQR_ENABLE = 1`, 1 Nm limit. Tilt robot — confirm wheels move in the correcting direction (free-spinning).
 
 ---
 

@@ -202,7 +202,7 @@ _FMT_TELEM_B = "<4H2f3f2f10f6f3fHBBI"
 
 def _decode_telem_a(payload: bytes) -> dict:
     (ts,
-     pitch, pitch_rate, wheel_vel, hip_l, hip_r, cmd_l, cmd_r, roll, yaw,
+     pitch, pitch_rate, wheel_vel, hip_l, hip_r, whl_tau_l, whl_tau_r, roll, yaw,
      state, fault,
      test_val, hip_l_curr, hip_r_curr,
      *ibus_and_alive,
@@ -219,8 +219,8 @@ def _decode_telem_a(payload: bytes) -> dict:
         "wheel_vel_avg":   wheel_vel,
         "hip_l_pos_rad":   hip_l,
         "hip_r_pos_rad":   hip_r,
-        "cmd_l":           cmd_l,
-        "cmd_r":           cmd_r,
+        "whl_tau_l":       whl_tau_l,
+        "whl_tau_r":       whl_tau_r,
         "roll_rad":        roll,
         "yaw_rad":         yaw,
         "robot_state":     state,
@@ -416,7 +416,7 @@ class PacketInspector(QWidget):
         self._v: dict[str, QLabel] = {}
         all_keys = ["Type", "Src", "Seq", "Len", "CRC",
                     "Pitch", "Rate", "WheelV", "State", "T(ms)",
-                    "HipL", "HipR", "CmdL", "CmdR", "Fault"]
+                    "HipL", "HipR", "WhlTauL", "WhlTauR", "Fault"]
         for key in all_keys:
             _, val = _kv(key)
             self._v[key] = val
@@ -441,7 +441,7 @@ class PacketInspector(QWidget):
         inner.addWidget(title)
         inner.addLayout(_row(["Type", "Src", "Seq", "Len", "CRC"]))
         inner.addLayout(_row(["Pitch", "Rate", "WheelV", "State", "T(ms)"]))
-        inner.addLayout(_row(["HipL", "HipR", "CmdL", "CmdR", "Fault"]))
+        inner.addLayout(_row(["HipL", "HipR", "WhlTauL", "WhlTauR", "Fault"]))
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -467,12 +467,12 @@ class PacketInspector(QWidget):
             self._set("T(ms)",  str(info.get("timestamp_ms", "—")))
             self._set("HipL",   f"{info['hip_l_pos_rad']:+.3f}")
             self._set("HipR",   f"{info['hip_r_pos_rad']:+.3f}")
-            self._set("CmdL",   f"{info['cmd_l']:+.3f}")
-            self._set("CmdR",   f"{info['cmd_r']:+.3f}")
+            self._set("WhlTauL", f"{info['whl_tau_l']:+.3f}")
+            self._set("WhlTauR", f"{info['whl_tau_r']:+.3f}")
             fault = info.get("fault_name", "—")
             self._set("Fault", fault, RED if fault != "NONE" else TEXT)
         else:
-            for k in ["Pitch", "Rate", "WheelV", "State", "T(ms)", "HipL", "HipR", "CmdL", "CmdR", "Fault"]:
+            for k in ["Pitch", "Rate", "WheelV", "State", "T(ms)", "HipL", "HipR", "WhlTauL", "WhlTauR", "Fault"]:
                 self._set(k, "—")
 
 
@@ -682,6 +682,13 @@ class DevicePanel(QWidget):
             self._append(f"[error] could not open {port}", RED)
             self._conn_btn.setChecked(False)
             return
+        if self._device == "teensy":
+            # Teensy's if(Serial) checks DTR; assert it so the firmware sends USB telemetry.
+            # Safe for Teensy — unlike ESP32 which has an autoreset circuit triggered by DTR.
+            try:
+                ser.dtr = True
+            except Exception:
+                pass
         self._reader = SerialReader(ser, self._log_path)
         self._reader.line_received.connect(lambda t: self._append(t, TEXT))
         self._reader.raw_data.connect(self._decoder.feed)

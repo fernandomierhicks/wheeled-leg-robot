@@ -3,14 +3,14 @@
 Displays live position + command for both hip axes. The "Command" trace
 always shows a position in degrees: the MIT setpoint (p°, from Send MIT /
 test wave) in MANUAL mode, the firmware's hardstop-seek ramp in CALIBRATION,
-or the active position command (cmd_l/cmd_r) in all other states.
+or the active position command in all other states.
 Controls: Enable / Disable / Zero per-motor and both,
           MIT position command (p°, Kp, Kd, τff).
 
 Telemetry fields used (from TelemetryPayload / comm_protocol.h):
-    hip_l_pos_rad, hip_r_pos_rad       — hip encoder position [rad]
-    cmd_l, cmd_r                       — hip position command [rad]
-    hip_l_current_a, hip_r_current_a   — hip phase current [A]
+    hip_l_pos_rad, hip_r_pos_rad           — hip encoder position [rad]
+    hip_l_cmd_pos_rad, hip_r_cmd_pos_rad   — hip position command [rad]
+    hip_l_current_a, hip_r_current_a       — hip phase current [A]
 
 Commands are framed via the CommLink protocol (shared/comm_protocol.h) and
 written to the Teensy serial port through SerialPortManager.
@@ -662,8 +662,8 @@ class HipMotorsTab(QWidget):
 
         pos_l = info.get("hip_l_pos_rad", 0.0)
         pos_r = info.get("hip_r_pos_rad", 0.0)
-        cmd_l = info.get("cmd_l", 0.0)
-        cmd_r = info.get("cmd_r", 0.0)
+        cmd_l = info.get("hip_l_cmd_pos_rad", 0.0)
+        cmd_r = info.get("hip_r_cmd_pos_rad", 0.0)
         cur_l = info.get("hip_l_current_a", 0.0)
         cur_r = info.get("hip_r_current_a", 0.0)
 

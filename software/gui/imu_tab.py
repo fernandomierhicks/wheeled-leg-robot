@@ -131,7 +131,7 @@ class ImuTab(QWidget):
         ro_lay.addWidget(hdr)
 
         self._vals: dict[str, QLabel] = {}
-        for name in ["Pitch", "Roll", "Yaw", "Pitch rate", "State"]:
+        for name in ["Pitch", "Roll", "Yaw", "Pitch rate", "Roll rate", "Yaw rate", "IMU loss", "State"]:
             row = QHBoxLayout()
             row.setSpacing(4)
             k = QLabel(name + ":")
@@ -164,8 +164,10 @@ class ImuTab(QWidget):
         top.setSizes([520, 160])
         top.setHandleWidth(5)
 
-        # ── Gyro chart (pitch rate live; roll/yaw placeholder) ────────────────
-        self._gyro_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
+        # ── Gyro chart (all 3 rates live) ────────────────────────────────────
+        self._pitch_rate_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
+        self._roll_rate_buf:  deque = deque([0.0] * _BUF, maxlen=_BUF)
+        self._yaw_rate_buf:   deque = deque([0.0] * _BUF, maxlen=_BUF)
         self._gyro_w = pg.PlotWidget()
         self._gyro_w.setTitle("Gyroscope", color=TEXT, size="11pt")
         self._gyro_w.setLabel("left", "rad/s", color=DIM)
@@ -173,29 +175,32 @@ class ImuTab(QWidget):
         self._gyro_w.setXRange(0, _BUF)
         self._gyro_w.getAxis("bottom").setStyle(showValues=False)
         self._gyro_w.addLegend(offset=(5, 5))
-        self._gyro_curve = self._gyro_w.plot(
-            list(self._gyro_buf),
-            pen=pg.mkPen(BLUE, width=1.5),
-            name="pitch rate",
-        )
-        for name, color in [("roll rate", DIM), ("yaw rate", ORANGE)]:
-            self._gyro_w.plot(
-                [0] * _BUF,
-                pen=pg.mkPen(color, width=1, style=Qt.PenStyle.DashLine),
-                name=name,
-            )
+        self._pitch_rate_curve = self._gyro_w.plot(
+            list(self._pitch_rate_buf), pen=pg.mkPen(BLUE,   width=1.5), name="pitch rate")
+        self._roll_rate_curve  = self._gyro_w.plot(
+            list(self._roll_rate_buf),  pen=pg.mkPen(GREEN,  width=1.5), name="roll rate")
+        self._yaw_rate_curve   = self._gyro_w.plot(
+            list(self._yaw_rate_buf),   pen=pg.mkPen(ORANGE, width=1.5), name="yaw rate")
 
-        # ── Accel chart (placeholder) ─────────────────────────────────────────
-        self._accel_w = _placeholder_chart(
-            "Accelerometer", "m/s²",
-            "No data — not in telemetry yet",
-            [("X", RED), ("Y", GREEN), ("Z", BLUE)],
-        )
+        # ── Accel chart (live) ────────────────────────────────────────────────
+        self._ax_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
+        self._ay_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
+        self._az_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
+        self._accel_w = pg.PlotWidget()
+        self._accel_w.setTitle("Accelerometer", color=TEXT, size="11pt")
+        self._accel_w.setLabel("left", "m/s²", color=DIM)
+        self._accel_w.showGrid(x=True, y=True, alpha=0.12)
+        self._accel_w.setXRange(0, _BUF)
+        self._accel_w.getAxis("bottom").setStyle(showValues=False)
+        self._accel_w.addLegend(offset=(5, 5))
+        self._ax_curve = self._accel_w.plot(list(self._ax_buf), pen=pg.mkPen(RED,   width=1.5), name="X fwd")
+        self._ay_curve = self._accel_w.plot(list(self._ay_buf), pen=pg.mkPen(GREEN, width=1.5), name="Y left")
+        self._az_curve = self._accel_w.plot(list(self._az_buf), pen=pg.mkPen(BLUE,  width=1.5), name="Z up")
 
-        # ── Mag chart (placeholder) ───────────────────────────────────────────
+        # ── Mag chart (placeholder — no magnetometer in telemetry) ────────────
         self._mag_w = _placeholder_chart(
             "Magnetometer", "µT",
-            "No data — not in telemetry yet",
+            "No magnetometer in telemetry",
             [("X", RED), ("Y", GREEN), ("Z", BLUE)],
         )
 
@@ -227,20 +232,34 @@ class ImuTab(QWidget):
         if info.get("ptype") != 0x01:
             return
 
-        pitch = info.get("pitch_rad",       0.0)
-        roll  = info.get("roll_rad",        0.0)
-        yaw   = info.get("yaw_rad",         0.0)
-        rate  = info.get("pitch_rate_rads", 0.0)
-        state = info.get("state_name",      "—")
+        pitch      = info.get("pitch_rad",         0.0)
+        roll       = info.get("roll_rad",           0.0)
+        yaw        = info.get("yaw_rad",            0.0)
+        pitch_rate = info.get("pitch_rate_rads",    0.0)
+        roll_rate  = info.get("roll_rate_rads",     0.0)
+        yaw_rate   = info.get("yaw_rate_rads",      0.0)
+        accel_x    = info.get("accel_x_ms2",        0.0)
+        accel_y    = info.get("accel_y_ms2",        0.0)
+        accel_z    = info.get("accel_z_ms2",        0.0)
+        imu_loss   = info.get("imu_packet_loss_pct", 0)
+        state      = info.get("state_name",         "—")
 
         # Readout
         self._vals["Pitch"].setText(f"{math.degrees(pitch):+.1f}°")
         self._vals["Roll"].setText(f"{math.degrees(roll):+.1f}°")
         self._vals["Yaw"].setText(f"{math.degrees(yaw):+.1f}°")
-        self._vals["Pitch rate"].setText(f"{rate:+.3f} r/s")
-        color = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE, "STANDBY": YELLOW, "STARTUP": WHITE}.get(state, TEXT)
+        self._vals["Pitch rate"].setText(f"{pitch_rate:+.3f} r/s")
+        self._vals["Roll rate"].setText(f"{roll_rate:+.3f} r/s")
+        self._vals["Yaw rate"].setText(f"{yaw_rate:+.3f} r/s")
+        loss_color = RED if imu_loss > 10 else (YELLOW if imu_loss > 0 else GREEN)
+        self._vals["IMU loss"].setStyleSheet(
+            f"color: {loss_color}; font-size: 12px; font-weight: bold; font-family: Consolas;"
+        )
+        self._vals["IMU loss"].setText(f"{imu_loss}%")
+        state_color = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE,
+                       "STANDBY": YELLOW, "STARTUP": WHITE}.get(state, TEXT)
         self._vals["State"].setStyleSheet(
-            f"color: {color}; font-size: 12px; font-weight: bold; font-family: Consolas;"
+            f"color: {state_color}; font-size: 12px; font-weight: bold; font-family: Consolas;"
         )
         self._vals["State"].setText(state)
 
@@ -259,9 +278,21 @@ class ImuTab(QWidget):
         for pts0, line in self._body_lines:
             line.setData(pos=(R @ pts0.T).T.astype(np.float32))
 
-        # Gyro chart
-        self._gyro_buf.append(rate)
-        self._gyro_curve.setData(list(self._gyro_buf))
+        # Gyro chart — all 3 rates live
+        self._pitch_rate_buf.append(pitch_rate)
+        self._roll_rate_buf.append(roll_rate)
+        self._yaw_rate_buf.append(yaw_rate)
+        self._pitch_rate_curve.setData(list(self._pitch_rate_buf))
+        self._roll_rate_curve.setData(list(self._roll_rate_buf))
+        self._yaw_rate_curve.setData(list(self._yaw_rate_buf))
+
+        # Accel chart — all 3 axes live
+        self._ax_buf.append(accel_x)
+        self._ay_buf.append(accel_y)
+        self._az_buf.append(accel_z)
+        self._ax_curve.setData(list(self._ax_buf))
+        self._ay_curve.setData(list(self._ay_buf))
+        self._az_curve.setData(list(self._az_buf))
 
 
 # ── Compact IMU widget for embedding in other tabs ────────────────────────────

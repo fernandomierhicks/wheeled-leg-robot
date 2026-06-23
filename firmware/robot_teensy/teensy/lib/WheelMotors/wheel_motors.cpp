@@ -59,6 +59,8 @@ static void rx_callback(const CAN_message_t& msg) {
         float pos, vel;
         memcpy(&pos, msg.buf + 0, 4);
         memcpy(&vel, msg.buf + 4, 4);
+        // Right motor is physically mirrored — negate so positive = robot forward.
+        if (node_id == ODESC_NODE_R) { pos = -pos; vel = -vel; }
         ax->pos_turns   = pos;
         ax->vel_turns_s = vel;
         ax->last_fb_ms  = millis();
@@ -165,11 +167,13 @@ void wheel_motors_send(float L, float R) {
             break;
         }
 
-        case WheelMode::TORQUE:
+        case WheelMode::TORQUE: {
+            float R_hw = -R;  // right motor is physically mirrored
             send_frame(ODESC_NODE_L, CMD_SET_INPUT_TRQ, &L, 4);
             delayMicroseconds(CAN_INTER_FRAME_US);
-            send_frame(ODESC_NODE_R, CMD_SET_INPUT_TRQ, &R, 4);
+            send_frame(ODESC_NODE_R, CMD_SET_INPUT_TRQ, &R_hw, 4);
             break;
+        }
     }
 }
 

@@ -84,15 +84,13 @@ void controlLoop_run() {
     if (g_state.tau_sym >  torque_limit) g_state.tau_sym =  torque_limit;
     if (g_state.tau_sym < -torque_limit) g_state.tau_sym = -torque_limit;
 
-    // Log computed torque regardless of enable flag (tau_yaw = 0 until Phase 4)
-    g_state.cmd_l = g_state.tau_sym + g_state.tau_yaw;
-    g_state.cmd_r = g_state.tau_sym - g_state.tau_yaw;
-
     // ── Wheel torque output ───────────────────────────────────────────────────
+    float tau_L = 0.0f;
+    float tau_R = 0.0f;
     if (param_get(PARAM_LQR_ENABLE) >= 0.5f) {
         float soft_limit = param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
-        float tau_L = g_state.cmd_l;
-        float tau_R = g_state.cmd_r;
+        tau_L = g_state.tau_sym + g_state.tau_yaw;
+        tau_R = g_state.tau_sym - g_state.tau_yaw;
         // Per-wheel soft governor: zero torque if spinning beyond limit in the commanded direction
         if ((wm_L.vel_turns_s >  soft_limit && tau_L > 0.0f) ||
             (wm_L.vel_turns_s < -soft_limit && tau_L < 0.0f)) tau_L = 0.0f;
@@ -100,4 +98,7 @@ void controlLoop_run() {
             (wm_R.vel_turns_s < -soft_limit && tau_R < 0.0f)) tau_R = 0.0f;
         wheel_motors_send(tau_L, tau_R);
     }
+    // cmd_l/cmd_r reflect what was actually sent to the wheels (0 when disabled)
+    g_state.whl_tau_l = tau_L;
+    g_state.whl_tau_r = tau_R;
 }

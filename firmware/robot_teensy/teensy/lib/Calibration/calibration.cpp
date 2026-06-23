@@ -158,11 +158,6 @@ void calibration_update() {
     update_axis(ax_L, hm_L, hm_limits_L, hip_motor_send_L, hip_motor_zero_L, "L", HIP_MOTOR_L);
     update_axis(ax_R, hm_R, hm_limits_R, hip_motor_send_R, hip_motor_zero_R, "R", HIP_MOTOR_R);
 
-    // Echo the commanded position [rad] back to the GUI via the otherwise-
-    // unused telemetry cmd_l/cmd_r fields, so the Hip Motors tab can plot
-    // the calibration ramp against actual position.
-    g_state.cmd_l = ax_L.ramp_target;
-    g_state.cmd_r = ax_R.ramp_target;
 
     if (calibration_done() && !s_done_announced) {
         s_done_announced = true;

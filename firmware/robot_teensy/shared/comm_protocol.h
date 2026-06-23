@@ -145,8 +145,10 @@ typedef struct __attribute__((packed)) {
 //          ESP32 will reject mismatched packets with a clear error until both are reflashed.
 //          Also update _TELEM_VERSION in flash_monitor.py (search "must match TELEM_VERSION").
 //
-//  5. (optional) software/gui/raw_data_tab.py
-//       Add new field rows to the "Telemetry Payload" grid if you want live inspection.
+//  5. software/gui/raw_data_tab.py  ← REQUIRED
+//       Add new field rows to the matching tab (IMU / Hip Motors / Wheel Motors / Control /
+//       RC-ToF) using _add_row(), and populate the value in _on_packet().
+//       Also update imu_tab.py if the new field is IMU-related (orientation, rates, accel).
 //
 // Byte-offset map (packed, no padding — verify with static_assert or python struct.calcsize):
 //   [0]    uint32  timestamp_ms
@@ -181,8 +183,8 @@ typedef struct __attribute__((packed)) {
     float    wheel_vel_avg_ms;
     float    hip_l_pos_rad;
     float    hip_r_pos_rad;
-    float    cmd_l;
-    float    cmd_r;
+    float    whl_tau_l;      // final left  wheel torque command [N·m] (0 when LQR disabled; hip ramp target during calibration)
+    float    whl_tau_r;      // final right wheel torque command [N·m]
     float    roll_rad;
     float    yaw_rad;
     uint8_t  robot_state;        // matches RobotStateEnum

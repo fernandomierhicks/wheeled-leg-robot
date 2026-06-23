@@ -108,29 +108,54 @@ static void anim_scanner_calibration(CRGB* buf, uint32_t tick) {
         buf[(head + t) % NUM_LEDS] = kBar[t];
 }
 
-// STANDBY — cinema marquee: alternating yellow LEDs chase around the ring
+// STANDBY — slow amber ripple: a bright crest sweeps the full ring every ~3 s,
+// rising from a dim baseline so the strip always glows warmly.
 static void anim_marquee_standby(CRGB* buf, uint32_t tick) {
-    fill_solid(buf, NUM_LEDS, CRGB::Black);
-    int phase = (int)((tick / 15u) % 2);  // alternates every 300 ms
-    for (int i = phase; i < NUM_LEDS; i += 2)
-        buf[i] = CRGB(255, 200, 0);
+    // Crest position: one full lap every 150 ticks = 3 s
+    float crest = (float)(tick % 60u) / 60.0f * (float)NUM_LEDS;
+    for (int i = 0; i < NUM_LEDS; i++) {
+        // Angular distance from crest (0..NUM_LEDS/2)
+        float d = fabsf(fmodf((float)i - crest + (float)NUM_LEDS, (float)NUM_LEDS));
+        if (d > (float)NUM_LEDS / 2.0f) d = (float)NUM_LEDS - d;
+        // Cosine envelope: peak = 1.0 at crest, 0.0 at opposite side
+        float env = 0.5f + 0.5f * cosf(d / ((float)NUM_LEDS / 2.0f) * (float)M_PI);
+        uint8_t bri = (uint8_t)(20.0f + 235.0f * env * env);  // dim baseline → full amber
+        buf[i] = CRGB(bri, (uint8_t)(bri * 110u / 255u), 0);  // amber: full red, ~43% green
+    }
 }
 
-// RUNNING — green breathing on sides; front/rear show ToF proximity
+// RUNNING — two green comets orbiting in opposite directions, meeting exactly at
+// front (LED 0) and rear (LED 15) each half-revolution, creating a bounce effect.
 static void anim_running_tof(CRGB* buf, uint32_t tick) {
-    uint8_t bri = map(sin8((uint8_t)((tick % 300u) * 256u / 300u)), 0, 255, 50, 220);
-    fill_side(buf, SIDE_RIGHT, CRGB(0, bri, 0));
-    fill_side(buf, SIDE_LEFT,  CRGB(0, bri, 0));
+    fill_solid(buf, NUM_LEDS, CRGB::Black);
 
+    // Advance 1 LED every 2 ticks → full lap in 60 ticks = 1.2 s.
+    // CW head at pos; CCW head at (NUM_LEDS - pos) % NUM_LEDS.
+    // They share the same LED at pos == 0 (front) and pos == 15 (rear).
+    int pos = (int)((tick / 2u) % (uint32_t)NUM_LEDS);
+    int cw  = pos;
+    int ccw = (NUM_LEDS - pos) % NUM_LEDS;
+
+    const uint8_t kTail[8] = {255, 170, 105, 60, 32, 16, 7, 2};
+
+    for (int t = 0; t < 8; t++) {
+        uint8_t b   = kTail[t];
+        int cw_idx  = (cw  - t + NUM_LEDS) % NUM_LEDS;
+        int ccw_idx = (ccw + t)             % NUM_LEDS;
+        // Additive green (+ faint teal tint) so overlapping heads bloom bright
+        buf[cw_idx].g  = qadd8(buf[cw_idx].g,  b);
+        buf[cw_idx].b  = qadd8(buf[cw_idx].b,  b / 6);
+        buf[ccw_idx].g = qadd8(buf[ccw_idx].g, b);
+        buf[ccw_idx].b = qadd8(buf[ccw_idx].b, b / 6);
+    }
+
+    // Orange strobe on front/rear when obstacle is dangerously close (< 100 mm)
     uint16_t fd = g_tof_front_min;
-    CRGB fc = dist_to_color(fd);
-    if (fd != 0xFFFF && fd < 100 && (tick % 5u) >= 2u) fc.nscale8(60);
-    fill_side(buf, SIDE_FRONT, fc);
-
+    if (fd != 0xFFFF && fd < 100 && (tick % 5u) >= 2u)
+        fill_side(buf, SIDE_FRONT, CRGB(255, 60, 0));
     uint16_t rd = g_tof_rear_min;
-    CRGB rc = dist_to_color(rd);
-    if (rd != 0xFFFF && rd < 100 && (tick % 5u) >= 2u) rc.nscale8(60);
-    fill_side(buf, SIDE_REAR, rc);
+    if (rd != 0xFFFF && rd < 100 && (tick % 5u) >= 2u)
+        fill_side(buf, SIDE_REAR, CRGB(255, 60, 0));
 }
 
 // ESTOP — red strobe + white racing comet overlay

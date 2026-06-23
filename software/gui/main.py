@@ -31,6 +31,7 @@ from raw_data_tab import RawDataTab
 from robot_visualizer_tab import RobotVisualizerTab
 from radio_tab import RadioTab
 from wheel_motors import WheelMotorsTab
+from controllers_tab import ControllersTab
 from telemetry_bus import TelemetryBus
 from source_manager import SourceManager, TRANSPORT_LABEL
 from comm_commands import send_set_mode, send_reboot, send_soft_clear, STATE_STARTUP, STATE_STANDBY, STATE_ESTOP
@@ -530,6 +531,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(ParamsTab(),          "Parameters")
         tabs.addTab(RobotVisualizerTab(), "Visualizer")
         tabs.addTab(WheelMotorsTab(),     "Wheel Motors")
+        tabs.addTab(ControllersTab(),     "Controllers")
         tabs.addTab(RadioTab(),           "Radio")
         tabs.addTab(FlashMonitorTab(),    "Flash & Monitor")
         self._flash_tab_idx = tabs.count() - 1

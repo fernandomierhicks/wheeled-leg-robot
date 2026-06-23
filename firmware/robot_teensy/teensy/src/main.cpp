@@ -277,8 +277,8 @@ static void send_telemetry() {
     telem.wheel_vel_avg_ms = g_state.wheel_vel_avg_ms;
     telem.hip_l_pos_rad    = g_state.hip_l_pos_rad;
     telem.hip_r_pos_rad    = g_state.hip_r_pos_rad;
-    telem.cmd_l            = g_state.cmd_l;
-    telem.cmd_r            = g_state.cmd_r;
+    telem.whl_tau_l        = g_state.whl_tau_l;
+    telem.whl_tau_r        = g_state.whl_tau_r;
     telem.roll_rad         = imu_roll();
     telem.yaw_rad          = imu_yaw();
     telem.robot_state      = (uint8_t)g_state.state;
@@ -383,8 +383,8 @@ static void receive_commands() {
 
 static void read_sensors() {
     imu_update();
-    g_state.pitch_rad       = imu_pitch();
-    g_state.pitch_rate_rads = imu_pitch_rate();
+    g_state.pitch_rad       = -imu_pitch();       // IMU mounted inverted: negate to match robot +X=forward convention
+    g_state.pitch_rate_rads = -imu_pitch_rate();
 
     hip_motors_poll();
     g_state.hip_l_pos_rad   = hm_L.pos_rad;

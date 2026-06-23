@@ -8,8 +8,9 @@ changes, hip motor commands, ...).
 from port_manager import SerialPortManager
 
 # ── CommLink frame constants (shared/comm_protocol.h) ─────────────────────────
-COMM_START    = 0xFF
-COMM_END      = 0xFE
+COMM_START_A  = 0xAA
+COMM_START_B  = 0x55
+COMM_END      = 0xEF
 COMM_SRC_PC   = 0x03
 COMM_TYPE_CMD = 0x02
 CMD_PAYLOAD_V = 1
@@ -52,7 +53,7 @@ def build_frame(payload: bytes) -> bytes:
     crc = 0
     for b in header + payload:
         crc ^= b
-    return bytes([COMM_START]) + header + payload + bytes([crc, COMM_END])
+    return bytes([COMM_START_A, COMM_START_B]) + header + payload + bytes([crc, COMM_END])
 
 
 def send_frame(frame: bytes):

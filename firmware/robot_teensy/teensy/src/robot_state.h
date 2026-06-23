@@ -28,8 +28,8 @@ typedef struct {
     uint8_t        fault_code;        // FAULT_* from comm_protocol.h; set before entering ESTOP
     uint32_t       loop_count;
     // ── Controller outputs (written by control_loop.cpp / future phases) ──────
-    float          cmd_l;             // final left  wheel command [N·m] = tau_sym + tau_yaw
-    float          cmd_r;             // final right wheel command [N·m] = tau_sym - tau_yaw
+    float          whl_tau_l;         // final left  wheel torque command [N·m] = tau_sym + tau_yaw
+    float          whl_tau_r;         // final right wheel torque command [N·m] = tau_sym - tau_yaw
     float          tau_sym;           // unclamped LQR symmetric torque [N·m]
     float          tau_yaw;           // yaw PI differential torque [N·m] — Phase 4; 0 until then
     float          theta_ref;         // velocity PI lean setpoint [rad]  — Phase 3; 0 until then

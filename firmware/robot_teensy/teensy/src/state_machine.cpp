@@ -7,6 +7,7 @@
 #include "comm_protocol.h"
 #include "param_registry.h"
 #include "control_loop.h"
+#include "wheel_motors.h"
 #include "Buzzer.h"
 #include <StateMachine.h>
 
@@ -109,9 +110,10 @@ static void on_standby()  {
     bool from_estop    = (g_state.state == STATE_ESTOP);  // soft-clear path
     g_state.state = STATE_STANDBY;
     hip_motors_clear_setpoints();  // revert to zero-torque ping (e.g. after CALIBRATION)
-    g_state.cmd_l = 0.0f;          // clear calibration ramp echo from cmd_l/cmd_r
-    g_state.cmd_r = 0.0f;
+    g_state.whl_tau_l = 0.0f;
+    g_state.whl_tau_r = 0.0f;
     if (from_calib) calibration_abort();
+    if (from_running) wheel_motors_set_mode(WheelMode::IDLE);
     if (entering) comm_log(LOG_LEVEL_INFO, "-> STANDBY");
     if (from_running) g_buzzer.play(DISARMED_MELODY, sizeof(DISARMED_MELODY) / sizeof(DISARMED_MELODY[0]), 200);
     if (from_estop) {
@@ -164,6 +166,7 @@ static void on_running() {
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> RUNNING (armed)");
         g_buzzer.play(ARMED_MELODY, sizeof(ARMED_MELODY) / sizeof(ARMED_MELODY[0]), 200);
+        wheel_motors_set_mode(WheelMode::TORQUE);
     }
     controlLoop_run();
 }
@@ -197,6 +200,7 @@ static void on_estop() {
         s_req_calibration = false;
         comm_log(LOG_LEVEL_ERROR, "-> ESTOP [fault 0x%02X]", g_state.fault_code);
         g_buzzer.play(ESTOP_MELODY, sizeof(ESTOP_MELODY) / sizeof(ESTOP_MELODY[0]), 200);
+        wheel_motors_set_mode(WheelMode::IDLE);
         if (param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) {
             hip_motors_exit_mit();
             s_estop_hip_disabled = true;
