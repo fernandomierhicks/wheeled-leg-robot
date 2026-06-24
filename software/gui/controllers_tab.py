@@ -116,19 +116,18 @@ class ControllersTab(QWidget):
         super().__init__()
 
         # ── Rolling buffers ───────────────────────────────────────────────────
-        self._b_pitch     = _buf()
-        self._b_theta_ref = _buf()
-        self._b_vel_avg   = _buf()
-        self._b_v_ref     = _buf()
-        self._b_tau_sym   = _buf()
-        self._b_whl_tau_l     = _buf()
-        self._b_whl_tau_r     = _buf()
-        self._b_tau_yaw   = _buf()
-        self._b_vel_int   = _buf()
-        self._b_yaw_int   = _buf()
-        self._b_ff1       = _buf()
-        self._b_ff2       = _buf()
-        self._b_ff4       = _buf()
+        self._b_pitch        = _buf()
+        self._b_theta_ref    = _buf()
+        self._b_vel_avg      = _buf()
+        self._b_v_ref        = _buf()
+        self._b_tau_sym      = _buf()
+        self._b_whl_tau_l    = _buf()
+        self._b_whl_tau_r    = _buf()
+        self._b_omega_cmd    = _buf()
+        self._b_yaw_rate     = _buf()
+        self._b_tau_yaw      = _buf()
+        self._b_ff1          = _buf()
+        self._b_ff2          = _buf()
 
         # ── Chart 1: Pitch vs θ_ref ───────────────────────────────────────────
         p1 = _make_plot("Pitch vs Lean Setpoint", "rad")
@@ -152,25 +151,24 @@ class ControllersTab(QWidget):
         self._c_whl_tau_r_line   = p3.plot(list(self._b_whl_tau_r),   pen=pg.mkPen(ORANGE, width=1),   name="cmd_R")
         p3.addLegend(offset=(5, 5))
 
-        # ── Chart 4: Yaw torque ───────────────────────────────────────────────
-        p4 = _make_plot("Yaw PI Torque", "N·m")
+        # ── Chart 4: Yaw rate reference vs measured ───────────────────────────
+        p4 = _make_plot("Yaw Rate — Reference vs Measured", "rad/s")
         p4.setYRange(-2.0, 2.0)
-        self._c_tau_yaw_line = p4.plot(list(self._b_tau_yaw), pen=pg.mkPen(ORANGE, width=1.5), name="τ_yaw")
+        self._c_omega_cmd_line = p4.plot(list(self._b_omega_cmd), pen=pg.mkPen(YELLOW, width=1.5), name="ω_cmd")
+        self._c_yaw_rate_line  = p4.plot(list(self._b_yaw_rate),  pen=pg.mkPen(GREEN,  width=1.5), name="ω_meas")
         p4.addLegend(offset=(5, 5))
 
-        # ── Chart 5: PI integrators ───────────────────────────────────────────
-        p5 = _make_plot("PI Integrator States", "rad / N·m·s")
-        p5.setYRange(-0.3, 0.3)
-        self._c_vel_int_line = p5.plot(list(self._b_vel_int), pen=pg.mkPen(YELLOW, width=1.5), name="vel_int")
-        self._c_yaw_int_line = p5.plot(list(self._b_yaw_int), pen=pg.mkPen(ORANGE, width=1.5), name="yaw_int")
+        # ── Chart 5: Yaw torque ───────────────────────────────────────────────
+        p5 = _make_plot("Yaw PI Effort", "N·m")
+        p5.setYRange(-2.0, 2.0)
+        self._c_tau_yaw_line = p5.plot(list(self._b_tau_yaw), pen=pg.mkPen(ORANGE, width=1.5), name="τ_yaw")
         p5.addLegend(offset=(5, 5))
 
         # ── Chart 6: Feedforward outputs ──────────────────────────────────────
-        p6 = _make_plot("Feedforward Outputs (Phase 6)", "N·m / rad")
+        p6 = _make_plot("Feedforward Outputs (Phase 6)", "N·m")
         p6.setYRange(-2.0, 2.0)
-        self._c_ff1_line = p6.plot(list(self._b_ff1), pen=pg.mkPen(BLUE,   width=1.5), name="ff1 hip")
-        self._c_ff2_line = p6.plot(list(self._b_ff2), pen=pg.mkPen(GREEN,  width=1.5), name="ff2 grav")
-        self._c_ff4_line = p6.plot(list(self._b_ff4), pen=pg.mkPen(ORANGE, width=1.5), name="ff4 cent")
+        self._c_ff1_line = p6.plot(list(self._b_ff1), pen=pg.mkPen(BLUE,  width=1.5), name="ff1 hip")
+        self._c_ff2_line = p6.plot(list(self._b_ff2), pen=pg.mkPen(GREEN, width=1.5), name="ff2 grav")
         p6.addLegend(offset=(5, 5))
 
         chart_panel = QWidget()
@@ -217,16 +215,14 @@ class ControllersTab(QWidget):
         self._v_whl_tau_l     = _ValueCell("cmd_L",     "N·m")
         self._v_whl_tau_r     = _ValueCell("cmd_R",     "N·m")
 
-        self._v_theta_ref = _ValueCell("θ_ref",     "rad")
-        self._v_v_ref     = _ValueCell("v_ref",     "m/s")
-        self._v_vel_int   = _ValueCell("vel_int",   "rad")
+        self._v_theta_ref  = _ValueCell("θ_ref",     "rad")
+        self._v_v_ref      = _ValueCell("v_ref",     "m/s")
 
-        self._v_tau_yaw   = _ValueCell("τ_yaw",     "N·m")
-        self._v_yaw_int   = _ValueCell("yaw_int",   "N·m·s")
+        self._v_omega_cmd  = _ValueCell("ω_cmd",     "rad/s")
+        self._v_tau_yaw    = _ValueCell("τ_yaw",     "N·m")
 
-        self._v_ff1       = _ValueCell("ff1_hip",   "N·m")
-        self._v_ff2       = _ValueCell("ff2_grav",  "N·m")
-        self._v_ff4       = _ValueCell("ff4_cent",  "rad")
+        self._v_ff1        = _ValueCell("ff1_hip",   "N·m")
+        self._v_ff2        = _ValueCell("ff2_grav",  "N·m")
 
         self._v_jump      = _ValueCell("jump_state", "")
         self._v_loop      = _ValueCell("loop_count", "")
@@ -256,15 +252,15 @@ class ControllersTab(QWidget):
         il.addWidget(_hline())
 
         il.addWidget(_section_label("Velocity PI  (Phase 3 — active when non-zero)"))
-        il.addLayout(_row(self._v_theta_ref, self._v_v_ref, self._v_vel_int))
+        il.addLayout(_row(self._v_v_ref, self._v_theta_ref))
         il.addWidget(_hline())
 
         il.addWidget(_section_label("Yaw PI  (Phase 4 — active when non-zero)"))
-        il.addLayout(_row(self._v_tau_yaw, self._v_yaw_int))
+        il.addLayout(_row(self._v_omega_cmd, self._v_tau_yaw))
         il.addWidget(_hline())
 
         il.addWidget(_section_label("Feedforward  (Phase 6 — active when non-zero)"))
-        il.addLayout(_row(self._v_ff1, self._v_ff2, self._v_ff4))
+        il.addLayout(_row(self._v_ff1, self._v_ff2))
         il.addWidget(_hline())
 
         il.addWidget(_section_label("Diagnostics"))
@@ -305,14 +301,13 @@ class ControllersTab(QWidget):
         whl_tau_l    = info.get("whl_tau_l", 0.0)
         whl_tau_r    = info.get("whl_tau_r", 0.0)
         tau_sym  = info.get("tau_sym", 0.0)
-        tau_yaw  = info.get("tau_yaw", 0.0)
-        theta    = info.get("theta_ref", 0.0)
-        v_ref    = info.get("v_ref", 0.0)
-        vel_int  = info.get("vel_err_integral", 0.0)
-        yaw_int  = info.get("yaw_err_integral", 0.0)
-        ff1      = info.get("ff1_out", 0.0)
-        ff2      = info.get("ff2_out", 0.0)
-        ff4      = info.get("ff4_out", 0.0)
+        tau_yaw   = info.get("tau_yaw", 0.0)
+        theta     = info.get("theta_ref", 0.0)
+        v_ref     = info.get("v_ref", 0.0)
+        omega_cmd = info.get("omega_cmd_rds", 0.0)
+        yaw_rate  = info.get("yaw_rate_rads", 0.0)
+        ff1       = info.get("ff1_out", 0.0)
+        ff2       = info.get("ff2_out", 0.0)
         flags    = info.get("health_flags", 0)
         jump     = info.get("jump_state", 0)
         loop     = info.get("loop_count", 0)
@@ -335,19 +330,17 @@ class ControllersTab(QWidget):
         self._v_whl_tau_r.set(whl_tau_r)
 
         # ── Velocity PI cells ─────────────────────────────────────────────────
-        self._v_theta_ref.set(theta)
         self._v_v_ref.set(v_ref)
-        self._v_vel_int.set(vel_int)
+        self._v_theta_ref.set(theta)
 
         # ── Yaw PI cells ──────────────────────────────────────────────────────
+        self._v_omega_cmd.set(omega_cmd)
         self._v_tau_yaw.set(tau_yaw, "+.4f",
                             ORANGE if abs(tau_yaw) > 1.0 else TEXT)
-        self._v_yaw_int.set(yaw_int)
 
         # ── Feedforward cells ─────────────────────────────────────────────────
         self._v_ff1.set(ff1)
         self._v_ff2.set(ff2)
-        self._v_ff4.set(ff4)
 
         # ── Diagnostic cells ──────────────────────────────────────────────────
         self._v_jump.set(int(jump), "d", GREEN if jump > 0 else TEXT)
@@ -361,12 +354,11 @@ class ControllersTab(QWidget):
         self._b_tau_sym.append(tau_sym)
         self._b_whl_tau_l.append(whl_tau_l)
         self._b_whl_tau_r.append(whl_tau_r)
+        self._b_omega_cmd.append(omega_cmd)
+        self._b_yaw_rate.append(yaw_rate)
         self._b_tau_yaw.append(tau_yaw)
-        self._b_vel_int.append(vel_int)
-        self._b_yaw_int.append(yaw_int)
         self._b_ff1.append(ff1)
         self._b_ff2.append(ff2)
-        self._b_ff4.append(ff4)
 
     def _refresh_charts(self):
         self._c_pitch_line.setData(list(self._b_pitch))
@@ -376,9 +368,8 @@ class ControllersTab(QWidget):
         self._c_tau_sym_line.setData(list(self._b_tau_sym))
         self._c_whl_tau_l_line.setData(list(self._b_whl_tau_l))
         self._c_whl_tau_r_line.setData(list(self._b_whl_tau_r))
+        self._c_omega_cmd_line.setData(list(self._b_omega_cmd))
+        self._c_yaw_rate_line.setData(list(self._b_yaw_rate))
         self._c_tau_yaw_line.setData(list(self._b_tau_yaw))
-        self._c_vel_int_line.setData(list(self._b_vel_int))
-        self._c_yaw_int_line.setData(list(self._b_yaw_int))
         self._c_ff1_line.setData(list(self._b_ff1))
         self._c_ff2_line.setData(list(self._b_ff2))
-        self._c_ff4_line.setData(list(self._b_ff4))

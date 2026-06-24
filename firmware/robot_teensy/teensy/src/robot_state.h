@@ -34,12 +34,9 @@ typedef struct {
     float          tau_yaw;           // yaw PI differential torque [N·m] — Phase 4; 0 until then
     float          theta_ref;         // velocity PI lean setpoint [rad]  — Phase 3; 0 until then
     float          v_ref;             // velocity reference [m/s]          — Phase 3; 0 until then
-    float          vel_err_integral;  // velocity PI integrator state      — Phase 3; 0 until then
-    float          yaw_err_integral;  // yaw PI integrator state           — Phase 4; 0 until then
     float          gain_sched_alpha;  // hip gain interpolation [0-1]      — Phase 5; 0 until then
     float          ff1_out;           // hip reaction FF torque [N·m]      — Phase 6; 0 until then
     float          ff2_out;           // gravity compensation FF [N·m]     — Phase 6; 0 until then
-    float          ff4_out;           // centripetal lean offset [rad]     — Phase 6; 0 until then
     uint8_t        jump_state;        // Jump FSM phase                    — Phase 7; 0 until then
 } RobotState;
 

@@ -155,9 +155,9 @@ _COMM_MAGIC    = bytes([0xAA, 0x55])  # two-byte start marker
 _COMM_END      = 0xEF
 _HEADER_SZ     = 8   # magic(2) + type + version + source + seq + len_lo + len_hi
 _OVERHEAD      = 10  # header(8) + checksum(1) + end(1)
-_TELEM_VERSION = 6   # must match TELEM_VERSION in shared/comm_protocol.h
+_TELEM_VERSION = 7   # must match TELEM_VERSION in shared/comm_protocol.h
 _TELEM_A_LEN   = 118
-_TELEM_B_LEN   = 120
+_TELEM_B_LEN   = 112
 
 _TYPE_NAMES  = {
     0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG",
@@ -192,12 +192,12 @@ _FAULT_DESCRIPTIONS = {
 }
 _LOG_LEVELS  = {0x01: "INFO", 0x02: "WARN", 0x03: "ERROR"}
 
-# Struct formats for split telemetry (V6, packed, little-endian)
+# Struct formats for split telemetry (V7, packed, little-endian)
 # TELEM_A: bytes 0-117 of TelemetryPayload
 _FMT_TELEM_A = "<I9fBB3f14HB6f2I3B"
-# TELEM_B: bytes 118-237 of TelemetryPayload
-# 4H tof_dist, 2f rates, 3f accel, 2f hip_vel, 10f hip_cmd, 6f ctrl, 3f ff, H health, BB diag, I loop
-_FMT_TELEM_B = "<4H2f3f2f10f6f3fHBBI"
+# TELEM_B: bytes 118-229 of TelemetryPayload
+# 4H tof_dist, 2f rates, 3f accel, 2f hip_vel, 10f hip_cmd, 5f ctrl, 2f ff, H health, BB diag, I loop
+_FMT_TELEM_B = "<4H2f3f2f10f5f2fHBBI"
 
 
 def _decode_telem_a(payload: bytes) -> dict:
@@ -255,8 +255,8 @@ def _decode_telem_b(payload: bytes) -> dict:
      hip_l_cmd_p, hip_r_cmd_p, hip_l_cmd_v, hip_r_cmd_v,
      hip_l_cmd_kp, hip_r_cmd_kp, hip_l_cmd_kd, hip_r_cmd_kd,
      hip_l_cmd_tff, hip_r_cmd_tff,
-     theta_ref, v_ref, tau_sym, tau_yaw, vel_err_int, yaw_err_int,
-     ff1, ff2, ff4,
+     theta_ref, v_ref, omega_cmd_rds, tau_sym, tau_yaw,
+     ff1, ff2,
      health_flags, imu_loss_pct, jump_state, loop_count) = _struct.unpack(_FMT_TELEM_B, payload)
     _NO_DATA = 0xFFFF
     tof_front = min((d for d in [tof0, tof1] if d != _NO_DATA), default=_NO_DATA)
@@ -284,13 +284,11 @@ def _decode_telem_b(payload: bytes) -> dict:
         "hip_r_cmd_tff":       hip_r_cmd_tff,
         "theta_ref":           theta_ref,
         "v_ref":               v_ref,
+        "omega_cmd_rds":       omega_cmd_rds,
         "tau_sym":             tau_sym,
         "tau_yaw":             tau_yaw,
-        "vel_err_integral":    vel_err_int,
-        "yaw_err_integral":    yaw_err_int,
         "ff1_out":             ff1,
         "ff2_out":             ff2,
-        "ff4_out":             ff4,
         "health_flags":        health_flags,
         "imu_packet_loss_pct": imu_loss_pct,
         "jump_state":          jump_state,

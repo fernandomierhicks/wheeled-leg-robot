@@ -9,6 +9,9 @@ static const uint8_t  VERSION    = 1;
 
 // ── Registry table ────────────────────────────────────────────────────────────
 // Add new params here. Defaults are the compile-time values previously in config.h.
+// IMPORTANT: After adding a param here and in param_ids.h, update
+//            software/gui/params_tab.py (_SUBGROUPS) so the GUI shows it
+//            in the correct section.
 // clang-format off
 static Param g_params[] = {
     // id                        group          name                     value     min       max     flags                   on_change
@@ -30,14 +33,51 @@ static Param g_params[] = {
     // GROUP_CONTROL — LQR controller settings
     {PARAM_LQR_ENABLE,              GROUP_CONTROL, "lqr_enable",          0.0f,    0.0f,    1.0f,  0,                     nullptr},
     {PARAM_SIM_PITCH_RAD,           GROUP_CONTROL, "sim_pitch_rad",       0.0f,   -1.5708f, 1.5708f, 0,                  nullptr},
+    {PARAM_ENABLE_SIM_PITCH_RAD,    GROUP_CONTROL, "enable_sim_pitch",    0.0f,    0.0f,    1.0f,  0,                     nullptr},
+    {PARAM_SIM_PITCH_RATE_RAD_S,    GROUP_CONTROL, "sim_pitch_rate",      0.0f,  -10.0f,   10.0f, 0,                     nullptr},
+    {PARAM_ENABLE_SIM_PITCH_RATE,   GROUP_CONTROL, "enable_sim_prate",    0.0f,    0.0f,    1.0f,  0,                     nullptr},
     {PARAM_LQR_TORQUE_LIMIT,        GROUP_CONTROL, "lqr_torque_limit",    1.0f,    0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_WHEEL_VEL_LIMIT_TURNS_S, GROUP_CONTROL, "wm_vel_limit",        3.0f,    1.0f,   20.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    // Velocity PI (Phase 3)
+    {PARAM_VEL_PI_EN,               GROUP_CONTROL, "vel_pi_en",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
+    {PARAM_VEL_PI_KP,               GROUP_CONTROL, "vel_pi_kp",           0.2f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_VEL_PI_KI,               GROUP_CONTROL, "vel_pi_ki",           0.1f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_VEL_PI_KFF,              GROUP_CONTROL, "vel_pi_kff",          0.1049f, 0.0f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_VEL_PI_THETA_MAX,        GROUP_CONTROL, "vel_pi_theta_max",    0.698f,  0.1f,    0.698f,PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_VEL_PI_RATE_LIM,         GROUP_CONTROL, "vel_pi_rate_lim",     1.745f,  0.1f,   10.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_VEL_PI_INT_MAX,          GROUP_CONTROL, "vel_pi_int_max",      1.0f,    0.1f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_V_CMD_MS,                GROUP_CONTROL, "v_cmd_ms",            0.0f,   -2.0f,    2.0f,  0,                     nullptr},
+    // Yaw PI (Phase 4)
+    {PARAM_YAW_PI_EN,               GROUP_CONTROL, "yaw_pi_en",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
+    {PARAM_YAW_PI_KP,               GROUP_CONTROL, "yaw_pi_kp",           0.1f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_YAW_PI_KI,               GROUP_CONTROL, "yaw_pi_ki",           0.2f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_YAW_PI_TORQUE_MAX,       GROUP_CONTROL, "yaw_pi_torque_max",   0.5f,    0.0f,    3.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_YAW_PI_INT_MAX,          GROUP_CONTROL, "yaw_pi_int_max",      0.5f,    0.0f,    3.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_OMEGA_CMD_RDS,           GROUP_CONTROL, "omega_cmd_rds",       0.0f,   -4.0f,    4.0f,  0,                     nullptr},
+    // Feedforward (Phase 6)
+    {PARAM_FF1_ALPHA,               GROUP_CONTROL, "ff1_alpha",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
+    {PARAM_FF2_ALPHA,               GROUP_CONTROL, "ff2_alpha",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
+    {PARAM_FF1_KT_HIP,              GROUP_CONTROL, "ff1_kt_hip",          1.2732f, 0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    // Jump controller (Phase 7)
+    {PARAM_JUMP_ENABLE,             GROUP_CONTROL, "jump_enable",         0.0f,    0.0f,    1.0f,  0,                     nullptr},
+    {PARAM_JUMP_TORQUE_MAX,         GROUP_CONTROL, "jump_torque_max",     0.0f,    0.0f,   18.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_JUMP_CROUCH_TIME_S,      GROUP_CONTROL, "jump_crouch_time",    0.30f,   0.05f,   1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_JUMP_RAMP_UP_S,          GROUP_CONTROL, "jump_ramp_up",        0.05f,   0.005f,  0.5f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_JUMP_RAMP_DOWN_RAD,      GROUP_CONTROL, "jump_ramp_down",      0.08f,   0.01f,   0.5f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_JUMP_OMEGA_MAX,          GROUP_CONTROL, "jump_omega_max",     40.0f,    5.0f,  200.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_JUMP_HARDSTOP_MARGIN,    GROUP_CONTROL, "jump_hs_margin",      0.06f,   0.01f,   0.5f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_JUMP_KP,                 GROUP_CONTROL, "jump_kp",            80.0f,    0.0f,  500.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_JUMP_KD,                 GROUP_CONTROL, "jump_kd",             1.0f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_JUMP_EXTEND_KD,          GROUP_CONTROL, "jump_ext_kd",         0.1f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_JUMP_EXTEND_TIMEOUT_S,   GROUP_CONTROL, "jump_ext_timeout",    0.15f,   0.05f,   1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
 
     // GROUP_WHEEL — wheel motor settings
     {PARAM_WM_ENC_TIMEOUT_MS, GROUP_WHEEL, "wm_enc_timeout_ms", 20.0f,  5.0f, 500.0f, PARAM_FLAG_PERSISTENT, nullptr},
 
     // GROUP_COMMAND — radio-derived setpoints (firmware-written, never persisted)
     {PARAM_RADIO_HIP_CMD, GROUP_COMMAND, "radio_hip_cmd",     0.0f,     0.0f,    1.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
+    {PARAM_RADIO_VEL_MAX, GROUP_COMMAND, "radio_vel_max",     0.5f,     0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_RADIO_YAW_MAX, GROUP_COMMAND, "radio_yaw_max",     1.0f,     0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
 
     // GROUP_IBUS — RC receiver live channel readings (firmware-written via param_force_set)
     {PARAM_IBUS_CH0,   GROUP_IBUS, "ibus_ch0",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},

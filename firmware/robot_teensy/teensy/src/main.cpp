@@ -265,7 +265,12 @@ static uint16_t build_health_flags() {
         && g_state.state == STATE_RUNNING)           f |= HEALTH_LQR_ACTIVE;
     if (fabsf(wm_L.vel_turns_s) > soft_lim)         f |= HEALTH_WM_L_VEL_LIMITED;
     if (fabsf(wm_R.vel_turns_s) > soft_lim)         f |= HEALTH_WM_R_VEL_LIMITED;
-    // HEALTH_VEL_PI_SAT and HEALTH_YAW_PI_SAT set by their controllers in Phase 3/4
+    if (param_get(PARAM_VEL_PI_EN) >= 0.5f
+        && fabsf(g_state.theta_ref) >= param_get(PARAM_VEL_PI_THETA_MAX))
+        f |= HEALTH_VEL_PI_SAT;
+    if (param_get(PARAM_YAW_PI_EN) >= 0.5f
+        && fabsf(g_state.tau_yaw) >= param_get(PARAM_YAW_PI_TORQUE_MAX))
+        f |= HEALTH_YAW_PI_SAT;
     return f;
 }
 
@@ -320,16 +325,14 @@ static void send_telemetry() {
     telem.hip_r_cmd_kd          = hm_sp_R.kd;
     telem.hip_l_cmd_tff         = hm_sp_L.tff;
     telem.hip_r_cmd_tff         = hm_sp_R.tff;
-    // V5 — balance controller internals (0 until respective phase is implemented)
+    // V7 — balance controller internals: setpoints + effort signals only
     telem.theta_ref             = g_state.theta_ref;
     telem.v_ref                 = g_state.v_ref;
+    telem.omega_cmd_rds         = param_get(PARAM_OMEGA_CMD_RDS);
     telem.tau_sym               = g_state.tau_sym;
     telem.tau_yaw               = g_state.tau_yaw;
-    telem.vel_err_integral      = g_state.vel_err_integral;
-    telem.yaw_err_integral      = g_state.yaw_err_integral;
     telem.ff1_out               = g_state.ff1_out;
     telem.ff2_out               = g_state.ff2_out;
-    telem.ff4_out               = g_state.ff4_out;
     // V5 — diagnostics
     telem.health_flags          = build_health_flags();
     telem.imu_packet_loss_pct   = (uint8_t)(imu_packet_loss() * 100.0f + 0.5f);
@@ -465,6 +468,15 @@ static void radio_update() {
     if (alive) {
         float t = constrain((g_ibus.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);  // CH3 (1-indexed)
         param_force_set(PARAM_RADIO_HIP_CMD, t);
+
+        float vel_norm = constrain((g_ibus.channel(2) - 1500.0f) / 500.0f, -1.0f, 1.0f);
+        param_force_set(PARAM_V_CMD_MS, vel_norm * param_get(PARAM_RADIO_VEL_MAX));
+
+        float yaw_norm = constrain((g_ibus.channel(4) - 1500.0f) / 500.0f, -1.0f, 1.0f);
+        param_force_set(PARAM_OMEGA_CMD_RDS, yaw_norm * param_get(PARAM_RADIO_YAW_MAX));
+    } else {
+        param_force_set(PARAM_V_CMD_MS, 0.0f);
+        param_force_set(PARAM_OMEGA_CMD_RDS, 0.0f);
     }
 }
 
@@ -510,6 +522,7 @@ void loop() {
     static uint8_t telem_div = 0;
     if (++telem_div >= 10) {
         telem_div = 0;
+        wheel_motors_request_vbus();
         send_telemetry();
     }
 

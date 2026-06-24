@@ -16,3 +16,8 @@
 #define WIFI_ENABLED      0     // set to 1 to re-enable UDP broadcast + TCP server
 #define TELEM_UDP_PORT    5005
 #define CMD_TCP_PORT      5006
+
+// --- Display personality ---
+// 0 = PERS_ENGINEERING (telemetry panels), 1 = PERS_FACE (animated eyes)
+// Change this to switch the power-on default; later the Teensy can override live.
+#define DEFAULT_DISPLAY_PERSONALITY  0

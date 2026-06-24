@@ -85,9 +85,26 @@ static uint32_t s_cmd_reject_deadline_ms = 0;
 // ── JUMPING auto-exit timer ───────────────────────────────────────────────────
 static uint32_t s_jump_deadline_ms = 0;
 
+// ── Jump FSM state (Phase 7) ──────────────────────────────────────────────────
+typedef enum : uint8_t {
+    JP_CROUCH  = 0,
+    JP_EXTEND  = 1,
+    JP_RETRACT = 2,
+    JP_DONE    = 3,
+} JumpPhase;
+
+static JumpPhase s_jp_phase        = JP_DONE;
+static uint32_t  s_jp_phase_ms     = 0;       // millis() when current phase started
+static float     s_jp_nom_L        = 0.0f;    // hip pos at jump trigger (RETRACT target)
+static float     s_jp_nom_R        = 0.0f;
+static float     s_jp_ret_L        = 0.0f;    // calibrated retracted pos (CROUCH target)
+static float     s_jp_ret_R        = 0.0f;
+static float     s_jp_from_L       = 0.0f;    // hip pos when RETRACT began
+static float     s_jp_from_R       = 0.0f;
+
 // ── MANUAL GUI watchdog ───────────────────────────────────────────────────────
 static uint32_t s_last_gui_packet_ms  = 0;
-static const uint32_t MANUAL_GUI_TIMEOUT_MS = 500;
+static const uint32_t MANUAL_GUI_TIMEOUT_MS = 5000;
 
 // ── State actions ─────────────────────────────────────────────────────────────
 
@@ -108,12 +125,18 @@ static void on_standby()  {
     bool from_running  = (g_state.state == STATE_RUNNING);
     bool from_calib    = (g_state.state == STATE_CALIBRATION);
     bool from_estop    = (g_state.state == STATE_ESTOP);  // soft-clear path
+    bool from_manual   = (g_state.state == STATE_MANUAL);
     g_state.state = STATE_STANDBY;
     hip_motors_clear_setpoints();  // revert to zero-torque ping (e.g. after CALIBRATION)
     g_state.whl_tau_l = 0.0f;
     g_state.whl_tau_r = 0.0f;
     if (from_calib) calibration_abort();
     if (from_running) wheel_motors_set_mode(WheelMode::IDLE);
+    if (from_manual) {
+        wheel_motors_send(0.0f, 0.0f);
+        wheel_motors_set_mode(WheelMode::IDLE);
+        wheel_motors_clear_errors();
+    }
     if (entering) comm_log(LOG_LEVEL_INFO, "-> STANDBY");
     if (from_running) g_buzzer.play(DISARMED_MELODY, sizeof(DISARMED_MELODY) / sizeof(DISARMED_MELODY[0]), 200);
     if (from_estop) {
@@ -182,10 +205,125 @@ static void on_cmd_reject() {
 static void on_jumping() {
     bool entering = (g_state.state != STATE_JUMPING);
     g_state.state = STATE_JUMPING;
+
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> JUMPING");
         g_buzzer.play(JUMP_MELODY, sizeof(JUMP_MELODY) / sizeof(JUMP_MELODY[0]), 200);
         s_jump_deadline_ms = millis() + 3000;
+        // Snapshot hip positions and calibrated retracted target
+        s_jp_phase  = JP_CROUCH;
+        s_jp_phase_ms = millis();
+        s_jp_nom_L  = hm_L.pos_rad;
+        s_jp_nom_R  = hm_R.pos_rad;
+        hip_cmd_to_setpoints(0.0f, &s_jp_ret_L, &s_jp_ret_R);  // t=0 → retracted
+    }
+
+    // LQR wheel balance runs throughout (identical to RUNNING — keeps robot upright on real robot)
+    controlLoop_run();
+
+    g_state.jump_state = (uint8_t)s_jp_phase;
+
+    // ── Master gate: leave at 0 until ready to test ───────────────────────────
+    if (param_get(PARAM_JUMP_ENABLE) < 0.5f) return;
+
+    // Require valid calibration limits before any hip torque is applied
+    if (!hm_limits_L.valid || !hm_limits_R.valid) {
+        comm_log(LOG_LEVEL_WARN, "JUMP: limits not valid — skipping hip cmds");
+        return;
+    }
+
+    float hip_q_L  = hm_L.pos_rad;
+    float hip_q_R  = hm_R.pos_rad;
+    float hip_dq_L = hm_L.vel_rad_s;
+    float hip_dq_R = hm_R.vel_rad_s;
+    float elapsed  = (millis() - s_jp_phase_ms) / 1000.0f;
+    float kp       = param_get(PARAM_JUMP_KP);
+    float kd       = param_get(PARAM_JUMP_KD);
+
+    if (s_jp_phase == JP_CROUCH) {
+        float crouch_t = param_get(PARAM_JUMP_CROUCH_TIME_S);
+        float alpha    = elapsed / crouch_t;
+        if (alpha > 1.0f) alpha = 1.0f;
+        float dq_L = (s_jp_ret_L - s_jp_nom_L) / crouch_t;
+        float dq_R = (s_jp_ret_R - s_jp_nom_R) / crouch_t;
+        hip_motors_set_setpoint_L(s_jp_nom_L + alpha * (s_jp_ret_L - s_jp_nom_L), dq_L, kp, kd, 0.0f);
+        hip_motors_set_setpoint_R(s_jp_nom_R + alpha * (s_jp_ret_R - s_jp_nom_R), dq_R, kp, kd, 0.0f);
+        if (elapsed >= crouch_t) {
+            s_jp_phase    = JP_EXTEND;
+            s_jp_phase_ms = millis();
+        }
+    }
+    else if (s_jp_phase == JP_EXTEND) {
+        // Seek direction sign: same direction calibration moved to reach the extended hardstop
+        float dir_L = param_get(PARAM_CALIB_L_SEEK_DIR);
+        float dir_R = param_get(PARAM_CALIB_R_SEEK_DIR);
+
+        // Extended calibrated limit (already includes CALIB_MARGIN from hardstop)
+        float lim_L = (dir_L > 0.0f) ? hm_limits_L.max_rad : hm_limits_L.min_rad;
+        float lim_R = (dir_R > 0.0f) ? hm_limits_R.max_rad : hm_limits_R.min_rad;
+
+        float dist_L = fabsf(hip_q_L - lim_L);
+        float dist_R = fabsf(hip_q_R - lim_R);
+
+        float ramp_dn = param_get(PARAM_JUMP_RAMP_DOWN_RAD);
+        float margin  = param_get(PARAM_JUMP_HARDSTOP_MARGIN);
+        float w_max   = param_get(PARAM_JUMP_OMEGA_MAX);
+        float max_trq = param_get(PARAM_JUMP_TORQUE_MAX);
+        float ext_kd  = param_get(PARAM_JUMP_EXTEND_KD);
+
+        // Torque softstart
+        float ramp_in = elapsed / param_get(PARAM_JUMP_RAMP_UP_S);
+        if (ramp_in > 1.0f) ramp_in = 1.0f;
+
+        // Torque ramp-to-zero near extended limit
+        float ramp_out_L = dist_L / ramp_dn;
+        if (ramp_out_L > 1.0f) ramp_out_L = 1.0f;
+        float ramp_out_R = dist_R / ramp_dn;
+        if (ramp_out_R > 1.0f) ramp_out_R = 1.0f;
+
+        // Speed taper: torque → 0 as hip velocity approaches omega_max
+        float tap_L = 1.0f - fabsf(hip_dq_L) / w_max;
+        if (tap_L < 0.0f) tap_L = 0.0f;
+        float tap_R = 1.0f - fabsf(hip_dq_R) / w_max;
+        if (tap_R < 0.0f) tap_R = 0.0f;
+
+        float tff_L = dir_L * max_trq * ramp_in * ramp_out_L * tap_L;
+        float tff_R = dir_R * max_trq * ramp_in * ramp_out_R * tap_R;
+
+        // Layer 4: hard cutoff — zero torque if within absolute margin of limit
+        bool cutoff = false;
+        if (dist_L < margin) { tff_L = 0.0f; cutoff = true; }
+        if (dist_R < margin) { tff_R = 0.0f; cutoff = true; }
+
+        // kp=0: pure torque + small damping; pos set to current so MITprotocol is well-formed
+        hip_motors_set_setpoint_L(hip_q_L, 0.0f, 0.0f, ext_kd, tff_L);
+        hip_motors_set_setpoint_R(hip_q_R, 0.0f, 0.0f, ext_kd, tff_R);
+
+        bool near_ext = (dist_L < ramp_dn && dist_R < ramp_dn);
+        bool timed_out = (elapsed >= param_get(PARAM_JUMP_EXTEND_TIMEOUT_S));
+        if (near_ext || cutoff || timed_out) {
+            s_jp_from_L   = hip_q_L;
+            s_jp_from_R   = hip_q_R;
+            s_jp_phase    = JP_RETRACT;
+            s_jp_phase_ms = millis();
+        }
+    }
+    else if (s_jp_phase == JP_RETRACT) {
+        static constexpr float RETRACT_TIME_S = 0.20f;
+        float alpha = elapsed / RETRACT_TIME_S;
+        if (alpha > 1.0f) alpha = 1.0f;
+        float dq_L = (s_jp_nom_L - s_jp_from_L) / RETRACT_TIME_S;
+        float dq_R = (s_jp_nom_R - s_jp_from_R) / RETRACT_TIME_S;
+        hip_motors_set_setpoint_L(s_jp_from_L + alpha * (s_jp_nom_L - s_jp_from_L), dq_L, kp, kd, 0.0f);
+        hip_motors_set_setpoint_R(s_jp_from_R + alpha * (s_jp_nom_R - s_jp_from_R), dq_R, kp, kd, 0.0f);
+        if (elapsed >= RETRACT_TIME_S) {
+            s_jp_phase = JP_DONE;
+        }
+    }
+    else {
+        // JP_DONE: hold at Q_NOM with stiff position hold until jump_done() timer fires → RUNNING
+        hip_motors_set_setpoint_L(s_jp_nom_L, 0.0f, kp, kd, 0.0f);
+        hip_motors_set_setpoint_R(s_jp_nom_R, 0.0f, kp, kd, 0.0f);
     }
 }
 static void on_estop() {

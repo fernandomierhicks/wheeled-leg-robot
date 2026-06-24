@@ -439,6 +439,8 @@ class WheelMotorsTab(QWidget):
         self._fw_R: float = 0.0  # last firmware setpoint sent to right wheel
         self._last_state_id: int | None = None
         self._wm_mode = WHEEL_MODE_IDLE
+        self._vbus_L_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
+        self._vbus_R_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
 
         self._panel_L = _WheelPanel("L", 0, self._send_L)
         self._panel_R = _WheelPanel("R", 1, self._send_R)
@@ -570,6 +572,42 @@ class WheelMotorsTab(QWidget):
         panels_row.addWidget(centre)
         panels_row.addWidget(self._panel_R, stretch=1)
 
+        # ── Vbus chart ────────────────────────────────────────────────────────
+        vbus_widget = QWidget()
+        vbus_widget.setObjectName("VbusPanel")
+        vbus_widget.setStyleSheet(
+            f"#VbusPanel {{background: {SURFACE}; border: 1px solid {BORDER};"
+            f" border-radius: 4px;}}"
+        )
+        vbus_lay = QVBoxLayout(vbus_widget)
+        vbus_lay.setContentsMargins(8, 4, 8, 4)
+        vbus_lay.setSpacing(2)
+        vbus_hdr = QLabel("Bus Voltage")
+        vbus_hdr.setStyleSheet(f"color: {DIM}; font-size: 10px; font-weight: bold;")
+        vbus_lay.addWidget(vbus_hdr)
+        self._vbus_chart = pg.PlotWidget()
+        self._vbus_chart.setBackground(BG)
+        self._vbus_chart.setFixedHeight(90)
+        self._vbus_chart.showGrid(x=True, y=True, alpha=0.12)
+        self._vbus_chart.setXRange(0, _BUF)
+        self._vbus_chart.getAxis("bottom").setStyle(showValues=False)
+        self._vbus_chart.addLegend(offset=(4, 4), verSpacing=-4)
+        self._crv_vbus_L = self._vbus_chart.plot(
+            list(self._vbus_L_buf),
+            pen=pg.mkPen(GREEN, width=1.5),
+            name="Vbus L",
+        )
+        self._crv_vbus_R = self._vbus_chart.plot(
+            list(self._vbus_R_buf),
+            pen=pg.mkPen(ORANGE, width=1.5),
+            name="Vbus R",
+        )
+        vbus_lay.addWidget(self._vbus_chart)
+
+        self._vbus_redraw = QTimer(self)
+        self._vbus_redraw.timeout.connect(self._redraw_vbus)
+        self._vbus_redraw.start(50)
+
         # ── Outer layout ──────────────────────────────────────────────────────
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
@@ -577,6 +615,7 @@ class WheelMotorsTab(QWidget):
         lay.addWidget(mode_bar)
         lay.addLayout(panels_row)
         lay.addWidget(diff_widget)
+        lay.addWidget(vbus_widget)
 
         TelemetryBus.instance().packet.connect(self._on_packet)
 
@@ -655,11 +694,16 @@ class WheelMotorsTab(QWidget):
 
             # Enter VELOCITY at 0 on MANUAL entry so ODrive goes CLOSED_LOOP
             # and encoder estimates start flowing — same pattern as test_wheel_motor.cpp.
+            # Clear errors first: the watchdog-expired fault from the previous session
+            # must be dismissed before the ODrive can re-arm on the next MANUAL entry.
             if in_manual:
                 self._fw_L = 0.0
                 self._fw_R = 0.0
-                send_wheel_set_mode(WHEEL_MODE_VELOCITY)
-                send_wheel_setpoint(0.0, 0.0)
+                send_wheel_clear_errors()
+                QTimer.singleShot(150, lambda: (
+                    send_wheel_set_mode(WHEEL_MODE_VELOCITY),
+                    send_wheel_setpoint(0.0, 0.0),
+                ))
 
         # Wheel telemetry (V3 only)
         wm_mode = info.get("wm_mode")
@@ -675,17 +719,30 @@ class WheelMotorsTab(QWidget):
                 f"color: {TEXT}; font-size: 11px; font-family: Consolas;"
             )
 
+        vbus_l = info.get("wm_l_vbus", 0.0)
+        vbus_r = info.get("wm_r_vbus", 0.0)
         self._panel_L.update_data(
             vel=info.get("wm_l_vel_turns_s", 0.0),
             pos=info.get("wm_l_pos_turns",   0.0),
-            vbus=info.get("wm_l_vbus",        0.0),
+            vbus=vbus_l,
             error=info.get("wm_l_error",      0),
             state_id=info.get("wm_l_state",   0),
         )
         self._panel_R.update_data(
             vel=info.get("wm_r_vel_turns_s", 0.0),
             pos=info.get("wm_r_pos_turns",   0.0),
-            vbus=info.get("wm_r_vbus",        0.0),
+            vbus=vbus_r,
             error=info.get("wm_r_error",      0),
             state_id=info.get("wm_r_state",   0),
         )
+        self._vbus_L_buf.append(vbus_l)
+        self._vbus_R_buf.append(vbus_r)
+
+    def _redraw_vbus(self):
+        self._crv_vbus_L.setData(list(self._vbus_L_buf))
+        self._crv_vbus_R.setData(list(self._vbus_R_buf))
+        all_v = list(self._vbus_L_buf) + list(self._vbus_R_buf)
+        lo, hi = min(all_v), max(all_v)
+        span = max(hi - lo, 1.0)
+        mid  = (lo + hi) / 2
+        self._vbus_chart.setYRange(mid - span * 0.6, mid + span * 0.6, padding=0.05)

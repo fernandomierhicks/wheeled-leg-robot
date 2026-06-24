@@ -67,58 +67,57 @@ K gains (nominal hip, params.py baseline): K_pitch=−9.771, K_pitch_rate=−1.8
 
 ---
 
-### Phase 3 — Velocity PI
+### Phase 3 — Velocity PI ✅ IMPLEMENTED — NOT VERIFIED (robot mode required)
 
-Implement on top of working LQR:
-```
-v_err = v_desired - wheel_vel_avg
-integral += v_err * dt  (anti-windup clamp)
-theta_ref = Kp*v_err + Ki*integral + Kff*dv_cmd_dt
-theta_ref = clamp(theta_ref, -theta_max, +theta_max)
-```
+New params: `vel_pi_en`, `vel_pi_kp`=0.2, `vel_pi_ki`=0.1, `vel_pi_kff`=0.1049, `vel_pi_theta_max`=0.698, `vel_pi_rate_lim`=1.745, `vel_pi_int_max`=1.0, `v_cmd_ms`=0.0
 
-`wheel_vel_avg` from `wm_L.vel_turns_s` / `wm_R.vel_turns_s` × `wheel_r`. Gains from Control.MD table.
+**Note:** Flatsat verification is not possible — K_vel positive feedback spins wheels without pendulum dynamics, causing vel PI integrator to wind up. All steps require upright balancing robot.
 
-**Safe test** (flatsat, wheels free-spinning):
-1. `v_desired = 0` (BALANCE mode). Push robot by hand; confirm wheels resist.
-2. `v_desired = 0.1 m/s`. Confirm wheels spin up slowly. Watch `theta_ref` in telemetry — should be small and stable.
+**Safe test** (robot upright and balancing):
+- [ ] 1. `vel_pi_en=0` — confirm `theta_ref=0` in telemetry.
+- [ ] 2. `vel_pi_en=1`, `v_cmd_ms=0` — push robot by hand; confirm wheels resist drift.
+- [ ] 3. `v_cmd_ms=0.1` — wheels spin up slowly; `theta_ref` goes slightly positive, `vel_err_integral` accumulates then stabilizes.
 
 ---
 
-### Phase 4 — Yaw PI
+### Phase 4 — Yaw PI ✅ IMPLEMENTED — verification pending
 
-```
-tau_yaw = Kp*(omega_desired - imu_yaw_rate()) + Ki*integral
-tau_L = tau_sym + tau_yaw
-tau_R = tau_sym - tau_yaw
-```
+New params: `yaw_pi_en`, `yaw_pi_kp`=0.1, `yaw_pi_ki`=0.2, `yaw_pi_torque_max`=0.5, `yaw_pi_int_max`=0.5, `omega_cmd_rds`=0.0
 
-Need `imu_yaw_rate()` getter added to `IMU.h` (BNO086 already outputs it).
+`imu_yaw_rate()` was already in IMU.h — no changes needed there.
 
-**Safe test** (flatsat): Command `omega_desired = 0.5 rad/s`. Confirm left wheel faster than right (verify sign vs. robot frame: +Y = left, +Z = up, right-hand rule → positive yaw = counterclockwise from above → left wheel slower, right faster). Adjust sign if needed.
+**Safe test** (flatsat):
+- [ ] 1. `yaw_pi_en=1`, `omega_cmd_rds=0.5` — confirm one wheel faster than the other.
+- [ ] 2. Verify sign: +Y = left, +Z = up, right-hand rule → positive yaw = CCW from above → right wheel faster. Flip sign of `omega_cmd_rds` or `yaw_pi_kp` if backwards.
 
 ---
 
-### Phase 5 — Hip gain scheduling
+### Phase 5 — Hip gain scheduling ✅ IMPLEMENTED — verification pending
 
-Implement 3-point LQR gain interpolation from Control.MD:
-```
-alpha = (q_hip_avg - Q_RET) / (Q_EXT - Q_RET)
-K = (1 - alpha) * K_retracted + alpha * K_extended
-```
+No new params. Gains hardcoded from `lqr.py` self-test (Q_pitch=0.01, Q_pitch_rate=0.1884, Q_vel=0.00508442, R=100.0):
 
-**Safe test** (flatsat): sweep hip position via radio CH3, confirm K values in telemetry change with leg height.
+| Position | K_pitch | K_rate | K_vel |
+|---|---|---|---|
+| Retracted (α=0) | −13.050 | −2.181 | −0.00713 |
+| Extended  (α=1) | −7.929  | −1.691 | −0.00713 |
+
+`alpha` derived from calibrated hip position span — coordinate-system agnostic, defaults to 0.5 if calibration not done.
+
+**Safe test** (flatsat):
+- [ ] 1. Calibrate hips. Sweep CH3 from retracted to extended — confirm `gain_sched_alpha` moves 0→1 in telemetry.
 
 ---
 
-### Phase 6 — Feedforward terms (FF1, FF2)
+### Phase 6 — Feedforward terms (FF1, FF2) ✅ IMPLEMENTED — verification pending
 
-Add after LQR + yaw verified:
-- **FF2 first** (gravity comp, pitch angle only). Start `ff2_alpha = 0`, ramp up.
-- **FF1 second** (hip reaction cancel, needs hip torque readback from CAN).
-- FF4 stays `alpha = 0` until driving on floor.
+New params: `ff2_alpha`=0.0, `ff1_alpha`=0.0, `ff1_kt_hip`=1.2732 N·m/A
 
-**Safe test**: compare `tau_sym` in telemetry with and without FF terms at a fixed fake pitch angle.
+`l_eff` linearly interpolated from IK-computed values: 0.183 m (retracted) → 0.296 m (extended). FF4 hardcoded 0 until floor driving.
+
+**Safe test** (flatsat):
+- [ ] 1. Set `sim_pitch_rad=0.1`. Note baseline `tau_sym`.
+- [ ] 2. `ff2_alpha=0.1` — confirm `ff2_out` non-zero in telemetry, `tau_sym` shifts. Ramp up slowly toward 1.0.
+- [ ] 3. `ff1_alpha=0.1` — watch `ff1_out`; verify sign plausible (should oppose hip torque effect). Increase cautiously.
 
 ---
 
@@ -132,23 +131,44 @@ Only implement and test once:
 
 ---
 
-## Critical Files to Modify
+## Critical Files (all modified — implementation complete)
 
-| File | Changes |
-|------|---------|
-| `firmware/robot_teensy/teensy/src/control_loop.cpp` | All controller logic |
-| `firmware/robot_teensy/shared/comm_protocol.h` | Add `FAULT_PITCH_WATCHDOG`, `FAULT_WHEEL_RUNAWAY`; telemetry fields for `tau_sym`, `theta_ref`, `tau_yaw` |
-| `firmware/robot_teensy/teensy/src/param_registry` | Add `PARAM_LQR_ENABLE`, `PARAM_SIM_PITCH_RAD`, `PARAM_LQR_TORQUE_LIMIT`, `PARAM_WHEEL_VEL_LIMIT_TURNS_S` |
-| `firmware/robot_teensy/teensy/src/state_machine.cpp` | `on_running()` calls `controlLoop_run()` instead of sending hip directly |
-| `firmware/robot_teensy/teensy/src/IMU.h/.cpp` | Add `imu_yaw_rate()` getter |
+| File | Status |
+|------|--------|
+| `firmware/robot_teensy/teensy/src/control_loop.cpp` | ✅ All phases 1–6 implemented |
+| `firmware/robot_teensy/shared/comm_protocol.h` | ✅ Fault codes, telemetry fields all present (TELEM_VERSION 6) |
+| `firmware/robot_teensy/teensy/lib/ParamRegistry/param_ids.h` | ✅ All params added (0x0400–0x0414) |
+| `firmware/robot_teensy/teensy/lib/ParamRegistry/param_registry.cpp` | ✅ All params registered with defaults |
+| `firmware/robot_teensy/teensy/src/main.cpp` | ✅ `build_health_flags()` updated for VEL_PI_SAT and YAW_PI_SAT |
+| `firmware/robot_teensy/teensy/src/state_machine.cpp` | ✅ `on_running()` calls `controlLoop_run()` |
+| `firmware/robot_teensy/teensy/lib/IMU/IMU.h` | ✅ `imu_yaw_rate()` already present, no changes needed |
 
 ## End-to-End Verification Checklist
 
-- [ ] Flash firmware. Boot. Calibrate. Arm via CH10.
-- [ ] GUI shows `tau_sym` in telemetry at 50 Hz = 0 when upright.
-- [ ] With `SIM_PITCH = 0.1`, tau is positive and proportional to gain × error.
-- [ ] With `LQR_ENABLE = 1`, `TORQUE_LIMIT = 1 Nm`: tilt robot — wheels spin in correcting direction.
-- [ ] ESTOP from radio disarm (CH10 drop): fault code = none / normal disarm.
-- [ ] ESTOP from pitch watchdog (tilt past 50°): fault code = `FAULT_PITCH_WATCHDOG` visible in GUI.
-- [ ] ESTOP from wheel runaway: fault code = `FAULT_WHEEL_RUNAWAY`.
-- [ ] No runaway: release upright robot → wheels settle to zero torque within ~1 s.
+**Phase 2 (LQR)** — verified:
+- [x] Flash firmware. Boot. Calibrate. Arm via CH10.
+- [x] GUI shows `tau_sym` in telemetry at 50 Hz = 0 when upright.
+- [x] With `sim_pitch_rad=0.1`, tau is positive and proportional to gain × error.
+- [x] With `lqr_enable=1`, `lqr_torque_limit=1 Nm`: tilt robot — wheels spin in correcting direction.
+- [x] ESTOP from radio disarm (CH10 drop): normal disarm.
+- [x] ESTOP from pitch watchdog (tilt past 50°): fault code = `FAULT_PITCH_WATCHDOG` visible in GUI.
+- [x] ESTOP from wheel runaway: fault code = `FAULT_WHEEL_RUNAWAY`.
+- [x] No runaway: release upright robot → wheels settle to zero torque within ~1 s.
+
+**Phase 3 (Velocity PI)** — NOT VERIFIED (robot mode required):
+- [ ] `vel_pi_en=0` → `theta_ref=0` in telemetry
+- [ ] `vel_pi_en=1`, `v_cmd_ms=0` → wheels resist hand-push
+- [ ] `v_cmd_ms=0.1` → wheels spin up, `theta_ref` positive, integral stabilizes
+
+**Phase 4 (Yaw PI)** — pending:
+- [ ] `yaw_pi_en=1`, `omega_cmd_rds=0.5` → differential wheel speed visible
+- [ ] Sign correct (right wheel faster for positive omega); adjust if not
+
+**Phase 5 (Gain scheduling)** — pending:
+- [ ] Post-calibration: sweep CH3, `gain_sched_alpha` tracks 0→1 in telemetry
+
+**Phase 6 (Feedforward)** — pending:
+- [ ] `ff2_alpha` ramped up from 0 at fixed `sim_pitch_rad`; `ff2_out` visible in telemetry
+- [ ] `ff1_alpha` enabled last; sign verified before increasing
+
+**Phase 7 (Jump FSM)** — NOT flatsat. Implement only when robot is on floor, secured.

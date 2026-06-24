@@ -67,6 +67,42 @@ static volatile uint32_t g_reject_end_ms     = 0;
 static volatile uint16_t g_tof_front_min     = 0xFFFF;
 static volatile uint16_t g_tof_rear_min      = 0xFFFF;
 
+// ── Display personality ───────────────────────────────────────────────────────
+enum DisplayPersonality : uint8_t { PERS_ENGINEERING = 0, PERS_FACE = 1 };
+static volatile DisplayPersonality g_display_personality =
+    (DisplayPersonality)DEFAULT_DISPLAY_PERSONALITY;
+
+// ── Telemetry state ───────────────────────────────────────────────────────────
+// Declared here (before animation functions) because neo_task uses g_fault_code.
+
+static volatile float    g_telem_pitch_rad  = 0.0f;
+static volatile float    g_telem_roll_rad   = 0.0f;
+static volatile float    g_telem_pitch_rate = 0.0f;
+static volatile float    g_telem_wheel_vel  = 0.0f;
+static volatile float    g_telem_hip_l_rad  = 0.0f;
+static volatile float    g_telem_hip_r_rad  = 0.0f;
+static volatile float    g_telem_hip_l_curr = 0.0f;
+static volatile float    g_telem_hip_r_curr = 0.0f;
+static volatile uint8_t  g_telem_ibus_alive = 0;
+static volatile uint8_t  g_fault_code       = FAULT_NONE;
+static volatile float    g_telem_wm_l_vel   = 0.0f;
+static volatile float    g_telem_wm_r_vel   = 0.0f;
+static volatile float    g_telem_wm_l_vbus  = 0.0f;
+static volatile float    g_telem_wm_r_vbus  = 0.0f;
+static volatile uint32_t g_telem_wm_l_error = 0;
+static volatile uint32_t g_telem_wm_r_error = 0;
+static volatile uint8_t  g_telem_wm_l_state = 0;
+static volatile uint8_t  g_telem_wm_r_state = 0;
+static volatile uint8_t  g_telem_wm_mode    = 0;
+static volatile bool     g_version_mismatch = false;
+
+// ── UART health (written core 1 on_teensy_packet / display_task, read display_task core 0)
+// 32-bit reads/writes are atomic on Xtensa — no mutex needed for these counters.
+static volatile uint32_t g_uart_crc_drops  = 0;  // lifetime CommLink CRC/frame errors
+static volatile uint32_t g_uart_seq_gaps   = 0;  // lifetime packets lost (loop_count jumps)
+static volatile uint8_t  g_uart_crc_rate   = 0;  // CRC drops in last 2 s window
+static volatile uint8_t  g_uart_gap_rate   = 0;  // seq gaps  in last 2 s window
+
 // ── Distance → color (green → yellow → red) ──────────────────────────────────
 
 static CRGB dist_to_color(uint16_t d) {
@@ -158,13 +194,22 @@ static void anim_running_tof(CRGB* buf, uint32_t tick) {
         fill_side(buf, SIDE_REAR, CRGB(255, 60, 0));
 }
 
-// ESTOP — red strobe + white racing comet overlay
+// ESTOP — red strobe + orange racing comet overlay
 static void anim_estop_alarm(CRGB* buf, uint32_t tick) {
     fill_solid(buf, NUM_LEDS, (tick % 25u < 10u) ? CRGB(200, 0, 0) : CRGB::Black);
     int head = (int)(tick % NUM_LEDS);
-    const uint8_t kW[5] = {255, 210, 155, 90, 40};
+    // Orange comet: R stays high, G tapers from ~140 to 10, B=0
+    const uint8_t kR[5] = {255, 230, 180, 110,  50};
+    const uint8_t kG[5] = {140, 110,  75,  40,  10};
     for (int t = 0; t < 5; t++)
-        buf[(head - t + NUM_LEDS) % NUM_LEDS] = CRGB(kW[t], kW[t], kW[t]);
+        buf[(head - t + NUM_LEDS) % NUM_LEDS] = CRGB(kR[t], kG[t], 0);
+}
+
+// FAULT — deep red slow pulse, all LEDs
+static void anim_fault(CRGB* buf, uint32_t tick) {
+    // sin8 gives 0-255; map to 60-255 so it never fully blacks out
+    uint8_t bri = map(sin8((uint8_t)(tick * 3u)), 0, 255, 60, 255);
+    fill_solid(buf, NUM_LEDS, CRGB(bri, 0, 0));
 }
 
 // MANUAL — cyan knight rider ping-pong on all four sides simultaneously
@@ -257,7 +302,12 @@ static void neo_task(void*) {
                 case RS_CALIBRATION: anim_scanner_calibration(neo_buf, tick);     break;
                 case RS_STANDBY:     anim_marquee_standby(neo_buf, tick);         break;
                 case RS_RUNNING:     anim_running_tof(neo_buf, tick);             break;
-                case RS_ESTOP:       anim_estop_alarm(neo_buf, tick);             break;
+                case RS_ESTOP:
+                    if (g_fault_code != FAULT_NONE && g_fault_code != FAULT_HUMAN_ESTOP)
+                        anim_fault(neo_buf, tick);
+                    else
+                        anim_estop_alarm(neo_buf, tick);
+                    break;
                 case RS_MANUAL:      anim_knight_rider_manual(neo_buf, tick);     break;
                 case RS_JUMPING:     anim_rainbow_jump(neo_buf, tick);            break;
                 default:             fill_solid(neo_buf, NUM_LEDS, CRGB::White);  break;
@@ -363,36 +413,6 @@ static void tof_task(void*) {
 
 static CommLink g_teensy(Serial2, COMM_SRC_ESP32);
 static CommLink g_usb(Serial,    COMM_SRC_ESP32);
-
-// ── Telemetry state ───────────────────────────────────────────────────────────
-
-static volatile float    g_telem_pitch_rad  = 0.0f;
-static volatile float    g_telem_roll_rad   = 0.0f;
-static volatile float    g_telem_pitch_rate = 0.0f;
-static volatile float    g_telem_wheel_vel  = 0.0f;
-static volatile float    g_telem_hip_l_rad  = 0.0f;
-static volatile float    g_telem_hip_r_rad  = 0.0f;
-static volatile float    g_telem_hip_l_curr = 0.0f;
-static volatile float    g_telem_hip_r_curr = 0.0f;
-static volatile uint8_t  g_telem_ibus_alive = 0;
-static volatile uint8_t  g_fault_code       = FAULT_NONE;
-static volatile float    g_telem_wm_l_vel   = 0.0f;
-static volatile float    g_telem_wm_r_vel   = 0.0f;
-static volatile float    g_telem_wm_l_vbus  = 0.0f;
-static volatile float    g_telem_wm_r_vbus  = 0.0f;
-static volatile uint32_t g_telem_wm_l_error = 0;
-static volatile uint32_t g_telem_wm_r_error = 0;
-static volatile uint8_t  g_telem_wm_l_state = 0;
-static volatile uint8_t  g_telem_wm_r_state = 0;
-static volatile uint8_t  g_telem_wm_mode    = 0;
-static volatile bool     g_version_mismatch = false;
-
-// ── UART health (written core 1 on_teensy_packet / display_task, read display_task core 0)
-// 32-bit reads/writes are atomic on Xtensa — no mutex needed for these counters.
-static volatile uint32_t g_uart_crc_drops  = 0;  // lifetime CommLink CRC/frame errors
-static volatile uint32_t g_uart_seq_gaps   = 0;  // lifetime packets lost (loop_count jumps)
-static volatile uint8_t  g_uart_crc_rate   = 0;  // CRC drops in last 2 s window
-static volatile uint8_t  g_uart_gap_rate   = 0;  // seq gaps  in last 2 s window
 
 // ── WiFi / TCP / UDP ──────────────────────────────────────────────────────────
 
@@ -529,6 +549,8 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
 static TFT_eSPI    tft;
 static TFT_eSprite ah_sprite(&tft);   // 170×156 off-screen AH buffer
 static TFT_eSprite wm_sprite(&tft);   // 70×156 off-screen wheel motor widget buffer
+static TFT_eSprite eye_sprite(&tft);  // 100×100 face personality (reused for L and R)
+static TFT_eSprite mouth_sprite(&tft);// 130×60  face personality mouth
 
 // Layout (landscape 320×240, rotation=1)
 #define BANNER_H   34
@@ -551,12 +573,87 @@ static TFT_eSprite wm_sprite(&tft);   // 70×156 off-screen wheel motor widget b
 #define HIP_DISPLAY_MIN  0.0f
 #define HIP_DISPLAY_MAX  2.0f
 
+// ── Face personality geometry (320×240 landscape) ─────────────────────────────
+#define FACE_EYE_L_CX      90
+#define FACE_EYE_R_CX     230
+#define FACE_EYE_CY       105
+#define FACE_EYE_RX        37   // ellipse half-width
+#define FACE_EYE_RY        35   // ellipse half-height
+#define FACE_PUPIL_R       22   // pupil circle radius
+#define FACE_PUPIL_TRAVEL  18   // max pupil offset from eye center (px)
+#define FACE_EYE_SPR_W    100   // sprite bounding box (gives 12 px clearance around ellipse)
+#define FACE_EYE_SPR_H    100
+#define FACE_EYE_SPR_CX    50   // eye center within sprite
+#define FACE_EYE_SPR_CY    50
+#define FACE_MOUTH_CX     160
+#define FACE_MOUTH_CY     195
+#define FACE_MOUTH_SPR_W  130
+#define FACE_MOUTH_SPR_H   60
+#define FACE_EYE_L_SPR_X  (FACE_EYE_L_CX - FACE_EYE_SPR_W/2)
+#define FACE_EYE_R_SPR_X  (FACE_EYE_R_CX - FACE_EYE_SPR_W/2)
+#define FACE_EYE_SPR_Y    (FACE_EYE_CY   - FACE_EYE_SPR_H/2)
+#define FACE_MOUTH_SPR_X  (FACE_MOUTH_CX - FACE_MOUTH_SPR_W/2)
+#define FACE_MOUTH_SPR_Y  (FACE_MOUTH_CY - FACE_MOUTH_SPR_H/2)
+
 // Colour palette (set in initDisplay() via tft.color565())
 static uint16_t COL_SKY, COL_GROUND, COL_AIRCRAFT;
 static uint16_t COL_GRAPH_BG, COL_PITCH_LINE, COL_ZERO_LINE;
 static uint16_t COL_HIP_FILL, COL_HIP_EMPTY;
 static uint16_t COL_FOOTER_BG, COL_DIM, COL_DIVIDER;
 static uint16_t COL_TICK_SKY, COL_TICK_GND;
+
+// ── Face personality data structures ─────────────────────────────────────────
+
+enum FaceMood : uint8_t {
+    MOOD_SLEEPY     = RS_STARTUP,
+    MOOD_FOCUSED    = RS_CALIBRATION,
+    MOOD_CALM       = RS_STANDBY,
+    MOOD_ALERT      = RS_RUNNING,
+    MOOD_SCARED     = RS_ESTOP,
+    MOOD_DETERMINED = RS_MANUAL,
+    MOOD_ANNOYED    = RS_CMD_REJECT,
+    MOOD_EXCITED    = RS_JUMPING,
+};
+
+struct MoodParams {
+    float    lid_base;       // resting lid coverage (0=fully open, 1=fully closed)
+    float    lid_squint;     // additional bottom-up squint
+    uint32_t blink_min_ms;
+    uint32_t blink_max_ms;
+    uint32_t blink_close_ms;
+    uint32_t blink_open_ms;
+    float    pupil_scale;    // pitch/roll telemetry sensitivity (0=use idle drift)
+    uint16_t sclera_color;
+    uint16_t pupil_color;
+    int8_t   mouth_shape;    // 0=neutral, 1=smile, -1=frown, 2=big smile, -2=wavy
+};
+
+// Filled at runtime in initFaceDisplay() because tft.color565() is not constexpr.
+static MoodParams kMoodTable[8];
+
+struct EyeAnim {
+    float lid_pos;   // current lid coverage (0=open, 1=closed)
+    float pupil_x;   // current pupil offset from eye center (px, float)
+    float pupil_y;
+    float pupil_tx;  // target pupil position
+    float pupil_ty;
+};
+
+enum BlinkPhase : uint8_t { BLINK_OPEN, BLINK_CLOSING, BLINK_CLOSED, BLINK_OPENING };
+
+struct FaceAnim {
+    EyeAnim    eye[2];
+    FaceMood   mood;
+    uint8_t    prev_robot_state;
+    BlinkPhase blink_phase;
+    uint32_t   blink_next_ms;
+    uint32_t   blink_phase_ms;
+    uint32_t   pupil_retarget_ms;
+    uint8_t    annoy_blink_count;
+    uint32_t   annoy_next_ms;
+};
+
+static FaceAnim g_face;
 
 // ── Text / state helpers ──────────────────────────────────────────────────────
 
@@ -950,9 +1047,9 @@ static void drawFooter(uint8_t state, bool active, bool rc_alive,
     tft.printf("%.2f m/s", wheel_vel);
 }
 
-// ── One-time static display init ──────────────────────────────────────────────
+// ── Display init helpers ──────────────────────────────────────────────────────
 
-static void initDisplay() {
+static void init_color_palette() {
     COL_SKY        = tft.color565( 20,  80, 200);
     COL_GROUND     = tft.color565(120,  65,  12);
     COL_AIRCRAFT   = tft.color565(255, 230,   0);
@@ -966,8 +1063,9 @@ static void initDisplay() {
     COL_DIVIDER    = tft.color565( 35,  35,  40);
     COL_TICK_SKY   = tft.color565(120, 180, 255);
     COL_TICK_GND   = tft.color565(200, 140,  80);
+}
 
-    // Allocate sprite buffers
+static void initEngineeringDisplay() {
     ah_sprite.setColorDepth(16);
     ah_sprite.createSprite(AH_W, AH_H);
 
@@ -976,12 +1074,10 @@ static void initDisplay() {
 
     tft.fillScreen(TFT_BLACK);
 
-    // Column dividers
     tft.drawFastVLine(HIP_X,   AH_Y, AH_H, COL_DIVIDER);
     tft.drawFastVLine(GRAPH_X, AH_Y, AH_H, COL_DIVIDER);
     tft.drawFastHLine(0, FOOTER_Y, 320, COL_DIVIDER);
 
-    // Hip axis labels (static — sprites don't cover this area)
     tft.setTextSize(1);
     tft.setTextColor(tft.color565(160, 160, 160), TFT_BLACK);
     tft.setCursor(HIP_X + 10, HIP_Y + 5);
@@ -992,9 +1088,330 @@ static void initDisplay() {
     tft.fillRect(0, FOOTER_Y + 1, 320, FOOTER_H - 1, COL_FOOTER_BG);
 }
 
+static void initFaceDisplay() {
+    kMoodTable[MOOD_SLEEPY]     = { 0.55f, 0.0f,  8000, 12000, 200, 600, 0.0f, TFT_WHITE, TFT_BLACK,  0 };
+    kMoodTable[MOOD_FOCUSED]    = { 0.15f, 0.25f, 5000,  8000, 100, 150, 0.0f, TFT_WHITE, TFT_BLUE,   0 };
+    kMoodTable[MOOD_CALM]       = { 0.0f,  0.0f,  3000,  5000, 100, 180, 0.3f, TFT_WHITE, TFT_BLACK,  0 };
+    kMoodTable[MOOD_ALERT]      = { 0.0f,  0.0f,  4000,  7000,  80, 120, 1.0f, TFT_WHITE, TFT_BLACK,  1 };
+    kMoodTable[MOOD_SCARED]     = { 0.0f,  0.0f,  1500,  2500,  60,  90, 0.0f, TFT_WHITE, TFT_RED,   -1 };
+    kMoodTable[MOOD_DETERMINED] = { 0.1f,  0.2f,  6000,  9000, 100, 160, 0.5f, TFT_WHITE, TFT_CYAN,  -1 };
+    kMoodTable[MOOD_ANNOYED]    = { 0.05f, 0.0f,   500,   800,  60,  80, 0.0f, TFT_WHITE, TFT_BLACK, -2 };
+    kMoodTable[MOOD_EXCITED]    = { 0.0f,  0.0f,   800,  1500,  50,  70, 0.0f,
+                                    tft.color565(255, 255, 200), TFT_BLACK, 2 };
+
+    eye_sprite.setColorDepth(16);
+    eye_sprite.createSprite(FACE_EYE_SPR_W, FACE_EYE_SPR_H);
+
+    mouth_sprite.setColorDepth(16);
+    mouth_sprite.createSprite(FACE_MOUTH_SPR_W, FACE_MOUTH_SPR_H);
+
+    tft.fillScreen(TFT_BLACK);
+
+    memset(&g_face, 0, sizeof(g_face));
+    g_face.mood             = MOOD_CALM;
+    g_face.prev_robot_state = 0xFF;  // sentinel: forces mood sync on first update
+    g_face.blink_phase      = BLINK_OPEN;
+    g_face.blink_next_ms    = millis() + 3000;
+    g_face.pupil_retarget_ms= millis() + 2000;
+}
+
+static void switch_personality(DisplayPersonality p) {
+    if (p == g_display_personality) return;
+
+    switch (g_display_personality) {
+        case PERS_ENGINEERING:
+            ah_sprite.deleteSprite();
+            wm_sprite.deleteSprite();
+            break;
+        case PERS_FACE:
+            eye_sprite.deleteSprite();
+            mouth_sprite.deleteSprite();
+            break;
+    }
+
+    g_display_personality = p;
+    tft.fillScreen(TFT_BLACK);
+
+    switch (p) {
+        case PERS_ENGINEERING: initEngineeringDisplay(); break;
+        case PERS_FACE:        initFaceDisplay();        break;
+    }
+    g_display_dirty = true;
+}
+
+static void initDisplay() {
+    init_color_palette();
+    switch (g_display_personality) {
+        case PERS_ENGINEERING: initEngineeringDisplay(); break;
+        case PERS_FACE:        initFaceDisplay();        break;
+    }
+}
+
+// ── Face personality animation ────────────────────────────────────────────────
+
+static void face_update_mood() {
+    uint8_t state = g_robot_state;
+    if (state == g_face.prev_robot_state) return;
+
+    g_face.mood             = (FaceMood)constrain((int)state, 0, 7);
+    g_face.prev_robot_state = state;
+
+    if (g_face.mood == MOOD_ANNOYED) {
+        g_face.annoy_blink_count = 4;
+        g_face.annoy_next_ms     = millis();
+    }
+    g_face.pupil_retarget_ms = millis();
+}
+
+static void face_update_blink(uint32_t now) {
+    const MoodParams& mp = kMoodTable[g_face.mood];
+
+    // Annoyed rapid blink overrides normal schedule
+    if (g_face.mood == MOOD_ANNOYED && g_face.annoy_blink_count > 0
+            && now >= g_face.annoy_next_ms) {
+        if (g_face.blink_phase == BLINK_OPEN) {
+            g_face.blink_phase    = BLINK_CLOSING;
+            g_face.blink_phase_ms = now;
+        }
+    }
+
+    switch (g_face.blink_phase) {
+        case BLINK_OPEN:
+            if (now >= g_face.blink_next_ms) {
+                g_face.blink_phase    = BLINK_CLOSING;
+                g_face.blink_phase_ms = now;
+            }
+            break;
+
+        case BLINK_CLOSING: {
+            float t = (float)(now - g_face.blink_phase_ms) / (float)mp.blink_close_ms;
+            float lid = constrain(t, 0.0f, 1.0f);
+            g_face.eye[0].lid_pos = lid;
+            g_face.eye[1].lid_pos = lid;
+            if (now - g_face.blink_phase_ms >= mp.blink_close_ms) {
+                g_face.blink_phase    = BLINK_CLOSED;
+                g_face.blink_phase_ms = now;
+            }
+            break;
+        }
+
+        case BLINK_CLOSED:
+            g_face.eye[0].lid_pos = 1.0f;
+            g_face.eye[1].lid_pos = 1.0f;
+            if (now - g_face.blink_phase_ms >= 20) {
+                g_face.blink_phase    = BLINK_OPENING;
+                g_face.blink_phase_ms = now;
+            }
+            break;
+
+        case BLINK_OPENING: {
+            float t = (float)(now - g_face.blink_phase_ms) / (float)mp.blink_open_ms;
+            float lid = constrain(1.0f - t, 0.0f, 1.0f);
+            g_face.eye[0].lid_pos = lid;
+            g_face.eye[1].lid_pos = lid;
+            if (now - g_face.blink_phase_ms >= mp.blink_open_ms) {
+                g_face.eye[0].lid_pos = 0.0f;
+                g_face.eye[1].lid_pos = 0.0f;
+                g_face.blink_phase    = BLINK_OPEN;
+                if (g_face.annoy_blink_count > 0) {
+                    g_face.annoy_blink_count--;
+                    g_face.annoy_next_ms = now + 80;
+                } else {
+                    uint32_t interval = mp.blink_min_ms +
+                        (uint32_t)random((int32_t)(mp.blink_max_ms - mp.blink_min_ms));
+                    g_face.blink_next_ms = now + interval;
+                }
+            }
+            break;
+        }
+    }
+}
+
+static void face_update_pupils(uint32_t now) {
+    const MoodParams& mp = kMoodTable[g_face.mood];
+    bool connected = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < 1000);
+
+    if (g_face.mood == MOOD_ALERT && connected) {
+        float tx = constrain(g_telem_roll_rad  * mp.pupil_scale * FACE_PUPIL_TRAVEL / 0.3f,
+                             -(float)FACE_PUPIL_TRAVEL, (float)FACE_PUPIL_TRAVEL);
+        float ty = constrain(-g_telem_pitch_rad * mp.pupil_scale * FACE_PUPIL_TRAVEL / 0.3f,
+                             -(float)FACE_PUPIL_TRAVEL, (float)FACE_PUPIL_TRAVEL);
+        g_face.eye[0].pupil_tx = tx;
+        g_face.eye[0].pupil_ty = ty;
+        g_face.eye[1].pupil_tx = tx;
+        g_face.eye[1].pupil_ty = ty;
+
+    } else if (g_face.mood == MOOD_DETERMINED && connected && mp.pupil_scale > 0.0f) {
+        float tx = constrain(g_telem_roll_rad  * mp.pupil_scale * FACE_PUPIL_TRAVEL / 0.3f,
+                             -(float)FACE_PUPIL_TRAVEL, (float)FACE_PUPIL_TRAVEL);
+        float ty = constrain(-g_telem_pitch_rad * mp.pupil_scale * FACE_PUPIL_TRAVEL / 0.3f,
+                             -(float)FACE_PUPIL_TRAVEL, (float)FACE_PUPIL_TRAVEL);
+        g_face.eye[0].pupil_tx = tx;
+        g_face.eye[0].pupil_ty = ty;
+        g_face.eye[1].pupil_tx = tx;
+        g_face.eye[1].pupil_ty = ty;
+
+    } else if (g_face.mood == MOOD_SCARED) {
+        for (int i = 0; i < 2; i++) {
+            g_face.eye[i].pupil_tx = (float)(random(9) - 4);
+            g_face.eye[i].pupil_ty = (float)(random(9) - 4);
+        }
+
+    } else if (g_face.mood == MOOD_FOCUSED) {
+        float phase = (float)(now % 2000u) / 2000.0f;
+        float sweep = (phase < 0.5f) ? phase * 2.0f : 2.0f - phase * 2.0f;
+        float tx = (sweep - 0.5f) * 2.0f * FACE_PUPIL_TRAVEL * 0.8f;
+        g_face.eye[0].pupil_tx =  tx;
+        g_face.eye[1].pupil_tx = -tx;
+        g_face.eye[0].pupil_ty = 0.0f;
+        g_face.eye[1].pupil_ty = 0.0f;
+
+    } else {
+        if (now >= g_face.pupil_retarget_ms) {
+            float tx = (float)(random((int)(FACE_PUPIL_TRAVEL * 2 + 1))) - FACE_PUPIL_TRAVEL;
+            float ty = (float)(random((int)(FACE_PUPIL_TRAVEL + 1))) - FACE_PUPIL_TRAVEL * 0.5f;
+            for (int i = 0; i < 2; i++) {
+                g_face.eye[i].pupil_tx = tx;
+                g_face.eye[i].pupil_ty = ty;
+            }
+            g_face.pupil_retarget_ms = now + (uint32_t)random(1500, 4000);
+        }
+    }
+
+    const float LERP = 0.15f;
+    for (int i = 0; i < 2; i++) {
+        g_face.eye[i].pupil_x += (g_face.eye[i].pupil_tx - g_face.eye[i].pupil_x) * LERP;
+        g_face.eye[i].pupil_y += (g_face.eye[i].pupil_ty - g_face.eye[i].pupil_y) * LERP;
+    }
+}
+
+static void draw_eye_sprite(int eye_idx, const EyeAnim& ea, FaceMood mood) {
+    const MoodParams& mp = kMoodTable[mood];
+    const int CX = FACE_EYE_SPR_CX;
+    const int CY = FACE_EYE_SPR_CY;
+
+    eye_sprite.fillSprite(TFT_BLACK);
+    eye_sprite.fillEllipse(CX, CY, FACE_EYE_RX, FACE_EYE_RY, mp.sclera_color);
+
+    // Pupil — clamped so it never exits the sclera
+    int px = CX + (int)ea.pupil_x;
+    int py = CY + (int)ea.pupil_y;
+    px = constrain(px, CX - (FACE_EYE_RX - FACE_PUPIL_R - 2), CX + (FACE_EYE_RX - FACE_PUPIL_R - 2));
+    py = constrain(py, CY - (FACE_EYE_RY - FACE_PUPIL_R - 2), CY + (FACE_EYE_RY - FACE_PUPIL_R - 2));
+    eye_sprite.fillCircle(px, py, FACE_PUPIL_R, mp.pupil_color);
+    // Glint
+    eye_sprite.fillCircle(px + 7, py - 7, 5, TFT_WHITE);
+
+    // Upper eyelid mask (slides down from top of ellipse)
+    float effective_lid = ea.lid_pos + mp.lid_base;
+    effective_lid = constrain(effective_lid, 0.0f, 1.0f);
+    int lid_h = (int)(effective_lid * (float)(FACE_EYE_RY * 2));
+    if (lid_h > 0) {
+        int lid_top = CY - FACE_EYE_RY;
+        eye_sprite.fillRect(0, lid_top, FACE_EYE_SPR_W, lid_h, TFT_BLACK);
+    }
+
+    // Bottom squint mask (rides up from bottom of ellipse)
+    if (mp.lid_squint > 0.0f) {
+        int sq_h = (int)(mp.lid_squint * (float)(FACE_EYE_RY * 2));
+        int sq_y = CY + FACE_EYE_RY - sq_h;
+        eye_sprite.fillRect(0, sq_y, FACE_EYE_SPR_W, sq_h + 6, TFT_BLACK);
+    }
+
+    // EXCITED: triangular arch mask over the top half of the ellipse
+    if (mood == MOOD_EXCITED) {
+        int outer_x = (eye_idx == 0) ? CX - FACE_EYE_RX : CX + FACE_EYE_RX;
+        int inner_x = (eye_idx == 0) ? CX + FACE_EYE_RX : CX - FACE_EYE_RX;
+        eye_sprite.fillTriangle(outer_x, CY, CX, CY - FACE_EYE_RY - 4, inner_x, CY, TFT_BLACK);
+    }
+
+    // ANNOYED: red angled brows above each eye, slanting inward
+    if (mood == MOOD_ANNOYED) {
+        uint16_t brow = tft.color565(200, 0, 0);
+        int brow_y = CY - FACE_EYE_RY - 8;
+        if (eye_idx == 0) {
+            eye_sprite.drawLine(CX - 26, brow_y,     CX + 6, brow_y - 10, brow);
+            eye_sprite.drawLine(CX - 26, brow_y + 1, CX + 6, brow_y - 9,  brow);
+        } else {
+            eye_sprite.drawLine(CX + 26, brow_y,     CX - 6, brow_y - 10, brow);
+            eye_sprite.drawLine(CX + 26, brow_y + 1, CX - 6, brow_y - 9,  brow);
+        }
+    }
+}
+
+static void draw_mouth() {
+    const int CX = FACE_MOUTH_SPR_W / 2;
+    const int CY = FACE_MOUTH_SPR_H / 2;
+    uint16_t MC = tft.color565(220, 120, 80);
+    int8_t shape = kMoodTable[g_face.mood].mouth_shape;
+
+    mouth_sprite.fillSprite(TFT_BLACK);
+
+    if (shape == 0) {
+        mouth_sprite.drawFastHLine(CX - 25, CY,     50, MC);
+        mouth_sprite.drawFastHLine(CX - 25, CY + 1, 50, MC);
+
+    } else if (shape == 1 || shape == 2) {
+        float r = (shape == 2) ? 36.0f : 28.0f;
+        int   n = (shape == 2) ? 10     : 8;
+        for (int i = -n/2; i < n/2; i++) {
+            float a0 = (float)i     / (float)(n/2) * 1.4f;
+            float a1 = (float)(i+1) / (float)(n/2) * 1.4f;
+            int x0 = CX + (int)(cosf(a0) * r);
+            int y0 = CY + (int)(sinf(a0) * r * 0.55f);
+            int x1 = CX + (int)(cosf(a1) * r);
+            int y1 = CY + (int)(sinf(a1) * r * 0.55f);
+            mouth_sprite.drawLine(x0, y0,     x1, y1,     MC);
+            mouth_sprite.drawLine(x0, y0 + 1, x1, y1 + 1, MC);
+        }
+
+    } else if (shape == -1) {
+        for (int i = -4; i < 4; i++) {
+            float a0 = (float)i     / 4.0f * 1.4f;
+            float a1 = (float)(i+1) / 4.0f * 1.4f;
+            int x0 = CX + (int)(cosf(a0) * 28.0f);
+            int y0 = CY - (int)(sinf(a0) * 16.0f) + 10;
+            int x1 = CX + (int)(cosf(a1) * 28.0f);
+            int y1 = CY - (int)(sinf(a1) * 16.0f) + 10;
+            mouth_sprite.drawLine(x0, y0,     x1, y1,     MC);
+            mouth_sprite.drawLine(x0, y0 + 1, x1, y1 + 1, MC);
+        }
+
+    } else {  // shape == -2: wavy/annoyed
+        const int px[] = {-30, -15, 0, 15, 30};
+        const int py[] = {  0,   8, 0,  8,  0};
+        for (int i = 0; i < 4; i++) {
+            mouth_sprite.drawLine(CX + px[i], CY + py[i],     CX + px[i+1], CY + py[i+1],     MC);
+            mouth_sprite.drawLine(CX + px[i], CY + py[i] + 1, CX + px[i+1], CY + py[i+1] + 1, MC);
+        }
+    }
+
+    mouth_sprite.pushSprite(FACE_MOUTH_SPR_X, FACE_MOUTH_SPR_Y);
+}
+
+static void update_face_display() {
+    uint32_t now = millis();
+    face_update_mood();
+    face_update_blink(now);
+    face_update_pupils(now);
+
+    draw_eye_sprite(0, g_face.eye[0], g_face.mood);
+    eye_sprite.pushSprite(FACE_EYE_L_SPR_X, FACE_EYE_SPR_Y);
+
+    draw_eye_sprite(1, g_face.eye[1], g_face.mood);
+    eye_sprite.pushSprite(FACE_EYE_R_SPR_X, FACE_EYE_SPR_Y);
+
+    draw_mouth();
+}
+
 // ── Main display update (~10 Hz) ──────────────────────────────────────────────
 
 static void update_display() {
+    if (g_display_personality == PERS_FACE) {
+        update_face_display();
+        return;
+    }
+
     uint8_t  state     = g_robot_state;
     uint8_t  fault     = g_fault_code;
     bool     active    = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < 1000);
@@ -1060,7 +1477,11 @@ static void display_task(void*) {
             if (g_uart_crc_rate || g_uart_gap_rate) g_display_dirty = true;
         }
 
-        if (g_display_dirty || (now - last_disp_ms >= 100)) {
+        // Face mode: update every 10ms tick for smooth animation.
+        // Engineering mode: update at 10 Hz or on dirty flag.
+        bool time_to_update = g_display_dirty ||
+            (g_display_personality == PERS_FACE ? true : (now - last_disp_ms >= 100));
+        if (time_to_update) {
             g_display_dirty = false;
             update_display();
             last_disp_ms = millis();

@@ -166,15 +166,15 @@ typedef struct __attribute__((packed)) {
 //   [134]  float×3  accel_x_ms2, accel_y_ms2, accel_z_ms2
 //   [146]  float×2  hip_l_vel_rads, hip_r_vel_rads
 //   [154]  float×10 hip_l/r_cmd_pos, hip_l/r_cmd_vel, hip_l/r_cmd_kp, hip_l/r_cmd_kd, hip_l/r_cmd_tff
-//   [194]  float×6  theta_ref, v_ref, tau_sym, tau_yaw, vel_err_integral, yaw_err_integral  (gain_sched_alpha removed)
-//   [218]  float×3  ff1_out, ff2_out, ff4_out
-//   [230]  uint16   health_flags
-//   [232]  uint8    imu_packet_loss_pct
-//   [233]  uint8    jump_state
-//   [234]  uint32   loop_count
-//   [238]  ← end, sizeof = 238 bytes
+//   [194]  float×5  theta_ref, v_ref, omega_cmd_rds, tau_sym, tau_yaw        ← V7 change
+//   [214]  float×2  ff1_out, ff2_out
+//   [222]  uint16   health_flags
+//   [224]  uint8    imu_packet_loss_pct
+//   [225]  uint8    jump_state
+//   [226]  uint32   loop_count
+//   [230]  ← end, sizeof = 230 bytes
 //
-#define TELEM_VERSION  6  // bump when adding/removing struct fields; triggers mismatch errors
+#define TELEM_VERSION  7  // bump when adding/removing struct fields; triggers mismatch errors
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -229,34 +229,31 @@ typedef struct __attribute__((packed)) {
     float    hip_r_cmd_kd;       // damping gain        R (hm_sp_R.kd)
     float    hip_l_cmd_tff;      // torque feedforward  L [N·m] (hm_sp_L.tff)
     float    hip_r_cmd_tff;      // torque feedforward  R [N·m] (hm_sp_R.tff)
-    // V5 additions — balance controller internals (28 bytes); 0 until respective phase
-    float    theta_ref;          // velocity PI lean setpoint [rad] — Phase 3
-    float    v_ref;              // velocity reference fed into LQR [m/s] — Phase 3
-    float    tau_sym;            // unclamped LQR symmetric torque [N·m] — shows saturation
-    float    tau_yaw;            // yaw PI differential torque [N·m] — Phase 4
-    float    vel_err_integral;   // velocity PI integrator state — Phase 3
-    float    yaw_err_integral;   // yaw PI integrator state — Phase 4
-    // V6: gain_sched_alpha removed — add back when Phase 5 is implemented
-    // V5 additions — feedforward outputs (12 bytes); 0 until Phase 6
+    // V7: balance controller internals — setpoints, controlled vars, effort signals only
+    float    theta_ref;          // vel PI effort / LQR setpoint [rad] — lean angle reference
+    float    v_ref;              // vel PI setpoint [m/s] — velocity reference
+    float    omega_cmd_rds;      // yaw PI setpoint [rad/s] — desired yaw rate (CH4 radio)
+    float    tau_sym;            // LQR symmetric wheel torque [N·m] — balance effort
+    float    tau_yaw;            // yaw PI differential torque [N·m] — yaw effort
+    // V7: feedforward outputs (ff4 removed — always 0 until centripetal FF is implemented)
     float    ff1_out;            // hip reaction torque cancellation [N·m]
     float    ff2_out;            // gravity compensation [N·m]
-    float    ff4_out;            // centripetal coupling lean offset [rad]
     // V5 additions — diagnostics (8 bytes)
     uint16_t health_flags;       // packed health bits — see HEALTH_FLAG_* below
     uint8_t  imu_packet_loss_pct;// IMU link loss 0-100% (imu_packet_loss() × 100)
     uint8_t  jump_state;         // Jump FSM phase (0=BALANCE/inactive) — Phase 7
     uint32_t loop_count;         // control loop counter; GUI uses delta to detect dropped frames
-} TelemetryPayload;  // 238 bytes — TELEM_VERSION 6
+} TelemetryPayload;  // 230 bytes — TELEM_VERSION 7
 
 // Split offsets for two-packet telemetry (TELEM_A + TELEM_B)
 // Each frame ≤130 bytes — both drain safely with UART FIFO threshold=32
 #define TELEM_A_LEN  118u  // bytes   0-117: IMU, hip pos, RC, wheel motors
-#define TELEM_B_LEN  120u  // bytes 118-237: ToF, rates, accel, hip cmd, control internals
+#define TELEM_B_LEN  112u  // bytes 118-229: ToF, rates, accel, hip cmd, control internals
 
 #ifdef __cplusplus
-static_assert(sizeof(TelemetryPayload) == 238,
+static_assert(sizeof(TelemetryPayload) == 230,
     "TelemetryPayload size changed — bump TELEM_VERSION, update COMM_MAX_PAYLOAD, and see PROPAGATION CHECKLIST");
-static_assert(TELEM_A_LEN + TELEM_B_LEN == 238, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
+static_assert(TELEM_A_LEN + TELEM_B_LEN == 230, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
 #endif
 
 // ── Health flag bits (TelemetryPayload::health_flags) ────────────────────────

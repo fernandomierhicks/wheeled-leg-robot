@@ -6,13 +6,12 @@
 ---Fernandos note dont change below
 
 
-
-LQR + other controllers as per handoff.md
-
+Verify all controllers per Handoff.MD
 
 
 
 
+Add screen personolity selector to radio. 
 
 ------------------------------------------------------firmware
 WIFI passthourgh

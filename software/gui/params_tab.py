@@ -3,8 +3,9 @@
 Displays all firmware parameters from the ParamRegistry.  On first telemetry
 received (or when Refresh is clicked) sends CMD_ID_PARAM_GET 0xFFFF.  Each
 PARAM_REPORT response (ptype 0x06) populates or refreshes a row.  Rows are
-grouped by subsystem with section headers.  Values are editable; Enter or the
-Set button sends CMD_ID_PARAM_SET and the cell flashes green on echo-back.
+grouped by subsystem and split into collapsible sub-sections (all start
+collapsed).  Values are editable; Enter or the Set button sends
+CMD_ID_PARAM_SET and the cell flashes green on echo-back.
 """
 
 import struct
@@ -34,6 +35,7 @@ _GROUP_NAMES = {
     0x03: "Wheel",
     0x04: "Control",
     0x05: "Command",
+    0x06: "RC Receiver (iBus)",
 }
 _GROUP_COLORS = {
     0x00: "#888888",
@@ -42,13 +44,44 @@ _GROUP_COLORS = {
     0x03: GREEN,
     0x04: "#cc88ff",
     0x05: "#ff88cc",
+    0x06: "#88ddff",
+}
+
+# ── Sub-group definitions (Control group split into logical sections) ──────────
+# Each entry: (param_id_range, parent_group_id, sub_group_label)
+_SUBGROUPS: list[tuple[range, int, str]] = [
+    (range(0x0400, 0x0404), 0x04, "LQR Core"),
+    (range(0x0404, 0x040C), 0x04, "Velocity PI"),
+    (range(0x040C, 0x0412), 0x04, "Yaw PI"),
+    (range(0x0412, 0x0415), 0x04, "Feedforward"),
+    (range(0x0415, 0x0420), 0x04, "Jump"),
+    (range(0x0420, 0x0423), 0x04, "Sim Injection"),  # enable_sim_pitch, sim_pitch_rate, enable_sim_prate
+    (range(0x0500, 0x0503), 0x05, "Radio Scale"),    # radio_hip_cmd, radio_vel_max, radio_yaw_max
+]
+
+_SUBGROUP_COLORS: dict[str, str] = {
+    "LQR Core":       "#dd99ff",
+    "Velocity PI":    "#bb77ee",
+    "Yaw PI":         "#9966dd",
+    "Feedforward":    "#ccaaff",
+    "Jump":           "#ffaa44",
+    "Sim Injection":  "#88ddcc",
+    "Radio Scale":    "#ff88cc",
 }
 
 
-def _hline() -> QFrame:
+def _get_subgroup(param_id: int) -> str | None:
+    for r, _, name in _SUBGROUPS:
+        if param_id in r:
+            return name
+    return None
+
+
+def _hline(color: str = BORDER) -> QFrame:
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
-    f.setStyleSheet(f"color: {BORDER};")
+    f.setStyleSheet(f"color: {color};")
+    f.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     return f
 
 
@@ -92,10 +125,9 @@ class _ParamRow(QWidget):
     def __init__(self, param_id: int, name: str, value: float,
                  min_val: float, max_val: float, flags: int):
         super().__init__()
-        self._id      = param_id
-        self._flags   = flags
-        self._group   = (param_id >> 8) & 0xFF
-        readonly      = bool(flags & _FLAG_READONLY)
+        self._id    = param_id
+        self._flags = flags
+        readonly    = bool(flags & _FLAG_READONLY)
 
         self._flash_timer = QTimer(self)
         self._flash_timer.setSingleShot(True)
@@ -105,19 +137,16 @@ class _ParamRow(QWidget):
         lay.setContentsMargins(6, 1, 6, 1)
         lay.setSpacing(8)
 
-        # Name
         lbl = QLabel(name)
         lbl.setFixedWidth(190)
         lbl.setStyleSheet(f"color: {TEXT}; font-family: Consolas; font-size: 11px;")
         lay.addWidget(lbl)
 
-        # Hex ID
         id_lbl = QLabel(f"0x{param_id:04X}")
         id_lbl.setFixedWidth(52)
         id_lbl.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-size: 10px;")
         lay.addWidget(id_lbl)
 
-        # Editable value
         self._edit = QLineEdit(f"{value:.6g}")
         self._edit.setFixedWidth(96)
         self._edit.setStyleSheet(_EDIT_STYLE_NORMAL)
@@ -128,7 +157,6 @@ class _ParamRow(QWidget):
         self._edit.returnPressed.connect(self._send)
         lay.addWidget(self._edit)
 
-        # Set button
         self._btn = QPushButton("Set")
         self._btn.setFixedWidth(34)
         self._btn.setEnabled(not readonly)
@@ -141,13 +169,11 @@ class _ParamRow(QWidget):
         self._btn.clicked.connect(self._send)
         lay.addWidget(self._btn)
 
-        # Range label
         range_lbl = QLabel(f"[{min_val:.4g} … {max_val:.4g}]")
         range_lbl.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-size: 10px;")
         range_lbl.setMinimumWidth(130)
         lay.addWidget(range_lbl)
 
-        # Flags
         flag_lbl = QLabel(_flag_text(flags))
         flag_lbl.setFixedWidth(40)
         flag_lbl.setToolTip(_flag_tooltip(flags))
@@ -156,22 +182,11 @@ class _ParamRow(QWidget):
 
         lay.addStretch()
 
-    # ── public ────────────────────────────────────────────────────────────────
-
-    @property
-    def group(self) -> int:
-        return self._group
-
     def update_value(self, value: float):
         self._edit.setText(f"{value:.6g}")
         self._flash_timer.stop()
         self._edit.setStyleSheet(_EDIT_STYLE_OK)
         self._flash_timer.start(700)
-
-    def set_group_visible(self, group_filter: int | None):
-        self.setVisible(group_filter is None or self._group == group_filter)
-
-    # ── private ───────────────────────────────────────────────────────────────
 
     def _send(self):
         try:
@@ -181,33 +196,78 @@ class _ParamRow(QWidget):
         send_param_set(self._id, val)
         self._flash_timer.stop()
         self._edit.setStyleSheet(_EDIT_STYLE_PENDING)
-        self._flash_timer.start(2500)  # revert if no echo within 2.5 s
+        self._flash_timer.start(2500)
 
     def _clear_flash(self):
         self._edit.setStyleSheet(_EDIT_STYLE_NORMAL)
 
 
-# ── Group section header ──────────────────────────────────────────────────────
+# ── Group section header (top-level, collapsible) ─────────────────────────────
 
 class _GroupHeader(QWidget):
-    def __init__(self, group_id: int):
+    def __init__(self, group_id: int, on_toggle):
         super().__init__()
         name  = _GROUP_NAMES.get(group_id, f"Group 0x{group_id:02X}")
         color = _GROUP_COLORS.get(group_id, DIM)
-        self._group = group_id
+        self._group     = group_id
+        self._on_toggle = on_toggle
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(6, 6, 6, 2)
+        lay.setContentsMargins(6, 8, 6, 2)
+        lay.setSpacing(4)
+
+        self._btn = QPushButton("▶")   # starts collapsed
+        self._btn.setFixedSize(18, 18)
+        self._btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{color};font-size:10px;"
+            f"border:none;padding:0}}"
+            f"QPushButton:hover{{color:white}}"
+        )
+        self._btn.clicked.connect(lambda: self._on_toggle(self._group))
+        lay.addWidget(self._btn)
 
         lbl = QLabel(name.upper())
         lbl.setStyleSheet(
             f"color: {color}; font-size: 10px; font-weight: bold; letter-spacing: 1px;"
         )
         lay.addWidget(lbl)
-        lay.addWidget(_hline())
+        lay.addWidget(_hline(color))
 
-    def set_group_visible(self, group_filter: int | None):
-        self.setVisible(group_filter is None or self._group == group_filter)
+    def set_collapsed(self, collapsed: bool):
+        self._btn.setText("▶" if collapsed else "▼")
+
+
+# ── Sub-group header (indented, collapsible) ──────────────────────────────────
+
+class _SubGroupHeader(QWidget):
+    def __init__(self, group_id: int, subgroup: str, on_toggle):
+        super().__init__()
+        color = _SUBGROUP_COLORS.get(subgroup, DIM)
+        self._group     = group_id
+        self._subgroup  = subgroup
+        self._on_toggle = on_toggle
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(28, 3, 6, 1)
+        lay.setSpacing(4)
+
+        self._btn = QPushButton("▶")   # starts collapsed
+        self._btn.setFixedSize(14, 14)
+        self._btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{color};font-size:9px;"
+            f"border:none;padding:0}}"
+            f"QPushButton:hover{{color:white}}"
+        )
+        self._btn.clicked.connect(lambda: self._on_toggle(self._group, self._subgroup))
+        lay.addWidget(self._btn)
+
+        lbl = QLabel(subgroup)
+        lbl.setStyleSheet(f"color: {color}; font-size: 10px; font-style: italic;")
+        lay.addWidget(lbl)
+        lay.addWidget(_hline(color))
+
+    def set_collapsed(self, collapsed: bool):
+        self._btn.setText("▶" if collapsed else "▼")
 
 
 # ── Main tab ──────────────────────────────────────────────────────────────────
@@ -215,15 +275,18 @@ class _GroupHeader(QWidget):
 class ParamsTab(QWidget):
     def __init__(self):
         super().__init__()
-        self._rows: dict[int, _ParamRow] = {}          # param_id → row widget
-        self._headers: dict[int, _GroupHeader] = {}    # group_id → header widget
+        self._rows:       dict[int, _ParamRow]                   = {}
+        self._headers:    dict[int, _GroupHeader]                = {}
+        self._subheaders: dict[tuple[int, str], _SubGroupHeader] = {}
+        self._collapsed_groups:    set[int]            = set()
+        self._collapsed_subgroups: set[tuple[int, str]] = set()
         self._requested = False
 
         # ── Toolbar ───────────────────────────────────────────────────────────
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
 
-        grp_lbl = QLabel("Group:")
+        grp_lbl = QLabel("Filter:")
         grp_lbl.setStyleSheet(f"color: {DIM}; font-size: 11px;")
         toolbar.addWidget(grp_lbl)
 
@@ -231,7 +294,14 @@ class ParamsTab(QWidget):
         self._grp_combo.addItem("All", None)
         for gid, gname in _GROUP_NAMES.items():
             self._grp_combo.addItem(gname, gid)
-        self._grp_combo.setFixedWidth(130)
+        # Separator then sub-group quick-jump entries
+        sep_idx = self._grp_combo.count()
+        self._grp_combo.addItem("── sections ──", "separator")
+        self._grp_combo.model().item(sep_idx).setEnabled(False)
+        for _, gid, sgname in _SUBGROUPS:
+            self._grp_combo.addItem(f"  {sgname}", (gid, sgname))
+
+        self._grp_combo.setFixedWidth(160)
         self._grp_combo.currentIndexChanged.connect(self._apply_filter)
         toolbar.addWidget(self._grp_combo)
 
@@ -271,7 +341,7 @@ class ParamsTab(QWidget):
         self._inner_lay = QVBoxLayout(self._inner)
         self._inner_lay.setContentsMargins(0, 0, 0, 0)
         self._inner_lay.setSpacing(0)
-        self._inner_lay.addStretch()  # keeps rows packed to top
+        self._inner_lay.addStretch()
 
         scroll = QScrollArea()
         scroll.setWidget(self._inner)
@@ -303,7 +373,6 @@ class ParamsTab(QWidget):
     def _on_packet(self, info: dict):
         ptype = info.get("ptype")
 
-        # Auto-request on first telemetry if nothing loaded yet
         if ptype == 0x01 and not self._rows and not self._requested:
             self._request_all()
             return
@@ -333,31 +402,98 @@ class ParamsTab(QWidget):
         self._lbl_status.setStyleSheet(f"color: {TEXT}; font-size: 11px;")
 
     def _apply_filter(self):
-        gid = self._grp_combo.currentData()
-        for row in self._rows.values():
-            row.set_group_visible(gid)
-        for hdr in self._headers.values():
-            hdr.set_group_visible(gid)
+        flt = self._grp_combo.currentData()
+        if flt == "separator":
+            return
+        # Auto-expand the selected section so filtered items are always visible
+        if isinstance(flt, tuple):
+            self._collapsed_subgroups.discard(flt)
+            self._collapsed_groups.discard(flt[0])
+        elif isinstance(flt, int):
+            self._collapsed_groups.discard(flt)
+        self._reapply_visibility()
+
+    def _on_group_toggle(self, group_id: int):
+        if group_id in self._collapsed_groups:
+            self._collapsed_groups.discard(group_id)
+        else:
+            self._collapsed_groups.add(group_id)
+        self._reapply_visibility()
+
+    def _on_subgroup_toggle(self, group_id: int, subgroup: str):
+        key = (group_id, subgroup)
+        if key in self._collapsed_subgroups:
+            self._collapsed_subgroups.discard(key)
+        else:
+            self._collapsed_subgroups.add(key)
+        self._reapply_visibility()
 
     # ── private ───────────────────────────────────────────────────────────────
 
     def _add_row(self, param_id: int, name: str, value: float,
                  min_val: float, max_val: float, flags: int):
-        group = (param_id >> 8) & 0xFF
+        group    = (param_id >> 8) & 0xFF
+        subgroup = _get_subgroup(param_id)
 
-        # Insert group header the first time we see this group
         if group not in self._headers:
-            hdr = _GroupHeader(group)
-            # insert before the trailing stretch (last item)
+            hdr = _GroupHeader(group, self._on_group_toggle)
             self._inner_lay.insertWidget(self._inner_lay.count() - 1, hdr)
             self._headers[group] = hdr
+            self._collapsed_groups.add(group)      # start collapsed
+
+        if subgroup is not None:
+            key = (group, subgroup)
+            if key not in self._subheaders:
+                subhdr = _SubGroupHeader(group, subgroup, self._on_subgroup_toggle)
+                self._inner_lay.insertWidget(self._inner_lay.count() - 1, subhdr)
+                self._subheaders[key] = subhdr
+                self._collapsed_subgroups.add(key)  # start collapsed
 
         row = _ParamRow(param_id, name, value, min_val, max_val, flags)
         self._inner_lay.insertWidget(self._inner_lay.count() - 1, row)
         self._rows[param_id] = row
 
-        # Apply current filter to the new row
-        gid = self._grp_combo.currentData()
-        row.set_group_visible(gid)
-        if group in self._headers:
-            self._headers[group].set_group_visible(gid)
+        self._reapply_visibility()
+
+    def _reapply_visibility(self):
+        flt = self._grp_combo.currentData()
+        if flt == "separator":
+            flt = None
+
+        for param_id, row in self._rows.items():
+            group    = (param_id >> 8) & 0xFF
+            subgroup = _get_subgroup(param_id)
+
+            if flt is None:
+                filter_ok = True
+            elif isinstance(flt, tuple):
+                filter_ok = (group == flt[0] and subgroup == flt[1])
+            else:
+                filter_ok = (group == flt)
+
+            group_collapsed = group in self._collapsed_groups
+            sub_collapsed   = (subgroup is not None and
+                               (group, subgroup) in self._collapsed_subgroups)
+
+            row.setVisible(filter_ok and not group_collapsed and not sub_collapsed)
+
+        for gid, hdr in self._headers.items():
+            if flt is None:
+                hdr.setVisible(True)
+            elif isinstance(flt, tuple):
+                hdr.setVisible(flt[0] == gid)
+            else:
+                hdr.setVisible(gid == flt)
+            hdr.set_collapsed(gid in self._collapsed_groups)
+
+        for (gid, sgname), subhdr in self._subheaders.items():
+            if flt is None:
+                filter_ok = True
+            elif isinstance(flt, tuple):
+                filter_ok = (flt == (gid, sgname))
+            else:
+                filter_ok = (gid == flt)
+
+            group_collapsed = gid in self._collapsed_groups
+            subhdr.setVisible(filter_ok and not group_collapsed)
+            subhdr.set_collapsed((gid, sgname) in self._collapsed_subgroups)
