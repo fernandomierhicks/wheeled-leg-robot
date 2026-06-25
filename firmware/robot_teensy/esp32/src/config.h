@@ -13,7 +13,7 @@
 #define TFT_BLK  15   // backlight; tie to 3.3 V if GPIO control not needed
 
 // --- WiFi telemetry ---
-#define WIFI_ENABLED      0     // set to 1 to re-enable UDP broadcast + TCP server
+#define WIFI_ENABLED      1     // set to 0 to disable UDP broadcast + TCP server
 #define TELEM_UDP_PORT    5005
 #define CMD_TCP_PORT      5006
 

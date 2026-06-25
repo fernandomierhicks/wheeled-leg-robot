@@ -57,10 +57,13 @@ def build_frame(payload: bytes) -> bytes:
 
 
 def send_frame(frame: bytes):
-    """Write a frame to the Teensy serial port (no-op if port is closed)."""
+    """Send a frame over WiFi TCP (if connected) and/or USB serial."""
+    from wifi_transport import WifiTransport
+    WifiTransport.instance().send(frame)
+
     pm = SerialPortManager.instance()
     with pm._lock:
-        s = pm._open.get("teensy")
+        s = pm._open.get("esp32") or pm._open.get("teensy")
     if s and s.is_open:
         try:
             s.write(frame)

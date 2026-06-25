@@ -523,6 +523,9 @@ class MainWindow(QMainWindow):
         sm = SourceManager.instance()
         sm.source_changed.connect(self._on_source_changed)
 
+        from wifi_transport import WifiTransport
+        WifiTransport.instance().start()
+
         tabs = QTabWidget()
         tabs.addTab(DashboardTab(),       "Dashboard")
         tabs.addTab(ImuTab(),             "IMU")
