@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame, QMessageBox, QMenu,
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QPainter, QColor, QPen
 
 from theme import APP_STYLE, BORDER, TEXT, DIM, GREEN, ORANGE, RED, BLUE, YELLOW, WHITE
 from robot_log_widget import RobotLogWidget
@@ -236,6 +236,101 @@ _FAULT_SEVERITY = {
     0x03: "REBOOT",      # HIP_FEEDBACK_LOST
 }
 
+# ── Battery status widget ─────────────────────────────────────────────────────
+
+class BatteryStatusWidget(QWidget):
+    """Battery icon + voltage label for the status bar. Blinks at 1 Hz when critically low."""
+    _VMAX = 25.2   # 4.2 V/cell × 6S
+    _VMIN = 21.0   # 3.5 V/cell × 6S (display empty)
+    _NBARS = 5
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedWidth(72)
+        self._vbus: float | None = None
+        self._blink_on = True
+        self._blink_timer = QTimer(self)
+        self._blink_timer.setInterval(500)
+        self._blink_timer.timeout.connect(self._on_blink)
+        TelemetryBus.instance().packet.connect(self._on_packet)
+
+    def _num_bars(self, vbus: float) -> int:
+        pct = max(0.0, min(1.0, (vbus - self._VMIN) / (self._VMAX - self._VMIN)))
+        return round(pct * self._NBARS)
+
+    def _on_packet(self, info: dict):
+        vl = info.get("wm_l_vbus")
+        vr = info.get("wm_r_vbus")
+        if vl is None or vr is None:
+            return
+        vbus = (vl + vr) * 0.5
+        low = self._num_bars(vbus) <= 1
+        if low and not self._blink_timer.isActive():
+            self._blink_timer.start()
+        elif not low and self._blink_timer.isActive():
+            self._blink_timer.stop()
+            self._blink_on = True
+        self._vbus = vbus
+        self.update()
+
+    def set_connected(self, connected: bool):
+        if not connected:
+            self._blink_timer.stop()
+            self._blink_on = True
+            self._vbus = None
+            self.update()
+
+    def _on_blink(self):
+        self._blink_on = not self._blink_on
+        self.update()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        w, h = self.width(), self.height()
+
+        # Icon geometry
+        BW, BH = 22, 12
+        NW, NH = 3, 6
+        bx = 2
+        by = (h - BH) // 2
+
+        if self._vbus is None:
+            p.setPen(QPen(QColor(DIM)))
+            p.drawRect(bx, by, BW - 1, BH - 1)
+            p.fillRect(bx + BW, by + (BH - NH) // 2, NW, NH, QColor(DIM))
+            p.end()
+            return
+
+        bars = self._num_bars(self._vbus)
+        low  = bars <= 1
+        pct  = bars / self._NBARS
+        col  = QColor(GREEN if pct > 0.5 else ORANGE if pct > 0.2 else RED)
+
+        if low and not self._blink_on:
+            dim = QColor(100, 0, 0)
+            p.setPen(QPen(dim))
+            p.drawRect(bx, by, BW - 1, BH - 1)
+            p.fillRect(bx + BW, by + (BH - NH) // 2, NW, NH, dim)
+        else:
+            p.setPen(QPen(QColor(WHITE)))
+            p.drawRect(bx, by, BW - 1, BH - 1)
+            p.fillRect(bx + BW, by + (BH - NH) // 2, NW, NH, QColor(WHITE))
+            p.fillRect(bx + 2, by + 2, BW - 4, BH - 4, QColor(15, 15, 20))
+            # 5 bars × 2px wide, 1px gap, 2px left padding
+            for i in range(self._NBARS):
+                if i < bars:
+                    p.fillRect(bx + 4 + i * 3, by + 3, 2, BH - 6, col)
+
+        # Voltage text
+        p.setPen(QPen(col))
+        p.setFont(QFont("Consolas", 9))
+        tx = bx + BW + NW + 4
+        p.drawText(tx, 0, w - tx, h,
+                   Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                   f"{self._vbus:.1f}V")
+        p.end()
+
+
 # ── Status bar ────────────────────────────────────────────────────────────────
 
 def _vsep() -> QFrame:
@@ -262,6 +357,7 @@ class StatusBar:
         self._mode.setStyleSheet(f"color: {DIM};")
         self._test      = QLabel("~: —")
         self._test.setStyleSheet(f"color: {DIM}; font-family: Consolas;")
+        self._batt      = BatteryStatusWidget()
         self._conn      = QLabel("● Disconnected")
         self._conn.setStyleSheet(f"color: {RED};")
 
@@ -307,7 +403,7 @@ class StatusBar:
         self._btn_reboot.setEnabled(False)
         self._btn_reboot.clicked.connect(self._on_reboot_clicked)
 
-        for w in (self._source, _vsep(), self._transport, _vsep(), self._dt, _vsep(), self._mode, _vsep(), self._test):
+        for w in (self._source, _vsep(), self._transport, _vsep(), self._dt, _vsep(), self._mode, _vsep(), self._test, _vsep(), self._batt):
             sb.addWidget(w)
         self._mismatch_lbl = QLabel("FIRMWARE MISMATCH — reflash ESP32/Teensy")
         self._mismatch_lbl.setStyleSheet(
@@ -489,6 +585,7 @@ class StatusBar:
             self._conn.setStyleSheet(f"color: {RED};")
             self._conn.setText("● Disconnected")
             self._mismatch_lbl.setVisible(False)
+            self._batt.set_connected(False)
 
     def set_version_mismatch(self, got: int, expected: int):
         self._mismatch_lbl.setText(

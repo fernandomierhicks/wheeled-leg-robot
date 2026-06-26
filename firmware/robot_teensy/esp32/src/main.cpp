@@ -703,14 +703,28 @@ static const char* fault_description(uint8_t code) {
 
 // ── Mode Banner ───────────────────────────────────────────────────────────────
 
-static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool mismatch) {
+static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool mismatch, float vbus) {
     static uint8_t prev_state    = 0xFF;
     static bool    prev_active   = false;
     static uint8_t prev_fault    = 0xFF;
     static bool    prev_mismatch = false;
+    static int  prev_batt_bars = -99;
+    static bool prev_blink_on  = true;
+
+    // 6S LiPo: 4.2V/cell × 6 = 25.2V full, 3.5V/cell × 6 = 21.0V empty
+    const float BATT_VMAX = 25.2f, BATT_VMIN = 21.0f;
+    int batt_bars = (vbus > 5.0f)
+        ? (int)(constrain((vbus - BATT_VMIN) / (BATT_VMAX - BATT_VMIN), 0.0f, 1.0f) * 5.0f + 0.5f)
+        : -1;  // -1 = no data
+
+    // Low-battery blink: ≤1 bar flashes at 1 Hz; phase change forces redraw
+    bool blink_on = (batt_bars >= 0 && batt_bars <= 1) ? ((millis() / 500) % 2 == 0) : true;
+
     if (state == prev_state && active == prev_active && fault == prev_fault
-            && mismatch == prev_mismatch) return;
-    prev_state = state; prev_active = active; prev_fault = fault; prev_mismatch = mismatch;
+            && mismatch == prev_mismatch && batt_bars == prev_batt_bars
+            && blink_on == prev_blink_on) return;
+    prev_state = state; prev_active = active; prev_fault = fault;
+    prev_mismatch = mismatch; prev_batt_bars = batt_bars; prev_blink_on = blink_on;
 
     tft.fillRect(0, 0, 320, BANNER_H, tft.color565(8, 10, 20));
 
@@ -746,6 +760,29 @@ static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool misma
         tft.setTextColor(TFT_YELLOW, tft.color565(8, 10, 20));
         tft.setCursor(8, BANNER_H - 10);
         tft.print(fault_description(fault));
+    }
+
+    // Battery icon — top-right corner of banner
+    // Body: 34px × 24px; nub: 4px × 10px; 5 fill bars inside
+    const int BX = 276, BY = 5, BW = 34, BH = 24;
+    const uint16_t BANNER_BG = tft.color565(8, 10, 20);
+    tft.fillRect(BX - 1, BY - 1, BW + 6, BH + 2, BANNER_BG);  // clear area incl. nub
+    if (batt_bars >= 0 && blink_on) {
+        float pct = batt_bars / 5.0f;
+        uint16_t bc = (pct > 0.5f) ? TFT_GREEN : (pct > 0.2f) ? TFT_YELLOW : TFT_RED;
+        tft.drawRect(BX, BY, BW, BH, TFT_WHITE);
+        tft.fillRect(BX + BW, BY + 7, 4, 10, TFT_WHITE);  // positive nub
+        tft.fillRect(BX + 2, BY + 2, BW - 4, BH - 4, tft.color565(15, 15, 20));
+        // 5 fill bars, each 5px wide with 1px gap
+        for (int i = 0; i < 5; i++) {
+            int bx = BX + 2 + i * 6;
+            if (i < batt_bars)
+                tft.fillRect(bx, BY + 3, 5, BH - 6, bc);
+        }
+    } else if (batt_bars >= 0 && !blink_on) {
+        // Blink-off phase: dim red outline only so position is still readable
+        tft.drawRect(BX, BY, BW, BH, tft.color565(120, 0, 0));
+        tft.fillRect(BX + BW, BY + 7, 4, 10, tft.color565(120, 0, 0));
     }
 }
 
@@ -1435,7 +1472,8 @@ static void update_display() {
     uint8_t  wm_r_state = g_telem_wm_r_state;
     uint8_t  wm_mode    = g_telem_wm_mode;
 
-    drawModeBanner(state, active, fault, g_version_mismatch);
+    float vbus_avg = (wm_l_vbus + wm_r_vbus) * 0.5f;
+    drawModeBanner(state, active, fault, g_version_mismatch, active ? vbus_avg : 0.0f);
     drawArtificialHorizon(active ? pitch : 0.0f, active ? roll : 0.0f);
     drawHipBars(hip_l, hip_r, curr_l, curr_r);
     drawWheelMotors(active ? wm_l_vel : 0.0f, active ? wm_r_vel : 0.0f,

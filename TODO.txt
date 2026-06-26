@@ -7,11 +7,11 @@
 
 
 Verify all controllers per Handoff.MD
-
-
-
-
 Add screen personolity selector to radio. 
+Parameter or menu options via remote?
+Battery monitor with alarm for time to change battery. Batter icon in screne?
+
+
 
 ------------------------------------------------------firmware
 WIFI passthourgh
