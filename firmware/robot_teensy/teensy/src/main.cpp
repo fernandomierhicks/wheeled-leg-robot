@@ -338,6 +338,9 @@ static void send_telemetry() {
     telem.imu_packet_loss_pct   = (uint8_t)(imu_packet_loss() * 100.0f + 0.5f);
     telem.jump_state            = g_state.jump_state;
     telem.loop_count            = g_state.loop_count;
+    // V8 — radio channel assignments
+    telem.active_profile        = (uint8_t)param_get(PARAM_ACTIVE_PROFILE);
+    telem.pitch_trim_rad        = param_get(PARAM_RADIO_PITCH_TRIM);
     const uint8_t* tp = (const uint8_t*)&telem;
     g_comm.send(COMM_TYPE_TELEM_A, TELEM_VERSION, tp,               TELEM_A_LEN);
     g_comm.send(COMM_TYPE_TELEM_B, TELEM_VERSION, tp + TELEM_A_LEN, TELEM_B_LEN);
@@ -349,12 +352,27 @@ static void send_telemetry() {
 
 // ── LED ───────────────────────────────────────────────────────────────────────
 
+// Profile-change flash: set by radio_update(), consumed by update_led().
+static uint32_t s_profile_flash_until_ms = 0;
+static uint8_t  s_profile_flash_rgb[3]   = {};
+
 static void update_buzzer() {
     g_buzzer.update();
 }
 
 static void update_led() {
     static RobotStateEnum prev = (RobotStateEnum)0xFF;
+
+    // Profile-change flash takes priority for its duration, then restores state LED.
+    if (s_profile_flash_until_ms) {
+        if (millis() < s_profile_flash_until_ms) {
+            g_led.solid(s_profile_flash_rgb[0], s_profile_flash_rgb[1], s_profile_flash_rgb[2]);
+            g_led.update();
+            return;
+        }
+        s_profile_flash_until_ms = 0;
+        prev = (RobotStateEnum)0xFF;  // force state animation re-apply
+    }
 
     RobotStateEnum cur = g_state.state;
     if (cur != prev) {
@@ -474,6 +492,43 @@ static void radio_update() {
 
         float yaw_norm = constrain((g_ibus.channel(4) - 1500.0f) / 500.0f, -1.0f, 1.0f);
         param_force_set(PARAM_OMEGA_CMD_RDS, yaw_norm * param_get(PARAM_RADIO_YAW_MAX));
+
+        // CH9: speed profile selector (3-position switch → profile 0/1/2)
+        static const uint16_t PROFILE_VEL[]    = {PARAM_PROFILE_1_VEL_MAX,    PARAM_PROFILE_2_VEL_MAX,    PARAM_PROFILE_3_VEL_MAX};
+        static const uint16_t PROFILE_YAW[]    = {PARAM_PROFILE_1_YAW_MAX,    PARAM_PROFILE_2_YAW_MAX,    PARAM_PROFILE_3_YAW_MAX};
+        static const uint16_t PROFILE_TORQUE[] = {PARAM_PROFILE_1_TORQUE_LIM, PARAM_PROFILE_2_TORQUE_LIM, PARAM_PROFILE_3_TORQUE_LIM};
+        static uint8_t s_last_profile = 255;  // force apply on first packet
+        uint16_t ch9 = g_ibus.channel(9);
+        uint8_t profile = (ch9 < 1333) ? 0 : (ch9 < 1667) ? 1 : 2;
+        if (profile != s_last_profile) {
+            s_last_profile = profile;
+            param_force_set(PARAM_ACTIVE_PROFILE, (float)profile);
+            param_set(PARAM_RADIO_VEL_MAX,    param_get(PROFILE_VEL[profile]));
+            param_set(PARAM_RADIO_YAW_MAX,    param_get(PROFILE_YAW[profile]));
+            param_set(PARAM_LQR_TORQUE_LIMIT, param_get(PROFILE_TORQUE[profile]));
+            comm_log(LOG_LEVEL_INFO, "Radio: speed profile %u", (unsigned)(profile + 1));
+
+            // LED flash: green=slow, yellow=medium, red=fast
+            static const uint8_t PROFILE_COLORS[][3] = {
+                {0, 200, 0},    // P1 — green
+                {255, 180, 0},  // P2 — yellow
+                {255, 0, 0},    // P3 — red
+            };
+            memcpy(s_profile_flash_rgb, PROFILE_COLORS[profile], 3);
+            s_profile_flash_until_ms = millis() + 400;
+
+            // Buzzer: ascending CMaj arpeggio, note count = profile+1
+            static const BuzzerNote PROFILE_MELODIES[][3] = {
+                {{72, 120, 0},  {0,   0,  0}, {0,   0,  0}},  // P1: C5
+                {{72,  80, 20}, {76, 120, 0}, {0,   0,  0}},  // P2: C5→E5
+                {{72,  60, 15}, {76,  60, 15}, {79, 120, 0}}, // P3: C5→E5→G5
+            };
+            g_buzzer.play(PROFILE_MELODIES[profile], profile + 1, 150);
+        }
+
+        // CH7: pitch trim hook — reads knob, writes param; LQR wiring deferred (see control_loop.cpp TODO)
+        float pitch_trim = constrain((g_ibus.channel(7) - 1500.0f) / 500.0f * 0.08727f, -0.08727f, 0.08727f);
+        param_force_set(PARAM_RADIO_PITCH_TRIM, pitch_trim);
     } else {
         param_force_set(PARAM_V_CMD_MS, 0.0f);
         param_force_set(PARAM_OMEGA_CMD_RDS, 0.0f);

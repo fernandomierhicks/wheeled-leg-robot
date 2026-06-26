@@ -172,9 +172,11 @@ typedef struct __attribute__((packed)) {
 //   [224]  uint8    imu_packet_loss_pct
 //   [225]  uint8    jump_state
 //   [226]  uint32   loop_count
-//   [230]  ← end, sizeof = 230 bytes
+//   [230]  uint8    active_profile                                            ← V8 start
+//   [231]  float    pitch_trim_rad
+//   [235]  ← end, sizeof = 235 bytes
 //
-#define TELEM_VERSION  7  // bump when adding/removing struct fields; triggers mismatch errors
+#define TELEM_VERSION  8  // bump when adding/removing struct fields; triggers mismatch errors
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -243,17 +245,20 @@ typedef struct __attribute__((packed)) {
     uint8_t  imu_packet_loss_pct;// IMU link loss 0-100% (imu_packet_loss() × 100)
     uint8_t  jump_state;         // Jump FSM phase (0=BALANCE/inactive) — Phase 7
     uint32_t loop_count;         // control loop counter; GUI uses delta to detect dropped frames
-} TelemetryPayload;  // 230 bytes — TELEM_VERSION 7
+    // V8 additions
+    uint8_t  active_profile;     // speed profile selected by CH9 (0=slow, 1=normal, 2=fast)
+    float    pitch_trim_rad;     // pitch equilibrium trim from CH7 [rad]; hook only until LQR wired
+} TelemetryPayload;  // 235 bytes — TELEM_VERSION 8
 
 // Split offsets for two-packet telemetry (TELEM_A + TELEM_B)
 // Each frame ≤130 bytes — both drain safely with UART FIFO threshold=32
 #define TELEM_A_LEN  118u  // bytes   0-117: IMU, hip pos, RC, wheel motors
-#define TELEM_B_LEN  112u  // bytes 118-229: ToF, rates, accel, hip cmd, control internals
+#define TELEM_B_LEN  117u  // bytes 118-234: ToF, rates, accel, hip cmd, control internals, profile, pitch trim
 
 #ifdef __cplusplus
-static_assert(sizeof(TelemetryPayload) == 230,
+static_assert(sizeof(TelemetryPayload) == 235,
     "TelemetryPayload size changed — bump TELEM_VERSION, update COMM_MAX_PAYLOAD, and see PROPAGATION CHECKLIST");
-static_assert(TELEM_A_LEN + TELEM_B_LEN == 230, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
+static_assert(TELEM_A_LEN + TELEM_B_LEN == 235, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
 #endif
 
 // ── Health flag bits (TelemetryPayload::health_flags) ────────────────────────

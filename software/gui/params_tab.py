@@ -56,7 +56,8 @@ _SUBGROUPS: list[tuple[range, int, str]] = [
     (range(0x0412, 0x0415), 0x04, "Feedforward"),
     (range(0x0415, 0x0420), 0x04, "Jump"),
     (range(0x0420, 0x0423), 0x04, "Sim Injection"),  # enable_sim_pitch, sim_pitch_rate, enable_sim_prate
-    (range(0x0500, 0x0503), 0x05, "Radio Scale"),    # radio_hip_cmd, radio_vel_max, radio_yaw_max
+    (range(0x0500, 0x0504), 0x05, "Radio Scale"),    # radio_hip_cmd, radio_vel_max, radio_yaw_max, radio_pitch_trim
+    (range(0x0510, 0x051A), 0x05, "Speed Profiles"), # profile 1/2/3 params + active_profile
 ]
 
 _SUBGROUP_COLORS: dict[str, str] = {
@@ -67,6 +68,7 @@ _SUBGROUP_COLORS: dict[str, str] = {
     "Jump":           "#ffaa44",
     "Sim Injection":  "#88ddcc",
     "Radio Scale":    "#ff88cc",
+    "Speed Profiles": "#ffcc66",
 }
 
 

@@ -5,16 +5,23 @@
 
 ---Fernandos note dont change below
 
+Setpoint in arc widgets in main gui shuold be visible above current value. maybe as a red thinner line?
+Remove dashboard tab
+
+Screen redo.md
+
+Show IMU frame in visualizer. 
+
+ 
 
 Verify all controllers per Handoff.MD
 Add screen personolity selector to radio. 
 Parameter or menu options via remote?
-Battery monitor with alarm for time to change battery. Batter icon in screne?
 
-
+SD card storage for high-res telemetry logging, downloadable to PC for plotting
 
 ------------------------------------------------------firmware
-WIFI passthourgh
+
 Easy to rotate frames around, IMU and screen
 
 

@@ -84,9 +84,21 @@
 #define PARAM_JUMP_EXTEND_TIMEOUT_S   0x041F  // [s] max time in EXTEND before forced RETRACT; default 0.15
 
 // GROUP_COMMAND — high-freq setpoints from radio/GUI
-#define PARAM_RADIO_HIP_CMD       0x0500  // hip extension command from CH3 [0=retracted, 1=extended]; stale when radio dead
-#define PARAM_RADIO_VEL_MAX       0x0501  // max forward speed mapped from full CH2 deflection [m/s]
-#define PARAM_RADIO_YAW_MAX       0x0502  // max yaw rate mapped from full CH4 deflection [rad/s]
+#define PARAM_RADIO_HIP_CMD        0x0500  // hip extension command from CH3 [0=retracted, 1=extended]; stale when radio dead
+#define PARAM_RADIO_VEL_MAX        0x0501  // max forward speed mapped from full CH2 deflection [m/s]
+#define PARAM_RADIO_YAW_MAX        0x0502  // max yaw rate mapped from full CH4 deflection [rad/s]
+#define PARAM_RADIO_PITCH_TRIM     0x0503  // pitch equilibrium trim from CH7 [rad]; hook only, not yet applied to LQR
+// Speed profiles (CH9 3-position switch selects profile 0/1/2)
+#define PARAM_PROFILE_1_VEL_MAX    0x0510  // profile 1 (slow) max forward speed [m/s]
+#define PARAM_PROFILE_1_YAW_MAX    0x0511  // profile 1 (slow) max yaw rate [rad/s]
+#define PARAM_PROFILE_1_TORQUE_LIM 0x0512  // profile 1 (slow) LQR torque limit [N·m]
+#define PARAM_PROFILE_2_VEL_MAX    0x0513  // profile 2 (normal) max forward speed [m/s]
+#define PARAM_PROFILE_2_YAW_MAX    0x0514  // profile 2 (normal) max yaw rate [rad/s]
+#define PARAM_PROFILE_2_TORQUE_LIM 0x0515  // profile 2 (normal) LQR torque limit [N·m]
+#define PARAM_PROFILE_3_VEL_MAX    0x0516  // profile 3 (fast) max forward speed [m/s]
+#define PARAM_PROFILE_3_YAW_MAX    0x0517  // profile 3 (fast) max yaw rate [rad/s]
+#define PARAM_PROFILE_3_TORQUE_LIM 0x0518  // profile 3 (fast) LQR torque limit [N·m]
+#define PARAM_ACTIVE_PROFILE       0x0519  // active speed profile index 0/1/2 (firmware-written, READONLY)
 
 // GROUP_IBUS — RC receiver channel readings (live, READONLY, firmware-written)
 #define PARAM_IBUS_CH0     0x0600  // RC channel 0  [1000–2000 µs]

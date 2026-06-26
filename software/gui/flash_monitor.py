@@ -48,7 +48,7 @@ FLASH_ACTIONS: dict[str, dict] = {
     "esp32": {
         "main":  [("▶  Flash Main",      ["run",  "-e", "esp32dev",   "-t", "upload"])],
         "tests": [
-            ("★  TFT Screen",     ["run",  "-e", "esp32dev",      "-t", "upload"]),
+            ("★  TFT Screen",     ["run",  "-e", "tft_benchmark", "-t", "upload"]),
             ("⊕  Laser Test",     ["run",  "-e", "vl53l1x_demo",  "-t", "upload"]),
             ("★  Neopixel",       ["run",  "-e", "neopixel_demo", "-t", "upload"]),
             ("⇄  T↔ESP32 Link",   ["test", "-e", "test_esp32",    "-f", "test_telemetry"]),
@@ -155,9 +155,9 @@ _COMM_MAGIC    = bytes([0xAA, 0x55])  # two-byte start marker
 _COMM_END      = 0xEF
 _HEADER_SZ     = 8   # magic(2) + type + version + source + seq + len_lo + len_hi
 _OVERHEAD      = 10  # header(8) + checksum(1) + end(1)
-_TELEM_VERSION = 7   # must match TELEM_VERSION in shared/comm_protocol.h
+_TELEM_VERSION = 8   # must match TELEM_VERSION in shared/comm_protocol.h
 _TELEM_A_LEN   = 118
-_TELEM_B_LEN   = 112
+_TELEM_B_LEN   = 117
 
 _TYPE_NAMES  = {
     0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG",
@@ -192,12 +192,12 @@ _FAULT_DESCRIPTIONS = {
 }
 _LOG_LEVELS  = {0x01: "INFO", 0x02: "WARN", 0x03: "ERROR"}
 
-# Struct formats for split telemetry (V7, packed, little-endian)
+# Struct formats for split telemetry (V8, packed, little-endian)
 # TELEM_A: bytes 0-117 of TelemetryPayload
 _FMT_TELEM_A = "<I9fBB3f14HB6f2I3B"
-# TELEM_B: bytes 118-229 of TelemetryPayload
-# 4H tof_dist, 2f rates, 3f accel, 2f hip_vel, 10f hip_cmd, 5f ctrl, 2f ff, H health, BB diag, I loop
-_FMT_TELEM_B = "<4H2f3f2f10f5f2fHBBI"
+# TELEM_B: bytes 118-234 of TelemetryPayload
+# 4H tof_dist, 2f rates, 3f accel, 2f hip_vel, 10f hip_cmd, 5f ctrl, 2f ff, H health, BB diag, I loop, B profile, f pitch_trim
+_FMT_TELEM_B = "<4H2f3f2f10f5f2fHBBIBf"
 
 
 def _decode_telem_a(payload: bytes) -> dict:
@@ -257,7 +257,8 @@ def _decode_telem_b(payload: bytes) -> dict:
      hip_l_cmd_tff, hip_r_cmd_tff,
      theta_ref, v_ref, omega_cmd_rds, tau_sym, tau_yaw,
      ff1, ff2,
-     health_flags, imu_loss_pct, jump_state, loop_count) = _struct.unpack(_FMT_TELEM_B, payload)
+     health_flags, imu_loss_pct, jump_state, loop_count,
+     active_profile, pitch_trim_rad) = _struct.unpack(_FMT_TELEM_B, payload)
     _NO_DATA = 0xFFFF
     tof_front = min((d for d in [tof0, tof1] if d != _NO_DATA), default=_NO_DATA)
     tof_rear  = min((d for d in [tof2, tof3] if d != _NO_DATA), default=_NO_DATA)
@@ -293,6 +294,8 @@ def _decode_telem_b(payload: bytes) -> dict:
         "imu_packet_loss_pct": imu_loss_pct,
         "jump_state":          jump_state,
         "loop_count":          loop_count,
+        "active_profile":      active_profile,
+        "pitch_trim_rad":      pitch_trim_rad,
     }
 
 

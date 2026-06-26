@@ -187,6 +187,9 @@ void controlLoop_run() {
     g_state.tau_yaw         = tau_yaw;
 
     // ── Balance LQR (Phase 5: gain-scheduled) ────────────────────────────────
+    // TODO: apply PARAM_RADIO_PITCH_TRIM as offset to pitch_ref here before computing x0.
+    //       Add: theta_ref += param_get(PARAM_RADIO_PITCH_TRIM);
+    //       Decide whether trim should also offset the vel_PI setpoint or only the LQR error.
     float x0 = pitch - theta_ref;         // pitch error relative to lean setpoint
     float x1 = (param_get(PARAM_ENABLE_SIM_PITCH_RATE) >= 0.5f)
                ? param_get(PARAM_SIM_PITCH_RATE_RAD_S)

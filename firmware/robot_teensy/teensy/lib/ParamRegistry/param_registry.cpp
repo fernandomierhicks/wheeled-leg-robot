@@ -75,9 +75,21 @@ static Param g_params[] = {
     {PARAM_WM_ENC_TIMEOUT_MS, GROUP_WHEEL, "wm_enc_timeout_ms", 20.0f,  5.0f, 500.0f, PARAM_FLAG_PERSISTENT, nullptr},
 
     // GROUP_COMMAND — radio-derived setpoints (firmware-written, never persisted)
-    {PARAM_RADIO_HIP_CMD, GROUP_COMMAND, "radio_hip_cmd",     0.0f,     0.0f,    1.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_RADIO_VEL_MAX, GROUP_COMMAND, "radio_vel_max",     0.5f,     0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_RADIO_YAW_MAX, GROUP_COMMAND, "radio_yaw_max",     1.0f,     0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_RADIO_HIP_CMD,        GROUP_COMMAND, "radio_hip_cmd",        0.0f,  0.0f,    1.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
+    {PARAM_RADIO_VEL_MAX,        GROUP_COMMAND, "radio_vel_max",        0.5f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_RADIO_YAW_MAX,        GROUP_COMMAND, "radio_yaw_max",        1.0f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_RADIO_PITCH_TRIM,     GROUP_COMMAND, "radio_pitch_trim",     0.0f, -0.0873f, 0.0873f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
+    // Speed profiles — each set of three is copied into the active params when CH9 switches
+    {PARAM_PROFILE_1_VEL_MAX,    GROUP_COMMAND, "profile1_vel_max",     0.2f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_1_YAW_MAX,    GROUP_COMMAND, "profile1_yaw_max",     0.5f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_1_TORQUE_LIM, GROUP_COMMAND, "profile1_torque_lim",  1.0f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_2_VEL_MAX,    GROUP_COMMAND, "profile2_vel_max",     0.5f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_2_YAW_MAX,    GROUP_COMMAND, "profile2_yaw_max",     1.0f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_2_TORQUE_LIM, GROUP_COMMAND, "profile2_torque_lim",  2.0f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_3_VEL_MAX,    GROUP_COMMAND, "profile3_vel_max",     1.0f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_3_YAW_MAX,    GROUP_COMMAND, "profile3_yaw_max",     2.0f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_3_TORQUE_LIM, GROUP_COMMAND, "profile3_torque_lim",  4.0f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_ACTIVE_PROFILE,       GROUP_COMMAND, "active_profile",       0.0f,  0.0f,    2.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
 
     // GROUP_IBUS — RC receiver live channel readings (firmware-written via param_force_set)
     {PARAM_IBUS_CH0,   GROUP_IBUS, "ibus_ch0",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},

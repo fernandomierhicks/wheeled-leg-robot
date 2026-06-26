@@ -94,7 +94,18 @@ static volatile uint32_t g_telem_wm_r_error = 0;
 static volatile uint8_t  g_telem_wm_l_state = 0;
 static volatile uint8_t  g_telem_wm_r_state = 0;
 static volatile uint8_t  g_telem_wm_mode    = 0;
+static volatile uint8_t  g_telem_active_profile = 0;
 static volatile bool     g_version_mismatch = false;
+
+// Extended telemetry — new fields used by redesigned display
+static volatile uint16_t g_telem_health_flags  = 0;
+static volatile float    g_telem_hip_l_cmd_rad = 0.0f;
+static volatile float    g_telem_hip_r_cmd_rad = 0.0f;
+static volatile float    g_telem_v_ref          = 0.0f;
+static volatile float    g_telem_omega_cmd_rds = 0.0f;
+static volatile float    g_telem_ff1_out        = 0.0f;
+static volatile float    g_telem_ff2_out        = 0.0f;
+static volatile uint8_t  g_telem_jump_state     = 0;
 
 // ── UART health (written core 1 on_teensy_packet / display_task, read display_task core 0)
 // 32-bit reads/writes are atomic on Xtensa — no mutex needed for these counters.
@@ -547,27 +558,30 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
 // ── Display ───────────────────────────────────────────────────────────────────
 
 static TFT_eSPI    tft;
-static TFT_eSprite ah_sprite(&tft);   // 170×156 off-screen AH buffer
-static TFT_eSprite wm_sprite(&tft);   // 70×156 off-screen wheel motor widget buffer
-static TFT_eSprite eye_sprite(&tft);  // 100×100 face personality (reused for L and R)
-static TFT_eSprite mouth_sprite(&tft);// 130×60  face personality mouth
+static TFT_eSprite banner_sprite(&tft); // 320×44  mode banner  ~28 KB
+static TFT_eSprite ah_sprite(&tft);     // 160×148 artificial horizon ~47 KB
+static TFT_eSprite panel_sprite(&tft);  // 80×148  shared: hip panel then wm widget ~23 KB
+static TFT_eSprite footer_sprite(&tft); // 320×48  footer status bar ~30 KB
+// Total engineering sprites ~128 KB — panel_sprite is reused for hip then wm sequentially.
+static TFT_eSprite eye_sprite(&tft);    // 100×100 face personality (reused L and R)
+static TFT_eSprite mouth_sprite(&tft);  // 130×60  face personality mouth
 
-// Layout (landscape 320×240, rotation=1)
-#define BANNER_H   34
+// Layout (landscape 320×240)  44 + 148 + 48 = 240 ✓   160 + 80 + 80 = 320 ✓
+#define BANNER_H   44
 #define AH_X        0
 #define AH_Y       BANNER_H
-#define AH_W      170
-#define AH_H      156
-#define HIP_X     170
+#define AH_W      160
+#define AH_H      148
+#define HIP_X     160
 #define HIP_Y      BANNER_H
 #define HIP_W      80
 #define HIP_H     AH_H
-#define GRAPH_X   250
+#define GRAPH_X   240
 #define GRAPH_Y    BANNER_H
-#define GRAPH_W    70
+#define GRAPH_W    80
 #define GRAPH_H   AH_H
-#define FOOTER_Y  190   // = BANNER_H + AH_H
-#define FOOTER_H   50
+#define FOOTER_Y  192   // = BANNER_H + AH_H
+#define FOOTER_H   48
 
 // Hip display range [rad] — tune to match calibrated travel
 #define HIP_DISPLAY_MIN  0.0f
@@ -701,89 +715,366 @@ static const char* fault_description(uint8_t code) {
     }
 }
 
+// ── Mode Banner helpers ───────────────────────────────────────────────────────
+
+// Linear interpolate between two color565 values; t: 0=c0, 255=c1.
+static uint16_t lerpColor(uint16_t c0, uint16_t c1, uint8_t t) {
+    int r = ((c0 >> 11) & 0x1F) + ((int)((c1 >> 11 & 0x1F) - (c0 >> 11 & 0x1F)) * t >> 8);
+    int g = ((c0 >>  5) & 0x3F) + ((int)((c1 >>  5 & 0x3F) - (c0 >>  5 & 0x3F)) * t >> 8);
+    int b = ( c0        & 0x1F) + ((int)((c1        & 0x1F) - (c0        & 0x1F)) * t >> 8);
+    return ((uint16_t)r << 11) | ((uint16_t)g << 5) | (uint16_t)b;
+}
+
+// Shift a color565 value brighter (+) or darker (-); G has 6 bits so it shifts twice.
+static uint16_t brighten565(uint16_t c, int shift) {
+    int r = ((c >> 11) & 0x1F) + shift;
+    int g = ((c >>  5) & 0x3F) + shift * 2;
+    int b = ( c        & 0x1F) + shift;
+    return ((uint16_t)constrain(r, 0, 31) << 11)
+         | ((uint16_t)constrain(g, 0, 63) <<  5)
+         |  (uint16_t)constrain(b, 0, 31);
+}
+
+// ── Icon helpers ──────────────────────────────────────────────────────────────
+
+// All icon helpers accept TFT_eSPI* so they work with both the display directly
+// and any TFT_eSprite (which is a subclass of TFT_eSPI).
+
+static void drawWifiIcon(TFT_eSPI* spr, int cx, int cy, bool active) {
+    uint16_t col = active ? spr->color565(0, 150, 255) : spr->color565(55, 55, 65);
+    spr->fillCircle(cx, cy + 11, 2, col);
+    for (int ri = 0; ri < 3; ri++) {
+        int r = 4 + ri * 4;
+        for (int ad = -45; ad <= 45; ad += 5) {
+            float ar = ad * (float)M_PI / 180.0f;
+            int px = cx + (int)(r * sinf(ar));
+            int py = (cy + 11) - (int)(r * cosf(ar));
+            spr->drawFastHLine(px, py, 1, col);
+        }
+    }
+}
+
+static void drawCellBarsIcon(TFT_eSPI* spr, int x, int y, bool active) {
+    uint16_t col = active ? TFT_GREEN : TFT_RED;
+    const int heights[4] = {4, 7, 10, 13};
+    for (int i = 0; i < 4; i++)
+        spr->fillRect(x + i * 5, y + 13 - heights[i], 4, heights[i], col);
+}
+
+static void drawHipJointIcon(TFT_eSPI* spr, int x, int y) {
+    uint16_t col = spr->color565(200, 200, 200);
+    spr->drawLine(x - 7, y + 9, x, y, col);
+    spr->drawLine(x, y, x + 7, y + 9, col);
+    spr->fillCircle(x, y, 2, col);
+}
+
+static void drawWheelIcon(TFT_eSprite* spr, int cx, int cy, int r) {
+    spr->drawCircle(cx, cy, r, TFT_WHITE);
+    for (int i = 0; i < 4; i++) {
+        float a = i * (float)M_PI / 2.0f;
+        spr->drawLine(cx, cy, cx + (int)(r * cosf(a)), cy + (int)(r * sinf(a)), TFT_WHITE);
+    }
+    spr->fillCircle(cx, cy, 2, TFT_WHITE);
+}
+
+static void drawMiniArcGauge(TFT_eSPI* spr, int cx, int cy, int r,
+                               float actual_pct, float cmd_pct) {
+    uint16_t track = spr->color565(45, 45, 55);
+    for (int ad = 0; ad <= 180; ad += 3) {
+        float ar = (270 + ad) * (float)M_PI / 180.0f;
+        int px = cx + (int)(r * sinf(ar));
+        int py = cy - (int)(r * cosf(ar));
+        spr->drawFastHLine(px, py, 1, track);
+    }
+    // Actual needle — thick cyan
+    float a_rad = (270.0f + actual_pct * 180.0f) * (float)M_PI / 180.0f;
+    int anx = cx + (int)(r * sinf(a_rad));
+    int any = cy - (int)(r * cosf(a_rad));
+    uint16_t act_col = spr->color565(0, 200, 255);
+    spr->drawLine(cx, cy, anx, any, act_col);
+    spr->drawLine(cx + 1, cy, anx + 1, any, act_col);
+    // Commanded needle — thin yellow
+    float c_rad = (270.0f + cmd_pct * 180.0f) * (float)M_PI / 180.0f;
+    int cnx = cx + (int)((r - 2) * sinf(c_rad));
+    int cny = cy - (int)((r - 2) * cosf(c_rad));
+    spr->drawLine(cx, cy, cnx, cny, TFT_YELLOW);
+    spr->fillCircle(cx, cy, 2, TFT_WHITE);
+}
+
+static void drawControllerButton(TFT_eSPI* spr, int x, int y,
+                                  const char* label, bool active) {
+    uint16_t bg  = active ? spr->color565(0, 110, 0)   : spr->color565(14, 14, 20);
+    uint16_t fg  = active ? TFT_WHITE                   : spr->color565(75, 75, 80);
+    uint16_t brd = active ? spr->color565(0, 190, 0)   : spr->color565(45, 45, 55);
+    spr->fillRoundRect(x, y, 14, 18, 2, bg);
+    spr->drawRoundRect(x, y, 14, 18, 2, brd);
+    spr->setTextColor(fg);
+    spr->setTextSize(1);
+    spr->setCursor(x + 1, y + 5);
+    spr->print(label);
+}
+
 // ── Mode Banner ───────────────────────────────────────────────────────────────
 
-static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool mismatch, float vbus) {
-    static uint8_t prev_state    = 0xFF;
-    static bool    prev_active   = false;
-    static uint8_t prev_fault    = 0xFF;
-    static bool    prev_mismatch = false;
-    static int  prev_batt_bars = -99;
-    static bool prev_blink_on  = true;
+static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool mismatch, float vbus, uint8_t profile) {
+    static uint8_t  prev_state      = 0xFF;
+    static bool     prev_active     = false;
+    static uint8_t  prev_fault      = 0xFF;
+    static bool     prev_mismatch   = false;
+    static int      prev_batt_bars  = -99;
+    static bool     prev_blink_on   = true;
+    static uint8_t  prev_profile    = 0xFF;
+    static uint32_t prev_mq_tick    = 0xFFFFFFFF;
 
     // 6S LiPo: 4.2V/cell × 6 = 25.2V full, 3.5V/cell × 6 = 21.0V empty
     const float BATT_VMAX = 25.2f, BATT_VMIN = 21.0f;
-    int batt_bars = (vbus > 5.0f)
+    int  batt_bars = (vbus > 5.0f)
         ? (int)(constrain((vbus - BATT_VMIN) / (BATT_VMAX - BATT_VMIN), 0.0f, 1.0f) * 5.0f + 0.5f)
-        : -1;  // -1 = no data
+        : -1;
+    bool blink_on  = (batt_bars >= 0 && batt_bars <= 1) ? ((millis() / 500) % 2 == 0) : true;
 
-    // Low-battery blink: ≤1 bar flashes at 1 Hz; phase change forces redraw
-    bool blink_on = (batt_bars >= 0 && batt_bars <= 1) ? ((millis() / 500) % 2 == 0) : true;
+    // Per-mode animation interval — drives dirty-check frame rate
+    uint32_t anim_interval;
+    if (!active || mismatch) {
+        anim_interval = 100;
+    } else {
+        switch (state) {
+            case RS_STANDBY:    anim_interval = 80;  break;
+            case RS_ESTOP:      anim_interval = 16;  break;
+            case RS_CMD_REJECT: anim_interval = 62;  break;
+            case RS_JUMPING:    anim_interval = 16;  break;
+            default: { static const uint32_t kMs[3] = {30, 20, 10};
+                       anim_interval = kMs[profile < 3 ? profile : 0]; break; }
+        }
+    }
+    uint32_t mq_tick = millis() / anim_interval;
 
     if (state == prev_state && active == prev_active && fault == prev_fault
             && mismatch == prev_mismatch && batt_bars == prev_batt_bars
-            && blink_on == prev_blink_on) return;
+            && blink_on == prev_blink_on && profile == prev_profile
+            && mq_tick == prev_mq_tick) return;
     prev_state = state; prev_active = active; prev_fault = fault;
     prev_mismatch = mismatch; prev_batt_bars = batt_bars; prev_blink_on = blink_on;
+    prev_profile = profile; prev_mq_tick = mq_tick;
 
-    tft.fillRect(0, 0, 320, BANNER_H, tft.color565(8, 10, 20));
+    uint32_t now_ms = millis();
 
+    // ── Per-mode gradient background ──────────────────────────────────────────
+
+    if (!active) {
+        // Disconnected: slow breathing pulse between dark slate and dim blue
+        uint8_t bri = sin8((uint8_t)(now_ms / 8));
+        uint16_t lo = tft.color565( 8, 10, 20);
+        uint16_t hi = tft.color565(18, 26, 55);
+        banner_sprite.fillSprite(lerpColor(lo, hi, bri));
+
+    } else if (mismatch) {
+        banner_sprite.fillSprite(TFT_RED);
+
+    } else switch (state) {
+
+        case RS_STARTUP: {
+            // Deep blue → cyan gradient comet sweeping left→right (~1 s period)
+            uint16_t lo = tft.color565(0, 15, 80);
+            uint16_t hi = tft.color565(0, 190, 255);
+            int offset  = (int)(now_ms / 3) % 320;
+            for (int x = 0; x < 320; x++) {
+                uint8_t t = sin8((uint8_t)(((x + 320 - offset) % 320) * 256 / 320));
+                banner_sprite.drawFastVLine(x, 0, BANNER_H, lerpColor(lo, hi, t));
+            }
+            break;
+        }
+
+        case RS_CALIBRATION: {
+            // Gaussian spotlight beam sweeping left↔right over blue base
+            uint16_t base = tft.color565(0, 10, 160);
+            banner_sprite.fillSprite(base);
+            int t       = (int)(now_ms % 2400u);
+            int sweep_x = (t < 1200) ? (t * 320 / 1200) : ((2400 - t) * 320 / 1200);
+            const int BW = 22;
+            for (int bx = max(0, sweep_x - BW); bx <= min(319, sweep_x + BW); bx++) {
+                int d    = abs(bx - sweep_x);
+                int frac = (BW - d) * 255 / (BW + 1);
+                // Gaussian falloff: frac * frac / 255
+                uint8_t v = (uint8_t)((frac * frac) >> 8);
+                banner_sprite.drawFastVLine(bx, 0, BANNER_H, lerpColor(base, TFT_WHITE, v));
+            }
+            break;
+        }
+
+        case RS_STANDBY: {
+            // Brown→yellow dense diagonal shimmer; old P3 speed is now P1
+            static const uint32_t kStandbyDiv[3] = {13, 6, 3};
+            uint16_t lo = tft.color565(130, 55, 5);
+            uint16_t hi = tft.color565(250, 210, 0);
+            uint32_t t  = now_ms / kStandbyDiv[profile < 3 ? profile : 0];
+            for (int y = 0; y < BANNER_H; y++) {
+                for (int x = 0; x < 320; x++) {
+                    uint8_t phase = (uint8_t)(((x + y * 2) * 3 + t) & 0xFF);
+                    banner_sprite.drawFastHLine(x, y, 1, lerpColor(lo, hi, sin8(phase)));
+                }
+            }
+            break;
+        }
+
+        case RS_RUNNING: {
+            // Light-green comets with comet tails bounce side→centre→side
+            static const uint32_t kRunPeriod[3] = {2000, 1200, 700};
+            uint32_t period = kRunPeriod[profile < 3 ? profile : 0];
+            uint32_t ph     = now_ms % period;
+            uint32_t half   = period / 2;
+            int32_t bounce  = (ph < half)
+                ? (int32_t)(ph * 160 / half)
+                : 160 - (int32_t)((ph - half) * 160 / half);
+            int pos_a = (int)bounce;
+            int pos_b = 319 - (int)bounce;
+            // dir: +1 = comet moving right, -1 = moving left
+            int dir_a = (ph < half) ? +1 : -1;
+            int dir_b = (ph < half) ? -1 : +1;
+
+            uint16_t col_bg    = tft.color565(0, 140, 25);
+            uint16_t col_comet = tft.color565(210, 255, 210);
+            banner_sprite.fillSprite(col_bg);
+
+            for (int x = 0; x < 320; x++) {
+                // Tail fades gently behind, sharp cutoff in front
+                int dx_a = x - pos_a;
+                int ba = (dx_a * dir_a > 0) ? max(0, 255 - abs(dx_a) * 8)
+                                             : max(0, 255 - abs(dx_a) * 55);
+                int dx_b = x - pos_b;
+                int bb = (dx_b * dir_b > 0) ? max(0, 255 - abs(dx_b) * 8)
+                                             : max(0, 255 - abs(dx_b) * 55);
+                int bri = min(255, ba + bb);
+                if (bri > 0)
+                    banner_sprite.drawFastVLine(x, 0, BANNER_H,
+                        lerpColor(col_bg, col_comet, (uint8_t)bri));
+            }
+            break;
+        }
+
+        case RS_ESTOP: {
+            // Radial ripple expanding from center, red
+            const int cx = 160, cy = BANNER_H / 2;
+            uint8_t phase = (uint8_t)(now_ms / 3);
+            uint16_t lo = tft.color565(45, 0, 0);
+            uint16_t hi = tft.color565(230, 0, 0);
+            for (int y = 0; y < BANNER_H; y++) {
+                int dy2 = (y - cy) * (y - cy);
+                for (int x = 0; x < 320; x++) {
+                    int dx   = x - cx;
+                    int dist = (int)sqrtf((float)(dx * dx + dy2));
+                    banner_sprite.drawFastHLine(x, y, 1, lerpColor(lo, hi, sin8((uint8_t)(dist * 8 - phase))));
+                }
+            }
+            break;
+        }
+
+        case RS_MANUAL: {
+            // Deep violet → magenta, very slow diagonal scroll
+            uint16_t lo = tft.color565(38, 0, 75);
+            uint16_t hi = tft.color565(175, 0, 200);
+            int offset  = (int)(now_ms * 0.04f) & 0xFF;
+            for (int y = 0; y < BANNER_H; y++) {
+                for (int x = 0; x < 320; x++) {
+                    uint8_t phase = (uint8_t)((x - y + offset) & 0xFF);
+                    banner_sprite.drawFastHLine(x, y, 1, lerpColor(lo, hi, sin8(phase)));
+                }
+            }
+            break;
+        }
+
+        case RS_CMD_REJECT: {
+            // Rapid orange/white strobe at ~8 Hz, auto-clears
+            bool flash = (now_ms / 62) & 1;
+            uint16_t col = flash ? tft.color565(255, 165, 0) : tft.color565(55, 28, 0);
+            banner_sprite.fillSprite(col);
+            break;
+        }
+
+        case RS_JUMPING: {
+            // Fast vertical sweep lime → white, top→bottom
+            uint16_t lo = tft.color565(20, 200, 0);
+            uint16_t hi = tft.color565(210, 255, 180);
+            int offset  = (int)(now_ms / 3) % BANNER_H;
+            for (int y = 0; y < BANNER_H; y++) {
+                uint8_t t = sin8((uint8_t)(((y + offset) % BANNER_H) * 256 / BANNER_H));
+                banner_sprite.drawFastHLine(0, y, 320, lerpColor(lo, hi, t));
+            }
+            break;
+        }
+
+        default:
+            banner_sprite.fillSprite(tft.color565(15, 17, 25));
+            break;
+    }
+
+    // ── Text overlay ──────────────────────────────────────────────────────────
     if (mismatch) {
-        tft.fillRect(0, 0, 5, BANNER_H, TFT_RED);
-        tft.setTextSize(2);
-        tft.setTextColor(TFT_RED, tft.color565(8, 10, 20));
-        tft.setCursor(8, (BANNER_H - 16) / 2);
-        tft.print("VER MISMATCH");
-        return;
+        banner_sprite.setTextColor(TFT_WHITE);
+        banner_sprite.setTextSize(2);
+        banner_sprite.setCursor(10, (BANNER_H - 16) / 2);
+        banner_sprite.print("VER MISMATCH");
+    } else {
+        bool show_fault = active && state == RS_ESTOP && fault != FAULT_NONE;
+
+        const char* label = active ? mode_name(state) : "NO TEENSY";
+        int tsize    = show_fault ? 2 : 3;
+        int label_px = (int)strlen(label) * 6 * tsize;
+        int cx       = max(8, (320 - label_px) / 2);
+        int text_y   = show_fault ? 3 : (BANNER_H - 8 * tsize) / 2;
+
+        const int tpad = 3;
+        banner_sprite.fillRect(cx - tpad, text_y - tpad, label_px + tpad * 2, 8 * tsize + tpad * 2,
+                               tft.color565(10, 10, 15));
+        banner_sprite.setTextColor(TFT_WHITE);
+        banner_sprite.setTextSize(tsize);
+        banner_sprite.setCursor(cx, text_y);
+        banner_sprite.print(label);
+
+        if (show_fault) {
+            banner_sprite.setTextColor(TFT_WHITE);
+            banner_sprite.setTextSize(1);
+            banner_sprite.setCursor(8, BANNER_H - 10);
+            banner_sprite.print(fault_description(fault));
+        }
+
+        if (active) {
+            uint16_t dot_col;
+            switch (profile) {
+                case 0:  dot_col = tft.color565(  0, 230,  80); break;
+                case 1:  dot_col = TFT_YELLOW;                   break;
+                default: dot_col = tft.color565(255,  80,   0); break;
+            }
+            banner_sprite.fillRect(2, 3, 40, BANNER_H - 6, TFT_BLACK);
+            banner_sprite.fillCircle(9, BANNER_H / 2, 4, dot_col);
+            banner_sprite.setTextColor(TFT_WHITE);
+            banner_sprite.setTextSize(2);
+            banner_sprite.setCursor(16, (BANNER_H - 16) / 2);
+            banner_sprite.printf("P%u", (unsigned)(profile + 1u));
+        }
     }
 
-    bool show_fault = active && state == RS_ESTOP && fault != FAULT_NONE;
-    uint16_t col = active ? mode_color(state) : COL_DIM;
-
-    // Left accent stripe
-    tft.fillRect(0, 0, 5, BANNER_H, col);
-
-    const char* label    = active ? mode_name(state) : "NO TEENSY";
-    int         tsize    = show_fault ? 2 : 3;
-    int         char_w   = 6 * tsize;
-    int         char_h   = 8 * tsize;
-    int         label_px = strlen(label) * char_w;
-    int         cx       = max(8, (320 - label_px) / 2);
-
-    tft.setTextSize(tsize);
-    tft.setTextColor(col, tft.color565(8, 10, 20));  // bg colour erases previous text
-    tft.setCursor(cx, show_fault ? 3 : (BANNER_H - char_h) / 2);
-    tft.print(label);
-
-    if (show_fault) {
-        tft.setTextSize(1);
-        tft.setTextColor(TFT_YELLOW, tft.color565(8, 10, 20));
-        tft.setCursor(8, BANNER_H - 10);
-        tft.print(fault_description(fault));
-    }
-
-    // Battery icon — top-right corner of banner
-    // Body: 34px × 24px; nub: 4px × 10px; 5 fill bars inside
-    const int BX = 276, BY = 5, BW = 34, BH = 24;
-    const uint16_t BANNER_BG = tft.color565(8, 10, 20);
-    tft.fillRect(BX - 1, BY - 1, BW + 6, BH + 2, BANNER_BG);  // clear area incl. nub
+    // ── Battery icon ──────────────────────────────────────────────────────────
+    const int BX = 276, BY = 8, BW = 34, BH = 28;
+    const uint16_t BATT_BG = tft.color565(8, 10, 20);
+    banner_sprite.fillRect(BX - 2, BY - 2, BW + 8, BH + 4, tft.color565(80, 85, 100));
+    banner_sprite.fillRect(BX - 1, BY - 1, BW + 6, BH + 2, BATT_BG);
     if (batt_bars >= 0 && blink_on) {
-        float pct = batt_bars / 5.0f;
-        uint16_t bc = (pct > 0.5f) ? TFT_GREEN : (pct > 0.2f) ? TFT_YELLOW : TFT_RED;
-        tft.drawRect(BX, BY, BW, BH, TFT_WHITE);
-        tft.fillRect(BX + BW, BY + 7, 4, 10, TFT_WHITE);  // positive nub
-        tft.fillRect(BX + 2, BY + 2, BW - 4, BH - 4, tft.color565(15, 15, 20));
-        // 5 fill bars, each 5px wide with 1px gap
+        float    pct = batt_bars / 5.0f;
+        uint16_t bc  = (pct > 0.5f) ? TFT_GREEN : (pct > 0.2f) ? TFT_YELLOW : TFT_RED;
+        banner_sprite.drawRect(BX, BY, BW, BH, TFT_WHITE);
+        banner_sprite.fillRect(BX + BW, BY + 9, 4, 10, TFT_WHITE);
+        banner_sprite.fillRect(BX + 2, BY + 2, BW - 4, BH - 4, tft.color565(15, 15, 20));
         for (int i = 0; i < 5; i++) {
             int bx = BX + 2 + i * 6;
-            if (i < batt_bars)
-                tft.fillRect(bx, BY + 3, 5, BH - 6, bc);
+            if (i < batt_bars) banner_sprite.fillRect(bx, BY + 3, 5, BH - 6, bc);
         }
     } else if (batt_bars >= 0 && !blink_on) {
-        // Blink-off phase: dim red outline only so position is still readable
-        tft.drawRect(BX, BY, BW, BH, tft.color565(120, 0, 0));
-        tft.fillRect(BX + BW, BY + 7, 4, 10, tft.color565(120, 0, 0));
+        banner_sprite.drawRect(BX, BY, BW, BH, tft.color565(120, 0, 0));
+        banner_sprite.fillRect(BX + BW, BY + 9, 4, 10, tft.color565(120, 0, 0));
     }
+
+    banner_sprite.pushSprite(0, 0);
 }
 
 // ── Artificial Horizon (sprite-based, no flicker) ─────────────────────────────
@@ -853,235 +1144,232 @@ static void drawArtificialHorizon(float pitch_rad, float roll_rad) {
     ah_sprite.pushSprite(AH_X, AH_Y);
 }
 
-// ── Hip Bars ──────────────────────────────────────────────────────────────────
+// ── Hip Panel (panel_sprite, 80×148, pushed to HIP_X,HIP_Y) ─────────────────
+// panel_sprite is shared with drawWheelMotors — draw hip first, then wm.
 
-static void drawHipBars(float hip_l, float hip_r, float curr_l, float curr_r) {
-    const int bar_h   = 108;
-    const int bar_w   = 26;
-    const int bar_l_x = HIP_X + 6;
-    const int bar_r_x = HIP_X + 46;
-    const int bar_top = HIP_Y + 16;
+static void drawHipPanel(float hip_l, float hip_r, float curr_l, float curr_r,
+                          float cmd_l, float cmd_r, uint16_t health_flags) {
+    panel_sprite.fillSprite(COL_GRAPH_BG);
 
-    auto pct = [](float rad) -> float {
-        return constrain((rad - HIP_DISPLAY_MIN) / (HIP_DISPLAY_MAX - HIP_DISPLAY_MIN),
-                         0.0f, 1.0f);
+    drawHipJointIcon(&panel_sprite, 40, 10);
+
+    const int cy = 58, r = 22;
+    auto hip_pct = [](float rad) -> float {
+        return constrain((rad - HIP_DISPLAY_MIN) / (HIP_DISPLAY_MAX - HIP_DISPLAY_MIN), 0.0f, 1.0f);
     };
+    drawMiniArcGauge(&panel_sprite, 20, cy, r, hip_pct(hip_l), hip_pct(cmd_l));
+    drawMiniArcGauge(&panel_sprite, 60, cy, r, hip_pct(hip_r), hip_pct(cmd_r));
 
-    float pl = pct(hip_l), pr = pct(hip_r);
-    int   fl = (int)(pl * bar_h), fr = (int)(pr * bar_h);
+    panel_sprite.setTextSize(1);
+    panel_sprite.setTextColor(COL_DIM);
+    panel_sprite.setCursor(17, cy + 4);
+    panel_sprite.print("L");
+    panel_sprite.setCursor(57, cy + 4);
+    panel_sprite.print("R");
 
-    // Left bar
-    tft.fillRect(bar_l_x, bar_top,              bar_w, bar_h - fl, COL_HIP_EMPTY);
-    tft.fillRect(bar_l_x, bar_top + bar_h - fl, bar_w, fl,         COL_HIP_FILL);
-    tft.drawRect(bar_l_x - 1, bar_top - 1, bar_w + 2, bar_h + 2, TFT_WHITE);
+    const int bar_y = 88, bar_h = 8, bar_w = 34;
+    const float CURR_MAX = 8.0f;
+    auto curr_col = [&](float c) -> uint16_t {
+        if (c < 3.0f) return TFT_GREEN;
+        if (c < 6.0f) return TFT_YELLOW;
+        return TFT_RED;
+    };
+    auto drawCurrBar = [&](int bx, float curr) {
+        int fill = (int)(constrain(curr / CURR_MAX, 0.0f, 1.0f) * bar_w);
+        panel_sprite.fillRect(bx, bar_y, bar_w, bar_h, panel_sprite.color565(15, 15, 20));
+        if (fill > 0) panel_sprite.fillRect(bx, bar_y, fill, bar_h, curr_col(curr));
+        panel_sprite.drawRect(bx - 1, bar_y - 1, bar_w + 2, bar_h + 2, panel_sprite.color565(45, 45, 55));
+        panel_sprite.setTextColor(panel_sprite.color565(190, 190, 190));
+        panel_sprite.setCursor(bx, bar_y + bar_h + 3);
+        panel_sprite.printf("%.1fA", curr);
+    };
+    drawCurrBar(3,  curr_l);
+    drawCurrBar(43, curr_r);
 
-    // Right bar
-    tft.fillRect(bar_r_x, bar_top,              bar_w, bar_h - fr, COL_HIP_EMPTY);
-    tft.fillRect(bar_r_x, bar_top + bar_h - fr, bar_w, fr,         COL_HIP_FILL);
-    tft.drawRect(bar_r_x - 1, bar_top - 1, bar_w + 2, bar_h + 2, TFT_WHITE);
+    const int dot_y = 116;
+    panel_sprite.fillCircle(20, dot_y, 4, (health_flags & HEALTH_HIP_L_OK) ? TFT_GREEN : TFT_RED);
+    panel_sprite.fillCircle(60, dot_y, 4, (health_flags & HEALTH_HIP_R_OK) ? TFT_GREEN : TFT_RED);
 
-    // Percentage labels
-    int pct_y = bar_top + bar_h + 4;
-    tft.fillRect(HIP_X, pct_y, HIP_W, 12, TFT_BLACK);
-    tft.setTextSize(1);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setCursor(bar_l_x, pct_y);
-    tft.printf("%3d%%", (int)(pl * 100));
-    tft.setCursor(bar_r_x, pct_y);
-    tft.printf("%3d%%", (int)(pr * 100));
+    panel_sprite.setTextSize(1);
+    panel_sprite.setTextColor(panel_sprite.color565(140, 140, 150));
+    panel_sprite.setCursor(2, 128);
+    panel_sprite.printf("%.2f", hip_l);
+    panel_sprite.setCursor(42, 128);
+    panel_sprite.printf("%.2f", hip_r);
 
-    // Current labels
-    int curr_y = pct_y + 12;
-    tft.fillRect(HIP_X, curr_y, HIP_W, 11, TFT_BLACK);
-    tft.setTextColor(tft.color565(255, 160, 0), TFT_BLACK);
-    tft.setCursor(bar_l_x, curr_y);
-    tft.printf("%.1fA", curr_l);
-    tft.setCursor(bar_r_x, curr_y);
-    tft.printf("%.1fA", curr_r);
+    panel_sprite.drawRect(0, 0, HIP_W, HIP_H, TFT_WHITE);
+    panel_sprite.pushSprite(HIP_X, HIP_Y);
 }
 
-// ── Wheel Motor Widget (sprite-based, 70×156) ─────────────────────────────────
+// ── Wheel Motor Widget (sprite-based, 80×148) ─────────────────────────────────
 
 static void drawWheelMotors(float vel_l, float vel_r,
-                             float vbus_l, float vbus_r,
                              uint8_t state_l, uint8_t state_r,
                              uint32_t err_l, uint32_t err_r,
-                             uint8_t mode) {
-    const int w = GRAPH_W, h = GRAPH_H;
+                             uint8_t mode, float v_ref, float wheel_vel_avg) {
+    panel_sprite.fillSprite(COL_GRAPH_BG);
+    panel_sprite.setTextSize(1);
 
-    wm_sprite.fillSprite(COL_GRAPH_BG);
-    wm_sprite.setTextSize(1);
+    // Wheel icon
+    drawWheelIcon(&panel_sprite, 40, 11, 8);
 
-    // Title
-    wm_sprite.setTextColor(COL_ZERO_LINE);
-    wm_sprite.setCursor(4, 2);
-    wm_sprite.print("WHEELS");
-
-    // Velocity bars (bidirectional, zero centred)
-    const float VEL_MAX  = 20.0f;   // turns/s full scale
+    // Velocity bars (bidirectional, zero centred, 26×60 each)
+    const float VEL_MAX  = 20.0f;
     const int   bar_w    = 26;
-    const int   bar_h    = 80;
-    const int   bar_top  = 13;
+    const int   bar_h    = 60;
+    const int   bar_top  = 24;
     const int   bar_cy   = bar_top + bar_h / 2;
     const int   bar_lx   = 4;
-    const int   bar_rx   = 38;
-    const uint16_t COL_BAR_EMPTY = wm_sprite.color565(20, 20, 28);
+    const int   bar_rx   = 50;
+    const uint16_t COL_EMPTY = panel_sprite.color565(20, 20, 28);
 
     auto drawVelBar = [&](int bx, float vel) {
         float cv = constrain(vel / VEL_MAX, -1.0f, 1.0f);
-        int fill  = (int)(fabsf(cv) * (bar_h / 2));
-        uint16_t fc = (vel >= 0.0f) ? wm_sprite.color565(0, 200, 100)
-                                     : wm_sprite.color565(255, 100, 0);
-        wm_sprite.fillRect(bx, bar_top, bar_w, bar_h, COL_BAR_EMPTY);
+        int fill = (int)(fabsf(cv) * (bar_h / 2));
+        uint16_t fc = (vel >= 0.0f) ? panel_sprite.color565(0, 200, 100)
+                                     : panel_sprite.color565(255, 100, 0);
+        panel_sprite.fillRect(bx, bar_top, bar_w, bar_h, COL_EMPTY);
         if (fill > 0) {
             int fy = (vel >= 0.0f) ? bar_cy - fill : bar_cy;
-            wm_sprite.fillRect(bx, fy, bar_w, fill, fc);
+            panel_sprite.fillRect(bx, fy, bar_w, fill, fc);
         }
-        wm_sprite.drawFastHLine(bx, bar_cy, bar_w, COL_ZERO_LINE);
-        wm_sprite.drawRect(bx - 1, bar_top - 1, bar_w + 2, bar_h + 2, TFT_WHITE);
+        panel_sprite.drawFastHLine(bx, bar_cy, bar_w, COL_ZERO_LINE);
+        panel_sprite.drawRect(bx - 1, bar_top - 1, bar_w + 2, bar_h + 2, TFT_WHITE);
     };
-
     drawVelBar(bar_lx, vel_l);
     drawVelBar(bar_rx, vel_r);
 
     // Velocity numbers
     int num_y = bar_top + bar_h + 3;
-    wm_sprite.setTextColor(TFT_WHITE);
-    wm_sprite.setCursor(bar_lx, num_y);
-    wm_sprite.printf("%.1f", vel_l);
-    wm_sprite.setCursor(bar_rx, num_y);
-    wm_sprite.printf("%.1f", vel_r);
+    panel_sprite.setTextColor(TFT_WHITE);
+    panel_sprite.setCursor(bar_lx, num_y);
+    panel_sprite.printf("%.1f", vel_l);
+    panel_sprite.setCursor(bar_rx, num_y);
+    panel_sprite.printf("%.1f", vel_r);
 
-    // State dots (green = closed loop, yellow = idle/other)
+    // State dots
     int dot_y = num_y + 11;
-    wm_sprite.fillCircle(bar_lx + bar_w / 2, dot_y, 4,
-                         (state_l == 8) ? TFT_GREEN : TFT_YELLOW);
-    wm_sprite.fillCircle(bar_rx + bar_w / 2, dot_y, 4,
-                         (state_r == 8) ? TFT_GREEN : TFT_YELLOW);
+    auto state_col = [](uint8_t s) -> uint16_t {
+        return (s == 8) ? TFT_GREEN : (s == 0) ? TFT_YELLOW : TFT_RED;
+    };
+    panel_sprite.fillCircle(bar_lx + bar_w / 2, dot_y, 4, state_col(state_l));
+    panel_sprite.fillCircle(bar_rx + bar_w / 2, dot_y, 4, state_col(state_r));
 
-    // Mode label
+    // Mode label centred between bars
     const char* mode_str;
     switch (mode) {
-        case 1: mode_str = "VEL";  break;
-        case 2: mode_str = "POS";  break;
-        case 3: mode_str = "TRQ";  break;
-        default: mode_str = "IDLE"; break;
+        case 1: mode_str = "VEL"; break;
+        case 2: mode_str = "POS"; break;
+        case 3: mode_str = "TRQ"; break;
+        default: mode_str = "IDL"; break;
     }
-    wm_sprite.setTextColor(wm_sprite.color565(160, 160, 160));
-    wm_sprite.setCursor(2, dot_y + 7);
-    wm_sprite.printf("M:%s", mode_str);
+    panel_sprite.setTextColor(panel_sprite.color565(150, 150, 160));
+    panel_sprite.setCursor(34, dot_y - 4);
+    panel_sprite.print(mode_str);
 
-    // Bus voltage (average L+R — same battery)
-    float vbus = (vbus_l + vbus_r) * 0.5f;
-    uint16_t vc = (vbus > 20.0f) ? TFT_GREEN
-                : (vbus > 15.0f) ? TFT_YELLOW
-                                 : TFT_RED;
-    wm_sprite.setTextColor(vc);
-    wm_sprite.setCursor(2, dot_y + 17);
-    wm_sprite.printf("%.1fV", vbus);
+    // Full-width speed bar (±2.5 m/s, wheel_vel_avg actual + v_ref command tick)
+    const float SPD_MAX = 2.5f;
+    const int   sb_x    = 2;
+    const int   sb_y    = dot_y + 13;
+    const int   sb_w    = 76;
+    const int   sb_h    = 10;
+    const int   sb_cx   = sb_x + sb_w / 2;
+    panel_sprite.fillRect(sb_x, sb_y, sb_w, sb_h, panel_sprite.color565(15, 15, 20));
+    panel_sprite.drawRect(sb_x - 1, sb_y - 1, sb_w + 2, sb_h + 2, panel_sprite.color565(45, 45, 55));
+    float sv  = constrain(wheel_vel_avg, -SPD_MAX, SPD_MAX);
+    int   spx = (int)(sv / SPD_MAX * (sb_w / 2));
+    uint16_t svc = (wheel_vel_avg >= 0.0f) ? TFT_CYAN : TFT_MAGENTA;
+    if (spx > 0)       panel_sprite.fillRect(sb_cx, sb_y + 1, spx, sb_h - 2, svc);
+    else if (spx < 0)  panel_sprite.fillRect(sb_cx + spx, sb_y + 1, -spx, sb_h - 2, svc);
+    panel_sprite.drawFastVLine(sb_cx, sb_y, sb_h, TFT_WHITE);
+    // v_ref command tick (yellow)
+    float vrf = constrain(v_ref, -SPD_MAX, SPD_MAX);
+    int   vrx = sb_cx + (int)(vrf / SPD_MAX * (sb_w / 2));
+    panel_sprite.drawFastVLine(vrx, sb_y - 2, sb_h + 4, TFT_YELLOW);
 
-    // Error indicator
+    panel_sprite.setTextColor(TFT_WHITE);
+    panel_sprite.setCursor(2, sb_y + sb_h + 3);
+    panel_sprite.printf("%.2fm/s", wheel_vel_avg);
+
     if (err_l || err_r) {
-        wm_sprite.setTextColor(TFT_RED);
-        wm_sprite.setCursor(2, dot_y + 27);
-        wm_sprite.print("ERR!");
+        panel_sprite.setTextColor(TFT_RED);
+        panel_sprite.setCursor(2, sb_y + sb_h + 13);
+        panel_sprite.print("ERR!");
     }
 
-    wm_sprite.drawRect(0, 0, w, h, TFT_WHITE);
-    wm_sprite.pushSprite(GRAPH_X, GRAPH_Y);
+    panel_sprite.drawRect(0, 0, GRAPH_W, GRAPH_H, TFT_WHITE);
+    panel_sprite.pushSprite(GRAPH_X, GRAPH_Y);
 }
 
-// ── Footer Status Bar ─────────────────────────────────────────────────────────
+// ── Footer Status Bar (footer_sprite, 320×48, pushed to 0,FOOTER_Y) ──────────
 
-static void drawFooter(uint8_t state, bool active, bool rc_alive,
-                       float wheel_vel, uint32_t pkt_age_ms) {
-    const int fy = FOOTER_Y;
+static void drawFooter(uint8_t state, bool active, bool rc_alive, uint32_t pkt_age_ms,
+                       uint16_t health_flags, float v_ref, float omega_cmd_rds,
+                       float ff1_out, float ff2_out, uint8_t jump_state) {
+    footer_sprite.fillSprite(COL_FOOTER_BG);
+    footer_sprite.setTextSize(1);
 
-    // Heartbeat — pulses at display update rate when connected
+    // ── Row 1 (y 0-22): connection status ─────────────────────────────────────
+
+    // Heartbeat dot
     static bool hb_phase = false;
     if (active) hb_phase = !hb_phase;
-
     uint16_t hb_col = active ? mode_color(state) : COL_DIM;
-    int      hb_r   = active ? (hb_phase ? 8 : 5) : 3;
-    tft.fillRect(2, fy + 2, 22, 22, COL_FOOTER_BG);
-    tft.fillCircle(12, fy + 13, hb_r, hb_col);
+    footer_sprite.fillCircle(10, 11, active ? (hb_phase ? 7 : 5) : 3, hb_col);
 
     // Packet age
-    tft.fillRect(26, fy + 6, 48, 11, COL_FOOTER_BG);
-    tft.setTextSize(1);
-    tft.setTextColor(active ? TFT_WHITE : COL_DIM, COL_FOOTER_BG);
-    tft.setCursor(26, fy + 7);
+    footer_sprite.setTextColor(active ? TFT_WHITE : COL_DIM);
+    footer_sprite.setCursor(22, 7);
     if (active)
-        tft.printf("%4lums", (unsigned long)min((uint32_t)9999, pkt_age_ms));
+        footer_sprite.printf("%4lums", (unsigned long)min((uint32_t)9999, pkt_age_ms));
     else
-        tft.print("NO PKT");
+        footer_sprite.print("NO PKT");
 
-    // UART dot + label
-    tft.fillRect(78, fy + 5, 46, 14, COL_FOOTER_BG);
-    tft.fillCircle(83, fy + 12, 4, active ? TFT_GREEN : TFT_YELLOW);
-    tft.setTextColor(active ? TFT_GREEN : TFT_YELLOW, COL_FOOTER_BG);
-    tft.setCursor(90, fy + 7);
-    tft.print(active ? "UART" : "WAIT");
+    // UART dot
+    footer_sprite.fillCircle(72, 11, 4, active ? TFT_GREEN : TFT_YELLOW);
+    footer_sprite.setTextColor(active ? TFT_GREEN : TFT_YELLOW);
+    footer_sprite.setCursor(79, 7);
+    footer_sprite.print(active ? "UART" : "WAIT");
 
-    // RC dot + label
-    tft.fillRect(130, fy + 5, 34, 14, COL_FOOTER_BG);
-    tft.fillCircle(135, fy + 12, 4, rc_alive ? TFT_GREEN : TFT_RED);
-    tft.setTextColor(rc_alive ? TFT_GREEN : TFT_RED, COL_FOOTER_BG);
-    tft.setCursor(142, fy + 7);
-    tft.print(rc_alive ? "RC" : "RC!");
+    // WiFi arc icon
+    drawWifiIcon(&footer_sprite, 114, 0, g_wifi_inited);
 
-    // WiFi dot + label
-    tft.fillRect(174, fy + 5, 38, 14, COL_FOOTER_BG);
-    uint16_t wifi_col = g_wifi_inited ? tft.color565(0, 150, 255) : COL_DIM;
-    tft.fillCircle(179, fy + 12, 4, wifi_col);
-    tft.setTextColor(wifi_col, COL_FOOTER_BG);
-    tft.setCursor(186, fy + 7);
-    tft.print("WiFi");
+    // RC bars icon
+    drawCellBarsIcon(&footer_sprite, 136, 5, rc_alive);
 
-    // UART health — right side of footer top strip (x 214-316), only shown when non-zero.
-    // Orange = historical errors, Red = errors happening right now (last 2 s).
-    tft.fillRect(214, fy + 5, 104, 14, COL_FOOTER_BG);
+    // UART health (CRC/GAP) — right side
     uint32_t crc_tot = g_uart_crc_drops;
     uint32_t gap_tot = g_uart_seq_gaps;
     if (crc_tot || gap_tot) {
-        bool     active = (g_uart_crc_rate > 0 || g_uart_gap_rate > 0);
-        uint16_t ucol   = active ? TFT_RED : tft.color565(255, 120, 0);
-        tft.setTextSize(1);
-        tft.setTextColor(ucol, COL_FOOTER_BG);
-        tft.setCursor(214, fy + 7);
-        // Format: "CRC:5 GAP:2" or "CRC:5!" (! = active)
+        bool     ua   = (g_uart_crc_rate > 0 || g_uart_gap_rate > 0);
+        uint16_t ucol = ua ? TFT_RED : footer_sprite.color565(255, 120, 0);
+        footer_sprite.setTextColor(ucol);
+        footer_sprite.setCursor(162, 7);
         if (crc_tot && gap_tot)
-            tft.printf("CRC:%lu GAP:%lu%s", crc_tot, gap_tot, active ? "!" : "");
+            footer_sprite.printf("CRC:%lu G:%lu%s", crc_tot, gap_tot, ua ? "!" : "");
         else if (crc_tot)
-            tft.printf("CRC:%lu%s", crc_tot, active ? "!" : "");
+            footer_sprite.printf("CRC:%lu%s", crc_tot, ua ? "!" : "");
         else
-            tft.printf("GAP:%lu%s", gap_tot, active ? "!" : "");
+            footer_sprite.printf("GAP:%lu%s", gap_tot, ua ? "!" : "");
     }
 
-    // Wheel velocity bar
-    const float VEL_MAX = 2.0f;
-    const int   bar_x   = 4;
-    const int   bar_y   = fy + 28;
-    const int   bar_w   = 312;
-    const int   bar_h   = 13;
-    const int   bar_cx  = bar_x + bar_w / 2;
+    // Divider between rows
+    footer_sprite.drawFastHLine(0, 23, 320, footer_sprite.color565(35, 35, 45));
 
-    tft.fillRect(bar_x, bar_y, bar_w, bar_h, COL_FOOTER_BG);
-    tft.drawRect(bar_x, bar_y, bar_w, bar_h, tft.color565(60, 60, 60));
+    // ── Row 2 (y 25-46): controller radio buttons ─────────────────────────────
+    bool lqr_on = (health_flags & HEALTH_LQR_ACTIVE) != 0;
+    bool vp_on  = (v_ref != 0.0f);
+    bool yp_on  = (omega_cmd_rds != 0.0f);
+    bool f1_on  = (ff1_out != 0.0f);
+    bool f2_on  = (ff2_out != 0.0f);
+    bool jm_on  = (jump_state != 0);
 
-    float    cv  = constrain(wheel_vel, -VEL_MAX, VEL_MAX);
-    int      fpx = (int)(cv / VEL_MAX * (bar_w / 2));
-    uint16_t vc  = (wheel_vel >= 0) ? TFT_CYAN : TFT_MAGENTA;
-    if (fpx > 0)
-        tft.fillRect(bar_cx,       bar_y + 1, fpx,  bar_h - 2, vc);
-    else if (fpx < 0)
-        tft.fillRect(bar_cx + fpx, bar_y + 1, -fpx, bar_h - 2, vc);
-    tft.drawFastVLine(bar_cx, bar_y, bar_h, TFT_WHITE);
+    const char* labels[6]  = {"LQ", "VP", "YP", "F1", "F2", "JM"};
+    bool        states_[6] = {lqr_on, vp_on, yp_on, f1_on, f2_on, jm_on};
+    for (int i = 0; i < 6; i++)
+        drawControllerButton(&footer_sprite, 2 + i * 16, 25, labels[i], states_[i]);
 
-    tft.fillRect(bar_x + 90, bar_y + bar_h + 1, 130, 9, COL_FOOTER_BG);
-    tft.setTextColor(TFT_WHITE, COL_FOOTER_BG);
-    tft.setCursor(bar_x + 112, bar_y + bar_h + 2);
-    tft.printf("%.2f m/s", wheel_vel);
+    footer_sprite.pushSprite(0, FOOTER_Y);
 }
 
 // ── Display init helpers ──────────────────────────────────────────────────────
@@ -1103,26 +1391,23 @@ static void init_color_palette() {
 }
 
 static void initEngineeringDisplay() {
+    banner_sprite.setColorDepth(16);
+    banner_sprite.createSprite(320, BANNER_H);
+
     ah_sprite.setColorDepth(16);
     ah_sprite.createSprite(AH_W, AH_H);
 
-    wm_sprite.setColorDepth(16);
-    wm_sprite.createSprite(GRAPH_W, GRAPH_H);
+    panel_sprite.setColorDepth(16);
+    panel_sprite.createSprite(GRAPH_W, GRAPH_H);  // 80×148, reused for hip + wm
+
+    footer_sprite.setColorDepth(16);
+    footer_sprite.createSprite(320, FOOTER_H);
 
     tft.fillScreen(TFT_BLACK);
 
     tft.drawFastVLine(HIP_X,   AH_Y, AH_H, COL_DIVIDER);
     tft.drawFastVLine(GRAPH_X, AH_Y, AH_H, COL_DIVIDER);
     tft.drawFastHLine(0, FOOTER_Y, 320, COL_DIVIDER);
-
-    tft.setTextSize(1);
-    tft.setTextColor(tft.color565(160, 160, 160), TFT_BLACK);
-    tft.setCursor(HIP_X + 10, HIP_Y + 5);
-    tft.print("L");
-    tft.setCursor(HIP_X + 50, HIP_Y + 5);
-    tft.print("R");
-
-    tft.fillRect(0, FOOTER_Y + 1, 320, FOOTER_H - 1, COL_FOOTER_BG);
 }
 
 static void initFaceDisplay() {
@@ -1157,8 +1442,10 @@ static void switch_personality(DisplayPersonality p) {
 
     switch (g_display_personality) {
         case PERS_ENGINEERING:
+            banner_sprite.deleteSprite();
             ah_sprite.deleteSprite();
-            wm_sprite.deleteSprite();
+            panel_sprite.deleteSprite();
+            footer_sprite.deleteSprite();
             break;
         case PERS_FACE:
             eye_sprite.deleteSprite();
@@ -1471,17 +1758,32 @@ static void update_display() {
     uint8_t  wm_l_state = g_telem_wm_l_state;
     uint8_t  wm_r_state = g_telem_wm_r_state;
     uint8_t  wm_mode    = g_telem_wm_mode;
+    uint8_t  profile    = g_telem_active_profile;
+    uint16_t health     = g_telem_health_flags;
+    float    hip_l_cmd  = g_telem_hip_l_cmd_rad;
+    float    hip_r_cmd  = g_telem_hip_r_cmd_rad;
+    float    v_ref      = g_telem_v_ref;
+    float    omega_cmd  = g_telem_omega_cmd_rds;
+    float    ff1_out    = g_telem_ff1_out;
+    float    ff2_out    = g_telem_ff2_out;
+    uint8_t  jmp_state  = g_telem_jump_state;
 
     float vbus_avg = (wm_l_vbus + wm_r_vbus) * 0.5f;
-    drawModeBanner(state, active, fault, g_version_mismatch, active ? vbus_avg : 0.0f);
+    drawModeBanner(state, active, fault, g_version_mismatch, active ? vbus_avg : 0.0f, active ? profile : 0);
     drawArtificialHorizon(active ? pitch : 0.0f, active ? roll : 0.0f);
-    drawHipBars(hip_l, hip_r, curr_l, curr_r);
+    drawHipPanel(hip_l, hip_r, curr_l, curr_r,
+                 active ? hip_l_cmd : 0.0f, active ? hip_r_cmd : 0.0f,
+                 active ? health : 0);
     drawWheelMotors(active ? wm_l_vel : 0.0f, active ? wm_r_vel : 0.0f,
-                    wm_l_vbus, wm_r_vbus,
                     active ? wm_l_state : 0, active ? wm_r_state : 0,
                     active ? wm_l_error : 0, active ? wm_r_error : 0,
-                    active ? wm_mode : 0);
-    drawFooter(state, active, rc_alive, active ? wheel_vel : 0.0f, pkt_age);
+                    active ? wm_mode : 0,
+                    active ? v_ref : 0.0f, active ? wheel_vel : 0.0f);
+    drawFooter(state, active, rc_alive, pkt_age,
+               active ? health : 0,
+               active ? v_ref : 0.0f, active ? omega_cmd : 0.0f,
+               active ? ff1_out : 0.0f, active ? ff2_out : 0.0f,
+               active ? jmp_state : 0);
 }
 
 // ── Display task (core 0) ─────────────────────────────────────────────────────
@@ -1516,9 +1818,9 @@ static void display_task(void*) {
         }
 
         // Face mode: update every 10ms tick for smooth animation.
-        // Engineering mode: update at 10 Hz or on dirty flag.
+        // Engineering mode: update at ~30 Hz or on dirty flag.
         bool time_to_update = g_display_dirty ||
-            (g_display_personality == PERS_FACE ? true : (now - last_disp_ms >= 100));
+            (g_display_personality == PERS_FACE ? true : (now - last_disp_ms >= 33));
         if (time_to_update) {
             g_display_dirty = false;
             update_display();
@@ -1590,9 +1892,18 @@ void loop() {
         g_telem_wm_r_vbus   = pkt.wm_r_vbus;
         g_telem_wm_l_error  = pkt.wm_l_error;
         g_telem_wm_r_error  = pkt.wm_r_error;
-        g_telem_wm_l_state  = pkt.wm_l_state;
-        g_telem_wm_r_state  = pkt.wm_r_state;
-        g_telem_wm_mode     = pkt.wm_mode;
+        g_telem_wm_l_state      = pkt.wm_l_state;
+        g_telem_wm_r_state      = pkt.wm_r_state;
+        g_telem_wm_mode         = pkt.wm_mode;
+        g_telem_active_profile  = pkt.active_profile;
+        g_telem_health_flags    = pkt.health_flags;
+        g_telem_hip_l_cmd_rad   = pkt.hip_l_cmd_pos_rad;
+        g_telem_hip_r_cmd_rad   = pkt.hip_r_cmd_pos_rad;
+        g_telem_v_ref           = pkt.v_ref;
+        g_telem_omega_cmd_rds   = pkt.omega_cmd_rds;
+        g_telem_ff1_out         = pkt.ff1_out;
+        g_telem_ff2_out         = pkt.ff2_out;
+        g_telem_jump_state      = pkt.jump_state;
 
         // Gap detection via loop_count (in TELEM_B): each pair should advance by ~10
         static uint32_t s_last_lc  = 0;

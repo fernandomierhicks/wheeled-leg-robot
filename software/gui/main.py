@@ -331,6 +331,75 @@ class BatteryStatusWidget(QWidget):
         p.end()
 
 
+# ── Radio signal widget ───────────────────────────────────────────────────────
+
+class RadioSignalWidget(QWidget):
+    """RC TX signal indicator — 4 ascending vertical bars (cellular-style, not WiFi arcs).
+    Green = signal, red = no signal, dim = no telemetry data yet."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(52, 24)
+        self._alive: bool | None = None
+        TelemetryBus.instance().packet.connect(self._on_packet)
+
+    def _on_packet(self, info: dict):
+        alive = info.get("ibus_alive")
+        if alive is None:
+            return
+        new = bool(alive)
+        if new != self._alive:
+            self._alive = new
+            self.update()
+
+    def set_connected(self, connected: bool):
+        if not connected and self._alive is not None:
+            self._alive = None
+            self.update()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+
+        # 4 bars, ascending heights, left-aligned
+        n_bars = 4
+        bar_w  = 4
+        gap    = 3
+        total  = n_bars * bar_w + (n_bars - 1) * gap
+        x0     = 2
+        base_y = h - 4
+
+        if self._alive is None:
+            bar_color = QColor(DIM)
+            n_lit = 0
+        elif self._alive:
+            bar_color = QColor(GREEN)
+            n_lit = n_bars
+        else:
+            bar_color = QColor(RED)
+            n_lit = 1  # one short bar to suggest "no signal"
+
+        dim_color = QColor(DIM)
+        dim_color.setAlpha(60)
+
+        for i in range(n_bars):
+            bh = 4 + i * 4   # 4, 8, 12, 16 px
+            x  = x0 + i * (bar_w + gap)
+            y  = base_y - bh
+            col = bar_color if i < n_lit else dim_color
+            p.fillRect(x, y, bar_w, bh, col)
+
+        # "RC" label
+        lbl_color = QColor(GREEN if self._alive else (RED if self._alive is not None else DIM))
+        p.setPen(QPen(lbl_color))
+        p.setFont(QFont("Consolas", 8))
+        p.drawText(x0 + total + 3, 0, w - (x0 + total + 3), h,
+                   Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                   "RC")
+        p.end()
+
+
 # ── Status bar ────────────────────────────────────────────────────────────────
 
 def _vsep() -> QFrame:
@@ -355,9 +424,10 @@ class StatusBar:
         self._dt        = QLabel("dt: —")
         self._mode      = QLabel("—")
         self._mode.setStyleSheet(f"color: {DIM};")
-        self._test      = QLabel("~: —")
-        self._test.setStyleSheet(f"color: {DIM}; font-family: Consolas;")
+        self._profile   = QLabel("")
+        self._profile.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-weight: bold;")
         self._batt      = BatteryStatusWidget()
+        self._radio     = RadioSignalWidget()
         self._conn      = QLabel("● Disconnected")
         self._conn.setStyleSheet(f"color: {RED};")
 
@@ -403,7 +473,7 @@ class StatusBar:
         self._btn_reboot.setEnabled(False)
         self._btn_reboot.clicked.connect(self._on_reboot_clicked)
 
-        for w in (self._source, _vsep(), self._transport, _vsep(), self._dt, _vsep(), self._mode, _vsep(), self._test, _vsep(), self._batt):
+        for w in (self._source, _vsep(), self._transport, _vsep(), self._dt, _vsep(), self._mode, self._profile, _vsep(), self._batt, _vsep(), self._radio):
             sb.addWidget(w)
         self._mismatch_lbl = QLabel("FIRMWARE MISMATCH — reflash ESP32/Teensy")
         self._mismatch_lbl.setStyleSheet(
@@ -573,9 +643,11 @@ class StatusBar:
             self._btn_reset.setEnabled(False)
             self._btn_reset.setToolTip("Hardware fault — power cycle robot and reboot required")
 
-    def set_test_val(self, val: float):
-        self._test.setStyleSheet(f"color: {TEXT}; font-family: Consolas;")
-        self._test.setText(f"~: {val:+.3f}")
+    def set_profile(self, profile: int):
+        label = f"  P{profile + 1}" if isinstance(profile, int) and 0 <= profile <= 2 else ""
+        color = {0: DIM, 1: GREEN, 2: ORANGE}.get(profile, DIM)
+        self._profile.setStyleSheet(f"color: {color}; font-family: Consolas; font-weight: bold;")
+        self._profile.setText(label)
 
     def set_connected(self, connected: bool):
         if connected:
@@ -586,6 +658,7 @@ class StatusBar:
             self._conn.setText("● Disconnected")
             self._mismatch_lbl.setVisible(False)
             self._batt.set_connected(False)
+            self._radio.set_connected(False)
 
     def set_version_mismatch(self, got: int, expected: int):
         self._mismatch_lbl.setText(
@@ -624,12 +697,12 @@ class MainWindow(QMainWindow):
         WifiTransport.instance().start()
 
         tabs = QTabWidget()
+        tabs.addTab(RobotVisualizerTab(), "Visualizer")
         tabs.addTab(DashboardTab(),       "Dashboard")
         tabs.addTab(ImuTab(),             "IMU")
         tabs.addTab(RawDataTab(),         "Raw Data")
         tabs.addTab(HipMotorsTab(),       "Hip Motors")
         tabs.addTab(ParamsTab(),          "Parameters")
-        tabs.addTab(RobotVisualizerTab(), "Visualizer")
         tabs.addTab(WheelMotorsTab(),     "Wheel Motors")
         tabs.addTab(ControllersTab(),     "Controllers")
         tabs.addTab(RadioTab(),           "Radio")
@@ -684,9 +757,9 @@ class MainWindow(QMainWindow):
         if state:
             self.status.set_mode(state, info.get("fault_name", ""), info.get("fault_description", ""),
                                  info.get("fault_code", 0))
-        test_val = info.get("test_val")
-        if test_val is not None:
-            self.status.set_test_val(test_val)
+        profile = info.get("active_profile")
+        if profile is not None:
+            self.status.set_profile(profile)
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
 
