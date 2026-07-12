@@ -245,10 +245,10 @@ void controlLoop_run() {
             (wm_L.vel_turns_s < -soft_limit && tau_L < 0.0f)) tau_L = 0.0f;
         if ((wm_R.vel_turns_s >  soft_limit && tau_R > 0.0f) ||
             (wm_R.vel_turns_s < -soft_limit && tau_R < 0.0f)) tau_R = 0.0f;
-
-        wheel_motors_send(tau_L, tau_R);
     }
-    // cmd_l/cmd_r reflect what was actually sent (0 when LQR disabled)
+    // Send every tick unconditionally — tau_L/tau_R are 0 when LQR disabled.
+    // This prevents stale ODrive torque on re-arm and acts as an implicit watchdog pet.
+    wheel_motors_send(tau_L, tau_R);
     g_state.whl_tau_l = tau_L;
     g_state.whl_tau_r = tau_R;
 }

@@ -16,6 +16,18 @@
 //            software/gui/params_tab.py (_SUBGROUPS) so the GUI shows it
 //            in the correct section.
 
+// GROUP_SYSTEM — peripheral enable flags (bench-test without full hardware)
+// 0 = peripheral not connected: init/poll is skipped, and the state machine
+// no longer gates STARTUP/CALIBRATION/RUNNING on it. Persisted so it
+// survives reboot during a bench-test session. Takes effect at boot —
+// changing at runtime requires CMD_ID_REBOOT to re-run setup().
+#define PARAM_IMU_ENABLE     0x0000  // BNO086 IMU (SPI). 0 also blocks RUNNING (arming) —
+                                      // real pitch feedback is required to balance.
+#define PARAM_AK45_ENABLE    0x0001  // AK45-10 hip motors (CAN2)
+#define PARAM_WHEEL_ENABLE   0x0002  // wheel motor controllers / ODrive (CAN3)
+#define PARAM_BUZZER_ENABLE  0x0003  // buzzer
+#define PARAM_LED_ENABLE     0x0004  // status RGB LED
+
 // GROUP_HIP — hip motor behaviour
 #define PARAM_ESTOP_HIP_DISABLE   0x0200  // 1=exit MIT on ESTOP entry and re-enter on reset, 0=leave MIT running
 // TODO: add PARAM_HIP_RUNNING_KP (0x0201), PARAM_HIP_RUNNING_KD (0x0202), PARAM_HIP_RUNNING_TFF (0x0203)

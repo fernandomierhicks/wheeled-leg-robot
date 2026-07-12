@@ -26,6 +26,8 @@ public:
 #ifdef __cplusplus
 static_assert(COMM_MAX_PAYLOAD >= sizeof(TelemetryPayload),
     "COMM_MAX_PAYLOAD is smaller than TelemetryPayload — CommLink::send() would overflow its stack buffer");
+static_assert(LOG_CHUNK_DATA + sizeof(LogDataHeader) <= COMM_MAX_PAYLOAD,
+    "LOG_DATA frame exceeds COMM_MAX_PAYLOAD");
 #endif
 
 // If a frame start is seen but the frame does not complete within this many ms, the

@@ -14,6 +14,10 @@ public:
     void begin();
     void update();  // must be called every loop
 
+    // Disabling blanks the LED immediately and no-ops all animation calls
+    // until re-enabled — for bench-testing without the LED wired up.
+    void set_enabled(bool en);
+
     // --- Animations ---
 
     // Immediate solid color. r/g/b in [0, 255].
@@ -41,6 +45,7 @@ public:
 private:
     uint8_t _pr, _pg, _pb;
     bool    _active_low;
+    bool    _enabled = true;
     Mode    _mode = Mode::SOLID;
     bool    _done = true;
 

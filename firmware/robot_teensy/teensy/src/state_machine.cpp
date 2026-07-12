@@ -349,15 +349,18 @@ static void on_estop() {
 // ── Transition conditions ─────────────────────────────────────────────────────
 
 static bool startup_ok() {
-    return imu_state() == ImuState::NOMINAL && hip_motors_ok();
+    bool imu_ok = (param_get(PARAM_IMU_ENABLE)  < 0.5f) || (imu_state() == ImuState::NOMINAL);
+    bool hip_ok = (param_get(PARAM_AK45_ENABLE) < 0.5f) || hip_motors_ok();
+    return imu_ok && hip_ok;
 }
 static bool startup_fail() {
-    if (imu_state() == ImuState::ERROR) {
+    if (param_get(PARAM_IMU_ENABLE) >= 0.5f && imu_state() == ImuState::ERROR) {
         comm_log(LOG_LEVEL_ERROR, "FAULT: IMU init failed");
         g_state.fault_code = FAULT_IMU_ERROR;
         return true;
     }
-    if (millis() > 2000 && (!hm_L.ever_heard || !hm_R.ever_heard)) {
+    if (param_get(PARAM_AK45_ENABLE) >= 0.5f &&
+        millis() > 2000 && (!hm_L.ever_heard || !hm_R.ever_heard)) {
         comm_log(LOG_LEVEL_ERROR, "FAULT: hip init timeout (L=%d R=%d)", (int)hm_L.ever_heard, (int)hm_R.ever_heard);
         g_state.fault_code = FAULT_HIP_INIT_TIMEOUT;
         return true;
@@ -365,7 +368,7 @@ static bool startup_fail() {
     return false;
 }
 static bool standby_hip_fault() {
-    if (!hip_motors_ok()) {
+    if (param_get(PARAM_AK45_ENABLE) >= 0.5f && !hip_motors_ok()) {
         comm_log(LOG_LEVEL_ERROR, "FAULT: hip feedback lost");
         g_state.fault_code = FAULT_HIP_FEEDBACK_LOST;
         return true;
@@ -375,7 +378,16 @@ static bool standby_hip_fault() {
 static bool req_manual()        { bool v = s_req_manual;  s_req_manual  = false; return v; }
 static bool req_standby()       { bool v = s_req_standby; s_req_standby = false; return v; }
 static bool req_reset()         { bool v = s_req_reset;   s_req_reset   = false; return v; }
-static bool req_calibration()   { bool v = s_req_calibration; s_req_calibration = false; return v; }
+static bool req_calibration() {
+    if (!s_req_calibration) return false;
+    s_req_calibration = false;
+    if (param_get(PARAM_AK45_ENABLE) < 0.5f) {
+        comm_log(LOG_LEVEL_WARN, "Calibration denied: hip motors disabled (ak45_enable=0)");
+        stateMachine_request_cmd_reject();
+        return false;
+    }
+    return true;
+}
 static bool req_cmd_reject() { bool v = s_req_cmd_reject; s_req_cmd_reject = false; return v; }
 static bool cmd_reject_done() { return (millis() >= s_cmd_reject_deadline_ms); }
 static bool manual_gui_timeout() {
@@ -386,6 +398,21 @@ static bool manual_gui_timeout() {
 static bool req_running() {
     if (!s_req_running) return false;
     s_req_running = false;
+    if (param_get(PARAM_IMU_ENABLE) < 0.5f) {
+        comm_log(LOG_LEVEL_WARN, "Running mode denied: IMU disabled (imu_enable=0)");
+        stateMachine_request_cmd_reject();
+        return false;
+    }
+    if (param_get(PARAM_AK45_ENABLE) < 0.5f) {
+        comm_log(LOG_LEVEL_WARN, "Running mode denied: hip motors disabled (ak45_enable=0)");
+        stateMachine_request_cmd_reject();
+        return false;
+    }
+    if (param_get(PARAM_WHEEL_ENABLE) < 0.5f) {
+        comm_log(LOG_LEVEL_WARN, "Running mode denied: wheel motors disabled (wheel_enable=0)");
+        stateMachine_request_cmd_reject();
+        return false;
+    }
     if (!hm_limits_L.valid || !hm_limits_R.valid) {
         comm_log(LOG_LEVEL_WARN, "Running mode denied: calibrate first (limits not valid).");
         stateMachine_request_cmd_reject();

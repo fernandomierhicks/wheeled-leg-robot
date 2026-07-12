@@ -140,14 +140,18 @@ void wheel_motors_set_mode(WheelMode mode) {
 }
 
 void wheel_motors_send(float L, float R) {
+    // Right motor is physically mirrored — apply sign convention once here.
+    float L_hw =  L;
+    float R_hw = -R;
+
     switch (wm_mode) {
         case WheelMode::IDLE:
             break;
 
         case WheelMode::VELOCITY: {
-            // rad/s → turns/s; right motor is physically mirrored — negate command
-            float vel_L[2] = {  L / TWO_PI, 0.0f };
-            float vel_R[2] = { -R / TWO_PI, 0.0f };
+            // rad/s → turns/s
+            float vel_L[2] = { L_hw / TWO_PI, 0.0f };
+            float vel_R[2] = { R_hw / TWO_PI, 0.0f };
             send_frame(ODESC_NODE_L, CMD_SET_INPUT_VEL, vel_L, 8);
             delayMicroseconds(CAN_INTER_FRAME_US);
             send_frame(ODESC_NODE_R, CMD_SET_INPUT_VEL, vel_R, 8);
@@ -155,9 +159,9 @@ void wheel_motors_send(float L, float R) {
         }
 
         case WheelMode::POSITION: {
-            // rad → turns; vel_ff and torque_ff both zero; right motor mirrored — negate
-            float pos_L =  L / TWO_PI;
-            float pos_R = -R / TWO_PI;
+            // rad → turns; vel_ff and torque_ff both zero
+            float pos_L = L_hw / TWO_PI;
+            float pos_R = R_hw / TWO_PI;
             uint8_t buf[8] = {};
             memcpy(buf + 0, &pos_L, 4);
             send_frame(ODESC_NODE_L, CMD_SET_INPUT_POS, buf, 8);
@@ -168,8 +172,7 @@ void wheel_motors_send(float L, float R) {
         }
 
         case WheelMode::TORQUE: {
-            float R_hw = -R;  // right motor is physically mirrored
-            send_frame(ODESC_NODE_L, CMD_SET_INPUT_TRQ, &L, 4);
+            send_frame(ODESC_NODE_L, CMD_SET_INPUT_TRQ, &L_hw, 4);
             delayMicroseconds(CAN_INTER_FRAME_US);
             send_frame(ODESC_NODE_R, CMD_SET_INPUT_TRQ, &R_hw, 4);
             break;

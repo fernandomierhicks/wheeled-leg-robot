@@ -13,6 +13,7 @@
 #include "Buzzer.h"
 #include "param_registry.h"
 #include "IBus.h"
+#include "sd_logger.h"
 
 CommLink g_comm(Serial5, COMM_SRC_TEENSY);     // ESP32 UART bridge
 CommLink g_comm_usb(Serial, COMM_SRC_TEENSY);  // direct PC USB
@@ -41,6 +42,11 @@ void comm_log(uint8_t level, const char* fmt, ...) {
     memcpy(buf + 1, msg, n);
     g_comm.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
     if (Serial) g_comm_usb.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
+}
+
+static void sd_logger_send(uint8_t type, uint8_t version, const void* payload, uint16_t len) {
+    g_comm.send(type, version, payload, len);
+    if (Serial) g_comm_usb.send(type, version, payload, len);
 }
 
 void comm_send_calib_event(uint8_t axis, uint8_t event,
@@ -181,6 +187,32 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         }
         return;
     }
+
+    // ── SD log control: start/stop/list/get/delete ─────────────────────────────
+    if (cmd_id == CMD_ID_LOG && len >= 2) {
+        uint8_t sub = payload[1];
+        if (sub == LOG_SUB_START) {
+            uint32_t dur = 0; if (len >= 6) memcpy(&dur, payload + 2, 4);
+            comm_log(LOG_LEVEL_INFO, "CMD log start dur_ms=%lu", (unsigned long)dur);
+            sd_logger_start(dur);
+        } else if (sub == LOG_SUB_STOP) {
+            comm_log(LOG_LEVEL_INFO, "CMD log stop");
+            sd_logger_stop();
+        } else if (sub == LOG_SUB_LIST) {
+            comm_log(LOG_LEVEL_INFO, "CMD log list");
+            sd_logger_list();
+        } else if (sub == LOG_SUB_GET && len >= 8) {
+            uint16_t idx; uint32_t start;
+            memcpy(&idx, payload + 2, 2); memcpy(&start, payload + 4, 4);
+            comm_log(LOG_LEVEL_INFO, "CMD log get idx=%u start_chunk=%lu", idx, (unsigned long)start);
+            sd_logger_begin_get(idx, start);
+        } else if (sub == LOG_SUB_DELETE && len >= 4) {
+            uint16_t idx; memcpy(&idx, payload + 2, 2);
+            comm_log(LOG_LEVEL_INFO, "CMD log delete idx=%u", idx);
+            sd_logger_delete(idx);
+        }
+        return;
+    }
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -232,19 +264,48 @@ void setup() {
 
     comm_log(LOG_LEVEL_INFO, "Firmware starting");
     param_init();
+
+    // Peripheral enable flags — bench-test without full hardware connected.
+    // See PARAM_*_ENABLE in param_ids.h. Takes effect at boot; toggling live
+    // requires CMD_ID_REBOOT to re-run setup().
+    bool imu_en   = param_get(PARAM_IMU_ENABLE)   >= 0.5f;
+    bool hip_en   = param_get(PARAM_AK45_ENABLE)  >= 0.5f;
+    bool wheel_en = param_get(PARAM_WHEEL_ENABLE) >= 0.5f;
+    g_buzzer.set_enabled(param_get(PARAM_BUZZER_ENABLE) >= 0.5f);
+    g_led.set_enabled(param_get(PARAM_LED_ENABLE)       >= 0.5f);
+
+    sd_logger_set_sender(sd_logger_send);
+    if (sd_logger_begin()) comm_log(LOG_LEVEL_INFO, "SD logger ready");
+    else                   comm_log(LOG_LEVEL_WARN, "SD logger: no card detected");
     g_ibus.begin();
     comm_log(LOG_LEVEL_INFO, "IBus RX ready (Serial4)");
-    imu_init();
-    comm_log(LOG_LEVEL_INFO, "IMU initializing...");
-    hip_motors_init();
-    comm_log(LOG_LEVEL_INFO, "Hip CAN init OK");
-    hip_motors_enter_mit();
-    wheel_motors_init();
-    wheel_motors_set_mode(WheelMode::IDLE);
-    wheel_motors_clear_errors();
-    delay(300);  // wait for ODrive to send a fresh heartbeat with cleared error state
-    comm_log(LOG_LEVEL_INFO, "Wheel CAN init OK");
-    comm_log(LOG_LEVEL_INFO, "Hip MIT mode enabled");
+
+    if (imu_en) {
+        imu_init();
+        comm_log(LOG_LEVEL_INFO, "IMU initializing...");
+    } else {
+        comm_log(LOG_LEVEL_WARN, "IMU disabled (imu_enable=0)");
+    }
+
+    if (hip_en) {
+        hip_motors_init();
+        comm_log(LOG_LEVEL_INFO, "Hip CAN init OK");
+        hip_motors_enter_mit();
+        comm_log(LOG_LEVEL_INFO, "Hip MIT mode enabled");
+    } else {
+        comm_log(LOG_LEVEL_WARN, "Hip motors disabled (ak45_enable=0)");
+    }
+
+    if (wheel_en) {
+        wheel_motors_init();
+        wheel_motors_set_mode(WheelMode::IDLE);
+        wheel_motors_clear_errors();
+        delay(300);  // wait for ODrive to send a fresh heartbeat with cleared error state
+        comm_log(LOG_LEVEL_INFO, "Wheel CAN init OK");
+    } else {
+        comm_log(LOG_LEVEL_WARN, "Wheel motors disabled (wheel_enable=0)");
+    }
+
     controlLoop_init();
     stateMachine_init();
     comm_log(LOG_LEVEL_INFO, "Setup complete");
@@ -274,73 +335,77 @@ static uint16_t build_health_flags() {
     return f;
 }
 
+static void fill_telemetry(TelemetryPayload& t) {
+    t.timestamp_ms     = millis();
+    t.pitch_rad        = g_state.pitch_rad;
+    t.pitch_rate_rads  = g_state.pitch_rate_rads;
+    t.wheel_vel_avg_ms = g_state.wheel_vel_avg_ms;
+    t.hip_l_pos_rad    = g_state.hip_l_pos_rad;
+    t.hip_r_pos_rad    = g_state.hip_r_pos_rad;
+    t.whl_tau_l        = g_state.whl_tau_l;
+    t.whl_tau_r        = g_state.whl_tau_r;
+    t.roll_rad         = imu_roll();
+    t.yaw_rad          = imu_yaw();
+    t.robot_state      = (uint8_t)g_state.state;
+    t.fault_code       = g_state.fault_code;
+    t.test_val         = sinf(2.0f * (float)M_PI * 2.0f * millis() / 1000.0f);
+    t.hip_l_current_a  = g_state.hip_l_current_a;
+    t.hip_r_current_a  = g_state.hip_r_current_a;
+    for (uint8_t i = 1; i <= IBUS_NUM_CH; i++) t.ibus_ch[i - 1] = g_ibus.channel(i);
+    t.ibus_alive       = g_ibus.alive() ? 1 : 0;
+    t.wm_l_vel_turns_s = wm_L.vel_turns_s;
+    t.wm_r_vel_turns_s = wm_R.vel_turns_s;
+    t.wm_l_pos_turns   = wm_L.pos_turns;
+    t.wm_r_pos_turns   = wm_R.pos_turns;
+    t.wm_l_vbus        = wm_L.vbus;
+    t.wm_r_vbus        = wm_R.vbus;
+    t.wm_l_error       = wm_L.error;
+    t.wm_r_error       = wm_R.error;
+    t.wm_l_state       = wm_L.axis_state;
+    t.wm_r_state       = wm_R.axis_state;
+    t.wm_mode          = (uint8_t)wm_mode;
+    for (int i = 0; i < 4; i++) t.tof_dist_mm[i] = g_tof.dist_mm[i];
+    // V5 — IMU rates + linear acceleration
+    t.roll_rate_rads        = imu_roll_rate();
+    t.yaw_rate_rads         = imu_yaw_rate();
+    t.accel_x_ms2           = imu_accel_x();
+    t.accel_y_ms2           = imu_accel_y();
+    t.accel_z_ms2           = imu_accel_z();
+    // V5 — hip velocity feedback
+    t.hip_l_vel_rads        = hm_L.vel_rad_s;
+    t.hip_r_vel_rads        = hm_R.vel_rad_s;
+    // V5 — hip motor MIT setpoints (cmd vs feedback enables tracking quality plots)
+    t.hip_l_cmd_pos_rad     = hm_sp_L.p;
+    t.hip_r_cmd_pos_rad     = hm_sp_R.p;
+    t.hip_l_cmd_vel_rads    = hm_sp_L.v;
+    t.hip_r_cmd_vel_rads    = hm_sp_R.v;
+    t.hip_l_cmd_kp          = hm_sp_L.kp;
+    t.hip_r_cmd_kp          = hm_sp_R.kp;
+    t.hip_l_cmd_kd          = hm_sp_L.kd;
+    t.hip_r_cmd_kd          = hm_sp_R.kd;
+    t.hip_l_cmd_tff         = hm_sp_L.tff;
+    t.hip_r_cmd_tff         = hm_sp_R.tff;
+    // V7 — balance controller internals: setpoints + effort signals only
+    t.theta_ref             = g_state.theta_ref;
+    t.v_ref                 = g_state.v_ref;
+    t.omega_cmd_rds         = param_get(PARAM_OMEGA_CMD_RDS);
+    t.tau_sym               = g_state.tau_sym;
+    t.tau_yaw               = g_state.tau_yaw;
+    t.ff1_out               = g_state.ff1_out;
+    t.ff2_out               = g_state.ff2_out;
+    // V5 — diagnostics
+    t.health_flags          = build_health_flags();
+    t.imu_packet_loss_pct   = (uint8_t)(imu_packet_loss() * 100.0f + 0.5f);
+    t.jump_state            = g_state.jump_state;
+    t.loop_count            = g_state.loop_count;
+    // V8 — radio channel assignments
+    t.active_profile        = (uint8_t)param_get(PARAM_ACTIVE_PROFILE);
+    t.pitch_trim_rad        = param_get(PARAM_RADIO_PITCH_TRIM);
+}
+
 static void send_telemetry() {
     TelemetryPayload telem;
-    telem.timestamp_ms     = millis();
-    telem.pitch_rad        = g_state.pitch_rad;
-    telem.pitch_rate_rads  = g_state.pitch_rate_rads;
-    telem.wheel_vel_avg_ms = g_state.wheel_vel_avg_ms;
-    telem.hip_l_pos_rad    = g_state.hip_l_pos_rad;
-    telem.hip_r_pos_rad    = g_state.hip_r_pos_rad;
-    telem.whl_tau_l        = g_state.whl_tau_l;
-    telem.whl_tau_r        = g_state.whl_tau_r;
-    telem.roll_rad         = imu_roll();
-    telem.yaw_rad          = imu_yaw();
-    telem.robot_state      = (uint8_t)g_state.state;
-    telem.fault_code       = g_state.fault_code;
-    telem.test_val         = sinf(2.0f * (float)M_PI * 2.0f * millis() / 1000.0f);
-    telem.hip_l_current_a  = g_state.hip_l_current_a;
-    telem.hip_r_current_a  = g_state.hip_r_current_a;
-    for (uint8_t i = 1; i <= IBUS_NUM_CH; i++) telem.ibus_ch[i - 1] = g_ibus.channel(i);
-    telem.ibus_alive       = g_ibus.alive() ? 1 : 0;
-    telem.wm_l_vel_turns_s = wm_L.vel_turns_s;
-    telem.wm_r_vel_turns_s = wm_R.vel_turns_s;
-    telem.wm_l_pos_turns   = wm_L.pos_turns;
-    telem.wm_r_pos_turns   = wm_R.pos_turns;
-    telem.wm_l_vbus        = wm_L.vbus;
-    telem.wm_r_vbus        = wm_R.vbus;
-    telem.wm_l_error       = wm_L.error;
-    telem.wm_r_error       = wm_R.error;
-    telem.wm_l_state       = wm_L.axis_state;
-    telem.wm_r_state       = wm_R.axis_state;
-    telem.wm_mode          = (uint8_t)wm_mode;
-    for (int i = 0; i < 4; i++) telem.tof_dist_mm[i] = g_tof.dist_mm[i];
-    // V5 — IMU rates + linear acceleration
-    telem.roll_rate_rads        = imu_roll_rate();
-    telem.yaw_rate_rads         = imu_yaw_rate();
-    telem.accel_x_ms2           = imu_accel_x();
-    telem.accel_y_ms2           = imu_accel_y();
-    telem.accel_z_ms2           = imu_accel_z();
-    // V5 — hip velocity feedback
-    telem.hip_l_vel_rads        = hm_L.vel_rad_s;
-    telem.hip_r_vel_rads        = hm_R.vel_rad_s;
-    // V5 — hip motor MIT setpoints (cmd vs feedback enables tracking quality plots)
-    telem.hip_l_cmd_pos_rad     = hm_sp_L.p;
-    telem.hip_r_cmd_pos_rad     = hm_sp_R.p;
-    telem.hip_l_cmd_vel_rads    = hm_sp_L.v;
-    telem.hip_r_cmd_vel_rads    = hm_sp_R.v;
-    telem.hip_l_cmd_kp          = hm_sp_L.kp;
-    telem.hip_r_cmd_kp          = hm_sp_R.kp;
-    telem.hip_l_cmd_kd          = hm_sp_L.kd;
-    telem.hip_r_cmd_kd          = hm_sp_R.kd;
-    telem.hip_l_cmd_tff         = hm_sp_L.tff;
-    telem.hip_r_cmd_tff         = hm_sp_R.tff;
-    // V7 — balance controller internals: setpoints + effort signals only
-    telem.theta_ref             = g_state.theta_ref;
-    telem.v_ref                 = g_state.v_ref;
-    telem.omega_cmd_rds         = param_get(PARAM_OMEGA_CMD_RDS);
-    telem.tau_sym               = g_state.tau_sym;
-    telem.tau_yaw               = g_state.tau_yaw;
-    telem.ff1_out               = g_state.ff1_out;
-    telem.ff2_out               = g_state.ff2_out;
-    // V5 — diagnostics
-    telem.health_flags          = build_health_flags();
-    telem.imu_packet_loss_pct   = (uint8_t)(imu_packet_loss() * 100.0f + 0.5f);
-    telem.jump_state            = g_state.jump_state;
-    telem.loop_count            = g_state.loop_count;
-    // V8 — radio channel assignments
-    telem.active_profile        = (uint8_t)param_get(PARAM_ACTIVE_PROFILE);
-    telem.pitch_trim_rad        = param_get(PARAM_RADIO_PITCH_TRIM);
+    fill_telemetry(telem);
     const uint8_t* tp = (const uint8_t*)&telem;
     g_comm.send(COMM_TYPE_TELEM_A, TELEM_VERSION, tp,               TELEM_A_LEN);
     g_comm.send(COMM_TYPE_TELEM_B, TELEM_VERSION, tp + TELEM_A_LEN, TELEM_B_LEN);
@@ -403,18 +468,24 @@ static void receive_commands() {
 }
 
 static void read_sensors() {
-    imu_update();
-    g_state.pitch_rad       = -imu_pitch();       // IMU mounted inverted: negate to match robot +X=forward convention
-    g_state.pitch_rate_rads = -imu_pitch_rate();
+    if (param_get(PARAM_IMU_ENABLE) >= 0.5f) {
+        imu_update();
+        g_state.pitch_rad       = -imu_pitch();       // IMU mounted inverted: negate to match robot +X=forward convention
+        g_state.pitch_rate_rads = -imu_pitch_rate();
+    }
 
-    hip_motors_poll();
-    g_state.hip_l_pos_rad   = hm_L.pos_rad;
-    g_state.hip_r_pos_rad   = hm_R.pos_rad;
-    g_state.hip_l_current_a = hm_L.current_A;
-    g_state.hip_r_current_a = hm_R.current_A;
+    if (param_get(PARAM_AK45_ENABLE) >= 0.5f) {
+        hip_motors_poll();
+        g_state.hip_l_pos_rad   = hm_L.pos_rad;
+        g_state.hip_r_pos_rad   = hm_R.pos_rad;
+        g_state.hip_l_current_a = hm_L.current_A;
+        g_state.hip_r_current_a = hm_R.current_A;
+    }
 
-    wheel_motors_poll();
-    wheel_motors_pet_watchdog();
+    if (param_get(PARAM_WHEEL_ENABLE) >= 0.5f) {
+        wheel_motors_poll();
+        wheel_motors_pet_watchdog();
+    }
 
     g_ibus.update();
     for (uint8_t i = 1; i <= IBUS_NUM_CH; i++)
@@ -483,6 +554,18 @@ static void radio_update() {
     }
     s_was_jump = jump_sw;
 
+    // RC log start/stop stub — CH5/6/7/9/10 already assigned (calib/jump/trim/profile/arm).
+    // TODO(user): assign a spare iBUS channel for log start/stop.
+    // Set LOG_SWITCH_CH to a real channel index (1-based) to enable; 0 keeps this disabled.
+    static constexpr uint8_t LOG_SWITCH_CH = 0;   // 0 = unassigned (stub)
+    if (LOG_SWITCH_CH != 0) {
+        bool on = g_ibus.channel(LOG_SWITCH_CH) > 1500;
+        static bool prev = false;
+        if (on && !prev) { if (!sd_logger_is_active()) sd_logger_start(0); }
+        if (!on && prev) { sd_logger_stop(); }
+        prev = on;
+    }
+
     if (alive) {
         float t = constrain((g_ibus.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);  // CH3 (1-indexed)
         param_force_set(PARAM_RADIO_HIP_CMD, t);
@@ -497,7 +580,8 @@ static void radio_update() {
         static const uint16_t PROFILE_VEL[]    = {PARAM_PROFILE_1_VEL_MAX,    PARAM_PROFILE_2_VEL_MAX,    PARAM_PROFILE_3_VEL_MAX};
         static const uint16_t PROFILE_YAW[]    = {PARAM_PROFILE_1_YAW_MAX,    PARAM_PROFILE_2_YAW_MAX,    PARAM_PROFILE_3_YAW_MAX};
         static const uint16_t PROFILE_TORQUE[] = {PARAM_PROFILE_1_TORQUE_LIM, PARAM_PROFILE_2_TORQUE_LIM, PARAM_PROFILE_3_TORQUE_LIM};
-        static uint8_t s_last_profile = 255;  // force apply on first packet
+        static uint8_t s_last_profile = 255;   // force apply on first packet
+        static float   s_trq_target   = -1.0f; // <0 = no pending slew
         uint16_t ch9 = g_ibus.channel(9);
         uint8_t profile = (ch9 < 1333) ? 0 : (ch9 < 1667) ? 1 : 2;
         if (profile != s_last_profile) {
@@ -505,7 +589,7 @@ static void radio_update() {
             param_force_set(PARAM_ACTIVE_PROFILE, (float)profile);
             param_set(PARAM_RADIO_VEL_MAX,    param_get(PROFILE_VEL[profile]));
             param_set(PARAM_RADIO_YAW_MAX,    param_get(PROFILE_YAW[profile]));
-            param_set(PARAM_LQR_TORQUE_LIMIT, param_get(PROFILE_TORQUE[profile]));
+            s_trq_target = param_get(PROFILE_TORQUE[profile]); // applied via slew below
             comm_log(LOG_LEVEL_INFO, "Radio: speed profile %u", (unsigned)(profile + 1));
 
             // LED flash: green=slow, yellow=medium, red=fast
@@ -524,6 +608,22 @@ static void radio_update() {
                 {{72,  60, 15}, {76,  60, 15}, {79, 120, 0}}, // P3: C5→E5→G5
             };
             g_buzzer.play(PROFILE_MELODIES[profile], profile + 1, 150);
+        }
+
+        // Slew PARAM_LQR_TORQUE_LIMIT toward the profile target at 5 N·m/s.
+        // Upward steps apply immediately (safe); downward steps are ramped to
+        // avoid destabilising the balancer mid-run.
+        if (s_trq_target >= 0.0f) {
+            static constexpr float TRQ_SLEW_STEP = 5.0f * 0.002f; // 5 N·m/s @ 500 Hz
+            float cur = param_get(PARAM_LQR_TORQUE_LIMIT);
+            if (s_trq_target >= cur) {
+                param_set(PARAM_LQR_TORQUE_LIMIT, s_trq_target);
+                s_trq_target = -1.0f;
+            } else {
+                float next = cur - TRQ_SLEW_STEP;
+                if (next <= s_trq_target) { next = s_trq_target; s_trq_target = -1.0f; }
+                param_set(PARAM_LQR_TORQUE_LIMIT, next);
+            }
         }
 
         // CH7: pitch trim hook — reads knob, writes param; LQR wiring deferred (see control_loop.cpp TODO)
@@ -573,11 +673,20 @@ void loop() {
     update_led();
     update_buzzer();
 
+    if (sd_logger_is_active()) {
+        static LogRecord rec;
+        fill_telemetry(rec.telem);
+        rec.t_micros = micros();
+        sd_logger_write(&rec);
+    }
+    sd_logger_service();            // 1 sector/tick + auto-stop
+    sd_logger_service_transfer();   // paced chunk streaming during a GET
+
     // Send telemetry at 50 Hz (every 10th tick of the 500 Hz loop)
     static uint8_t telem_div = 0;
     if (++telem_div >= 10) {
         telem_div = 0;
-        wheel_motors_request_vbus();
+        if (param_get(PARAM_WHEEL_ENABLE) >= 0.5f) wheel_motors_request_vbus();
         send_telemetry();
     }
 

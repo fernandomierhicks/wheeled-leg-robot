@@ -13,7 +13,17 @@ void RgbLed::begin() {
 
 // --------------------------------------------------------------------------
 
+void RgbLed::set_enabled(bool en) {
+    _enabled = en;
+    if (!_enabled) {
+        _mode = Mode::SOLID;
+        _done = true;
+        _write(0, 0, 0);
+    }
+}
+
 void RgbLed::solid(uint8_t r, uint8_t g, uint8_t b) {
+    if (!_enabled) return;
     _r = r; _g = g; _b = b;
     _mode = Mode::SOLID;
     _done = true;
@@ -24,6 +34,7 @@ void RgbLed::off() { solid(0, 0, 0); }
 
 void RgbLed::blink(uint8_t r, uint8_t g, uint8_t b,
                    uint32_t on_ms, uint32_t off_ms) {
+    if (!_enabled) return;
     _r = r; _g = g; _b = b;
     _on_ms  = on_ms;
     _off_ms = off_ms;
@@ -33,6 +44,7 @@ void RgbLed::blink(uint8_t r, uint8_t g, uint8_t b,
 }
 
 void RgbLed::pulse(uint8_t r, uint8_t g, uint8_t b, uint32_t period_ms) {
+    if (!_enabled) return;
     _r = r; _g = g; _b = b;
     _period_ms = period_ms;
     _mode = Mode::PULSE;
@@ -41,6 +53,7 @@ void RgbLed::pulse(uint8_t r, uint8_t g, uint8_t b, uint32_t period_ms) {
 }
 
 void RgbLed::fade_to(uint8_t r, uint8_t g, uint8_t b, uint32_t duration_ms) {
+    if (!_enabled) return;
     _from_r = _r; _from_g = _g; _from_b = _b;
     _r = r; _g = g; _b = b;
     _duration_ms = duration_ms;
@@ -51,6 +64,7 @@ void RgbLed::fade_to(uint8_t r, uint8_t g, uint8_t b, uint32_t duration_ms) {
 
 void RgbLed::flash_then_pulse(uint8_t r, uint8_t g, uint8_t b,
                                uint32_t flash_ms, uint32_t period_ms) {
+    if (!_enabled) return;
     _r = r; _g = g; _b = b;
     _duration_ms = flash_ms;
     _period_ms   = period_ms;

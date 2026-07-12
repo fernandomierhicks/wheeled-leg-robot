@@ -21,20 +21,22 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen
 
-from theme import APP_STYLE, BORDER, TEXT, DIM, GREEN, ORANGE, RED, BLUE, YELLOW, WHITE
-from robot_log_widget import RobotLogWidget
-from flash_monitor import FlashMonitorTab
-from hip_motors import HipMotorsTab
-from imu_tab import ImuTab, ImuMiniWidget
-from params_tab import ParamsTab
-from raw_data_tab import RawDataTab
-from robot_visualizer_tab import RobotVisualizerTab
-from radio_tab import RadioTab
-from wheel_motors import WheelMotorsTab
-from controllers_tab import ControllersTab
-from telemetry_bus import TelemetryBus
-from source_manager import SourceManager, TRANSPORT_LABEL
-from comm_commands import send_set_mode, send_reboot, send_soft_clear, STATE_STARTUP, STATE_STANDBY, STATE_ESTOP
+from tabs.theme import APP_STYLE, BORDER, TEXT, DIM, GREEN, ORANGE, RED, BLUE, YELLOW, WHITE
+from tabs.robot_log_widget import RobotLogWidget
+from tabs.flash_monitor import FlashMonitorTab
+from tabs.hip_motors import HipMotorsTab
+from tabs.imu_tab import ImuTab, ImuMiniWidget
+from tabs.params_tab import ParamsTab
+from tabs.raw_data_tab import RawDataTab
+from tabs.robot_visualizer_tab import RobotVisualizerTab
+from tabs.radio_tab import RadioTab
+from tabs.wheel_motors import WheelMotorsTab
+from tabs.controllers_tab import ControllersTab
+from tabs.log_playback import LogsTab, LogPlaybackController
+from tabs.log_transfer import LogTransferManager
+from tabs.telemetry_bus import TelemetryBus
+from tabs.source_manager import SourceManager, TRANSPORT_LABEL
+from tabs.comm_commands import send_set_mode, send_reboot, send_soft_clear, STATE_STARTUP, STATE_STANDBY, STATE_ESTOP
 
 _BG = "#0b0b18"
 
@@ -408,6 +410,96 @@ def _vsep() -> QFrame:
     f.setStyleSheet(f"color: {BORDER};")
     return f
 
+
+class LogMiniControls(QWidget):
+    """Compact SD-logging + playback controls for the status bar — start/stop
+    a log or play/pause an open .wlog from any tab, without switching to
+    the Logs tab. Both drive the same LogTransferManager/LogPlaybackController
+    singletons the Logs tab uses, so state always stays in sync."""
+
+    def __init__(self):
+        super().__init__()
+        self._xfer = LogTransferManager.instance()
+        self._pb   = LogPlaybackController.instance()
+
+        self._rec_lbl = QLabel("● REC")
+        self._rec_lbl.setStyleSheet(f"color: {DIM}; font-weight: bold; font-size: 12px;")
+        self._rec_lbl.setToolTip("Lit while an SD log is actively recording")
+
+        self._btn_log = QPushButton()
+        self._btn_log.setFixedWidth(64)
+        self._btn_log.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_log.clicked.connect(self._on_log_clicked)
+        self._style_log_button(False)
+
+        self._btn_play = QPushButton("▶")
+        self._btn_play.setFixedWidth(26)
+        self._btn_play.setEnabled(False)
+        self._btn_play.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_play.setToolTip("Open a .wlog in the Logs tab to enable playback")
+        self._btn_play.clicked.connect(self._pb.toggle)
+        self._btn_play.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{TEXT};border:1px solid {BORDER};"
+            f"border-radius:3px;padding:2px}}"
+            f"QPushButton:disabled{{color:{DIM};border:1px solid {BORDER}}}"
+            f"QPushButton:hover{{background:{BORDER}}}"
+        )
+
+        self._pb_lbl = QLabel("")
+        self._pb_lbl.setStyleSheet(f"color: {DIM}; font-size: 11px; font-family: Consolas;")
+        self._pb_lbl.setMaximumWidth(140)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(4, 0, 4, 0)
+        lay.setSpacing(6)
+        lay.addWidget(self._rec_lbl)
+        lay.addWidget(self._btn_log)
+        lay.addWidget(self._btn_play)
+        lay.addWidget(self._pb_lbl)
+
+        self._xfer.logging_state_changed.connect(self._on_logging_state)
+        self._pb.file_opened.connect(self._on_file_opened)
+        self._pb.playing_changed.connect(self._on_playing_changed)
+        self._pb.position_changed.connect(self._on_position_changed)
+
+    def _style_log_button(self, active: bool):
+        color = RED if active else GREEN
+        self._btn_log.setText("■ Stop" if active else "● Log")
+        self._btn_log.setToolTip(
+            "Stop the active SD log" if active else
+            "Start logging until Stop is clicked (use the Logs tab for a timed duration)"
+        )
+        self._btn_log.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{color};border:1px solid {color};"
+            f"border-radius:3px;padding:2px 6px;font-size:11px}}"
+            f"QPushButton:hover{{background:{BORDER}}}"
+        )
+
+    def _on_log_clicked(self):
+        if self._xfer.is_logging():
+            self._xfer.stop_logging()
+        else:
+            self._xfer.start_logging(0)
+
+    def _on_logging_state(self, active: bool):
+        self._style_log_button(active)
+        self._rec_lbl.setStyleSheet(
+            f"color: {RED if active else DIM}; font-weight: bold; font-size: 12px;"
+        )
+
+    def _on_file_opened(self, path: str, count: int, sample_rate_hz: int):
+        from pathlib import Path
+        self._btn_play.setEnabled(True)
+        self._btn_play.setToolTip("Play/pause the open .wlog")
+        self._pb_lbl.setText(Path(path).name)
+
+    def _on_playing_changed(self, playing: bool):
+        self._btn_play.setText("⏸" if playing else "▶")
+
+    def _on_position_changed(self, idx: int, total: int):
+        self._pb_lbl.setToolTip(f"{idx} / {total}")
+
+
 class StatusBar:
     def __init__(self, sb):
         self._source = QPushButton("● —")
@@ -482,7 +574,11 @@ class StatusBar:
         )
         self._mismatch_lbl.setVisible(False)
 
+        self._log_controls = LogMiniControls()
+
         sb.addPermanentWidget(self._mismatch_lbl)
+        sb.addPermanentWidget(_vsep())
+        sb.addPermanentWidget(self._log_controls)
         sb.addPermanentWidget(_vsep())
         sb.addPermanentWidget(self._btn_estop)
         sb.addPermanentWidget(_vsep())
@@ -532,7 +628,7 @@ class StatusBar:
             send_reboot()
 
     def _on_source_clicked(self):
-        from source_manager import SourceManager, PRIORITY
+        from tabs.source_manager import SourceManager, PRIORITY
         sm = SourceManager.instance()
         menu = QMenu()
         menu.setStyleSheet(
@@ -565,7 +661,7 @@ class StatusBar:
             sm.set_override(chosen.data())
 
     def set_source(self, src: str):
-        from source_manager import SourceManager
+        from tabs.source_manager import SourceManager
         sm = SourceManager.instance()
         color = {
             "TEENSY": BLUE,
@@ -693,7 +789,7 @@ class MainWindow(QMainWindow):
         sm = SourceManager.instance()
         sm.source_changed.connect(self._on_source_changed)
 
-        from wifi_transport import WifiTransport
+        from tabs.wifi_transport import WifiTransport
         WifiTransport.instance().start()
 
         tabs = QTabWidget()
@@ -706,23 +802,38 @@ class MainWindow(QMainWindow):
         tabs.addTab(WheelMotorsTab(),     "Wheel Motors")
         tabs.addTab(ControllersTab(),     "Controllers")
         tabs.addTab(RadioTab(),           "Radio")
-        tabs.addTab(FlashMonitorTab(),    "Flash & Monitor")
-        self._flash_tab_idx = tabs.count() - 1
+        tabs.addTab(LogsTab(),            "Logs")
+        self._flash_tab_idx = tabs.addTab(FlashMonitorTab(), "Flash & Monitor")
 
         self._log_pane = RobotLogWidget()
         self._log_pane.setContentsMargins(8, 2, 8, 6)
 
-        central = QWidget()
+        # QFrame (not QWidget) so a thick border can be toggled reliably via
+        # QSS as the obvious "you are looking at replayed data" indicator —
+        # top-level window chrome borders are OS-dependent and unreliable.
+        central = QFrame()
+        central.setObjectName("central")
+        self._central_style_live = f"QFrame#central {{ background: {_BG}; border: 3px solid transparent; }}"
+        self._central_style_playback = f"QFrame#central {{ background: {_BG}; border: 3px solid {ORANGE}; }}"
+        central.setStyleSheet(self._central_style_live)
         central_lay = QVBoxLayout(central)
         central_lay.setContentsMargins(0, 0, 0, 0)
         central_lay.setSpacing(0)
         central_lay.addWidget(tabs)
         central_lay.addWidget(self._log_pane)
         self.setCentralWidget(central)
+        self._central = central
 
         tabs.currentChanged.connect(self._on_tab_changed)
 
+        self._base_title = self.windowTitle()
+        TelemetryBus.instance().playback_state_changed.connect(self._on_playback_state)
+
         self._on_source_changed(sm.active)
+
+    def _on_playback_state(self, active: bool):
+        self._central.setStyleSheet(self._central_style_playback if active else self._central_style_live)
+        self.setWindowTitle(f"[PLAYBACK] {self._base_title}" if active else self._base_title)
 
     def _on_tab_changed(self, idx: int):
         self._log_pane.setVisible(idx != self._flash_tab_idx)

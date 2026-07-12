@@ -11,7 +11,17 @@ void Buzzer::begin() {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+void Buzzer::set_enabled(bool en) {
+    _enabled = en;
+    if (!_enabled) {
+        _silence();
+        _notes = nullptr;
+        _done  = true;
+    }
+}
+
 void Buzzer::tone(uint16_t freq_hz, uint8_t volume, uint32_t duration_ms) {
+    if (!_enabled) return;
     _notes          = nullptr;
     _tone_start     = millis();
     _tone_duration  = duration_ms;
@@ -25,6 +35,7 @@ void Buzzer::midi(uint8_t note, uint8_t volume, uint32_t duration_ms) {
 }
 
 void Buzzer::play(const BuzzerNote* notes, uint8_t count, uint8_t volume, bool loop) {
+    if (!_enabled) return;
     if (!notes || count == 0) return;
     _notes       = notes;
     _count       = count;

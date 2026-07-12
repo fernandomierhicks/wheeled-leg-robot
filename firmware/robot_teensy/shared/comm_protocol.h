@@ -31,6 +31,8 @@
 #define COMM_TYPE_TOF          0x07  // ESP32→Teensy: raw ToF distances (TofPayload)
 #define COMM_TYPE_TELEM_A      0x10  // first 118 bytes of TelemetryPayload (frame = 128 bytes)
 #define COMM_TYPE_TELEM_B      0x11  // next  120 bytes of TelemetryPayload (frame = 130 bytes)
+#define COMM_TYPE_LOG_INFO     0x12  // Teensy→PC: SD-log directory / transfer metadata (LogInfoPayload)
+#define COMM_TYPE_LOG_DATA     0x13  // Teensy→PC: SD-log file chunk (LogDataHeader + raw bytes)
 
 // ── Calibration event sub-types ───────────────────────────────────────────────
 #define CALIB_EVENT_PAYLOAD_V1   1
@@ -261,6 +263,69 @@ static_assert(sizeof(TelemetryPayload) == 235,
 static_assert(TELEM_A_LEN + TELEM_B_LEN == 235, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
 #endif
 
+// ── High-datarate SD log (.wlog) ──────────────────────────────────────────────
+//
+// The Teensy logs one LogRecord per 500 Hz control tick to a preallocated .wlog
+// file on the built-in microSD. A LogRecord WRAPS the unchanged TelemetryPayload
+// (so the live 50 Hz wire format is untouched) and prepends a micros() timestamp.
+// The PC reads t_micros, then decodes the embedded 235-byte telem blob with the
+// SAME split-telemetry decoder used for live data. See software/gui/log_playback.py.
+//
+#define WLOG_FORMAT_V1  1
+#define WLOG_SAMPLE_HZ  500      // control/log tick rate [Hz]
+#define LOG_CHUNK_DATA  480      // max file bytes per COMM_TYPE_LOG_DATA frame
+
+typedef struct __attribute__((packed)) {
+    char     magic[8];         // "WLRLOG\0" (7 used + 1 pad)
+    uint8_t  format_version;   // WLOG_FORMAT_V1
+    uint8_t  telem_version;    // == TELEM_VERSION at capture time (decode key)
+    uint16_t record_size;      // == sizeof(LogRecord)
+    uint16_t sample_rate_hz;   // WLOG_SAMPLE_HZ
+    uint32_t start_millis;     // millis() at sd_logger_start()
+    uint8_t  reserved[14];
+} WlogHeader;                  // 32 bytes — file header
+
+typedef struct __attribute__((packed)) {
+    uint32_t         t_micros; // micros() at capture — sub-ms inter-tick timing
+    TelemetryPayload telem;    // the exact 235-byte struct, TELEM_VERSION 8
+} LogRecord;                   // 239 bytes — one per control tick
+
+// ── Payload: COMM_TYPE_LOG_INFO (Teensy→PC) ──────────────────────────────────
+#define LOG_INFO_PAYLOAD_V1  1
+#define LOG_INFO_ENTRY       0x01  // one directory entry (reply to LIST): file_index, file_size
+#define LOG_INFO_LIST_END    0x02  // end of directory listing
+#define LOG_INFO_XFER_BEGIN  0x03  // start of a GET: file_index, file_size, total_chunks
+#define LOG_INFO_XFER_END    0x04  // end of a GET: file_index, total_chunks, crc32
+#define LOG_INFO_STATUS      0x05  // START/STOP/DELETE ack: file_index, status (0=ok)
+
+typedef struct __attribute__((packed)) {
+    uint8_t  info_type;    // LOG_INFO_*
+    uint16_t file_index;   // LOGxxxx index (0xFFFF = n/a)
+    uint32_t file_size;    // bytes (ENTRY / XFER_BEGIN)
+    uint32_t total_chunks; // XFER_BEGIN / XFER_END
+    uint32_t crc32;        // XFER_END — CRC32 of the whole file
+    uint8_t  status;       // STATUS: 0=ok, non-zero=error code
+} LogInfoPayload;          // 16 bytes
+
+// ── Payload: COMM_TYPE_LOG_DATA (Teensy→PC) ──────────────────────────────────
+// Frame payload = LogDataHeader (8 B) + data_len raw file bytes (≤ LOG_CHUNK_DATA).
+#define LOG_DATA_PAYLOAD_V1  1
+typedef struct __attribute__((packed)) {
+    uint16_t file_index;
+    uint32_t chunk_index;  // 0-based; file byte offset = chunk_index * LOG_CHUNK_DATA
+    uint16_t data_len;     // raw file bytes following this header (≤ LOG_CHUNK_DATA)
+} LogDataHeader;           // 8 bytes
+
+#ifdef __cplusplus
+static_assert(sizeof(WlogHeader) == 32, "WlogHeader must be 32 bytes");
+static_assert(sizeof(LogRecord) == 239, "LogRecord must be sizeof(uint32)+sizeof(TelemetryPayload)");
+static_assert(sizeof(LogInfoPayload) == 16, "LogInfoPayload must be 16 bytes");
+static_assert(sizeof(LogDataHeader) == 8, "LogDataHeader must be 8 bytes");
+// LOG_CHUNK_DATA + sizeof(LogDataHeader) <= COMM_MAX_PAYLOAD is checked in CommLink.h,
+// since COMM_MAX_PAYLOAD is not yet defined at this point when comm_protocol.h is
+// included directly (without CommLink.h first, as several .cpp files do).
+#endif
+
 // ── Health flag bits (TelemetryPayload::health_flags) ────────────────────────
 #define HEALTH_HIP_L_OK          (1u << 0)  // hm_L.ok — CAN feedback fresh
 #define HEALTH_HIP_R_OK          (1u << 1)  // hm_R.ok
@@ -295,6 +360,14 @@ typedef struct __attribute__((packed)) {
 #define WHEEL_SUB_CLEAR_ERRORS 0x03  // no payload
 #define CMD_ID_PARAM_SET  0x10  // payload: uint16_t param_id, float value  (6 bytes after cmd_id)
 #define CMD_ID_PARAM_GET  0x11  // payload: uint16_t param_id  (0xFFFF = dump all)
+#define CMD_ID_LOG        0x12  // payload: uint8_t sub_cmd [, args] — high-datarate SD logging
+
+// Log sub-commands (CMD_ID_LOG payload byte 1)
+#define LOG_SUB_START     0x01  // + uint32_t duration_ms (0 = log until STOP)
+#define LOG_SUB_STOP      0x02  // no args — close the active log file
+#define LOG_SUB_LIST      0x03  // no args — reply: one LOG_INFO ENTRY per file, then LIST_END
+#define LOG_SUB_GET       0x04  // + uint16_t file_index, uint32_t start_chunk — stream LOG_DATA
+#define LOG_SUB_DELETE    0x05  // + uint16_t file_index — erase one .wlog file
 
 // ── Payload: param report (COMM_TYPE_PARAM_REPORT) ───────────────────────────
 #define PARAM_REPORT_PAYLOAD_V1  1

@@ -5539,3 +5539,40 @@
 2026-05-07 19:50:43 [INFO] Control: axis1 -> idle
 2026-05-07 19:50:45 [INFO] Control: axis1 -> closed loop (mode=3, seeded input_pos=1.5782 turns)
 2026-05-07 19:50:55 [INFO] Disconnected
+2026-06-16 23:01:21 [INFO] No stale ODrive processes found.
+2026-06-16 23:01:22 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-06-19 21:52:16 [INFO] No stale ODrive processes found.
+2026-06-19 21:52:16 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-06-19 21:53:30 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-06-19 21:53:30 [INFO] Setup: axis0 config read OK
+2026-06-19 21:53:30 [INFO] Control: axis0 gains read OK
+2026-06-19 21:53:30 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-06-19 21:53:30 [INFO] GUI: connect success
+2026-06-19 21:53:58 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-06-19 21:53:59 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-06-19 21:53:59 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-06-19 21:53:59 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-06-19 21:54:00 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-06-19 21:54:00 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-06-19 21:54:00 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-06-19 21:54:01 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-06-19 21:54:01 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-06-19 21:54:08 [INFO] No stale ODrive processes found.
+2026-06-19 21:54:08 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-06-19 21:54:12 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-06-19 21:54:12 [INFO] Setup: axis0 config read OK
+2026-06-19 21:54:12 [INFO] Control: axis0 gains read OK
+2026-06-19 21:54:12 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-06-19 21:54:12 [INFO] GUI: connect success
+2026-06-19 21:54:16 [INFO] EXEC clear_errors(() {}) -> None
+2026-06-19 21:54:16 [INFO] Control: errors cleared + watchdog fed
+2026-06-19 21:54:22 [INFO] Control: axis0 -> closed loop (mode=2, seeded input_pos=-0.1874 turns)
+2026-06-19 21:54:30 [INFO] Control: axis0 -> idle
+2026-06-19 21:54:30 [INFO] Setup: axis1 config read OK
+2026-06-19 21:54:30 [INFO] Control: axis1 gains read OK
+2026-06-19 21:54:30 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-06-19 21:54:35 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=0.3631 turns)
+2026-06-19 21:54:38 [INFO] Control: axis1 -> idle
+2026-06-19 21:54:42 [INFO] EXEC clear_errors(() {}) -> None
+2026-06-19 21:54:42 [INFO] Control: errors cleared + watchdog fed
+2026-06-19 21:54:44 [INFO] Disconnected

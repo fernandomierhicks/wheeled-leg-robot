@@ -5,19 +5,10 @@
 
 ---Fernandos note dont change below
 
-Setpoint in arc widgets in main gui shuold be visible above current value. maybe as a red thinner line?
-Remove dashboard tab
-
-Screen redo.md
-
-Show IMU frame in visualizer. 
-
- 
 
 Verify all controllers per Handoff.MD
 Add screen personolity selector to radio. 
 Parameter or menu options via remote?
-
 SD card storage for high-res telemetry logging, downloadable to PC for plotting
 
 ------------------------------------------------------firmware
@@ -78,4 +69,4 @@ fernandomierhicks1	10%	    Monday 12pm
 fernandomierhicks2	11%	    Monday 12PM
 
 
-One long OPUS task, 7minutes consumes 25% 5-hour limit and 3% weekly limit. 
+One long OPUS task ( like planning for high datarate logging. ), 7minutes consumes 25% 5-hour limit and 3% weekly limit. 

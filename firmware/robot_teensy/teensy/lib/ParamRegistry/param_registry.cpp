@@ -15,6 +15,15 @@ static const uint8_t  VERSION    = 1;
 // clang-format off
 static Param g_params[] = {
     // id                        group          name                     value     min       max     flags                   on_change
+    // GROUP_SYSTEM — peripheral enable flags (bench-test without full hardware)
+    // NOTE: defaulted to 0 (disabled) for now — bench setup has only Teensy+ESP32
+    // connected. Flip to 1.0 once the full robot hardware is back in the loop.
+    {PARAM_IMU_ENABLE,    GROUP_SYSTEM, "imu_enable",    0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_AK45_ENABLE,   GROUP_SYSTEM, "ak45_enable",   0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_WHEEL_ENABLE,  GROUP_SYSTEM, "wheel_enable",  0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_BUZZER_ENABLE, GROUP_SYSTEM, "buzzer_enable", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_LED_ENABLE,    GROUP_SYSTEM, "led_enable",    0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+
     {PARAM_ESTOP_HIP_DISABLE, GROUP_HIP,   "estop_hip_disable",  1.0f,      0.0f,     1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_SEEK_SPEED,  GROUP_CALIB, "calib_seek_speed",  0.17453f,  0.01f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_KP,          GROUP_CALIB, "calib_kp",          16.0f,     0.0f,   500.0f,  PARAM_FLAG_PERSISTENT, nullptr},
