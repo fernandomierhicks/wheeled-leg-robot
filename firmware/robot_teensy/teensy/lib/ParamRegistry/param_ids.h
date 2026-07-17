@@ -38,6 +38,15 @@
 #define PARAM_WHEEL_L_ENABLE  0x0007  // left ODrive wheel motor present
 #define PARAM_WHEEL_R_ENABLE  0x0008  // right ODrive wheel motor present
 
+// Hardware watchdog (WDOG1) — auto-reboots the MCU if the main loop stops
+// petting it (see main.cpp watchdog_enable()/watchdog_pet()). Guards against
+// a stuck driver call (e.g. BNO08x sh2 getProdIds has no internal timeout)
+// hanging the control loop with no crash and no recovery. Takes effect at
+// boot; changing at runtime requires CMD_ID_REBOOT. Note: WDOG1's enable bit
+// is write-once in hardware — once armed it cannot be turned off in software
+// until the next reset, regardless of this param.
+#define PARAM_WATCHDOG_ENABLE 0x0009  // 1 = enable hardware watchdog; default 0 (disabled)
+
 // GROUP_HIP — hip motor behaviour
 #define PARAM_ESTOP_HIP_DISABLE   0x0200  // 1=exit MIT on ESTOP entry and re-enter on reset, 0=leave MIT running
 // TODO: add PARAM_HIP_RUNNING_KP (0x0201), PARAM_HIP_RUNNING_KD (0x0202), PARAM_HIP_RUNNING_TFF (0x0203)

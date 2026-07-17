@@ -17,6 +17,9 @@
 #define TELEM_UDP_PORT    5005
 #define CMD_TCP_PORT      5006
 
+// --- ToF laser distance sensors (VL53L1X x4) ---
+#define LASERS_ENABLED    0     // set to 1 once VL53L1X sensors are wired up
+
 // --- Display personality ---
 // 0 = PERS_ENGINEERING (telemetry panels), 1 = PERS_FACE (animated eyes)
 // Change this to switch the power-on default; later the Teensy can override live.

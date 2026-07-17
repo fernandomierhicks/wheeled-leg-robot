@@ -8,16 +8,17 @@ collapsed).  Values are editable; Enter or the Set button sends
 CMD_ID_PARAM_SET and the cell flashes green on echo-back.
 """
 
+import json
 import struct
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QDoubleValidator
 from PyQt6.QtWidgets import (
-    QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 
-from .comm_commands import send_param_get_all, send_param_set
+from .comm_commands import send_param_get_all, send_param_reset_defaults, send_param_set
 from .telemetry_bus import TelemetryBus
 from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
 
@@ -125,6 +126,7 @@ class _ParamRow(QWidget):
                  min_val: float, max_val: float, flags: int):
         super().__init__()
         self._id    = param_id
+        self._name  = name
         self._flags = flags
         readonly    = bool(flags & _FLAG_READONLY)
 
@@ -186,6 +188,18 @@ class _ParamRow(QWidget):
         self._flash_timer.stop()
         self._edit.setStyleSheet(_EDIT_STYLE_OK)
         self._flash_timer.start(700)
+
+    def is_readonly(self) -> bool:
+        return bool(self._flags & _FLAG_READONLY)
+
+    def current_value(self) -> float:
+        try:
+            return float(self._edit.text())
+        except ValueError:
+            return 0.0
+
+    def export_entry(self) -> dict:
+        return {"name": self._name, "value": self.current_value()}
 
     def _send(self):
         try:
@@ -314,6 +328,38 @@ class ParamsTab(QWidget):
         btn_refresh.clicked.connect(self._request_all)
         toolbar.addWidget(btn_refresh)
 
+        toolbar.addSpacing(12)
+
+        _neutral_btn_style = (
+            f"QPushButton{{background:{SURFACE};color:{TEXT};"
+            f"border:1px solid {BORDER};border-radius:3px;padding:3px 8px}}"
+            f"QPushButton:hover{{background:{BORDER}}}"
+        )
+
+        btn_export = QPushButton("Export…")
+        btn_export.setFixedWidth(72)
+        btn_export.setStyleSheet(_neutral_btn_style)
+        btn_export.clicked.connect(self._on_export)
+        toolbar.addWidget(btn_export)
+
+        btn_import = QPushButton("Import…")
+        btn_import.setFixedWidth(72)
+        btn_import.setStyleSheet(_neutral_btn_style)
+        btn_import.clicked.connect(self._on_import)
+        toolbar.addWidget(btn_import)
+
+        toolbar.addSpacing(12)
+
+        btn_reset = QPushButton("Reset to Defaults")
+        btn_reset.setFixedWidth(120)
+        btn_reset.setStyleSheet(
+            f"QPushButton{{background:{SURFACE};color:{RED};"
+            f"border:1px solid {RED};border-radius:3px;padding:3px 8px}}"
+            f"QPushButton:hover{{background:{RED};color:{BG}}}"
+        )
+        btn_reset.clicked.connect(self._on_reset_defaults)
+        toolbar.addWidget(btn_reset)
+
         toolbar.addSpacing(8)
 
         self._lbl_status = QLabel("No params loaded — connect and click Refresh")
@@ -368,6 +414,90 @@ class ParamsTab(QWidget):
         self._requested = True
         self._lbl_status.setText("Requesting…")
         self._lbl_status.setStyleSheet(f"color: {DIM}; font-size: 11px;")
+
+    def _on_reset_defaults(self):
+        reply = QMessageBox.question(
+            self, "Reset All Parameters",
+            "Reset ALL parameters to firmware defaults?\n\n"
+            "This overwrites every editable value — including tuned gains and "
+            "calibration-adjacent settings — and cannot be undone. Export first "
+            "if you want to keep the current configuration.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        send_param_reset_defaults()
+        self._lbl_status.setText("Reset to defaults requested…")
+        self._lbl_status.setStyleSheet(f"color: {ORANGE}; font-size: 11px;")
+
+    def _on_export(self):
+        if not self._rows:
+            QMessageBox.information(self, "Export Parameters",
+                                     "No params loaded — connect and click Refresh first.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Export Parameters", "params.json",
+                                               "JSON Files (*.json)")
+        if not path:
+            return
+        data = {f"0x{pid:04X}": row.export_entry() for pid, row in sorted(self._rows.items())}
+        try:
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except OSError as e:
+            QMessageBox.warning(self, "Export Parameters", f"Failed to write file:\n{e}")
+            return
+        self._lbl_status.setText(f"Exported {len(data)} params to {path}")
+        self._lbl_status.setStyleSheet(f"color: {TEXT}; font-size: 11px;")
+
+    def _on_import(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Import Parameters", "",
+                                               "JSON Files (*.json)")
+        if not path:
+            return
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            QMessageBox.warning(self, "Import Parameters", f"Failed to read file:\n{e}")
+            return
+
+        to_apply: list[tuple[int, float]] = []
+        skipped = 0
+        for key, entry in data.items():
+            try:
+                pid = int(key, 16) if isinstance(key, str) and key.lower().startswith("0x") else int(key)
+                value = float(entry["value"]) if isinstance(entry, dict) else float(entry)
+            except (KeyError, TypeError, ValueError):
+                skipped += 1
+                continue
+            row = self._rows.get(pid)
+            if row is None or row.is_readonly():
+                skipped += 1
+                continue
+            to_apply.append((pid, value))
+
+        if not to_apply:
+            QMessageBox.information(self, "Import Parameters",
+                                     "No applicable params found in file (unknown IDs or all read-only).")
+            return
+
+        msg = f"Apply {len(to_apply)} param(s) from:\n{path}"
+        if skipped:
+            msg += f"\n\n{skipped} entr{'y' if skipped == 1 else 'ies'} skipped (unknown ID or read-only)."
+        reply = QMessageBox.question(
+            self, "Import Parameters", msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        for pid, value in to_apply:
+            send_param_set(pid, value)
+
+        self._lbl_status.setText(f"Imported {len(to_apply)} params from {path}")
+        self._lbl_status.setStyleSheet(f"color: {TEXT}; font-size: 11px;")
 
     def _on_packet(self, info: dict):
         ptype = info.get("ptype")

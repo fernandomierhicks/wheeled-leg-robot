@@ -3,6 +3,7 @@
 #include "hip_motors.h"
 #include "robot_state.h"
 #include "../test_led.h"
+#include "../test_stubs.h"
 
 // Satisfy hip_motors.cpp's reference to g_state; poll() reads state == STATE_STANDBY.
 RobotState g_state = {};
@@ -89,9 +90,17 @@ void setup() {
 
 void loop() {
     static uint32_t last_send = 0;
+    static uint32_t last_poll = 0;
     uint32_t now = millis();
 
-    hip_motors_poll();
+    // Rate-limit to match the real firmware's 500 Hz control tick (see
+    // read_sensors() in main.cpp) — calling this unthrottled floods CAN2
+    // with far more frames/sec than the 1 Mbps bus can drain, which can
+    // drive the controller into a bus-off state and silently freeze hm_L/hm_R.
+    if (now - last_poll >= 2) {
+        last_poll = now;
+        hip_motors_poll();
+    }
 
     if (now - last_send >= 10) {
         last_send = now;

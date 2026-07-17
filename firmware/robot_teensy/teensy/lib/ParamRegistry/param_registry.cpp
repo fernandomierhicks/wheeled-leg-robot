@@ -1,8 +1,18 @@
 #include "param_registry.h"
+#include "comm_protocol.h"
 #include <LittleFS.h>
 
 // ── Flash filesystem ──────────────────────────────────────────────────────────
-static LittleFS_QSPI s_fs;
+// This board has no onboard QSPI NOR/NAND chip (confirmed on hardware — begin()
+// always failed), so params live in a carved-out slice of the Teensy's own
+// program flash instead. No extra hardware needed.
+// Must be >= 2 sectors — LittleFS stores its metadata as a redundant pair and
+// won't format a 1-block volume. Teensy 4.1's LittleFS_Program sector size is
+// 64 KiB (SECTOR_SIZE in the framework's LittleFS.cpp), so the minimum viable
+// size is 128 KiB; 256 KiB (4 sectors) leaves headroom and is still negligible
+// next to the 7.75 MB available.
+static LittleFS_Program s_fs;
+static const uint32_t FS_SIZE_BYTES = 256 * 1024;
 static const char*   PARAMS_FILE = "/params.bin";
 static const uint16_t MAGIC      = 0xB0B1;
 static const uint8_t  VERSION    = 1;
@@ -36,6 +46,8 @@ static Param g_params[] = {
     {PARAM_HIP_R_ENABLE,   GROUP_SYSTEM, "hip_r_enable",   1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_WHEEL_L_ENABLE, GROUP_SYSTEM, "wheel_l_enable", 1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_WHEEL_R_ENABLE, GROUP_SYSTEM, "wheel_r_enable", 1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+
+    {PARAM_WATCHDOG_ENABLE, GROUP_SYSTEM, "watchdog_enable", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
 
     {PARAM_ESTOP_HIP_DISABLE, GROUP_HIP,   "estop_hip_disable",  1.0f,      0.0f,     1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_SEEK_SPEED,  GROUP_CALIB, "calib_seek_speed",  0.17453f,  0.01f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
@@ -154,6 +166,12 @@ static Param g_params[] = {
 
 static const uint16_t PARAM_COUNT = sizeof(g_params) / sizeof(g_params[0]);
 
+// Compile-time defaults, captured once in param_init() before load_from_flash()
+// overwrites g_params[].value — the only record of "default" once flash restore
+// or a GUI param_set() has touched a value. Sized/populated at init, not
+// statically initialized, since it must mirror g_params[] exactly.
+static float s_defaults[PARAM_COUNT];
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 static Param* find(uint16_t id) {
@@ -165,15 +183,25 @@ static Param* find(uint16_t id) {
 
 static void load_from_flash() {
     File f = s_fs.open(PARAMS_FILE, FILE_READ);
-    if (!f) return;
+    if (!f) {
+        comm_log(LOG_LEVEL_WARN, "Param flash: no params.bin (first boot, or flash unmounted)");
+        return;
+    }
 
     uint16_t magic;
     uint8_t  ver;
     uint16_t count;
-    if (f.read(&magic, 2) != 2 || magic != MAGIC) { f.close(); return; }
-    if (f.read(&ver,   1) != 1 || ver   != VERSION) { f.close(); return; }
+    if (f.read(&magic, 2) != 2 || magic != MAGIC) {
+        comm_log(LOG_LEVEL_WARN, "Param flash: bad magic in params.bin, ignoring");
+        f.close(); return;
+    }
+    if (f.read(&ver,   1) != 1 || ver   != VERSION) {
+        comm_log(LOG_LEVEL_WARN, "Param flash: version mismatch in params.bin, ignoring");
+        f.close(); return;
+    }
     if (f.read(&count, 2) != 2) { f.close(); return; }
 
+    uint16_t restored = 0;
     for (uint16_t i = 0; i < count; i++) {
         uint16_t id;
         float    val;
@@ -185,15 +213,20 @@ static void load_from_flash() {
             if (val < p->min_val) val = p->min_val;
             if (val > p->max_val) val = p->max_val;
             p->value = val;
+            restored++;
         }
     }
     f.close();
+    comm_log(LOG_LEVEL_INFO, "Param flash: restored %u/%u params", restored, count);
 }
 
 static void save_to_flash() {
     s_fs.remove(PARAMS_FILE);
     File f = s_fs.open(PARAMS_FILE, FILE_WRITE);
-    if (!f) return;
+    if (!f) {
+        comm_log(LOG_LEVEL_ERROR, "Param flash: save FAILED (could not open params.bin for write)");
+        return;
+    }
 
     // Count persistent params
     uint16_t count = 0;
@@ -211,14 +244,24 @@ static void save_to_flash() {
         f.write((uint8_t*)&g_params[i].value, 4);
     }
     f.close();
+    comm_log(LOG_LEVEL_INFO, "Param flash: saved %u params", count);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 void param_init() {
-    if (!s_fs.begin()) {
+    for (uint16_t i = 0; i < PARAM_COUNT; i++) s_defaults[i] = g_params[i].value;
+
+    bool mounted = s_fs.begin(FS_SIZE_BYTES);
+    if (!mounted) {
         s_fs.format();
-        s_fs.begin();
+        mounted = s_fs.begin(FS_SIZE_BYTES);
+    }
+    if (mounted) {
+        comm_log(LOG_LEVEL_INFO, "Param flash: mounted (%s)", s_fs.getMediaName());
+    } else {
+        comm_log(LOG_LEVEL_ERROR,
+                 "Param flash: mount FAILED — params will NOT persist across reboot");
     }
     load_from_flash();
 }
@@ -285,8 +328,14 @@ void param_save_all() {
 }
 
 void param_reset_defaults() {
-    s_fs.remove(PARAMS_FILE);
-    // Values already at compile-time defaults in g_params[] — no RAM changes needed.
+    for (uint16_t i = 0; i < PARAM_COUNT; i++) {
+        if (g_params[i].flags & PARAM_FLAG_READONLY) continue;  // matches param_set()'s own write gate
+        g_params[i].value = s_defaults[i];
+        if (g_params[i].on_change) g_params[i].on_change(g_params[i].value);
+    }
+    save_to_flash();
+    s_dirty = false;
+    comm_log(LOG_LEVEL_WARN, "Param flash: all params reset to compile-time defaults");
 }
 
 void param_force_set(uint16_t id, float val) {

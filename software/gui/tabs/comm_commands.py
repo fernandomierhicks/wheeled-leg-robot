@@ -25,6 +25,7 @@ CMD_ID_WHEEL     = 0x07
 CMD_ID_PARAM_SET = 0x10
 CMD_ID_PARAM_GET = 0x11
 CMD_ID_LOG       = 0x12
+CMD_ID_PARAM_RESET_DEFAULTS = 0x13
 
 # Log sub-commands (comm_protocol.h LOG_SUB_*)
 LOG_SUB_START  = 0x01
@@ -125,6 +126,13 @@ def send_param_get_all():
     """Send CMD_ID_PARAM_GET 0xFFFF — firmware replies with one PARAM_REPORT per param."""
     import struct
     send_frame(build_frame(struct.pack("<BH", CMD_ID_PARAM_GET, 0xFFFF)))
+
+
+def send_param_reset_defaults():
+    """Send CMD_ID_PARAM_RESET_DEFAULTS — firmware reverts every writable param to
+    its compile-time default, persists it, and replies with a full PARAM_REPORT dump."""
+    import struct
+    send_frame(build_frame(struct.pack("<B", CMD_ID_PARAM_RESET_DEFAULTS)))
 
 
 def send_wheel_set_mode(mode: int):

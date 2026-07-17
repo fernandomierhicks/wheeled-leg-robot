@@ -1,12 +1,15 @@
+import math
+import time
 from collections import deque
 
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel,
-    QScrollArea, QSplitter, QVBoxLayout, QWidget,
+    QCheckBox, QFrame, QHBoxLayout, QLabel,
+    QScrollArea, QSlider, QSplitter, QVBoxLayout, QWidget,
 )
 
+from .comm_commands import send_param_set
 from .telemetry_bus import TelemetryBus
 from .theme import BG, BORDER, BLUE, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, YELLOW
 
@@ -22,6 +25,17 @@ _HEALTH_WM_R_VEL_LIMITED = 1 << 10
 _K_PITCH      = -9.77113533
 _K_PITCH_RATE = -1.88054364
 _K_VEL        = -7.13051190e-03
+
+# Sim-pitch injection params (param_ids.h) — bench-test only, no arming
+# interlock in firmware, so this control must be disarmed before running for real.
+_PARAM_SIM_PITCH_RAD          = 0x0401
+_PARAM_ENABLE_SIM_PITCH_RAD   = 0x0420
+_PARAM_SIM_PITCH_RATE_RAD_S   = 0x0421
+_PARAM_ENABLE_SIM_PITCH_RATE  = 0x0422
+
+_SIM_PITCH_MAX_DEG   = 90.0   # matches firmware clamp on sim_pitch_rad (+-1.5708 rad)
+_SIM_PITCH_RATE_MAX  = 10.0   # matches firmware clamp on sim_pitch_rate (rad/s)
+_SIM_SLIDER_STEPS    = 900    # 0.1 deg resolution
 
 
 def _hline() -> QFrame:
@@ -109,6 +123,92 @@ def _make_plot(title: str, ylabel: str) -> pg.PlotWidget:
 
 def _buf() -> deque:
     return deque([0.0] * _BUF, maxlen=_BUF)
+
+
+class _SimPitchInjector(QWidget):
+    """Bench-test slider: drags a fake pitch into the LQR (in place of real
+    IMU feedback) and derives the matching fake pitch rate from how fast the
+    slider moves. Arms/disarms PARAM_ENABLE_SIM_PITCH_RAD/RATE — there is no
+    firmware interlock blocking RUNNING/JUMPING while armed, so this must be
+    unchecked before arming the robot for real.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._armed         = False
+        self._last_pitch_rad = 0.0
+        self._last_t         = None
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(4)
+
+        chk_row = QHBoxLayout()
+        chk_row.setSpacing(6)
+        self._chk = QCheckBox("Armed (overrides real IMU pitch)")
+        self._chk.setStyleSheet(f"color: {RED}; font-weight: bold; font-size: 11px;")
+        self._chk.toggled.connect(self._on_toggle)
+        chk_row.addWidget(self._chk)
+        chk_row.addStretch()
+        outer.addLayout(chk_row)
+
+        slider_row = QHBoxLayout()
+        slider_row.setSpacing(6)
+        self._slider = QSlider(Qt.Orientation.Horizontal)
+        self._slider.setRange(-_SIM_SLIDER_STEPS, _SIM_SLIDER_STEPS)
+        self._slider.setValue(0)
+        self._slider.setEnabled(False)
+        self._slider.valueChanged.connect(self._on_slider_changed)
+        self._slider.sliderReleased.connect(self._on_released)
+        slider_row.addWidget(self._slider, stretch=1)
+        self._lbl = QLabel("+0.0°")
+        self._lbl.setStyleSheet(
+            f"color: {ORANGE}; font-family: Consolas; font-size: 10px;"
+        )
+        self._lbl.setFixedWidth(52)
+        slider_row.addWidget(self._lbl)
+        outer.addLayout(slider_row)
+
+    def _raw_to_rad(self, raw: int) -> float:
+        return math.radians(raw / _SIM_SLIDER_STEPS * _SIM_PITCH_MAX_DEG)
+
+    def _on_toggle(self, checked: bool):
+        self._armed = checked
+        self._slider.setEnabled(checked)
+        if not checked:
+            self._slider.blockSignals(True)
+            self._slider.setValue(0)
+            self._slider.blockSignals(False)
+            self._lbl.setText("+0.0°")
+            self._last_pitch_rad = 0.0
+            self._last_t = None
+            send_param_set(_PARAM_SIM_PITCH_RAD, 0.0)
+            send_param_set(_PARAM_SIM_PITCH_RATE_RAD_S, 0.0)
+        send_param_set(_PARAM_ENABLE_SIM_PITCH_RAD, 1.0 if checked else 0.0)
+        send_param_set(_PARAM_ENABLE_SIM_PITCH_RATE, 1.0 if checked else 0.0)
+
+    def _on_slider_changed(self, raw: int):
+        if not self._armed:
+            return
+        pitch_rad = self._raw_to_rad(raw)
+        now  = time.monotonic()
+        rate = 0.0
+        if self._last_t is not None:
+            dt = now - self._last_t
+            if dt > 1e-3:
+                rate = (pitch_rad - self._last_pitch_rad) / dt
+                rate = max(-_SIM_PITCH_RATE_MAX, min(_SIM_PITCH_RATE_MAX, rate))
+        self._last_pitch_rad = pitch_rad
+        self._last_t = now
+        self._lbl.setText(f"{math.degrees(pitch_rad):+.1f}°")
+        send_param_set(_PARAM_SIM_PITCH_RAD, pitch_rad)
+        send_param_set(_PARAM_SIM_PITCH_RATE_RAD_S, rate)
+
+    def _on_released(self):
+        if not self._armed:
+            return
+        self._last_t = None  # next drag starts its rate estimate fresh
+        send_param_set(_PARAM_SIM_PITCH_RATE_RAD_S, 0.0)
 
 
 class ControllersTab(QWidget):
@@ -243,6 +343,11 @@ class ControllersTab(QWidget):
         il.setSpacing(4)
 
         il.addLayout(flags_row)
+        il.addWidget(_hline())
+
+        il.addWidget(_section_label("Sim Pitch Injection (bench only — no arming interlock)"))
+        self._sim_pitch = _SimPitchInjector()
+        il.addWidget(self._sim_pitch)
         il.addWidget(_hline())
 
         il.addWidget(_section_label("LQR Balance Controller"))

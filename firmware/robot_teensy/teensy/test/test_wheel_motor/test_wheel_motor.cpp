@@ -2,6 +2,7 @@
 #include <unity.h>
 #include "wheel_motors.h"
 #include "../test_led.h"
+#include "../test_stubs.h"
 
 void setUp(void) {}
 void tearDown(void) {}

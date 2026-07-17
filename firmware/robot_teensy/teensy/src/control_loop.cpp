@@ -71,9 +71,11 @@ void controlLoop_run() {
     g_state.wheel_vel_avg_ms = vel_avg_ms;
 
     // ── Effective pitch (real or injected) ────────────────────────────────────
+    // Written back into g_state so telemetry/GUI see exactly what the LQR sees.
     float pitch = (param_get(PARAM_ENABLE_SIM_PITCH_RAD) >= 0.5f)
                   ? param_get(PARAM_SIM_PITCH_RAD)
                   : g_state.pitch_rad;
+    g_state.pitch_rad = pitch;
 
     // ── Pitch watchdog ────────────────────────────────────────────────────────
     if (fabsf(pitch) > PITCH_WATCHDOG_RAD) {
@@ -194,6 +196,7 @@ void controlLoop_run() {
     float x1 = (param_get(PARAM_ENABLE_SIM_PITCH_RATE) >= 0.5f)
                ? param_get(PARAM_SIM_PITCH_RATE_RAD_S)
                : g_state.pitch_rate_rads;
+    g_state.pitch_rate_rads = x1;
     float x2 = vel_avg_ms - g_state.v_ref;  // zero when at commanded speed
 
     g_state.tau_sym = -(k_pitch * x0 + k_rate * x1 + K_VEL * x2);

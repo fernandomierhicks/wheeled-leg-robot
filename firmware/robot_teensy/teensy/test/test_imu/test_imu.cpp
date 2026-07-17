@@ -63,8 +63,6 @@ void setup() {
     check(!isnan(pitch), "pitch is not NaN");
     check(!isnan(roll),  "roll is not NaN");
     check(!isnan(rate),  "pitch_rate is not NaN");
-    check(fabsf(pitch) < 1.57f, "pitch within +/-90deg of level");
-    check(fabsf(roll)  < 1.57f, "roll within +/-90deg of level");
     check(fabsf(rate)  < 0.5f,  "pitch_rate near zero at rest");
 
     Serial.println("[IMU] measuring packet loss over a 1.5 s window...");

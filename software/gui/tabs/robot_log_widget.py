@@ -1,9 +1,9 @@
 from datetime import datetime
 
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QHBoxLayout, QLabel, QPlainTextEdit,
+    QApplication, QHBoxLayout, QLabel, QMenu, QPlainTextEdit,
     QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -57,9 +57,7 @@ class RobotLogWidget(QWidget):
         self._btn_warn.toggled.connect( lambda v: self._set_filter("WARN",  v))
         self._btn_error.toggled.connect(lambda v: self._set_filter("ERROR", v))
 
-        self._chk_autoscroll = QCheckBox("Auto-scroll")
-        self._chk_autoscroll.setChecked(True)
-        self._chk_autoscroll.setStyleSheet(f"color: {DIM}; font-size: 10px;")
+        self._autoscroll = True
 
         self._btn_copy = QPushButton("Copy")
         self._btn_copy.setFixedHeight(20)
@@ -76,7 +74,6 @@ class RobotLogWidget(QWidget):
         toolbar.setSpacing(6)
         toolbar.addWidget(hdr)
         toolbar.addStretch()
-        toolbar.addWidget(self._chk_autoscroll)
         toolbar.addWidget(self._btn_info)
         toolbar.addWidget(self._btn_warn)
         toolbar.addWidget(self._btn_error)
@@ -92,6 +89,8 @@ class RobotLogWidget(QWidget):
             f" font-family: Consolas; font-size: 11px;"
         )
         self._log.setFixedHeight(140)
+        self._log.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._log.customContextMenuRequested.connect(self._show_context_menu)
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -109,6 +108,26 @@ class RobotLogWidget(QWidget):
         self._btn_copy.setText("Copied!")
         QTimer.singleShot(1000, lambda: self._btn_copy.setText("Copy"))
 
+    def _show_context_menu(self, pos):
+        menu = QMenu(self._log)
+        menu.setStyleSheet(
+            f"QMenu{{background:#1a1a2e;color:{TEXT};border:1px solid {BORDER};"
+            f"padding:2px}}"
+            f"QMenu::item{{padding:4px 20px}}"
+            f"QMenu::item:selected{{background:{BORDER}}}"
+        )
+        autoscroll_action = menu.addAction("Auto-scroll")
+        autoscroll_action.setCheckable(True)
+        autoscroll_action.setChecked(self._autoscroll)
+        menu.addSeparator()
+        clear_action = menu.addAction("Clear")
+
+        chosen = menu.exec(self._log.mapToGlobal(pos))
+        if chosen == autoscroll_action:
+            self._autoscroll = not self._autoscroll
+        elif chosen == clear_action:
+            self._log.clear()
+
     def _append(self, text: str, color: str):
         ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         fmt = QTextCharFormat()
@@ -117,7 +136,7 @@ class RobotLogWidget(QWidget):
         cur.movePosition(QTextCursor.MoveOperation.End)
         cur.setCharFormat(fmt)
         cur.insertText(f"[{ts}] {text}\n")
-        if self._chk_autoscroll.isChecked():
+        if self._autoscroll:
             self._log.verticalScrollBar().setValue(self._log.verticalScrollBar().maximum())
 
     def _on_packet(self, info: dict):

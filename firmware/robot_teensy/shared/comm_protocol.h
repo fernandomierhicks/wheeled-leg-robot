@@ -367,6 +367,8 @@ typedef struct __attribute__((packed)) {
 #define CMD_ID_PARAM_SET  0x10  // payload: uint16_t param_id, float value  (6 bytes after cmd_id)
 #define CMD_ID_PARAM_GET  0x11  // payload: uint16_t param_id  (0xFFFF = dump all)
 #define CMD_ID_LOG        0x12  // payload: uint8_t sub_cmd [, args] — high-datarate SD logging
+#define CMD_ID_PARAM_RESET_DEFAULTS  0x13  // payload: none — reverts all writable params to
+                                            // compile-time defaults, replies with a full PARAM_REPORT dump
 
 // Log sub-commands (CMD_ID_LOG payload byte 1)
 #define LOG_SUB_START     0x01  // + uint32_t duration_ms (0 = log until STOP)

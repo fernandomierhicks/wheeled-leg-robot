@@ -707,19 +707,21 @@ static const char* mode_name(uint8_t state) {
     }
 }
 
+// MIRROR: _FAULT_DESCRIPTIONS in software/gui/tabs/telem_format.py — keep wording in
+// sync whenever a fault is added/changed (ASCII only, no UTF-8, TFT font can't render it).
 static const char* fault_description(uint8_t code) {
     switch (code) {
         case FAULT_NONE:               return "";
-        case FAULT_IMU_ERROR:          return "IMU error during startup";
-        case FAULT_HIP_INIT_TIMEOUT:   return "Hip CAN timeout at boot";
-        case FAULT_HIP_FEEDBACK_LOST:  return "Hip feedback lost";
-        case FAULT_HIP_LARGE_POS_CMD:  return "Hip position jump too large";
-        case FAULT_CALIBRATION_TIMEOUT:return "Hardstop not found";
-        case FAULT_HUMAN_ESTOP:        return "User ESTOP";
-        case FAULT_PITCH_WATCHDOG:     return "Pitch watchdog ESTOP";
-        case FAULT_WHEEL_RUNAWAY:      return "Wheel runaway ESTOP";
-        case FAULT_IMU_LOST:           return "IMU lost in flight";
-        case FAULT_WHEEL_FEEDBACK_LOST:return "Wheel feedback lost";
+        case FAULT_IMU_ERROR:          return "IMU reported ERROR during startup";
+        case FAULT_HIP_INIT_TIMEOUT:   return "No CAN reply from hip motors within 2 s of boot";
+        case FAULT_HIP_FEEDBACK_LOST:  return "Hip CAN feedback timed out during operation (> 20 ms)";
+        case FAULT_HIP_LARGE_POS_CMD:  return "Commanded hip position jump exceeded MAX_HIP_DELTA_RAD";
+        case FAULT_CALIBRATION_TIMEOUT:return "Hardstop not found within CALIB_SAFETY_BOUND_RAD";
+        case FAULT_HUMAN_ESTOP:        return "Human triggered ESTOP";
+        case FAULT_PITCH_WATCHDOG:     return "|pitch| > 50 deg for > 200 ms - robot tipped";
+        case FAULT_WHEEL_RUNAWAY:      return "Wheel velocity exceeded 2x soft governor limit";
+        case FAULT_IMU_LOST:           return "IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)";
+        case FAULT_WHEEL_FEEDBACK_LOST:return "Wheel encoder timeout or ODrive error while RUNNING/JUMPING";
         default:                       return "Unknown fault";
     }
 }
@@ -1040,14 +1042,7 @@ static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool misma
         banner_sprite.setCursor(cx, text_y);
         banner_sprite.print(label);
 
-        if (show_fault) {
-            banner_sprite.setTextColor(TFT_WHITE);
-            banner_sprite.setTextSize(1);
-            banner_sprite.setCursor(8, BANNER_H - 10);
-            banner_sprite.print(fault_description(fault));
-        }
-
-        if (active) {
+        if (active && !show_fault) {
             uint16_t dot_col;
             switch (profile) {
                 case 0:  dot_col = tft.color565(  0, 230,  80); break;
@@ -1060,6 +1055,17 @@ static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool misma
             banner_sprite.setTextSize(2);
             banner_sprite.setCursor(16, (BANNER_H - 16) / 2);
             banner_sprite.printf("P%u", (unsigned)(profile + 1u));
+        }
+
+        if (show_fault) {
+            // Drawn last (and skips the profile badge above) so nothing overlaps it.
+            const char* fdesc     = fault_description(fault);
+            int         fdesc_px  = (int)strlen(fdesc) * 6;
+            int         fdesc_cx  = max(2, (320 - fdesc_px) / 2);
+            banner_sprite.setTextColor(TFT_WHITE);
+            banner_sprite.setTextSize(1);
+            banner_sprite.setCursor(fdesc_cx, BANNER_H - 10);
+            banner_sprite.print(fdesc);
         }
     }
 
@@ -1868,7 +1874,9 @@ void setup() {
 #endif
 
     xTaskCreatePinnedToCore(neo_task,     "neo",  4096, nullptr, 1, nullptr, 0);
+#if LASERS_ENABLED
     xTaskCreatePinnedToCore(tof_task,     "tof",  4096, nullptr, 1, nullptr, 0);
+#endif
     xTaskCreatePinnedToCore(display_task, "disp", 6144, nullptr, 1, nullptr, 0);
 
     Serial.println("[ESP32] ready");

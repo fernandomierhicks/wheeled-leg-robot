@@ -9,7 +9,7 @@ from PyQt6.QtCore import QObject, QProcess, QThread, QTimer, pyqtSignal, Qt
 from PyQt6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPlainTextEdit, QPushButton, QSplitter, QVBoxLayout, QWidget,
+    QLineEdit, QMenu, QPlainTextEdit, QPushButton, QSplitter, QVBoxLayout, QWidget,
 )
 
 from .port_manager import SerialPortManager
@@ -522,6 +522,8 @@ class DevicePanel(QWidget):
         self._output.setStyleSheet(
             f"background: #0a0a14; color: {TEXT}; border: 1px solid {BORDER};"
         )
+        self._output.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._output.customContextMenuRequested.connect(self._show_output_menu)
 
         # ── Packet inspector ─────────────────────────────────────────────────
         self._inspector = PacketInspector()
@@ -540,6 +542,7 @@ class DevicePanel(QWidget):
         scroll_chk = QCheckBox("Auto-scroll")
         scroll_chk.setChecked(True)
         scroll_chk.toggled.connect(lambda v: setattr(self, "_auto_scroll", v))
+        self._scroll_chk = scroll_chk
 
         bot_row = QHBoxLayout()
         bot_row.addWidget(self._send_input)
@@ -708,6 +711,17 @@ class DevicePanel(QWidget):
         if self._auto_scroll:
             sb = self._output.verticalScrollBar()
             sb.setValue(sb.maximum())
+
+    def _show_output_menu(self, pos):
+        menu = self._output.createStandardContextMenu()
+        menu.addSeparator()
+        autoscroll_act = menu.addAction("Auto-scroll")
+        autoscroll_act.setCheckable(True)
+        autoscroll_act.setChecked(self._auto_scroll)
+        autoscroll_act.toggled.connect(self._scroll_chk.setChecked)
+        clear_act = menu.addAction("Clear")
+        clear_act.triggered.connect(self._output.clear)
+        menu.exec(self._output.mapToGlobal(pos))
 
 # ── Tab ───────────────────────────────────────────────────────────────────────
 

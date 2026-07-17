@@ -43,6 +43,8 @@ _FAULT_NAMES = {
     0x0A: "IMU_LOST",
     0x0B: "WHEEL_FEEDBACK_LOST",
 }
+# MIRROR: fault_description() in firmware/robot_teensy/esp32/src/main.cpp — keep wording
+# in sync whenever a fault is added/changed (that copy must stay ASCII-only, no UTF-8).
 _FAULT_DESCRIPTIONS = {
     0x00: "",
     0x01: "IMU reported ERROR during startup",
