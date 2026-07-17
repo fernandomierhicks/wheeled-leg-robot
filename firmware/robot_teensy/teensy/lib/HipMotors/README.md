@@ -39,7 +39,7 @@ Feedback is interrupt-driven (`FlexCAN_T4::onReceive`). `hm_L` / `hm_R` globals 
 
 ## Gotchas
 
-**MIT mode silently drops out** — the AK45-10 exits MIT mode after ~4 s without a re-entry frame. `hip_motors_poll()` re-sends `enter_mit` every 3 s automatically, but you must also call it explicitly on startup before the first `hip_motors_send()` or the command will be silently ignored (`send` no-ops when `mit_active == false`).
+**MIT mode silently drops out** — the AK45-10 exits MIT mode after ~4 s without a re-entry frame. `hip_motors_poll()` re-sends `enter_mit` every 3 s automatically, but you must also call it explicitly on startup before the first `hip_motors_send()` or the command will be silently ignored (each motor's frame is skipped while its `mit_active == false` — gating is per motor, so a single-leg bench setup still drives the active side).
 
 **Inter-frame delay** — a 500 µs gap (`CAN_INTER_FRAME_US`) is inserted between every back-to-back pair of CAN TX frames. Removing it causes the second motor to miss the frame intermittently.
 

@@ -7,12 +7,13 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_BNO08x.h>
+#include <sh2.h>
 #include "config.h"
 #include "IMU.h"
 
 // ── Config ───────────────────────────────────────────────────────────────────
 static constexpr uint32_t IMU_RATE_HZ       = 400;
-static constexpr uint32_t TIMEOUT_MS        = 100;   // silence before ERROR (measured from last poll, not wall clock)
+static constexpr uint32_t TIMEOUT_MS        = 100;   // data silence while actively polling before ERROR
 static constexpr uint32_t RETRY_INTERVAL_MS = 1000;
 static constexpr uint32_t LOSS_WINDOW_MS    = 1000;
 static constexpr float    LOSS_THRESHOLD    = 0.10f;
@@ -37,7 +38,6 @@ static float     _accel_y        = 0.0f;
 static float     _accel_z        = 0.0f;
 static float     _packet_loss    = 0.0f;
 static uint32_t  _last_update_ms = 0;
-static uint32_t  _last_poll_ms   = 0;
 static uint32_t  _retry_due_ms   = 0;
 
 // Packet loss tracking
@@ -98,6 +98,12 @@ static bool enable_reports() {
 // On retries from ERROR state this is acceptable since motion is gated on NOMINAL.
 static bool attempt_init() {
     if (!_sensor.begin_SPI(PIN_IMU_CS, PIN_IMU_INT)) {
+        // Adafruit_BNO08x::_init() leaks its SHTP pool slot on failure (never
+        // calls sh2_close()) — without this, every retry after the first
+        // failure fails begin_SPI() instantly (pool exhausted) and NOMINAL
+        // becomes permanently unreachable, even if the sensor would have
+        // responded on a later attempt.
+        sh2_close();
         return false;
     }
     delay(100);
@@ -164,7 +170,6 @@ void imu_update() {
         if (attempt_init()) {
             _state          = ImuState::NOMINAL;
             _last_update_ms = millis();
-            _last_poll_ms   = _last_update_ms;
             _rv_seq_valid   = false;
             _packet_loss    = 0.0f;
             reset_loss_window(_last_update_ms);
@@ -176,7 +181,6 @@ void imu_update() {
 
     case ImuState::NOMINAL:
     case ImuState::DEGRADED:
-        _last_poll_ms = now;
         break;
     }
 
@@ -218,8 +222,9 @@ void imu_update() {
         }
     }
 
-    // Sensor silence timeout — only fires if we've been actively polling but data stopped
-    if (now - _last_update_ms > TIMEOUT_MS && now - _last_poll_ms >= TIMEOUT_MS) {
+    // Sensor silence timeout — we only reach here while NOMINAL/DEGRADED (i.e.
+    // actively polling), so data silence alone is enough to declare ERROR.
+    if (now - _last_update_ms > TIMEOUT_MS) {
         _state        = ImuState::ERROR;
         _retry_due_ms = now + RETRY_INTERVAL_MS;
         return;

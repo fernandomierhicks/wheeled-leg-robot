@@ -110,7 +110,7 @@ static volatile uint8_t  g_telem_jump_state     = 0;
 // ── UART health (written core 1 on_teensy_packet / display_task, read display_task core 0)
 // 32-bit reads/writes are atomic on Xtensa — no mutex needed for these counters.
 static volatile uint32_t g_uart_crc_drops  = 0;  // lifetime CommLink CRC/frame errors
-static volatile uint32_t g_uart_seq_gaps   = 0;  // lifetime packets lost (loop_count jumps)
+static volatile uint32_t g_uart_seq_gaps   = 0;  // lifetime frames lost (CommLink seq gaps; mirror of g_teensy.rx_seq_gaps())
 static volatile uint8_t  g_uart_crc_rate   = 0;  // CRC drops in last 2 s window
 static volatile uint8_t  g_uart_gap_rate   = 0;  // seq gaps  in last 2 s window
 
@@ -510,6 +510,7 @@ static void forward_to_teensy(uint8_t type, uint8_t version, uint8_t /*source*/,
 // Both accesses are on the same core so no mutex is needed.
 static TelemetryPayload s_telem_snap;
 static bool             s_telem_a_rx   = false;  // TELEM_A received, waiting for B
+static uint8_t          s_telem_a_seq  = 0;      // link seq of that TELEM_A (pairing check)
 static bool             s_telem_fresh  = false;  // complete A+B pair ready in s_telem_snap
 
 // ── Teensy → all outputs ──────────────────────────────────────────────────────
@@ -541,13 +542,20 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
 
     // Reassemble split telemetry into s_telem_snap; signal loop() to process once.
     // All global updates happen in loop() so only the freshest snapshot is acted on.
+    // Pairing requires B.seq == A.seq + 1 (Teensy sends the halves back-to-back) —
+    // otherwise a lost B followed by a lost A would pair halves from different ticks.
     if (type == COMM_TYPE_TELEM_A && len == TELEM_A_LEN) {
         memcpy(&s_telem_snap, payload, TELEM_A_LEN);
-        s_telem_a_rx = true;
+        s_telem_a_seq = g_teensy.last_rx_seq();
+        s_telem_a_rx  = true;
     } else if (type == COMM_TYPE_TELEM_B && len == TELEM_B_LEN && s_telem_a_rx) {
-        memcpy(((uint8_t*)&s_telem_snap) + TELEM_A_LEN, payload, TELEM_B_LEN);
-        s_telem_a_rx  = false;
-        s_telem_fresh = true;   // loop() will pick this up after draining the UART buffer
+        s_telem_a_rx = false;
+        if ((uint8_t)(g_teensy.last_rx_seq() - s_telem_a_seq) == 1) {
+            memcpy(((uint8_t*)&s_telem_snap) + TELEM_A_LEN, payload, TELEM_B_LEN);
+            s_telem_fresh = true;   // loop() will pick this up after draining the UART buffer
+        }
+        // Non-adjacent halves: discard the pair; the loss itself is already
+        // counted by g_teensy.rx_seq_gaps().
     }
 
     if (!g_teensy_ever_heard) g_display_dirty = true;
@@ -708,9 +716,10 @@ static const char* fault_description(uint8_t code) {
         case FAULT_HIP_LARGE_POS_CMD:  return "Hip position jump too large";
         case FAULT_CALIBRATION_TIMEOUT:return "Hardstop not found";
         case FAULT_HUMAN_ESTOP:        return "User ESTOP";
-        case FAULT_PARAM_OUT_OF_BOUNDS:return "Param out of bounds";
         case FAULT_PITCH_WATCHDOG:     return "Pitch watchdog ESTOP";
         case FAULT_WHEEL_RUNAWAY:      return "Wheel runaway ESTOP";
+        case FAULT_IMU_LOST:           return "IMU lost in flight";
+        case FAULT_WHEEL_FEEDBACK_LOST:return "Wheel feedback lost";
         default:                       return "Unknown fault";
     }
 }
@@ -1768,7 +1777,15 @@ static void update_display() {
     float    ff2_out    = g_telem_ff2_out;
     uint8_t  jmp_state  = g_telem_jump_state;
 
-    float vbus_avg = (wm_l_vbus + wm_r_vbus) * 0.5f;
+    // A disabled/unrequested wheel motor's vbus reads a permanent 0 (Teensy never
+    // polls it) — exclude it from the average instead of dragging a real ~24V
+    // reading down to ~12V. Mirrors the same fix in software/gui/main.py.
+    constexpr float VBUS_MIN_VALID = 5.0f;
+    float vbus_sum = 0.0f;
+    uint8_t vbus_n = 0;
+    if (wm_l_vbus > VBUS_MIN_VALID) { vbus_sum += wm_l_vbus; vbus_n++; }
+    if (wm_r_vbus > VBUS_MIN_VALID) { vbus_sum += wm_r_vbus; vbus_n++; }
+    float vbus_avg = (vbus_n > 0) ? (vbus_sum / vbus_n) : 0.0f;
     drawModeBanner(state, active, fault, g_version_mismatch, active ? vbus_avg : 0.0f, active ? profile : 0);
     drawArtificialHorizon(active ? pitch : 0.0f, active ? roll : 0.0f);
     drawHipPanel(hip_l, hip_r, curr_l, curr_r,
@@ -1807,7 +1824,8 @@ static void display_task(void*) {
         // Refresh UART health rates every 2 s
         if (now - last_health_ms >= 2000) {
             uint32_t cur_crc = g_teensy.rx_drops();
-            uint32_t cur_gap = g_uart_seq_gaps;
+            uint32_t cur_gap = g_teensy.rx_seq_gaps();  // per-link frame loss (audit W3)
+            g_uart_seq_gaps  = cur_gap;
             g_uart_crc_drops = cur_crc;
             g_uart_crc_rate  = (uint8_t)min((uint32_t)255, cur_crc - prev_crc_drops);
             g_uart_gap_rate  = (uint8_t)min((uint32_t)255, cur_gap - prev_seq_gaps);
@@ -1905,15 +1923,8 @@ void loop() {
         g_telem_ff2_out         = pkt.ff2_out;
         g_telem_jump_state      = pkt.jump_state;
 
-        // Gap detection via loop_count (in TELEM_B): each pair should advance by ~10
-        static uint32_t s_last_lc  = 0;
-        static bool     s_lc_valid = false;
-        if (s_lc_valid) {
-            uint32_t delta = pkt.loop_count - s_last_lc;
-            if (delta > 15) g_uart_seq_gaps += (delta / 10) - 1;
-        }
-        s_last_lc  = pkt.loop_count;
-        s_lc_valid = true;
+        // (Gap detection moved to CommLink's per-link seq counter — see
+        // g_teensy.rx_seq_gaps(), mirrored into g_uart_seq_gaps by display_task.)
     }
 
 #if WIFI_ENABLED

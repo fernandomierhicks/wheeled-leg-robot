@@ -25,7 +25,6 @@ from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
 _FLAG_PERSISTENT      = 1 << 0
 _FLAG_READONLY        = 1 << 1
 _FLAG_COMMAND         = 1 << 2
-_FLAG_FAULT_ON_BOUNDS = 1 << 3
 
 # ── Group map (param_ids.h GROUP_*) ───────────────────────────────────────────
 _GROUP_NAMES = {
@@ -92,7 +91,6 @@ def _flag_text(flags: int) -> str:
     if flags & _FLAG_PERSISTENT:      parts.append("P")
     if flags & _FLAG_READONLY:        parts.append("R")
     if flags & _FLAG_COMMAND:         parts.append("C")
-    if flags & _FLAG_FAULT_ON_BOUNDS: parts.append("!")
     return " ".join(parts) or "—"
 
 
@@ -101,7 +99,6 @@ def _flag_tooltip(flags: int) -> str:
     if flags & _FLAG_PERSISTENT:      lines.append("P — Persistent (saved to flash)")
     if flags & _FLAG_READONLY:        lines.append("R — Read-only (firmware writes only)")
     if flags & _FLAG_COMMAND:         lines.append("C — Command (high-freq setpoint, not saved)")
-    if flags & _FLAG_FAULT_ON_BOUNDS: lines.append("! — Fault on bounds violation (triggers ESTOP)")
     return "\n".join(lines) or "No flags"
 
 

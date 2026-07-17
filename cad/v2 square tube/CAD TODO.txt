@@ -1,20 +1,13 @@
 CAD TODO
 
 
---ANKLE
-Wider ankle mount. Piece broke, needs more surface area
-Encoder cable blocks M3 support screw
-Make M3 length exact, either 20 or 25mm
 
----AK45 simulator so leg angle is fixed. 
-
-Tweak Custom proto board positioning of USB connectors. 
 
 
 
 
 Disasemble RX receiver, put it somewhere that doesn't occupy space?
-DC-DC under the Arduinos?
+
 Laser mount
 Measure battery strap
 

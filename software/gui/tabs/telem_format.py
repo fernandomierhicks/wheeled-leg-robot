@@ -10,6 +10,24 @@ import struct
 
 TELEM_VERSION = 8  # must match TELEM_VERSION in shared/comm_protocol.h
 
+# ── Frame checksum — CRC-8 (poly 0x07, init 0x00, MSB-first — CRC-8/SMBus) ────
+# MIRROR: crc8_table()/crc8_step() in shared/CommLink/CommLink.cpp. Replaced the
+# original 1-byte XOR on 2026-07-13 (flag-day — firmware and GUI must match).
+_CRC8_TABLE = []
+for _i in range(256):
+    _c = _i
+    for _ in range(8):
+        _c = ((_c << 1) ^ 0x07) & 0xFF if _c & 0x80 else (_c << 1) & 0xFF
+    _CRC8_TABLE.append(_c)
+
+
+def crc8(data: bytes) -> int:
+    """CRC-8 over the given bytes (frame header fields + payload)."""
+    crc = 0
+    for b in data:
+        crc = _CRC8_TABLE[crc ^ b]
+    return crc
+
 _STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING"}
 _FAULT_NAMES = {
     0x00: "NONE",
@@ -19,9 +37,11 @@ _FAULT_NAMES = {
     0x04: "HIP_LARGE_POS_CMD",
     0x05: "CALIBRATION_TIMEOUT",
     0x06: "HUMAN_ESTOP",
-    0x07: "PARAM_OUT_OF_BOUNDS",
+    # 0x07 reserved — was PARAM_OUT_OF_BOUNDS (removed; writes always clamp)
     0x08: "PITCH_WATCHDOG",
     0x09: "WHEEL_RUNAWAY",
+    0x0A: "IMU_LOST",
+    0x0B: "WHEEL_FEEDBACK_LOST",
 }
 _FAULT_DESCRIPTIONS = {
     0x00: "",
@@ -31,9 +51,10 @@ _FAULT_DESCRIPTIONS = {
     0x04: "Commanded hip position jump exceeded MAX_HIP_DELTA_RAD",
     0x05: "Hardstop not found within CALIB_SAFETY_BOUND_RAD",
     0x06: "Human triggered ESTOP",
-    0x07: "Param write out of bounds — value outside [min, max]",
     0x08: "|pitch| > 50° for > 200 ms — robot tipped",
     0x09: "Wheel velocity exceeded 2× soft governor limit",
+    0x0A: "IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)",
+    0x0B: "Wheel encoder timeout or ODrive error while RUNNING/JUMPING",
 }
 
 # Struct formats for split telemetry (V8, packed, little-endian)

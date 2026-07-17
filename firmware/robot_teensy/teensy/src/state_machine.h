@@ -37,7 +37,8 @@ void stateMachine_request_soft_clear();
 // the originating state. Called internally by req_running() on denied arm attempt.
 void stateMachine_request_cmd_reject();
 
-// Called by the command handler each time a GUI command packet arrives.
-// Feeds the MANUAL-mode watchdog: if no call for >500 ms while in MANUAL,
-// the state machine auto-exits back to STANDBY.
+// Called by the command handler each time a GUI command packet arrives
+// (the GUI sends CMD_ID_PING at 10 Hz as a heartbeat). Feeds the MANUAL-mode
+// watchdog: if no call for >MANUAL_GUI_TIMEOUT_MS (state_machine.cpp,
+// currently 500 ms) while in MANUAL, the state machine auto-exits to STANDBY.
 void stateMachine_ping_gui_watchdog();

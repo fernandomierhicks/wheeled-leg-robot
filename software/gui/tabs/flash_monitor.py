@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .port_manager import SerialPortManager
-from .telem_format import decode_telem_a as _decode_telem_a, decode_telem_b as _decode_telem_b
+from .telem_format import crc8 as _crc8, decode_telem_a as _decode_telem_a, decode_telem_b as _decode_telem_b
 from .theme import BG, BORDER, BLUE, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ FLASH_ACTIONS: dict[str, dict] = {
     "teensy": {
         "main":  [("▶  Flash Main",      ["run",  "-e", "teensy41",    "-t", "upload"])],
         "tests": [
-            ("⊕  IMU Test",       ["test", "-e", "test_teensy", "-f", "test_imu"]),
+            ("⊕  IMU Test",       ["test", "-e", "test_teensy", "-f", "test_imu", "--without-testing"]),
             ("⚙  AK45 Test",      ["test", "-e", "test_teensy", "-f", "test_hip_motor"]),
             ("⚙  ODrive Test",    ["test", "-e", "test_teensy", "-f", "test_wheel_motor"]),
             ("◈  RC iBUS Test",   ["test", "-e", "test_teensy", "-f", "test_rc"]),
@@ -180,6 +180,12 @@ class PacketDecoder(QObject):
         self._device      = device
         self._buf         = b""
         self._telem_a_buf: dict | None = None  # holds decoded TELEM_A waiting for TELEM_B
+        # Link-health counters for this transport (audit W1/W3/W4) — attached to
+        # every emitted packet as link_* keys, surfaced in the Raw Data tab.
+        self._crc_drops   = 0   # frames discarded on bad CRC-8
+        self._seq_gaps    = 0   # frames lost per seq discontinuities
+        self._pair_drops  = 0   # A/B halves rejected for non-adjacent seq
+        self._seq_last: int | None = None
 
     def feed(self, data: bytes):
         self._buf += data
@@ -210,9 +216,16 @@ class PacketDecoder(QObject):
             if end_byte != _COMM_END:
                 self._buf = self._buf[1:]
                 continue
-            xor = ptype ^ version ^ source ^ seq ^ self._buf[6] ^ self._buf[7]
-            for b in payload:
-                xor ^= b
+            # Enforce the checksum (audit W1): a corrupted frame with intact
+            # magic/END must not inject garbage telemetry — drop and count.
+            if _crc8(self._buf[2:8 + length]) != checksum:
+                self._crc_drops += 1
+                self._buf = self._buf[total:]
+                continue
+            # Per-link loss metric (audit W3): seq gap between valid frames.
+            if self._seq_last is not None:
+                self._seq_gaps += (seq - self._seq_last - 1) & 0xFF
+            self._seq_last = seq
             info: dict = {
                 "ptype":     ptype,
                 "version":   version,
@@ -222,7 +235,10 @@ class PacketDecoder(QObject):
                 "seq":       seq,
                 "length":    length,
                 "checksum":  checksum,
-                "crc_ok":    (xor == checksum),
+                "crc_ok":    True,
+                "link_crc_drops":  self._crc_drops,
+                "link_seq_gaps":   self._seq_gaps,
+                "link_pair_drops": self._pair_drops,
             }
             try:
                 if ptype == 0x04 and length >= 2:
@@ -253,11 +269,17 @@ class PacketDecoder(QObject):
                     self._buf = self._buf[total:]
                     continue  # don't emit yet
                 elif ptype == 0x11 and length == _TELEM_B_LEN and self._telem_a_buf is not None:
-                    # TELEM_B — complete the packet and emit as a unified telemetry dict
-                    if version == _TELEM_VERSION:
+                    # TELEM_B — complete the packet and emit as a unified telemetry
+                    # dict. Pairing requires B.seq == A.seq + 1 (audit W4): over UDP,
+                    # reordering/loss can otherwise pair halves from different ticks.
+                    a_seq = self._telem_a_buf.get("seq", -2)
+                    if version == _TELEM_VERSION and ((a_seq + 1) & 0xFF) == seq:
                         info = {**self._telem_a_buf, **info, **_decode_telem_b(payload)}
                         info["ptype"]     = 0x01   # appear as TELEM to PacketInspector
                         info["type_name"] = "TELEM"
+                    elif version == _TELEM_VERSION:
+                        self._pair_drops += 1
+                        info["link_pair_drops"] = self._pair_drops
                     self._telem_a_buf = None
                 elif ptype == 0x12 and length >= 16:
                     # LOG_INFO — SD-log directory/transfer metadata (LogInfoPayload).

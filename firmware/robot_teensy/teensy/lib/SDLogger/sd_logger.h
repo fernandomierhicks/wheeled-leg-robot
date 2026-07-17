@@ -19,9 +19,15 @@ uint16_t sd_logger_active_index();        // current LOGxxxx index (for status r
 // Retrieval (driven by on_command in main.cpp; all Teensy→PC replies via callbacks)
 void     sd_logger_list();                        // emit LOG_INFO ENTRY per file + LIST_END
 void     sd_logger_begin_get(uint16_t idx, uint32_t start_chunk); // arm a streaming transfer
-void     sd_logger_service_transfer();            // pace 1-2 LOG_DATA chunks/tick; emit XFER_END
+void     sd_logger_service_transfer();            // paced LOG_DATA streaming; emit XFER_END
 bool     sd_logger_transfer_active();
 void     sd_logger_delete(uint16_t idx);          // erase + LOG_INFO STATUS ack
+
+// Transfer pacing (audit W5): every interval_ms, service_transfer sends at most
+// `burst` chunks. Set BEFORE sd_logger_begin_get() based on the requesting
+// transport's wire rate (CP2102 on the ESP32 path is only ~92 kB/s; direct
+// Teensy USB is high-speed). interval_ms=0 → every tick.
+void     sd_logger_set_get_pacing(uint32_t interval_ms, uint8_t burst);
 
 // Send callback: emits one COMM_TYPE_LOG_INFO / COMM_TYPE_LOG_DATA frame.
 // main.cpp wires this to a function that sends on g_comm and (if connected) g_comm_usb.

@@ -31,6 +31,10 @@ static uint32_t g_xfer_chunk = 0;
 static uint32_t g_xfer_total_chunks = 0;
 static uint64_t g_xfer_file_size = 0;
 static uint32_t g_crc_state = 0;
+// Pacing (audit W5): at most g_xfer_burst chunks per g_xfer_interval_ms window.
+static uint32_t g_xfer_interval_ms = 0;
+static uint8_t  g_xfer_burst = 2;
+static uint32_t g_xfer_last_ms = 0;
 
 static sd_logger_sender_t g_sender = nullptr;
 
@@ -264,10 +268,23 @@ void sd_logger_begin_get(uint16_t idx, uint32_t start_chunk) {
     }
 }
 
+void sd_logger_set_get_pacing(uint32_t interval_ms, uint8_t burst) {
+    g_xfer_interval_ms = interval_ms;
+    g_xfer_burst = (burst == 0) ? 1 : burst;
+}
+
 void sd_logger_service_transfer() {
     if (!g_xfer_active || !g_sender) return;
 
-    for (int i = 0; i < 2 && g_xfer_active; i++) {
+    // Pace to the requesting transport's wire rate — unthrottled streaming
+    // (2 chunks/tick ≈ 490 kB/s) overruns the ESP32 CP2102 path (~92 kB/s).
+    if (g_xfer_interval_ms) {
+        uint32_t now = millis();
+        if (now - g_xfer_last_ms < g_xfer_interval_ms) return;
+        g_xfer_last_ms = now;
+    }
+
+    for (int i = 0; i < g_xfer_burst && g_xfer_active; i++) {
         uint8_t frame[sizeof(LogDataHeader) + LOG_CHUNK_DATA];
         int n = g_rd_file.read(frame + sizeof(LogDataHeader), LOG_CHUNK_DATA);
         if (n <= 0) {

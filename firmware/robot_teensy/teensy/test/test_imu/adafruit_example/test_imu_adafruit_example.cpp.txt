@@ -1,0 +1,103 @@
+// Adapted, near-verbatim from Adafruit_BNO08x's own bundled example
+// (examples/quaternion_yaw_pitch_roll/quaternion_yaw_pitch_roll.ino),
+// changed only to: (1) use begin_SPI() with our actual wiring instead of
+// begin_I2C(), (2) not hang forever on failure so we get diagnostic output
+// instead of a silent brick. Logic, report types, and euler-angle math are
+// untouched from upstream — this tests "does the library's own official
+// path work on this hardware," independent of this project's IMU.cpp.
+
+#include <Arduino.h>
+#include <Adafruit_BNO08x.h>
+#include "config.h"
+
+// For SPI mode, we need a CS pin and INT pin (matches project config.h)
+#define BNO08X_CS   PIN_IMU_CS
+#define BNO08X_INT  PIN_IMU_INT
+#define BNO08X_RESET PIN_IMU_RST
+
+struct euler_t {
+  float yaw;
+  float pitch;
+  float roll;
+} ypr;
+
+Adafruit_BNO08x  bno08x(BNO08X_RESET);
+sh2_SensorValue_t sensorValue;
+
+// Top frequency is about 250Hz but this report is more accurate
+sh2_SensorId_t reportType = SH2_ARVR_STABILIZED_RV;
+long reportIntervalUs = 5000;
+
+void setReports(sh2_SensorId_t reportType, long report_interval) {
+  Serial.println("Setting desired reports");
+  if (! bno08x.enableReport(reportType, report_interval)) {
+    Serial.println("Could not enable stabilized remote vector");
+  }
+}
+
+void setup(void) {
+  Serial.begin(115200);
+  while (!Serial && millis() < 3000) delay(10);
+
+  Serial.println("Adafruit BNO08x test! (official example, SPI-adapted)");
+  Serial.printf("CS=%d INT=%d RESET=%d\n", BNO08X_CS, BNO08X_INT, BNO08X_RESET);
+
+  // Try to initialize!
+  if (!bno08x.begin_SPI(BNO08X_CS, BNO08X_INT)) {
+    Serial.println("Failed to find BNO08x chip");
+    Serial.println("(upstream example would hang here forever -- printing instead)");
+    return;
+  }
+  Serial.println("BNO08x Found!");
+
+  setReports(reportType, reportIntervalUs);
+
+  Serial.println("Reading events");
+  delay(100);
+}
+
+void quaternionToEuler(float qr, float qi, float qj, float qk, euler_t* ypr, bool degrees = false) {
+    float sqr = sq(qr);
+    float sqi = sq(qi);
+    float sqj = sq(qj);
+    float sqk = sq(qk);
+
+    ypr->yaw = atan2(2.0 * (qi * qj + qk * qr), (sqi - sqj - sqk + sqr));
+    ypr->pitch = asin(-2.0 * (qi * qk - qj * qr) / (sqi + sqj + sqk + sqr));
+    ypr->roll = atan2(2.0 * (qj * qk + qi * qr), (-sqi - sqj + sqk + sqr));
+
+    if (degrees) {
+      ypr->yaw *= RAD_TO_DEG;
+      ypr->pitch *= RAD_TO_DEG;
+      ypr->roll *= RAD_TO_DEG;
+    }
+}
+
+void quaternionToEulerRV(sh2_RotationVectorWAcc_t* rotational_vector, euler_t* ypr, bool degrees = false) {
+    quaternionToEuler(rotational_vector->real, rotational_vector->i, rotational_vector->j, rotational_vector->k, ypr, degrees);
+}
+
+void loop() {
+  static uint32_t last_alive = 0;
+  if (millis() - last_alive >= 1000) {
+    last_alive = millis();
+    Serial.printf("alive t=%lu\n", millis());
+  }
+
+  if (bno08x.wasReset()) {
+    Serial.print("sensor was reset ");
+    setReports(reportType, reportIntervalUs);
+  }
+
+  if (bno08x.getSensorEvent(&sensorValue)) {
+    switch (sensorValue.sensorId) {
+      case SH2_ARVR_STABILIZED_RV:
+        quaternionToEulerRV(&sensorValue.un.arvrStabilizedRV, &ypr, true);
+        break;
+    }
+    Serial.print(sensorValue.status);     Serial.print("\t");
+    Serial.print(ypr.yaw);                Serial.print("\t");
+    Serial.print(ypr.pitch);              Serial.print("\t");
+    Serial.println(ypr.roll);
+  }
+}

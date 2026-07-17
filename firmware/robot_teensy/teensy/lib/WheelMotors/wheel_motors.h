@@ -12,6 +12,7 @@ struct WheelAxisState {
     uint8_t  axis_state;   // ODrive Axis_State enum value
     uint32_t last_fb_ms;   // millis() of most recent encoder estimate callback
     uint32_t last_hb_ms;   // millis() of most recent heartbeat
+    bool     ever_heard;   // true once any encoder estimate has been received
     bool     ok;           // true when encoder feedback is fresh (< CAN_TIMEOUT_MS)
 };
 
@@ -37,9 +38,10 @@ void wheel_motors_set_mode(WheelMode mode);
 // No-op in IDLE.
 void wheel_motors_send(float L, float R);
 
-// Keep ODrive watchdog alive. Call every tick unconditionally at CONTROL_HZ.
-// In IDLE, sends a zero-velocity keepalive; in active modes the regular
-// wheel_motors_send() call is already sufficient.
+// Keep ODrive watchdog alive. Call every tick at CONTROL_HZ; internally
+// divided to 50 Hz. In IDLE, sends a zero-velocity keepalive. TORQUE is
+// covered by the control loop's wheel_motors_send(); VELOCITY/POSITION by
+// the 50 Hz vbus poll (any axis-addressed CAN frame feeds the watchdog).
 void wheel_motors_pet_watchdog();
 
 // Send CLEAR_ERRORS to both axes (clears latched ODrive faults).

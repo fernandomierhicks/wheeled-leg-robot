@@ -6,14 +6,32 @@
 ---Fernandos note dont change below
 
 
-Verify all controllers per Handoff.MD
-Add screen personolity selector to radio. 
-Parameter or menu options via remote?
-SD card storage for high-res telemetry logging, downloadable to PC for plotting
+Path to be able to Verify all controllers per Handoff.MD:
+
+
+
+
+
+
+
 
 ------------------------------------------------------firmware
+--------------------------NON-CRITICAL
+Add screen personolity selector to radio. 
+Parameter or menu options via remote?
 
-Easy to rotate frames around, IMU and screen
+
+
+
+
+
+----------------------------------------------------------CAD
+Todo list in CAD folder
+
+
+----------------------------WIRING
+XT60+fuse to power cable
+
 
 
 

@@ -26,7 +26,7 @@ pg.setConfigOptions(antialias=False)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
-    QPushButton, QVBoxLayout, QWidget,
+    QPushButton, QSlider, QVBoxLayout, QWidget,
 )
 
 from .telemetry_bus import TelemetryBus
@@ -184,6 +184,8 @@ class _MotorPanel(QWidget):
         self._in_manual = False
         self._in_calibration = False
         self._redraw_count = 0
+        self._calib_min_rad: float | None = None
+        self._calib_max_rad: float | None = None
 
         self.setObjectName("MotorPanel")
         self.setStyleSheet(
@@ -212,22 +214,34 @@ class _MotorPanel(QWidget):
         self._lbl_limits = _readout(lay, "Limits", DIM)
         lay.addWidget(_hline())
 
-        # Mini chart — pos (blue) + tau (orange) + current (green)
+        # Mini chart — pos (blue) + cmd (orange)
         self._chart = pg.PlotWidget()
         self._chart.setBackground(BG)
-        self._chart.setMaximumHeight(115)
-        self._chart.setMinimumHeight(80)
+        self._chart.setMaximumHeight(90)
+        self._chart.setMinimumHeight(60)
         self._chart.showGrid(x=True, y=True, alpha=0.12)
         self._chart.setXRange(0, _BUF)
         self._chart.getAxis("bottom").setStyle(showValues=False)
-        leg = self._chart.addLegend(offset=(4, 4), verSpacing=-4)
+        self._chart.addLegend(offset=(4, 4), verSpacing=-4)
         self._crv_pos = self._chart.plot(
             list(self._pos_buf), pen=pg.mkPen(BLUE,   width=1.5), name="pos (°)")
         self._crv_cmd = self._chart.plot(
             list(self._cmd_buf), pen=pg.mkPen(ORANGE, width=1.2), name="cmd")
-        self._crv_cur = self._chart.plot(
-            list(self._cur_buf), pen=pg.mkPen(GREEN,  width=1.2), name="current (A)")
         lay.addWidget(self._chart)
+
+        # Mini chart — current (green), separate scale, below the pos/cmd chart
+        self._chart_cur = pg.PlotWidget()
+        self._chart_cur.setBackground(BG)
+        self._chart_cur.setMaximumHeight(70)
+        self._chart_cur.setMinimumHeight(45)
+        self._chart_cur.showGrid(x=True, y=True, alpha=0.12)
+        self._chart_cur.setXRange(0, _BUF)
+        self._chart_cur.getAxis("bottom").setStyle(showValues=False)
+        self._chart_cur.setXLink(self._chart)
+        self._chart_cur.addLegend(offset=(4, 4), verSpacing=-4)
+        self._crv_cur = self._chart_cur.plot(
+            list(self._cur_buf), pen=pg.mkPen(GREEN, width=1.2), name="current (A)")
+        lay.addWidget(self._chart_cur)
         lay.addWidget(_hline())
 
         # ── Controls container (disabled until MANUAL mode) ───────────────────
@@ -304,6 +318,26 @@ class _MotorPanel(QWidget):
         lim_row.addStretch()
         ctrl_lay.addLayout(lim_row)
 
+        # ── Full-range jog slider (spans calibrated retract/extend limits) ────
+        jog_row = QHBoxLayout()
+        jog_row.setSpacing(4)
+        jog_lbl = QLabel("Jog (calib):")
+        jog_lbl.setStyleSheet(f"color: {DIM}; font-size: 10px;")
+        jog_row.addWidget(jog_lbl)
+        self._jog_slider = QSlider(Qt.Orientation.Horizontal)
+        self._jog_slider.setRange(0, 1000)
+        self._jog_slider.setValue(500)
+        self._jog_slider.setEnabled(False)
+        self._jog_slider.valueChanged.connect(self._on_jog_slider_changed)
+        jog_row.addWidget(self._jog_slider, stretch=1)
+        self._lbl_jog = QLabel("—")
+        self._lbl_jog.setStyleSheet(
+            f"color: {ORANGE}; font-size: 10px; font-family: Consolas;"
+        )
+        self._lbl_jog.setFixedWidth(48)
+        jog_row.addWidget(self._lbl_jog)
+        ctrl_lay.addLayout(jog_row)
+
         # ── Test wave generator ───────────────────────────────────────────────
         ctrl_lay.addWidget(_hline())
         wave_row = QHBoxLayout()
@@ -368,19 +402,31 @@ class _MotorPanel(QWidget):
         self._redraw_timer.start(50)  # 20 Hz
 
     def set_controls_enabled(self, enabled: bool):
+        entering_manual = enabled and not self._in_manual
         self._ctrl.setEnabled(enabled)
         self._in_manual = enabled
         if not enabled:
             self._stop_wave()
+        if entering_manual:
+            self._sync_jog_to_current_pos()
+        self._update_jog_enabled()
 
     def set_calibration_active(self, active: bool):
         self._in_calibration = active
 
     def set_calib_limits(self, min_rad: float | None, max_rad: float | None):
+        self._calib_min_rad = min_rad
+        self._calib_max_rad = max_rad
         if min_rad is None:
             self._lbl_limits.setText("—")
         else:
             self._lbl_limits.setText(f"[{min_rad:+.3f}, {max_rad:+.3f}] rad")
+            # Sync the p° clamp spinboxes to the calibrated range so the jog
+            # slider (which is clamped through _send_mit like any other p°
+            # command) actually reaches the true retract/extend hardstops.
+            self._sp_min.setValue(math.degrees(min_rad))
+            self._sp_max.setValue(math.degrees(max_rad))
+        self._update_jog_enabled()
 
     # ── command helpers ───────────────────────────────────────────────────────
 
@@ -416,6 +462,43 @@ class _MotorPanel(QWidget):
 
     def _on_send_mit_clicked(self):
         self._stop_wave()
+        self._send_mit()
+
+    # ── full-range jog slider ─────────────────────────────────────────────────
+
+    def _sync_jog_to_current_pos(self):
+        # Snap the slider (silently) to the leg's actual live position on
+        # entering MANUAL, so the first drag moves from where the leg already
+        # is instead of jumping from whatever the slider was last left at.
+        self._sp_p.setValue(self._latest_pos_deg)
+        if self._calib_min_rad is None:
+            return
+        lo_deg = self._sp_min.value()
+        hi_deg = self._sp_max.value()
+        span   = hi_deg - lo_deg
+        frac   = 0.5 if span == 0 else (self._latest_pos_deg - lo_deg) / span
+        frac   = max(0.0, min(1.0, frac))
+        self._jog_slider.blockSignals(True)
+        self._jog_slider.setValue(int(round(frac * 1000)))
+        self._jog_slider.blockSignals(False)
+        self._lbl_jog.setText(f"{self._latest_pos_deg:+.1f}°")
+
+    def _update_jog_enabled(self):
+        self._jog_slider.setEnabled(self._in_manual and self._calib_min_rad is not None)
+        if self._jog_slider.isEnabled():
+            self._lbl_jog.setText(f"{self._sp_p.value():+.1f}°")
+        else:
+            self._lbl_jog.setText("—")
+
+    def _on_jog_slider_changed(self, raw: int):
+        if self._calib_min_rad is None:
+            return
+        lo_deg = self._sp_min.value()
+        hi_deg = self._sp_max.value()
+        p_deg  = lo_deg + (raw / 1000.0) * (hi_deg - lo_deg)
+        self._stop_wave()
+        self._sp_p.setValue(p_deg)
+        self._lbl_jog.setText(f"{p_deg:+.1f}°")
         self._send_mit()
 
     # ── test wave generator ───────────────────────────────────────────────────
@@ -474,16 +557,22 @@ class _MotorPanel(QWidget):
         self._crv_cmd.setData(list(self._cmd_buf))
         self._crv_cur.setData(list(self._cur_buf))
 
-        # auto-fit mini chart Y to all traces together — only every 5th
+        # auto-fit each mini chart's Y to its own traces — only every 5th
         # redraw (4 Hz at 20 Hz refresh); the Y range doesn't need to track
         # every single frame and setYRange forces an axis/repaint pass.
         self._redraw_count += 1
         if self._redraw_count % 5 == 0:
-            lo = min(min(self._pos_buf), min(self._cmd_buf), min(self._cur_buf))
-            hi = max(max(self._pos_buf), max(self._cmd_buf), max(self._cur_buf))
+            lo = min(min(self._pos_buf), min(self._cmd_buf))
+            hi = max(max(self._pos_buf), max(self._cmd_buf))
             span = max(hi - lo, 5.0)
             mid  = (lo + hi) / 2
             self._chart.setYRange(mid - span * 0.6, mid + span * 0.6, padding=0.05)
+
+            cur_lo, cur_hi = min(self._cur_buf), max(self._cur_buf)
+            cur_span = max(cur_hi - cur_lo, 1.0)
+            cur_mid  = (cur_lo + cur_hi) / 2
+            self._chart_cur.setYRange(
+                cur_mid - cur_span * 0.6, cur_mid + cur_span * 0.6, padding=0.05)
 
 
 # ── Main tab ──────────────────────────────────────────────────────────────────
@@ -555,13 +644,20 @@ class HipMotorsTab(QWidget):
         mb_lay.addStretch()
 
         self._btn_calibrate = _colored_btn("Calibrate", "#4a3a1a")
+        # Same send_set_mode(STANDBY) as "Exit Manual" below — placed next to
+        # Calibrate so a Calibrate/Standby/Calibrate/... bench loop doesn't
+        # need mouse travel across the whole bar (also exits CALIBRATION,
+        # which "Exit Manual" already did too, just far away and misleadingly named).
+        self._btn_standby   = _colored_btn("Standby", "#4a2a1a")
         self._btn_enter     = _colored_btn("Enter Manual", "#1a4a6a")
         self._btn_exit      = _colored_btn("Exit Manual",  "#4a2a1a")
         self._btn_calibrate.clicked.connect(lambda: self._set_mode(_STATE_CALIBRATION))
+        self._btn_standby.clicked.connect(lambda: self._set_mode(_STATE_STANDBY))
         self._btn_enter.clicked.connect(lambda: self._set_mode(_STATE_MANUAL))
         self._btn_exit .clicked.connect(lambda: self._set_mode(_STATE_STANDBY))
         self._btn_calibrate.setEnabled(False)
         mb_lay.addWidget(self._btn_calibrate)
+        mb_lay.addWidget(self._btn_standby)
         mb_lay.addWidget(self._btn_enter)
         mb_lay.addWidget(self._btn_exit)
 

@@ -103,8 +103,10 @@ static float     s_jp_from_L       = 0.0f;    // hip pos when RETRACT began
 static float     s_jp_from_R       = 0.0f;
 
 // ── MANUAL GUI watchdog ───────────────────────────────────────────────────────
+// Fed by any COMM_TYPE_COMMAND packet; the GUI sends CMD_ID_PING at 10 Hz so a
+// GUI crash/disconnect exits MANUAL (and stops wheels) within ~500 ms.
 static uint32_t s_last_gui_packet_ms  = 0;
-static const uint32_t MANUAL_GUI_TIMEOUT_MS = 5000;
+static const uint32_t MANUAL_GUI_TIMEOUT_MS = 500;
 
 // ── State actions ─────────────────────────────────────────────────────────────
 
@@ -153,6 +155,7 @@ static void on_manual() {
     g_state.state = STATE_MANUAL;
     if (entering) {
         s_last_gui_packet_ms = millis();  // start watchdog fresh; don't inherit stale timestamp
+        g_hip_cmd.pending = false;        // discard any hip cmd latched before MANUAL entry
         comm_log(LOG_LEVEL_INFO, "-> MANUAL");
     }
     if (!g_hip_cmd.pending) return;
@@ -330,12 +333,18 @@ static void on_estop() {
     bool entering = (g_state.state != STATE_ESTOP);
     g_state.state = STATE_ESTOP;
     if (entering) {
-        // Discard any queued mode requests so they don't fire unexpectedly
-        // after a future ESTOP → STARTUP → STANDBY sequence.
-        s_req_cmd_reject  = false;
-        s_req_manual      = false;
-        s_req_running     = false;
-        s_req_calibration = false;
+        // Discard ALL queued requests so nothing stale fires after a future
+        // reset/soft-clear — e.g. a CH6 jump latched the same tick a fault
+        // fired would otherwise jump the instant the robot is re-armed.
+        s_req_cmd_reject     = false;
+        s_req_manual         = false;
+        s_req_running        = false;
+        s_req_calibration    = false;
+        s_req_jump           = false;
+        s_req_disarm_running = false;
+        s_req_standby        = false;
+        s_req_reset          = false;
+        s_req_soft_clear     = false;
         comm_log(LOG_LEVEL_ERROR, "-> ESTOP [fault 0x%02X]", g_state.fault_code);
         g_buzzer.play(ESTOP_MELODY, sizeof(ESTOP_MELODY) / sizeof(ESTOP_MELODY[0]), 200);
         wheel_motors_set_mode(WheelMode::IDLE);
@@ -349,9 +358,8 @@ static void on_estop() {
 // ── Transition conditions ─────────────────────────────────────────────────────
 
 static bool startup_ok() {
-    bool imu_ok = (param_get(PARAM_IMU_ENABLE)  < 0.5f) || (imu_state() == ImuState::NOMINAL);
-    bool hip_ok = (param_get(PARAM_AK45_ENABLE) < 0.5f) || hip_motors_ok();
-    return imu_ok && hip_ok;
+    bool imu_ok = (param_get(PARAM_IMU_ENABLE) < 0.5f) || (imu_state() == ImuState::NOMINAL);
+    return imu_ok && hip_motors_ok();
 }
 static bool startup_fail() {
     if (param_get(PARAM_IMU_ENABLE) >= 0.5f && imu_state() == ImuState::ERROR) {
@@ -359,8 +367,9 @@ static bool startup_fail() {
         g_state.fault_code = FAULT_IMU_ERROR;
         return true;
     }
-    if (param_get(PARAM_AK45_ENABLE) >= 0.5f &&
-        millis() > 2000 && (!hm_L.ever_heard || !hm_R.ever_heard)) {
+    bool l_missing = (param_get(PARAM_HIP_L_ENABLE) >= 0.5f) && !hm_L.ever_heard;
+    bool r_missing = (param_get(PARAM_HIP_R_ENABLE) >= 0.5f) && !hm_R.ever_heard;
+    if (millis() > 2000 && (l_missing || r_missing)) {
         comm_log(LOG_LEVEL_ERROR, "FAULT: hip init timeout (L=%d R=%d)", (int)hm_L.ever_heard, (int)hm_R.ever_heard);
         g_state.fault_code = FAULT_HIP_INIT_TIMEOUT;
         return true;
@@ -368,12 +377,32 @@ static bool startup_fail() {
     return false;
 }
 static bool standby_hip_fault() {
-    if (param_get(PARAM_AK45_ENABLE) >= 0.5f && !hip_motors_ok()) {
+    if (!hip_motors_ok()) {
         comm_log(LOG_LEVEL_ERROR, "FAULT: hip feedback lost");
         g_state.fault_code = FAULT_HIP_FEEDBACK_LOST;
         return true;
     }
     return false;
+}
+// RUNNING/JUMPING only: balancing on a frozen pitch estimate drives the robot
+// over — ESTOP the moment the IMU leaves NOMINAL (silence or heavy packet loss).
+static bool running_imu_fault() {
+    if (param_get(PARAM_IMU_ENABLE) < 0.5f) return false;
+    if (imu_state() == ImuState::NOMINAL) return false;
+    comm_log(LOG_LEVEL_ERROR, "FAULT: IMU lost (imu_state=%d)", (int)imu_state());
+    g_state.fault_code = FAULT_IMU_LOST;
+    return true;
+}
+// RUNNING/JUMPING only: mirrors standby_hip_fault() for the wheels — encoder
+// silence or a latched ODrive error means the balancer has no actuator.
+static bool running_wheel_fault() {
+    bool l_bad = (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f) && (!wm_L.ok || wm_L.error);
+    bool r_bad = (param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) && (!wm_R.ok || wm_R.error);
+    if (!l_bad && !r_bad) return false;
+    comm_log(LOG_LEVEL_ERROR, "FAULT: wheel fb lost L(ok=%d e=%lu) R(ok=%d e=%lu)",
+             (int)wm_L.ok, (unsigned long)wm_L.error, (int)wm_R.ok, (unsigned long)wm_R.error);
+    g_state.fault_code = FAULT_WHEEL_FEEDBACK_LOST;
+    return true;
 }
 static bool req_manual()        { bool v = s_req_manual;  s_req_manual  = false; return v; }
 static bool req_standby()       { bool v = s_req_standby; s_req_standby = false; return v; }
@@ -381,8 +410,8 @@ static bool req_reset()         { bool v = s_req_reset;   s_req_reset   = false;
 static bool req_calibration() {
     if (!s_req_calibration) return false;
     s_req_calibration = false;
-    if (param_get(PARAM_AK45_ENABLE) < 0.5f) {
-        comm_log(LOG_LEVEL_WARN, "Calibration denied: hip motors disabled (ak45_enable=0)");
+    if (param_get(PARAM_HIP_L_ENABLE) < 0.5f && param_get(PARAM_HIP_R_ENABLE) < 0.5f) {
+        comm_log(LOG_LEVEL_WARN, "Calibration denied: no hip motors enabled (hip_l_enable=0, hip_r_enable=0)");
         stateMachine_request_cmd_reject();
         return false;
     }
@@ -403,18 +432,14 @@ static bool req_running() {
         stateMachine_request_cmd_reject();
         return false;
     }
-    if (param_get(PARAM_AK45_ENABLE) < 0.5f) {
-        comm_log(LOG_LEVEL_WARN, "Running mode denied: hip motors disabled (ak45_enable=0)");
-        stateMachine_request_cmd_reject();
-        return false;
-    }
-    if (param_get(PARAM_WHEEL_ENABLE) < 0.5f) {
-        comm_log(LOG_LEVEL_WARN, "Running mode denied: wheel motors disabled (wheel_enable=0)");
-        stateMachine_request_cmd_reject();
-        return false;
-    }
     if (!hm_limits_L.valid || !hm_limits_R.valid) {
         comm_log(LOG_LEVEL_WARN, "Running mode denied: calibrate first (limits not valid).");
+        stateMachine_request_cmd_reject();
+        return false;
+    }
+    if (param_get(PARAM_HIP_L_ENABLE)   < 0.5f || param_get(PARAM_HIP_R_ENABLE)   < 0.5f ||
+        param_get(PARAM_WHEEL_L_ENABLE) < 0.5f || param_get(PARAM_WHEEL_R_ENABLE) < 0.5f) {
+        comm_log(LOG_LEVEL_WARN, "Running mode denied: bench-test mode (a motor is disabled)");
         stateMachine_request_cmd_reject();
         return false;
     }
@@ -483,19 +508,28 @@ void stateMachine_init() {
     S_CALIBRATION->addTransition(calibration_done_fn,   S_STANDBY);
     S_CALIBRATION->addTransition(req_standby,           S_STANDBY);
 
-    S_RUNNING->addTransition(req_estop,          S_ESTOP);
-    S_RUNNING->addTransition(standby_hip_fault,  S_ESTOP);
-    S_RUNNING->addTransition(req_disarm_running, S_STANDBY);
-    S_RUNNING->addTransition(req_jump,           S_JUMPING);
+    S_RUNNING->addTransition(req_estop,           S_ESTOP);
+    S_RUNNING->addTransition(standby_hip_fault,   S_ESTOP);
+    S_RUNNING->addTransition(running_imu_fault,   S_ESTOP);
+    S_RUNNING->addTransition(running_wheel_fault, S_ESTOP);
+    S_RUNNING->addTransition(req_disarm_running,  S_STANDBY);
+    S_RUNNING->addTransition(req_jump,            S_JUMPING);
 
-    S_JUMPING->addTransition(req_estop,         S_ESTOP);
-    S_JUMPING->addTransition(standby_hip_fault, S_ESTOP);
-    S_JUMPING->addTransition(jump_done,         S_RUNNING);
+    S_JUMPING->addTransition(req_estop,           S_ESTOP);
+    S_JUMPING->addTransition(standby_hip_fault,   S_ESTOP);
+    S_JUMPING->addTransition(running_imu_fault,   S_ESTOP);
+    S_JUMPING->addTransition(running_wheel_fault, S_ESTOP);
+    S_JUMPING->addTransition(jump_done,           S_RUNNING);
 
     S_ESTOP  ->addTransition(req_soft_clear,     S_STANDBY);
     S_ESTOP  ->addTransition(req_reset,          S_STARTUP);
 
-    S_CMD_REJECT->addTransition(cmd_reject_done, S_STANDBY);
+    // req_estop/standby_hip_fault checked first, same as every other state —
+    // without these, an ESTOP request during the ~1 s reject transient would
+    // sit latched and only take effect once cmd_reject_done() fires.
+    S_CMD_REJECT->addTransition(req_estop,         S_ESTOP);
+    S_CMD_REJECT->addTransition(standby_hip_fault, S_ESTOP);
+    S_CMD_REJECT->addTransition(cmd_reject_done,   S_STANDBY);
 
     g_state.state = STATE_STARTUP;
 }
@@ -506,14 +540,62 @@ void stateMachine_update() {
 
 // ── Public request API ────────────────────────────────────────────────────────
 
-void stateMachine_request_manual()      { s_req_manual         = true; }
-void stateMachine_exit_manual()         { s_req_standby        = true; }
-void stateMachine_request_reset()       { s_req_reset          = true; }
-void stateMachine_request_calibration() { s_req_calibration    = true; }
-void stateMachine_request_running()     { s_req_running        = true; }
-void stateMachine_disarm_running()      { s_req_disarm_running = true; }
+// stateMachine_request_manual/_calibration/_running only latch while actually
+// in STANDBY. Their matching req_X() transition conditions (which clear the
+// flag) are only ever evaluated from S_STANDBY, so a stale/duplicate request
+// arriving while already past STANDBY (e.g. the GUI's dual WiFi+USB send
+// delivering one click twice) would otherwise sit latched indefinitely and
+// immediately re-fire the instant we return to STANDBY for any reason.
+void stateMachine_request_manual() {
+    if (g_state.state == STATE_STANDBY) s_req_manual = true;
+}
+// req_standby() is only evaluated from S_MANUAL/S_CALIBRATION — guard so a
+// stray "Standby" request sent from some other state (e.g. RUNNING, where
+// disarm_running is the correct path) doesn't latch and fire the moment we
+// next happen to enter MANUAL or CALIBRATION.
+void stateMachine_exit_manual() {
+    if (g_state.state == STATE_MANUAL || g_state.state == STATE_CALIBRATION)
+        s_req_standby = true;
+}
+// req_reset() is only evaluated from S_ESTOP — guard so a stray reset request
+// doesn't sit latched and silently clear a later, unrelated ESTOP fault.
+void stateMachine_request_reset() {
+    if (g_state.state == STATE_ESTOP) s_req_reset = true;
+}
+void stateMachine_request_calibration() {
+    if (g_state.state == STATE_STANDBY) s_req_calibration = true;
+}
+void stateMachine_request_running() {
+    if (g_state.state == STATE_STANDBY) s_req_running = true;
+}
+// req_disarm_running() is only evaluated from S_RUNNING — guard so a stray
+// disarm request doesn't sit latched and fire the instant we next arm,
+// disarming immediately after an operator arms RUNNING.
+void stateMachine_disarm_running() {
+    if (g_state.state == STATE_RUNNING) s_req_disarm_running = true;
+}
+// Deliberately unguarded: ESTOP must be reachable from any state (it already
+// is, from every state's transition list) and re-requesting it is harmless —
+// idempotent, and there is no origin state where a "stray" estop is wrong.
 void stateMachine_request_estop()       { s_req_estop          = true; }
+// Only ever called synchronously from within req_calibration()/req_running(),
+// which themselves only run while currentState == S_STANDBY — no external
+// caller, so no stale-latch risk here.
 void stateMachine_request_cmd_reject()  { s_req_cmd_reject     = true; }
-void stateMachine_request_soft_clear()  { s_req_soft_clear     = true; }
-void stateMachine_request_jump()        { s_req_jump           = true; }
+// req_soft_clear() is only evaluated from S_ESTOP — guard so a stray soft
+// clear doesn't sit latched and silently clear a later, unrelated SOFT fault.
+void stateMachine_request_soft_clear() {
+    if (g_state.state == STATE_ESTOP) s_req_soft_clear = true;
+}
+// req_jump() is only evaluated from S_RUNNING — guard so a stray jump request
+// doesn't sit latched and fire an unintended jump the instant we next arm.
+// jump_enable is the master gate: with it 0, don't even enter STATE_JUMPING —
+// on_jumping() would skip hip commands, leaving the hips uncommanded for 3 s.
+void stateMachine_request_jump() {
+    if (param_get(PARAM_JUMP_ENABLE) < 0.5f) {
+        comm_log(LOG_LEVEL_WARN, "JUMP: blocked — jump_enable=0");
+        return;
+    }
+    if (g_state.state == STATE_RUNNING) s_req_jump = true;
+}
 void stateMachine_ping_gui_watchdog()   { s_last_gui_packet_ms = millis(); }

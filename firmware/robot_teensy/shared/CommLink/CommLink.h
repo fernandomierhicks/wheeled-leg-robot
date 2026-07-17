@@ -58,6 +58,14 @@ public:
     // Count of frames discarded due to bad checksum, bad framing, length overflow, or timeout.
     uint32_t rx_drops() const { return _rx_drops; }
 
+    // Total frames lost on this link, from seq discontinuities between
+    // consecutive valid frames (audit W3). Never reset.
+    uint32_t rx_seq_gaps() const { return _rx_seq_gaps; }
+
+    // Seq of the frame currently being delivered — only meaningful when read
+    // from inside the onPacket callback (which runs synchronously in update()).
+    uint8_t last_rx_seq() const { return _rx_seq; }
+
 private:
     Stream&      _s;
     uint8_t      _src;
@@ -76,6 +84,9 @@ private:
     uint8_t     _rx_buf[COMM_MAX_PAYLOAD];
     uint32_t    _parse_start_ms;  // millis() when current frame start was seen
     uint32_t    _rx_drops;        // total frames discarded (never reset)
+    uint32_t    _rx_seq_gaps;     // total frames lost per seq discontinuities (never reset)
+    uint8_t     _rx_last_seq;     // seq of the previous valid frame
+    bool        _rx_seq_valid;    // _rx_last_seq holds a real value
 
-    void _reset_parser();         // resets state machine; does NOT touch _rx_drops
+    void _reset_parser();         // resets state machine; does NOT touch _rx_drops/_rx_seq_gaps
 };

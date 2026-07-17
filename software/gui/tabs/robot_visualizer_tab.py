@@ -11,8 +11,16 @@ from PyQt6.QtWidgets import (
     QGroupBox, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget,
 )
 
+from .comm_commands import send_param_get_all
 from .telemetry_bus import TelemetryBus
 from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, YELLOW, WHITE
+
+# Per-motor presence params (firmware ParamRegistry GROUP_SYSTEM) — read-only
+# indicators here; toggle via the Parameters tab's param browser.
+_PARAM_HIP_L_ENABLE   = 0x0005
+_PARAM_HIP_R_ENABLE   = 0x0006
+_PARAM_WHEEL_L_ENABLE = 0x0007
+_PARAM_WHEEL_R_ENABLE = 0x0008
 
 pg.setConfigOptions(antialias=True, background=BG, foreground=TEXT)
 
@@ -176,6 +184,15 @@ def _solve_ik(q_hip: float) -> dict | None:
 
 def _solve_ik_right(q_r: float) -> dict | None:
     return _solve_ik(-q_r)
+
+
+# Fallback pose used when the live hip angle doesn't solve (e.g. raw encoder
+# reading before this session's hip calibration has run) — keeps the leg/wheel
+# rendered at a reasonable pose instead of vanishing, so wheel-spin telemetry
+# stays visible even with an uncalibrated hip. _Q_NOM is the geometry's nominal
+# operating point and is always solvable.
+_IK_L_FALLBACK = _solve_ik(_Q_NOM)
+_IK_R_FALLBACK = _solve_ik_right(_Q_NOM)
 
 
 # ── 3-D helpers ───────────────────────────────────────────────────────────────
@@ -744,6 +761,9 @@ class RobotVisualizerTab(QWidget):
         self._update_tof_items(np.eye(3))
 
         # ── 3-column cockpit layout ───────────────────────────────────────────
+        self._enable_leds: dict[int, LedIndicator] = {}
+        self._params_requested = False
+
         left  = self._build_left_panel()
         right = self._build_right_panel()
 
@@ -865,6 +885,32 @@ class RobotVisualizerTab(QWidget):
         lay.addStretch()
         return w
 
+    def _enable_indicator(self, param_id: int) -> LedIndicator:
+        """Read-only LED reflecting a firmware presence param (hip_l/r_enable,
+        wheel_l/r_enable) — green when the motor is enabled, gray when disabled.
+        Toggle the underlying param from the Parameters tab, not from here."""
+        led = LedIndicator(7)
+        led.setToolTip(f"Motor enabled (param 0x{param_id:04X}) — set via Parameters tab")
+        self._enable_leds[param_id] = led
+        return led
+
+    def _presence_row(self, param_ids: tuple[int, int]) -> QHBoxLayout:
+        """Standalone 'motor present' row — LED + text label per side, kept off
+        the crowded health-LED row so it stays legible."""
+        row = QHBoxLayout()
+        row.setSpacing(4)
+        row.addWidget(_dim_label("present:", 9))
+        for side, pid in zip(("L", "R"), param_ids):
+            led = self._enable_indicator(pid)
+            sub = QHBoxLayout()
+            sub.setSpacing(3)
+            sub.addWidget(led)
+            sub.addWidget(_dim_label(side, 9))
+            row.addLayout(sub)
+            row.addSpacing(10)
+        row.addStretch()
+        return row
+
     def _build_hip_group(self) -> QGroupBox:
         gb = _make_group("HIP MOTORS")
         lay = QVBoxLayout(gb)
@@ -899,6 +945,9 @@ class RobotVisualizerTab(QWidget):
             sub.addStretch()
             info_row.addLayout(sub)
         lay.addLayout(info_row)
+
+        # Motor-present row (hip_l/r_enable) — separate line, easier to read
+        lay.addLayout(self._presence_row((_PARAM_HIP_L_ENABLE, _PARAM_HIP_R_ENABLE)))
 
         # Current bars
         curr_row = QHBoxLayout()
@@ -958,6 +1007,9 @@ class RobotVisualizerTab(QWidget):
         self._whl_mode_lbl = _dim_label("—", 8)
         state_row.addWidget(self._whl_mode_lbl)
         lay.addLayout(state_row)
+
+        # Motor-present row (wheel_l/r_enable) — separate line, easier to read
+        lay.addLayout(self._presence_row((_PARAM_WHEEL_L_ENABLE, _PARAM_WHEEL_R_ENABLE)))
 
         return gb
 
@@ -1107,8 +1159,8 @@ class RobotVisualizerTab(QWidget):
         self._hip_motor_R.setMeshData(
             meshdata=_cylinder_mesh(R @ _HIP_R_P1, R @ _HIP_R_P2, _HIP_MOTOR_R, n=16))
 
-        ik_l = _solve_ik(q_l)
-        ik_r = _solve_ik_right(q_r)
+        ik_l = _solve_ik(q_l)       or _IK_L_FALLBACK
+        ik_r = _solve_ik_right(q_r) or _IK_R_FALLBACK
         self._update_leg(self._leg_L, ik_l, R)
         self._update_leg(self._leg_R, ik_r, R)
 
@@ -1224,7 +1276,21 @@ class RobotVisualizerTab(QWidget):
     # ── Telemetry handler ─────────────────────────────────────────────────────
 
     def _on_packet(self, info: dict) -> None:
-        if info.get("ptype") != 0x01:
+        ptype = info.get("ptype")
+
+        if ptype == 0x01 and not self._params_requested:
+            send_param_get_all()
+            self._params_requested = True
+
+        if ptype == 0x06:
+            pid = info.get("param_id")
+            val = info.get("param_value")
+            led = self._enable_leds.get(pid)
+            if led is not None and val is not None:
+                led.set_state("green" if val >= 0.5 else "gray")
+            return
+
+        if ptype != 0x01:
             return
 
         # ── Raw fields ───────────────────────────────────────────────────────
@@ -1277,9 +1343,10 @@ class RobotVisualizerTab(QWidget):
         # ── 3-D scene ────────────────────────────────────────────────────────
         self._redraw(q_l, q_r, pitch, roll, yaw, whl_angle_l, whl_angle_r)
 
-        # ── IK for leg extension ─────────────────────────────────────────────
+        # ── IK for leg extension (health-indicator text; matches _redraw's
+        # sign convention — right leg mirrors q_r) ───────────────────────────
         ik_l = _solve_ik(q_l)
-        ik_r = _solve_ik(q_r)
+        ik_r = _solve_ik_right(q_r)
 
         # ── Left panel: Orientation ──────────────────────────────────────────
         pitch_deg = math.degrees(pitch)

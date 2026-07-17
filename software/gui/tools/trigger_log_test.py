@@ -33,13 +33,27 @@ LOG_LEVEL_NAMES = {1: "INFO", 2: "WARN", 3: "ERROR"}
 LOG_INFO_TYPE_NAMES = {1: "ENTRY", 2: "LIST_END", 3: "XFER_BEGIN", 4: "XFER_END", 5: "STATUS"}
 
 
+# CRC-8 poly 0x07, init 0x00 — MIRROR of crc8() in tabs/telem_format.py and
+# shared/CommLink/CommLink.cpp (inlined here to keep this script standalone).
+_CRC8_TABLE = []
+for _i in range(256):
+    _c = _i
+    for _ in range(8):
+        _c = ((_c << 1) ^ 0x07) & 0xFF if _c & 0x80 else (_c << 1) & 0xFF
+    _CRC8_TABLE.append(_c)
+
+
+def _crc8(data: bytes) -> int:
+    crc = 0
+    for b in data:
+        crc = _CRC8_TABLE[crc ^ b]
+    return crc
+
+
 def build_frame(ftype: int, version: int, payload: bytes, seq: int) -> bytes:
     plen = len(payload)
     header = bytes([ftype, version, SRC_PC, seq & 0xFF, plen & 0xFF, (plen >> 8) & 0xFF])
-    crc = 0
-    for b in header + payload:
-        crc ^= b
-    return bytes([START_A, START_B]) + header + payload + bytes([crc, END])
+    return bytes([START_A, START_B]) + header + payload + bytes([_crc8(header + payload), END])
 
 
 def find_teensy_port() -> str:
@@ -73,10 +87,7 @@ def parse_frames(buf: bytearray):
         del buf[:total]
         if end != END:
             continue  # corrupt frame, already dropped
-        expect_crc = ftype ^ ver ^ _src ^ _seq ^ len_lo ^ len_hi
-        for b in payload:
-            expect_crc ^= b
-        if crc != expect_crc:
+        if crc != _crc8(bytes([ftype, ver, _src, _seq, len_lo, len_hi]) + payload):
             continue
         yield ftype, ver, payload
 

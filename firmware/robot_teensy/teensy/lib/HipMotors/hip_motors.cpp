@@ -3,6 +3,7 @@
 #include "robot_state.h"
 #include "comm_protocol.h"
 #include "param_registry.h"
+#include "state_machine.h"
 #include <Arduino.h>
 #include <FlexCAN_T4.h>
 
@@ -80,8 +81,13 @@ static void pack_and_send(uint32_t id, float pos, float vel, float kp, float kd,
         if (delta > MAX_HIP_DELTA_RAD) {
             const char* side = (id == AK45_ID_L) ? "L" : "R";
             comm_log(LOG_LEVEL_ERROR, "FAULT: hip %s pos jump %.3f rad > %.3f", side, delta, MAX_HIP_DELTA_RAD);
+            // Request the transition through the FSM rather than writing
+            // g_state.state directly — a direct write desyncs it from the
+            // StateMachine library's own private currentState index, which
+            // then keeps re-running the state we were actually in (masking
+            // this fault entirely; see calibration double-run bug).
             g_state.fault_code = FAULT_HIP_LARGE_POS_CMD;
-            g_state.state      = STATE_ESTOP;
+            stateMachine_request_estop();
             return;
         }
     }
@@ -148,7 +154,7 @@ void hip_motors_poll() {
     hm_L.ok = hm_L.ever_heard && (now - hm_L.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
     hm_R.ok = hm_R.ever_heard && (now - hm_R.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
 
-    if (hm_L.mit_active && (now - last_enter_ms) >= MIT_REENTER_MS) {
+    if ((hm_L.mit_active || hm_R.mit_active) && (now - last_enter_ms) >= MIT_REENTER_MS) {
         hip_motors_enter_mit();
         comm_log(LOG_LEVEL_INFO, "Hip MIT re-enter");
     }
@@ -163,13 +169,16 @@ void hip_motors_poll() {
 
     // While a setpoint is active, re-send it every tick so it isn't overridden
     // by the zero-torque ping below. Otherwise ping with current-position +
-    // zero-torque so the AK45 returns feedback every frame.
+    // zero-torque so the AK45 returns feedback every frame. Each side is gated
+    // independently so a disabled/absent motor never gets CAN traffic.
     if (hm_L.mit_active) {
         if (hm_sp_L.active)
             pack_and_send(AK45_ID_L, hm_sp_L.p, hm_sp_L.v, hm_sp_L.kp, hm_sp_L.kd, hm_sp_L.tff);
         else
             pack_and_send(AK45_ID_L, hm_L.pos_rad, 0.0f, 0.0f, 0.0f, 0.0f);
         delayMicroseconds(CAN_INTER_FRAME_US);
+    }
+    if (hm_R.mit_active) {
         if (hm_sp_R.active)
             pack_and_send(AK45_ID_R, hm_sp_R.p, hm_sp_R.v, hm_sp_R.kp, hm_sp_R.kd, hm_sp_R.tff);
         else
@@ -179,19 +188,25 @@ void hip_motors_poll() {
 
 void hip_motors_enter_mit() {
     static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC};
-    send_raw(AK45_ID_L, cmd);
-    delayMicroseconds(CAN_INTER_FRAME_US);
-    send_raw(AK45_ID_R, cmd);
-    hm_L.mit_active = true;
-    hm_R.mit_active = true;
+    bool l_en = param_get(PARAM_HIP_L_ENABLE) >= 0.5f;
+    bool r_en = param_get(PARAM_HIP_R_ENABLE) >= 0.5f;
+    if (l_en) {
+        send_raw(AK45_ID_L, cmd);
+        delayMicroseconds(CAN_INTER_FRAME_US);
+    }
+    if (r_en) send_raw(AK45_ID_R, cmd);
+    hm_L.mit_active = l_en;
+    hm_R.mit_active = r_en;
     last_enter_ms   = millis();
 }
 
 void hip_motors_exit_mit() {
     static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFD};
-    send_raw(AK45_ID_L, cmd);
-    delayMicroseconds(CAN_INTER_FRAME_US);
-    send_raw(AK45_ID_R, cmd);
+    if (hm_L.mit_active) {
+        send_raw(AK45_ID_L, cmd);
+        delayMicroseconds(CAN_INTER_FRAME_US);
+    }
+    if (hm_R.mit_active) send_raw(AK45_ID_R, cmd);
     hm_L.mit_active = false;
     hm_R.mit_active = false;
     hip_motors_clear_setpoints();
@@ -199,10 +214,14 @@ void hip_motors_exit_mit() {
 
 void hip_motors_zero() {
     static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE};
-    send_raw(AK45_ID_L, cmd);
-    delayMicroseconds(CAN_INTER_FRAME_US);
-    send_raw(AK45_ID_R, cmd);
-    comm_log(LOG_LEVEL_INFO, "Hip encoders zeroed (L+R)");
+    bool l_en = param_get(PARAM_HIP_L_ENABLE) >= 0.5f;
+    bool r_en = param_get(PARAM_HIP_R_ENABLE) >= 0.5f;
+    if (l_en) {
+        send_raw(AK45_ID_L, cmd);
+        delayMicroseconds(CAN_INTER_FRAME_US);
+    }
+    if (r_en) send_raw(AK45_ID_R, cmd);
+    comm_log(LOG_LEVEL_INFO, "Hip encoders zeroed (L=%d R=%d)", (int)l_en, (int)r_en);
 }
 
 void hip_motor_zero_L() {
@@ -219,10 +238,14 @@ void hip_motor_zero_R() {
 
 void hip_motors_send(float pos_L, float vel_L, float kp_L, float kd_L, float trq_L,
                      float pos_R, float vel_R, float kp_R, float kd_R, float trq_R) {
-    if (!hm_L.mit_active) return;
-    pack_and_send(AK45_ID_L, clamp_to_limits(pos_L, hm_limits_L), vel_L, kp_L, kd_L, trq_L);
-    delayMicroseconds(CAN_INTER_FRAME_US);
-    pack_and_send(AK45_ID_R, clamp_to_limits(pos_R, hm_limits_R), vel_R, kp_R, kd_R, trq_R);
+    // Gate each motor independently — with only one leg enabled (bench config)
+    // the active side must still receive its frame.
+    if (hm_L.mit_active) {
+        pack_and_send(AK45_ID_L, clamp_to_limits(pos_L, hm_limits_L), vel_L, kp_L, kd_L, trq_L);
+        delayMicroseconds(CAN_INTER_FRAME_US);
+    }
+    if (hm_R.mit_active)
+        pack_and_send(AK45_ID_R, clamp_to_limits(pos_R, hm_limits_R), vel_R, kp_R, kd_R, trq_R);
 }
 
 void hip_motor_send_L(float pos, float vel, float kp, float kd, float torque) {
@@ -260,5 +283,7 @@ void hip_cmd_to_setpoints(float t, float* pos_L, float* pos_R) {
 }
 
 bool hip_motors_ok() {
-    return hm_L.ok && hm_R.ok;
+    bool l_ok = (param_get(PARAM_HIP_L_ENABLE) < 0.5f) || hm_L.ok;
+    bool r_ok = (param_get(PARAM_HIP_R_ENABLE) < 0.5f) || hm_R.ok;
+    return l_ok && r_ok;
 }

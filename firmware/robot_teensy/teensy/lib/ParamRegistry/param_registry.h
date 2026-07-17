@@ -6,7 +6,7 @@
 #define PARAM_FLAG_PERSISTENT      (1<<0)  // written to LittleFS flash on each set
 #define PARAM_FLAG_READONLY        (1<<1)  // firmware-only writes; GUI can read
 #define PARAM_FLAG_COMMAND         (1<<2)  // high-freq setpoint; never persisted
-#define PARAM_FLAG_FAULT_ON_BOUNDS (1<<3)  // out-of-range triggers ESTOP instead of clamp
+// (1<<3) reserved — was PARAM_FLAG_FAULT_ON_BOUNDS (removed; writes always clamp)
 
 // ── Param descriptor ──────────────────────────────────────────────────────────
 struct Param {
@@ -24,7 +24,6 @@ struct Param {
 enum class ParamSetResult : uint8_t {
     OK          = 0,
     CLAMPED     = 1,  // value was out of range and silently clamped
-    FAULT       = 2,  // FAULT_ON_BOUNDS param was out of range; caller must ESTOP
     NOT_FOUND   = 3,
     READONLY    = 4,
 };
@@ -34,9 +33,16 @@ enum class ParamSetResult : uint8_t {
 // Call once in setup() — mounts LittleFS and patches RAM table with stored values.
 void param_init();
 
-// Write a value. Clamps to [min, max] or returns FAULT if FAULT_ON_BOUNDS set.
-// Calls on_change callback and persists to flash if PERSISTENT.
+// Write a value. Out-of-range values clamp to [min, max] (returns CLAMPED).
+// Calls on_change callback. PERSISTENT params are NOT written to flash here —
+// they only mark a dirty flag; call param_flush_service() from the main loop.
 ParamSetResult param_set(uint16_t id, float val);
+
+// Deferred flash flush: writes dirty PERSISTENT params to flash once writes
+// have been quiet for 1 s AND allow_flush is true. Call once per loop tick;
+// pass allow_flush = false while RUNNING/JUMPING (a LittleFS rewrite stalls
+// the control loop for several ms).
+void param_flush_service(bool allow_flush);
 
 // Read current value. Returns 0.0f if id not found.
 float param_get(uint16_t id);

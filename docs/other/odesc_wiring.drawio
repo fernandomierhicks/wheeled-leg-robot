@@ -1,0 +1,244 @@
+<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <!-- TITLE -->
+    <mxCell id="999" value="ODESC 3.6 Wiring Diagram — Wheeled-Leg Robot"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=18;fontStyle=1;"
+      vertex="1" parent="1">
+      <mxGeometry x="400" y="20" width="820" height="40" as="geometry"/>
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- POWER -->
+    <!-- ============================================================ -->
+    <mxCell id="102" value="&lt;b&gt;24 V Battery / PSU&lt;/b&gt;"
+      style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;"
+      vertex="1" parent="1">
+      <mxGeometry x="690" y="55" width="180" height="50" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="101" value="&lt;b&gt;XT60 — Power In&lt;/b&gt;&lt;br&gt;&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; style=&quot;border-collapse:collapse;font-size:11px&quot;&gt;&lt;tr&gt;&lt;td style=&quot;color:#cc0000&quot;&gt;&lt;b&gt;+&lt;/b&gt;&lt;/td&gt;&lt;td&gt;DC+ · 24 V&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;−&lt;/b&gt;&lt;/td&gt;&lt;td&gt;DC− · GND&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;verticalAlign=top;spacingTop=6;"
+      vertex="1" parent="1">
+      <mxGeometry x="690" y="135" width="180" height="95" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_bat_xt60" style="edgeStyle=orthogonalEdgeStyle;strokeWidth=3;strokeColor=#b85450;"
+      edge="1" source="102" target="101" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- ODESC 3.6 MAIN BOARD -->
+    <!-- ============================================================ -->
+    <mxCell id="100" value="&lt;b&gt;ODESC 3.6&lt;/b&gt;&lt;br&gt;ODrive v0.5.x · Dual Drive&lt;br&gt;&lt;i style=&quot;font-size:10px&quot;&gt;axis0 = Left wheel (M0) · axis1 = Right wheel (M1)&lt;/i&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;verticalAlign=top;spacingTop=10;"
+      vertex="1" parent="1">
+      <mxGeometry x="590" y="275" width="380" height="160" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_xt60_odesc" value="24 V / GND"
+      style="edgeStyle=orthogonalEdgeStyle;strokeWidth=3;strokeColor=#d6b656;"
+      edge="1" source="101" target="100" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- MR30 PHASE CONNECTORS -->
+    <!-- ============================================================ -->
+    <mxCell id="110" value="&lt;b&gt;MR30 — M0 Phases&lt;/b&gt;&lt;br&gt;&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; style=&quot;border-collapse:collapse;font-size:11px&quot;&gt;&lt;tr&gt;&lt;td&gt;U&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;V&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;W&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=top;spacingTop=6;"
+      vertex="1" parent="1">
+      <mxGeometry x="360" y="295" width="160" height="110" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="111" value="&lt;b&gt;MR30 — M1 Phases&lt;/b&gt;&lt;br&gt;&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; style=&quot;border-collapse:collapse;font-size:11px&quot;&gt;&lt;tr&gt;&lt;td&gt;U&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;V&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;W&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=top;spacingTop=6;"
+      vertex="1" parent="1">
+      <mxGeometry x="1045" y="295" width="160" height="110" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_odesc_mr30_m0" value="U · V · W"
+      style="edgeStyle=orthogonalEdgeStyle;strokeWidth=2;strokeColor=#9673a6;"
+      edge="1" source="100" target="110" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_odesc_mr30_m1" value="U · V · W"
+      style="edgeStyle=orthogonalEdgeStyle;strokeWidth=2;strokeColor=#9673a6;"
+      edge="1" source="100" target="111" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- MOTORS -->
+    <!-- ============================================================ -->
+    <mxCell id="120" value="&lt;b&gt;Left Wheel Motor&lt;/b&gt;&lt;br&gt;Maytech MTO5065-70-HA-C&lt;br&gt;axis0 / M0"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="100" y="295" width="210" height="75" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="121" value="&lt;b&gt;Right Wheel Motor&lt;/b&gt;&lt;br&gt;Maytech MTO5065-70-HA-C&lt;br&gt;axis1 / M1"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;"
+      vertex="1" parent="1">
+      <mxGeometry x="1255" y="295" width="210" height="75" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_mr30_motorL" value="MR30"
+      style="edgeStyle=orthogonalEdgeStyle;strokeWidth=2;strokeColor=#9673a6;"
+      edge="1" source="110" target="120" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_mr30_motorR" value="MR30"
+      style="edgeStyle=orthogonalEdgeStyle;strokeWidth=2;strokeColor=#9673a6;"
+      edge="1" source="111" target="121" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- ODRIVE SPI HEADER -->
+    <!-- ============================================================ -->
+    <mxCell id="130" value="&lt;b&gt;SPI Header (0.1&quot; JST)&lt;/b&gt;&lt;br&gt;&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; style=&quot;border-collapse:collapse;font-size:11px&quot;&gt;&lt;tr&gt;&lt;td&gt;MOSI&lt;/td&gt;&lt;td&gt;→ encoder MOSI&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;MISO&lt;/td&gt;&lt;td&gt;← encoder data&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;SCK&lt;/td&gt;&lt;td&gt;clock&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;3.3 V&lt;/td&gt;&lt;td&gt;encoder VCC&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;GND&lt;/td&gt;&lt;td&gt;encoder GND&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;br&gt;&lt;i style=&quot;font-size:10px&quot;&gt;Shared between both encoders&lt;/i&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;verticalAlign=top;spacingTop=6;align=center;"
+      vertex="1" parent="1">
+      <mxGeometry x="560" y="510" width="240" height="230" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_odesc_spi" style="edgeStyle=orthogonalEdgeStyle;"
+      edge="1" source="100" target="130" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- ODRIVE GPIO HEADER -->
+    <!-- ============================================================ -->
+    <mxCell id="131" value="&lt;b&gt;GPIO Header (0.1&quot; JST)&lt;/b&gt;&lt;br&gt;&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; style=&quot;border-collapse:collapse;font-size:11px&quot;&gt;&lt;tr&gt;&lt;td&gt;GPIO3&lt;/td&gt;&lt;td&gt;CS — axis0 (Left)&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;GPIO4&lt;/td&gt;&lt;td&gt;CS — axis1 (Right)&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;br&gt;&lt;i style=&quot;font-size:10px&quot;&gt;Set in odrivetool:&lt;br&gt;axis0.encoder.config.abs_spi_cs_gpio_pin = 3&lt;br&gt;axis1.encoder.config.abs_spi_cs_gpio_pin = 4&lt;/i&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;verticalAlign=top;spacingTop=6;align=center;"
+      vertex="1" parent="1">
+      <mxGeometry x="830" y="510" width="250" height="200" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_odesc_gpio" style="edgeStyle=orthogonalEdgeStyle;"
+      edge="1" source="100" target="131" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- AS5048A ENCODERS -->
+    <!-- ============================================================ -->
+    <mxCell id="150" value="&lt;b&gt;AS5048A — Left (axis0)&lt;/b&gt;&lt;br&gt;14-bit Absolute Encoder&lt;br&gt;&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; style=&quot;border-collapse:collapse;font-size:11px&quot;&gt;&lt;tr&gt;&lt;td&gt;MOSI&lt;/td&gt;&lt;td&gt;← ODrive MOSI&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;MISO&lt;/td&gt;&lt;td&gt;→ ODrive MISO&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;CLK&lt;/td&gt;&lt;td&gt;← ODrive SCK&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;CS&lt;/td&gt;&lt;td&gt;← GPIO3&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;VCC&lt;/td&gt;&lt;td&gt;3.3 V&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;GND&lt;/td&gt;&lt;td&gt;GND&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=top;spacingTop=6;"
+      vertex="1" parent="1">
+      <mxGeometry x="130" y="510" width="210" height="230" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="151" value="&lt;b&gt;AS5048A — Right (axis1)&lt;/b&gt;&lt;br&gt;14-bit Absolute Encoder&lt;br&gt;&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; style=&quot;border-collapse:collapse;font-size:11px&quot;&gt;&lt;tr&gt;&lt;td&gt;MOSI&lt;/td&gt;&lt;td&gt;← ODrive MOSI&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;MISO&lt;/td&gt;&lt;td&gt;→ ODrive MISO&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;CLK&lt;/td&gt;&lt;td&gt;← ODrive SCK&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;CS&lt;/td&gt;&lt;td&gt;← GPIO4&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;VCC&lt;/td&gt;&lt;td&gt;3.3 V&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;GND&lt;/td&gt;&lt;td&gt;GND&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=top;spacingTop=6;"
+      vertex="1" parent="1">
+      <mxGeometry x="1220" y="510" width="210" height="230" as="geometry"/>
+    </mxCell>
+
+    <!-- SPI Header → AS5048A Left (MISO, SCK, 3.3V, GND) -->
+    <mxCell id="e_spi_encL" value="MOSI · MISO · SCK · 3.3V · GND"
+      style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#82b366;"
+      edge="1" source="130" target="150" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- SPI Header → AS5048A Right (MISO, SCK, 3.3V, GND) -->
+    <mxCell id="e_spi_encR" value="MOSI · MISO · SCK · 3.3V · GND"
+      style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#82b366;"
+      edge="1" source="130" target="151" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- GPIO3 → AS5048A Left CS -->
+    <mxCell id="e_gpio3_csL" value="CS (GPIO3)"
+      style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#6c8ebf;"
+      edge="1" source="131" target="150" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- GPIO4 → AS5048A Right CS -->
+    <mxCell id="e_gpio4_csR" value="CS (GPIO4)"
+      style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#6c8ebf;"
+      edge="1" source="131" target="151" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- CAN BUS -->
+    <!-- ============================================================ -->
+    <mxCell id="170" value="&lt;b&gt;TJA1050 CAN Transceiver&lt;/b&gt;&lt;br&gt;&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; style=&quot;border-collapse:collapse;font-size:11px&quot;&gt;&lt;tr&gt;&lt;td colspan=&quot;2&quot; style=&quot;background:#f8cecc;text-align:center&quot;&gt;&lt;b&gt;Bus Side&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;CANH&lt;/td&gt;&lt;td&gt;CAN High&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;CANL&lt;/td&gt;&lt;td&gt;CAN Low&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td colspan=&quot;2&quot; style=&quot;background:#dae8fc;text-align:center&quot;&gt;&lt;b&gt;Logic Side&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;TXD&lt;/td&gt;&lt;td&gt;← Arduino CANTX&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;RXD&lt;/td&gt;&lt;td&gt;→ Arduino CANRX&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;VCC&lt;/td&gt;&lt;td&gt;5 V&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;GND&lt;/td&gt;&lt;td&gt;GND&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;br&gt;&lt;i style=&quot;font-size:10px&quot;&gt;⚠ TXD/RXD are 5 V logic&lt;br&gt;Use SN65HVD230 for 3.3 V native&lt;/i&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;verticalAlign=top;spacingTop=8;"
+      vertex="1" parent="1">
+      <mxGeometry x="830" y="760" width="220" height="290" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_odesc_can" value="CAN H / CAN L"
+      style="edgeStyle=orthogonalEdgeStyle;strokeWidth=2;strokeColor=#b85450;"
+      edge="1" source="100" target="170" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="180" value="&lt;b&gt;Arduino UNO R4 WiFi&lt;/b&gt;&lt;br&gt;RA4M1 + ESP32-S3&lt;br&gt;&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; style=&quot;border-collapse:collapse;font-size:11px&quot;&gt;&lt;tr&gt;&lt;td&gt;CANTX (D4)&lt;/td&gt;&lt;td&gt;→ TJA TXD&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;CANRX (D5)&lt;/td&gt;&lt;td&gt;← TJA RXD&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;5 V&lt;/td&gt;&lt;td&gt;TJA VCC&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;GND&lt;/td&gt;&lt;td&gt;GND&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;br&gt;&lt;i style=&quot;font-size:10px&quot;&gt;Verify CANTX/CANRX pin labels on silkscreen&lt;/i&gt;"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;verticalAlign=top;spacingTop=8;"
+      vertex="1" parent="1">
+      <mxGeometry x="830" y="1090" width="220" height="210" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_tja_arduino" value="TXD · RXD · 5V · GND"
+      style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6c8ebf;"
+      edge="1" source="170" target="180" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- AK45-10 on same CAN bus -->
+    <mxCell id="hip_note" value="AK45-10 Hip Motors also on CAN bus&lt;br&gt;(ID L=1, R=2 · ODESC ID=3)&lt;br&gt;120 Ω terminator at each bus end"
+      style="text;html=1;strokeColor=#b85450;fillColor=#f8cecc;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=10;rounded=1;"
+      vertex="1" parent="1">
+      <mxGeometry x="560" y="790" width="230" height="65" as="geometry"/>
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- NOTES -->
+    <!-- ============================================================ -->
+    <mxCell id="notes" value="&lt;b&gt;Notes&lt;/b&gt;&lt;br&gt;• Hall sensors NOT used — AS5048A absolute encoder handles commutation, velocity, and position from power-on (no calibration spin needed)&lt;br&gt;• MOSI must be connected — ODrive requires it for SPI bus to function even though AS5048A is read-only&lt;br&gt;• MISO and SCK are shared; only CS lines are per-axis (GPIO3 / GPIO4)&lt;br&gt;• ODrive config: encoder.mode = ENCODER_MODE_SPI_ABS_AMS · abs_spi_cs_gpio_pin = 3 (axis0) or 4 (axis1)&lt;br&gt;• TJA1050 outputs 5 V on RXD — add resistor divider or use SN65HVD230 (3.3 V) instead"
+      style="text;html=1;strokeColor=#666666;fillColor=#f5f5f5;align=left;verticalAlign=top;spacingLeft=8;spacingRight=8;spacingTop=8;fontSize=10;rounded=1;"
+      vertex="1" parent="1">
+      <mxGeometry x="100" y="800" width="680" height="110" as="geometry"/>
+    </mxCell>
+
+    <!-- LEGEND -->
+    <mxCell id="leg1" value="— Phase wires (MR30)"
+      style="text;html=1;strokeColor=#9673a6;fillColor=#e1d5e7;align=left;fontSize=10;rounded=1;"
+      vertex="1" parent="1">
+      <mxGeometry x="100" y="940" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg2" value="- - SPI signals (0.1&quot; JST, shared)"
+      style="text;html=1;strokeColor=#82b366;fillColor=#d5e8d4;align=left;fontSize=10;rounded=1;"
+      vertex="1" parent="1">
+      <mxGeometry x="100" y="978" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg3" value="- - CS lines (GPIO3 / GPIO4)"
+      style="text;html=1;strokeColor=#6c8ebf;fillColor=#dae8fc;align=left;fontSize=10;rounded=1;"
+      vertex="1" parent="1">
+      <mxGeometry x="100" y="1016" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg4" value="— CAN Bus (twisted pair)"
+      style="text;html=1;strokeColor=#b85450;fillColor=#f8cecc;align=left;fontSize=10;rounded=1;"
+      vertex="1" parent="1">
+      <mxGeometry x="100" y="1054" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg5" value="— Power (XT60)"
+      style="text;html=1;strokeColor=#d6b656;fillColor=#fff2cc;align=left;fontSize=10;rounded=1;"
+      vertex="1" parent="1">
+      <mxGeometry x="100" y="1092" width="200" height="28" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>

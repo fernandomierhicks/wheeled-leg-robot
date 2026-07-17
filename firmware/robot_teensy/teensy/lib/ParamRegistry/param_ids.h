@@ -23,10 +23,20 @@
 // changing at runtime requires CMD_ID_REBOOT to re-run setup().
 #define PARAM_IMU_ENABLE     0x0000  // BNO086 IMU (SPI). 0 also blocks RUNNING (arming) —
                                       // real pitch feedback is required to balance.
-#define PARAM_AK45_ENABLE    0x0001  // AK45-10 hip motors (CAN2)
-#define PARAM_WHEEL_ENABLE   0x0002  // wheel motor controllers / ODrive (CAN3)
 #define PARAM_BUZZER_ENABLE  0x0003  // buzzer
 #define PARAM_LED_ENABLE     0x0004  // status RGB LED
+
+// Per-motor presence flags — 0 = that motor physically disconnected/not
+// present; CAN traffic to it is skipped and the state machine no longer
+// gates STARTUP/CALIBRATION on it. The whole hip/wheel CAN subsystem is
+// initialized at boot iff at least one of its two per-motor flags is set
+// (main.cpp setup()). Default 1 (present).
+// RUNNING/JUMPING are hard-blocked (state_machine.cpp req_running()) unless
+// all four are enabled.
+#define PARAM_HIP_L_ENABLE    0x0005  // left AK45 hip motor present
+#define PARAM_HIP_R_ENABLE    0x0006  // right AK45 hip motor present
+#define PARAM_WHEEL_L_ENABLE  0x0007  // left ODrive wheel motor present
+#define PARAM_WHEEL_R_ENABLE  0x0008  // right ODrive wheel motor present
 
 // GROUP_HIP — hip motor behaviour
 #define PARAM_ESTOP_HIP_DISABLE   0x0200  // 1=exit MIT on ESTOP entry and re-enter on reset, 0=leave MIT running
@@ -41,18 +51,43 @@
 
 // GROUP_CALIB — hardstop calibration tuning
 #define PARAM_CALIB_SEEK_SPEED    0x0100  // ramp speed toward hardstop [rad/s]
-#define PARAM_CALIB_KP            0x0101  // position gain while seeking
-#define PARAM_CALIB_KD            0x0102  // damping while seeking
+// CAL_SEEK_BOTTOM = t=0/"retracted" hardstop (robot weight assists the motor
+// here — see PARAM_RADIO_HIP_CMD convention, confirmed via hip_cmd_to_setpoints()):
+// less kp/strength needed, and a lower (more sensitive) stall current threshold
+// since the assisted baseline current while moving is already low.
+#define PARAM_CALIB_KP_BOTTOM     0x0101  // position gain while seeking (SEEK_BOTTOM/retract);
+                                           // also reused by CAL_RETURN_HOME's traverse-back move
+#define PARAM_CALIB_KD            0x0102  // damping while seeking (both phases)
 #define PARAM_CALIB_HOLD_KP       0x0103  // position gain while holding at home
 #define PARAM_CALIB_HOLD_KD       0x0104  // damping while holding at home
-#define PARAM_CALIB_STALL_CUR     0x0105  // current threshold to declare a hardstop [A]
+#define PARAM_CALIB_STALL_CUR_BOTTOM 0x0105  // current threshold to declare a hardstop [A] (SEEK_BOTTOM/retract)
 #define PARAM_CALIB_STALL_DEADBAND 0x0106 // max pos movement per tick to count as stalled [rad]
 #define PARAM_CALIB_STALL_TICKS   0x0107  // consecutive stalled ticks before declaring hardstop (int stored as float)
 #define PARAM_CALIB_MARGIN        0x0108  // safety margin from each hardstop [rad]
-#define PARAM_CALIB_SAFETY_BOUND  0x0109  // max seek distance before fault [rad]
+#define PARAM_CALIB_SAFETY_BOUND  0x0109  // max CAL_SEEK_BOTTOM travel before fault [rad] —
+                                           // worst case, an unknown start position needs up to
+                                           // the full joint range to reach the first hardstop.
 #define PARAM_CALIB_L_SEEK_DIR    0x010A  // sign (+1/-1) toward left hip bottom hardstop
 #define PARAM_CALIB_R_SEEK_DIR    0x010B  // sign (+1/-1) toward right hip bottom hardstop
 #define PARAM_CALIB_DONE          0x010C  // 1.0 = calibration completed at least once (persisted across reboots)
+#define PARAM_CALIB_SAFETY_BOUND_TOP 0x010D  // max CAL_SEEK_TOP travel before fault [rad] —
+                                              // measured from the just-zeroed bottom hardstop,
+                                              // so this only needs to cover the joint range once.
+// CAL_SEEK_TOP = t=1/"extended" hardstop — motor must fight robot weight here:
+// more kp/strength needed, and a higher (less sensitive) stall current threshold
+// so the elevated baseline current from fighting gravity doesn't false-trigger.
+#define PARAM_CALIB_KP_TOP        0x010E  // position gain while seeking (SEEK_TOP/extend)
+#define PARAM_CALIB_STALL_CUR_TOP 0x010F  // current threshold to declare a hardstop [A] (SEEK_TOP/extend)
+
+// Per-direction calibration enable — bench-testing one hardstop direction at a
+// time. READONLY: edit + reflash to change. SEEK_BOTTOM (retract) is the
+// prerequisite phase (establishes the zero reference), so disabling it skips
+// the whole axis, same as a disabled hip motor. Disabling SEEK_TOP (extend)
+// lets SEEK_BOTTOM run and zero normally, then holds there (CAL_HOLD_RETRACT)
+// instead of continuing — no limits are computed, calibration_done() never
+// fires for that axis, so STATE_CALIBRATION won't auto-exit to STANDBY.
+#define PARAM_CALIB_RETRACT_ENABLE 0x0110  // 1 = run SEEK_BOTTOM (retract); default 0
+#define PARAM_CALIB_EXTEND_ENABLE  0x0111  // 1 = run SEEK_TOP (extend) after retract; default 0
 
 // GROUP_CONTROL — LQR controller settings
 #define PARAM_LQR_ENABLE              0x0400  // 1 = wheel torque output active; 0 = LQR runs but outputs zero

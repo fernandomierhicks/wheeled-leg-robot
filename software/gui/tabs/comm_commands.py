@@ -6,6 +6,7 @@ changes, hip motor commands, ...).
 """
 
 from .port_manager import SerialPortManager
+from .telem_format import crc8
 
 # ── CommLink frame constants (shared/comm_protocol.h) ─────────────────────────
 COMM_START_A  = 0xAA
@@ -17,6 +18,7 @@ CMD_PAYLOAD_V = 1
 
 # Command IDs (comm_protocol.h CMD_ID_*)
 CMD_ID_SET_MODE  = 0x01
+CMD_ID_PING      = 0x02
 CMD_ID_HIP       = 0x05
 CMD_ID_REBOOT    = 0x06
 CMD_ID_WHEEL     = 0x07
@@ -52,26 +54,34 @@ _seq = [0]  # rolling Tx sequence counter
 
 
 def build_frame(payload: bytes) -> bytes:
-    """Wrap payload in a CommLink COMMAND frame."""
+    """Wrap payload in a CommLink COMMAND frame (CRC-8 checksum)."""
     seq = _seq[0] & 0xFF
     _seq[0] += 1
     plen = len(payload)
     header = bytes([COMM_TYPE_CMD, CMD_PAYLOAD_V, COMM_SRC_PC,
                     seq, plen & 0xFF, (plen >> 8) & 0xFF])
-    crc = 0
-    for b in header + payload:
-        crc ^= b
+    crc = crc8(header + payload)
     return bytes([COMM_START_A, COMM_START_B]) + header + payload + bytes([crc, COMM_END])
 
 
 def send_frame(frame: bytes):
-    """Send a frame over WiFi TCP (if connected) and/or USB serial."""
-    from .wifi_transport import WifiTransport
-    WifiTransport.instance().send(frame)
+    """Send a frame over the single active transport (matches whichever
+    device SourceManager has picked for telemetry: USB serial to esp32/teensy,
+    or WiFi). Commands must go out exactly once — sending over every connected
+    transport simultaneously double-delivers every command to the Teensy,
+    which firmware request flags aren't designed to absorb (see
+    stateMachine_request_calibration's STANDBY-only latch)."""
+    from .source_manager import SourceManager
+    active = SourceManager.instance().active
+
+    if active == "wifi":
+        from .wifi_transport import WifiTransport
+        WifiTransport.instance().send(frame)
+        return
 
     pm = SerialPortManager.instance()
     with pm._lock:
-        s = pm._open.get("esp32") or pm._open.get("teensy")
+        s = pm._open.get(active)
     if s and s.is_open:
         try:
             s.write(frame)
@@ -83,6 +93,14 @@ def send_set_mode(target: int):
     """Send CMD_ID_SET_MODE with the given target RobotStateEnum value."""
     import struct
     send_frame(build_frame(struct.pack("<BB", CMD_ID_SET_MODE, target)))
+
+
+def send_ping():
+    """Send CMD_ID_PING — GUI heartbeat. Feeds the firmware MANUAL-mode GUI
+    watchdog (500 ms): if pings stop (GUI crash/disconnect), the robot exits
+    MANUAL and idles the wheels. Sent at 10 Hz by MainWindow."""
+    import struct
+    send_frame(build_frame(struct.pack("<B", CMD_ID_PING)))
 
 
 def send_soft_clear():

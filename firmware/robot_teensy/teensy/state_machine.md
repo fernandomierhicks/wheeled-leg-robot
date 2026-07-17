@@ -29,15 +29,15 @@ stateDiagram-v2
     CALIBRATION --> STANDBY : GUI "Exit Manual" (abort)
 
     RUNNING --> ESTOP   : hip feedback lost (CAN timeout 20 ms)
+    RUNNING --> ESTOP   : IMU leaves NOMINAL (FAULT_IMU_LOST)
+    RUNNING --> ESTOP   : wheel encoder timeout / ODrive error (FAULT_WHEEL_FEEDBACK_LOST)
     RUNNING --> ESTOP   : GUI/radio ESTOP
-    RUNNING --> STANDBY : CH10 drops below 1990 µs
+    RUNNING --> STANDBY : CH10 drops below 1990 µs (level-based — also catches drops during JUMPING)
 
     CMD_REJECT --> STANDBY : auto-exit after ~1 s
 
     ESTOP --> STARTUP : GUI "Reset" (clears fault code, re-runs startup checks)
 ```
-
-> **Hidden ESTOP path:** an out-of-bounds param write (`ParamSetResult::FAULT`) pre-sets `fault_code = FAULT_PARAM_OUT_OF_BOUNDS` then calls `stateMachine_request_estop()` — can trigger ESTOP from **any** state.
 
 ## States
 
@@ -111,7 +111,7 @@ On exit to STANDBY: plays DISARMED_MELODY (triggered in `on_standby()`).
 
 ## ESTOP detail
 
-- On entry: flushes all pending mode requests (`s_req_manual`, `s_req_running`, `s_req_calibration`, `s_req_cmd_reject`) so stale queued requests cannot fire after a later STARTUP → STANDBY sequence.
+- On entry: flushes **all** pending mode requests (`s_req_manual`, `s_req_running`, `s_req_calibration`, `s_req_cmd_reject`, `s_req_jump`, `s_req_disarm_running`, `s_req_standby`, `s_req_reset`, `s_req_soft_clear`) so stale queued requests cannot fire after a later reset/soft-clear (e.g. a jump latched the same tick a fault fired).
 - On entry: if `PARAM_ESTOP_HIP_DISABLE == 1`, calls `hip_motors_exit_mit()` and sets `s_estop_hip_disabled = true`. Logs `fault_code` as hex.
 - On reset → STARTUP: if `s_estop_hip_disabled` and `PARAM_ESTOP_HIP_DISABLE >= 0.5f`, re-enters MIT automatically.
 - `fault_code` is set before entering ESTOP (see `FAULT_*` in `comm_protocol.h`). `req_estop()` only sets `FAULT_HUMAN_ESTOP` if `fault_code` is still `FAULT_NONE` — callers may pre-set a more specific code.
@@ -126,4 +126,7 @@ On exit to STANDBY: plays DISARMED_MELODY (triggered in `on_standby()`).
 | `FAULT_HIP_FEEDBACK_LOST` | CAN feedback timeout in STANDBY / MANUAL / CALIBRATION / RUNNING |
 | `FAULT_CALIBRATION_TIMEOUT` | Hardstop not found within `CALIB_SAFETY_BOUND_RAD` |
 | `FAULT_HUMAN_ESTOP` | ESTOP triggered by GUI button or radio |
-| `FAULT_PARAM_OUT_OF_BOUNDS` | Param write rejected — value outside `[min, max]` |
+| `FAULT_IMU_LOST` | IMU left NOMINAL while RUNNING/JUMPING (silence or heavy packet loss) |
+| `FAULT_WHEEL_FEEDBACK_LOST` | Wheel encoder timeout or ODrive error while RUNNING/JUMPING |
+
+Full code/severity table: `firmware/robot_teensy/README.md`.

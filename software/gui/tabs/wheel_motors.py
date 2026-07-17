@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .telemetry_bus import TelemetryBus
-from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
+from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, YELLOW
 from .comm_commands import (
     send_set_mode, send_wheel_set_mode, send_wheel_setpoint, send_wheel_clear_errors,
     WHEEL_MODE_IDLE, WHEEL_MODE_VELOCITY, WHEEL_MODE_POSITION, WHEEL_MODE_TORQUE,
@@ -157,6 +157,7 @@ class _WheelPanel(QWidget):
         self._send_fn = send_fn  # callable(fw_val: float) → sends setpoint for this wheel only
         self._vel_buf:  deque = deque([0.0] * _BUF, maxlen=_BUF)
         self._cmd_buf:  deque = deque([0.0] * _BUF, maxlen=_BUF)
+        self._pos_buf:  deque = deque([0.0] * _BUF, maxlen=_BUF)
         self._latest_vel  = 0.0
         self._latest_pos  = 0.0
         self._latest_vbus = 0.0
@@ -194,7 +195,9 @@ class _WheelPanel(QWidget):
         self._lbl_error = _readout(lay, "Error",    GREEN)
         lay.addWidget(_hline())
 
-        # Mini chart — velocity (blue) + commanded setpoint (orange dashed)
+        # Mini chart — velocity (blue) + commanded setpoint (orange dashed) on the
+        # left axis (turns/s), position (yellow) on a linked right axis (turns) —
+        # separate axes since position magnitude/units don't share velocity's scale.
         self._chart = pg.PlotWidget()
         self._chart.setBackground(BG)
         self._chart.setMaximumHeight(110)
@@ -202,17 +205,39 @@ class _WheelPanel(QWidget):
         self._chart.showGrid(x=True, y=True, alpha=0.12)
         self._chart.setXRange(0, _BUF)
         self._chart.getAxis("bottom").setStyle(showValues=False)
+        plot_item = self._chart.getPlotItem()
+        plot_item.setLabel("left", "t/s", color=DIM)
+        plot_item.showAxis("right")
+        plot_item.getAxis("right").setLabel("turns", color=DIM)
+        self._pos_vb = pg.ViewBox()
+        plot_item.scene().addItem(self._pos_vb)
+        plot_item.getAxis("right").linkToView(self._pos_vb)
+        self._pos_vb.setXLink(plot_item)
+
+        def _sync_pos_vb():
+            self._pos_vb.setGeometry(plot_item.vb.sceneBoundingRect())
+            self._pos_vb.linkedViewChanged(plot_item.vb, self._pos_vb.XAxis)
+
+        _sync_pos_vb()
+        plot_item.vb.sigResized.connect(_sync_pos_vb)
+
         leg = self._chart.addLegend(offset=(4, 4), verSpacing=-4)
-        self._crv_vel = self._chart.plot(
+        self._crv_vel = plot_item.plot(
             list(self._vel_buf),
             pen=pg.mkPen(BLUE, width=1.5),
             name="vel (t/s)",
         )
-        self._crv_cmd = self._chart.plot(
+        self._crv_cmd = plot_item.plot(
             list(self._cmd_buf),
             pen=pg.mkPen(ORANGE, width=1.2, style=Qt.PenStyle.DashLine),
             name="cmd",
         )
+        self._crv_pos = pg.PlotCurveItem(
+            list(self._pos_buf),
+            pen=pg.mkPen(YELLOW, width=1.2),
+        )
+        self._pos_vb.addItem(self._crv_pos)
+        leg.addItem(self._crv_pos, "pos (turns)")
         lay.addWidget(self._chart)
         lay.addWidget(_hline())
 
@@ -330,6 +355,7 @@ class _WheelPanel(QWidget):
         self._latest_state_id = state_id
         self._vel_buf.append(vel)
         self._cmd_buf.append(self._latest_cmd)
+        self._pos_buf.append(pos)
 
     # ── commands ──────────────────────────────────────────────────────────────
 
@@ -416,8 +442,10 @@ class _WheelPanel(QWidget):
         # Charts
         self._crv_vel.setData(list(self._vel_buf))
         self._crv_cmd.setData(list(self._cmd_buf))
+        self._crv_pos.setData(list(self._pos_buf))
 
-        # Auto-fit Y every 5th redraw
+        # Auto-fit Y every 5th redraw — velocity/cmd on the left axis, position
+        # independently on the right axis (different units/magnitude).
         if not hasattr(self, "_rd_count"):
             self._rd_count = 0
         self._rd_count += 1
@@ -427,6 +455,11 @@ class _WheelPanel(QWidget):
             span = max(hi - lo, 1.0)
             mid  = (lo + hi) / 2
             self._chart.setYRange(mid - span * 0.6, mid + span * 0.6, padding=0.05)
+
+            pos_lo, pos_hi = min(self._pos_buf), max(self._pos_buf)
+            pos_span = max(pos_hi - pos_lo, 1.0)
+            pos_mid  = (pos_lo + pos_hi) / 2
+            self._pos_vb.setYRange(pos_mid - pos_span * 0.6, pos_mid + pos_span * 0.6, padding=0.05)
 
 
 # ── Main tab ──────────────────────────────────────────────────────────────────

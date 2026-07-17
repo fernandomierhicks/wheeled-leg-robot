@@ -1,0 +1,128 @@
+// Raw hardware probe for the BNO086 IMU — bypasses the Adafruit_BNO08x/SH2
+// library entirely. Every wait in this file is time-bounded so it is always
+// safe to flash unattended.
+//
+// Round 3: after reading the boot advertisement, hand-craft and send a real
+// SHTP "Get Product ID Request" (reportId 0xF9) on the "control" channel
+// (channel 2, confirmed via the real driver's controlChan resolution), then
+// watch for a Product ID Response (0xF8). This tests the SPI WRITE path
+// directly, decoupled from the Adafruit_BNO08x/SH2 driver's own HAL.
+
+#include <Arduino.h>
+#include <SPI.h>
+#include "config.h"
+
+static void hard_reset() {
+    digitalWrite(PIN_IMU_RST, LOW);
+    delay(20);
+    digitalWrite(PIN_IMU_RST, HIGH);
+}
+
+static bool wait_int_low(uint32_t timeout_ms) {
+    uint32_t t0 = millis();
+    while (millis() - t0 < timeout_ms) {
+        if (digitalRead(PIN_IMU_INT) == LOW) return true;
+        delay(1);
+    }
+    return false;
+}
+
+// Reads whatever SHTP packet is currently available (INT should be low).
+static uint16_t read_packet(uint8_t *buf, uint16_t cap, uint8_t *out_chan, uint8_t *out_seq) {
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+    digitalWrite(PIN_IMU_CS, LOW);
+    delayMicroseconds(10);
+    uint8_t hdr[4];
+    for (int i = 0; i < 4; i++) hdr[i] = SPI.transfer(0x00);
+    uint16_t len = (hdr[0] | (hdr[1] << 8)) & 0x7FFF;
+    if (out_chan) *out_chan = hdr[2];
+    if (out_seq)  *out_seq  = hdr[3];
+    uint16_t body = (len > 4) ? (len - 4) : 0;
+    uint16_t to_read = (body > cap) ? cap : body;
+    for (uint16_t i = 0; i < to_read; i++) buf[i] = SPI.transfer(0x00);
+    digitalWrite(PIN_IMU_CS, HIGH);
+    SPI.endTransaction();
+    return len;
+}
+
+// Writes an SHTP packet: 4-byte header + payload, on the given channel/seq.
+static void write_packet(uint8_t channel, uint8_t seq, const uint8_t *payload, uint16_t payload_len) {
+    uint16_t total_len = 4 + payload_len;
+    uint8_t hdr[4] = {(uint8_t)(total_len & 0xFF), (uint8_t)((total_len >> 8) & 0x7F), channel, seq};
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+    digitalWrite(PIN_IMU_CS, LOW);
+    delayMicroseconds(10);
+    for (int i = 0; i < 4; i++) SPI.transfer(hdr[i]);
+    for (uint16_t i = 0; i < payload_len; i++) SPI.transfer(payload[i]);
+    digitalWrite(PIN_IMU_CS, HIGH);
+    SPI.endTransaction();
+}
+
+void setup() {
+    Serial.begin(115200);
+    while (!Serial && millis() < 3000) {}
+    Serial.println("\n=== IMU raw hardware probe, round 3: product-ID write test ===");
+
+    pinMode(PIN_IMU_INT, INPUT_PULLUP);
+    pinMode(PIN_IMU_RST, OUTPUT);
+    pinMode(PIN_IMU_CS, OUTPUT);
+    digitalWrite(PIN_IMU_CS, HIGH);
+    digitalWrite(PIN_IMU_RST, HIGH);
+    delay(50);
+    SPI.begin();
+
+    Serial.println("Resetting and draining boot advertisement...");
+    hard_reset();
+    uint8_t buf[300];
+    uint8_t chan, seq;
+    // Drain until INT stays high for a full 800 ms (genuinely idle), not just
+    // a fixed count -- earlier runs may have left backlog unread, making a
+    // later "response" actually just leftover boot-burst traffic.
+    for (int i = 0; i < 40; i++) {
+        if (wait_int_low(800)) {
+            uint16_t len = read_packet(buf, sizeof(buf), &chan, &seq);
+            Serial.printf("  drain[%d]: chan=%d seq=%d claimed len=%u  first bytes: ", i, chan, seq, len);
+            uint16_t body = (len > 4) ? (len - 4) : 0;
+            if (body > sizeof(buf)) body = sizeof(buf);
+            for (uint16_t k = 0; k < body && k < 8; k++) Serial.printf("%02X ", buf[k]);
+            Serial.println();
+        } else {
+            Serial.printf("  drain[%d]: INT idle for 800ms, drain complete\n", i);
+            break;
+        }
+        delay(20);
+    }
+
+    Serial.println("Sending Get Product ID Request (0xF9) on channel 2, seq 0...");
+    uint8_t req[2] = {0xF9, 0x00};
+    write_packet(2, 0, req, sizeof(req));
+
+    Serial.println("Waiting up to 2s for a response...");
+    bool got = wait_int_low(2000);
+    Serial.printf("INT low after request: %s\n", got ? "YES" : "NO");
+    if (got) {
+        uint16_t len = read_packet(buf, sizeof(buf), &chan, &seq);
+        Serial.printf("Response chan=%d seq=%d len=%u  first bytes: ", chan, seq, len);
+        uint16_t body = (len > 4) ? (len - 4) : 0;
+        if (body > sizeof(buf)) body = sizeof(buf);
+        for (uint16_t i = 0; i < body && i < 16; i++) Serial.printf("%02X ", buf[i]);
+        Serial.println();
+        if (body > 0 && buf[0] == 0xF8) {
+            Serial.println("RESULT: got a valid Product ID Response (0xF8)!");
+        } else {
+            Serial.println("RESULT: got a packet but NOT a Product ID Response.");
+        }
+    } else {
+        Serial.println("RESULT: sensor never responded to the request.");
+    }
+
+    Serial.println("\n=== probe round 3 done ===\n");
+}
+
+void loop() {
+    static uint32_t last = 0;
+    if (millis() - last >= 1000) {
+        last = millis();
+        Serial.printf("alive t=%lu  INT=%d\n", millis(), digitalRead(PIN_IMU_INT));
+    }
+}

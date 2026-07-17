@@ -30,21 +30,33 @@ uint32_t   g_tof_last_ms = 0;
 // ── Logging ───────────────────────────────────────────────────────────────────
 
 void comm_log(uint8_t level, const char* fmt, ...) {
-    char msg[62];
+    char msg[120];
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
     if (n <= 0) return;
-    if (n > (int)sizeof(msg)) n = sizeof(msg);
-    uint8_t buf[63];
+    // vsnprintf returns the would-be length; the buffer holds at most
+    // sizeof-1 chars (audit W6 — the old clamp sent the NUL terminator).
+    if (n > (int)sizeof(msg) - 1) n = (int)sizeof(msg) - 1;
+    uint8_t buf[1 + sizeof(msg)];
     buf[0] = level;
     memcpy(buf + 1, msg, n);
     g_comm.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
     if (Serial) g_comm_usb.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
 }
 
+// Which link requested the active SD-log GET (audit W5): bulk LOG_DATA chunks
+// go only to that link — duplicating ~490 B frames onto the other link wastes
+// its bandwidth for a stream nobody is reading (the GUI listens on one source).
+static bool s_log_get_via_usb = false;
+
 static void sd_logger_send(uint8_t type, uint8_t version, const void* payload, uint16_t len) {
+    if (type == COMM_TYPE_LOG_DATA) {
+        if (s_log_get_via_usb) { if (Serial) g_comm_usb.send(type, version, payload, len); }
+        else                   g_comm.send(type, version, payload, len);
+        return;
+    }
     g_comm.send(type, version, payload, len);
     if (Serial) g_comm_usb.send(type, version, payload, len);
 }
@@ -78,11 +90,28 @@ static void send_param_report(uint16_t idx) {
     if (Serial) g_comm_usb.send(COMM_TYPE_PARAM_REPORT, PARAM_REPORT_PAYLOAD_V1, &rpt, sizeof(rpt));
 }
 
+// ── Command permission matrix ─────────────────────────────────────────────────
+// Single place that decides which commands are accepted in which state.
+// Commands are requests: anything rejected here is logged and dropped, so it
+// can never sit latched and fire on a later state change (e.g. a hip MIT
+// command sent while in STANDBY executing the instant MANUAL is entered).
+static bool cmd_allowed(uint8_t cmd_id, RobotStateEnum s) {
+    switch (cmd_id) {
+        case CMD_ID_HIP:                // direct motor commands: MANUAL only
+        case CMD_ID_WHEEL:
+            return s == STATE_MANUAL;
+        case CMD_ID_REBOOT:             // never reset the MCU with torque active
+            return s == STATE_STARTUP || s == STATE_STANDBY || s == STATE_ESTOP;
+        default:                        // SET_MODE / PING / PARAM_* / LOG: any state
+            return true;
+    }
+}
+
 // ── Command handler ───────────────────────────────────────────────────────────
 
 static void on_command(uint8_t type, uint8_t version, uint8_t source,
                        const uint8_t* payload, uint16_t len) {
-    (void)version; (void)source;
+    (void)version;
 
     // ToF packet from ESP32: store latest distances for telemetry and obstacle avoidance
     if (type == COMM_TYPE_TOF && len >= (uint16_t)sizeof(TofPayload)) {
@@ -93,8 +122,13 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
 
     if (type != COMM_TYPE_COMMAND || len < 1) return;
 
-    stateMachine_ping_gui_watchdog();  // feed MANUAL-mode GUI watchdog
+    stateMachine_ping_gui_watchdog();  // feed MANUAL-mode GUI watchdog (any command proves GUI alive)
     uint8_t cmd_id = payload[0];
+
+    if (!cmd_allowed(cmd_id, g_state.state)) {
+        comm_log(LOG_LEVEL_WARN, "CMD 0x%02X rejected in state %d", cmd_id, (int)g_state.state);
+        return;
+    }
 
     // ── Mode change: signal the state machine ─────────────────────────────────
     if (cmd_id == CMD_ID_SET_MODE && len >= 2) {
@@ -114,8 +148,12 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     }
 
     // ── Reboot: full MCU reset — re-runs setup() from scratch ──────────────────
+    // Only reachable in STARTUP/STANDBY/ESTOP (cmd_allowed); still put the
+    // motors in a safe state first — MIT keepalive is active in STANDBY.
     if (cmd_id == CMD_ID_REBOOT) {
         comm_log(LOG_LEVEL_WARN, "Reboot requested");
+        hip_motors_exit_mit();
+        wheel_motors_set_mode(WheelMode::IDLE);
         Serial.flush();
         Serial5.flush();
         delay(50);
@@ -124,6 +162,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     }
 
     // ── Hip command: queue for execution by the MANUAL state action ───────────
+    // MANUAL-only (cmd_allowed); on_manual() also clears pending on entry.
     if (cmd_id == CMD_ID_HIP && len >= 3) {
         comm_log(LOG_LEVEL_INFO, "CMD hip motor=0x%02X sub=0x%02X", payload[1], payload[2]);
         g_hip_cmd.motor_id = payload[1];
@@ -140,9 +179,8 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     }
 
     // ── Wheel command: set mode / send setpoint / clear errors ───────────────
-    // Only accepted in MANUAL mode; LQR (STATE_RUNNING) commands wheels directly.
+    // MANUAL-only (cmd_allowed); LQR (STATE_RUNNING) commands wheels directly.
     if (cmd_id == CMD_ID_WHEEL && len >= 2) {
-        if (g_state.state != STATE_MANUAL) return;
         uint8_t sub = payload[1];
         if (sub == WHEEL_SUB_SET_MODE && len >= 3) {
             wheel_motors_set_mode((WheelMode)payload[2]);
@@ -163,12 +201,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         memcpy(&id,  payload + 1, 2);
         memcpy(&val, payload + 3, 4);
         comm_log(LOG_LEVEL_INFO, "CMD param_set 0x%04X = %.4f", id, val);
-        ParamSetResult res = param_set(id, val);
-        if (res == ParamSetResult::FAULT) {
-            comm_log(LOG_LEVEL_ERROR, "Param 0x%04X out of bounds — ESTOP", id);
-            g_state.fault_code = FAULT_PARAM_OUT_OF_BOUNDS;
-            stateMachine_request_estop();
-        }
+        param_set(id, val);  // out-of-range values clamp to [min, max]
         // Echo back actual (possibly clamped) value
         Param p; uint16_t idx = 0;
         while (param_by_index(idx, &p)) { if (p.id == id) { send_param_report(idx); break; } idx++; }
@@ -204,7 +237,23 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         } else if (sub == LOG_SUB_GET && len >= 8) {
             uint16_t idx; uint32_t start;
             memcpy(&idx, payload + 2, 2); memcpy(&start, payload + 4, 4);
+            // Bulk streaming only when the robot is inert (audit W5) — a GET
+            // during RUNNING adds blocking-write jitter to the control loop.
+            if (g_state.state != STATE_STANDBY && g_state.state != STATE_ESTOP) {
+                comm_log(LOG_LEVEL_WARN, "CMD log get denied: only in STANDBY/ESTOP");
+                LogInfoPayload p{};
+                p.info_type  = LOG_INFO_STATUS;
+                p.file_index = idx;
+                p.status     = 1;
+                sd_logger_send(COMM_TYPE_LOG_INFO, LOG_INFO_PAYLOAD_V1, &p, sizeof(p));
+                return;
+            }
             comm_log(LOG_LEVEL_INFO, "CMD log get idx=%u start_chunk=%lu", idx, (unsigned long)start);
+            // Pace to the requesting transport: direct Teensy USB is high-speed;
+            // the ESP32-relayed path is capped by the CP2102 at ~92 kB/s.
+            s_log_get_via_usb = (source == COMM_SRC_PC);
+            if (s_log_get_via_usb) sd_logger_set_get_pacing(0, 2);  // unthrottled (as before)
+            else                   sd_logger_set_get_pacing(8, 1);  // ~61 kB/s + telemetry headroom
             sd_logger_begin_get(idx, start);
         } else if (sub == LOG_SUB_DELETE && len >= 4) {
             uint16_t idx; memcpy(&idx, payload + 2, 2);
@@ -267,12 +316,24 @@ void setup() {
 
     // Peripheral enable flags — bench-test without full hardware connected.
     // See PARAM_*_ENABLE in param_ids.h. Takes effect at boot; toggling live
-    // requires CMD_ID_REBOOT to re-run setup().
-    bool imu_en   = param_get(PARAM_IMU_ENABLE)   >= 0.5f;
-    bool hip_en   = param_get(PARAM_AK45_ENABLE)  >= 0.5f;
-    bool wheel_en = param_get(PARAM_WHEEL_ENABLE) >= 0.5f;
+    // requires CMD_ID_REBOOT to re-run setup(). The hip/wheel CAN subsystems
+    // come up iff at least one of their two per-motor flags is set.
+    bool imu_en     = param_get(PARAM_IMU_ENABLE)     >= 0.5f;
+    bool hip_l_en   = param_get(PARAM_HIP_L_ENABLE)   >= 0.5f;
+    bool hip_r_en   = param_get(PARAM_HIP_R_ENABLE)   >= 0.5f;
+    bool wheel_l_en = param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f;
+    bool wheel_r_en = param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f;
+    bool hip_en     = hip_l_en   || hip_r_en;
+    bool wheel_en   = wheel_l_en || wheel_r_en;
     g_buzzer.set_enabled(param_get(PARAM_BUZZER_ENABLE) >= 0.5f);
     g_led.set_enabled(param_get(PARAM_LED_ENABLE)       >= 0.5f);
+
+    // Flag any single motor disabled for bench testing — distinct from the
+    // "whole subsystem off" logs below, so a single-leg setup is obvious at boot.
+    if (!hip_l_en)   comm_log(LOG_LEVEL_WARN, "Bench-test mode: hip_l disabled (hip_l_enable=0)");
+    if (!hip_r_en)   comm_log(LOG_LEVEL_WARN, "Bench-test mode: hip_r disabled (hip_r_enable=0)");
+    if (!wheel_l_en) comm_log(LOG_LEVEL_WARN, "Bench-test mode: wheel_l disabled (wheel_l_enable=0)");
+    if (!wheel_r_en) comm_log(LOG_LEVEL_WARN, "Bench-test mode: wheel_r disabled (wheel_r_enable=0)");
 
     sd_logger_set_sender(sd_logger_send);
     if (sd_logger_begin()) comm_log(LOG_LEVEL_INFO, "SD logger ready");
@@ -293,7 +354,7 @@ void setup() {
         hip_motors_enter_mit();
         comm_log(LOG_LEVEL_INFO, "Hip MIT mode enabled");
     } else {
-        comm_log(LOG_LEVEL_WARN, "Hip motors disabled (ak45_enable=0)");
+        comm_log(LOG_LEVEL_WARN, "Hip motors disabled (hip_l_enable=0, hip_r_enable=0)");
     }
 
     if (wheel_en) {
@@ -303,13 +364,19 @@ void setup() {
         delay(300);  // wait for ODrive to send a fresh heartbeat with cleared error state
         comm_log(LOG_LEVEL_INFO, "Wheel CAN init OK");
     } else {
-        comm_log(LOG_LEVEL_WARN, "Wheel motors disabled (wheel_enable=0)");
+        comm_log(LOG_LEVEL_WARN, "Wheel motors disabled (wheel_l_enable=0, wheel_r_enable=0)");
     }
 
     controlLoop_init();
     stateMachine_init();
     comm_log(LOG_LEVEL_INFO, "Setup complete");
 }
+
+// ── Loop overrun tracking ─────────────────────────────────────────────────────
+// Work time above the 2000 µs tick budget. This is also how flash-write or
+// SD-transfer stalls become visible (see param_flush_service / R1).
+static uint32_t s_overrun_count   = 0;
+static uint32_t s_last_overrun_ms = 0;
 
 // ── Telemetry ─────────────────────────────────────────────────────────────────
 
@@ -332,6 +399,8 @@ static uint16_t build_health_flags() {
     if (param_get(PARAM_YAW_PI_EN) >= 0.5f
         && fabsf(g_state.tau_yaw) >= param_get(PARAM_YAW_PI_TORQUE_MAX))
         f |= HEALTH_YAW_PI_SAT;
+    if (s_overrun_count && millis() - s_last_overrun_ms < 1000)
+        f |= HEALTH_LOOP_OVERRUN;
     return f;
 }
 
@@ -474,7 +543,7 @@ static void read_sensors() {
         g_state.pitch_rate_rads = -imu_pitch_rate();
     }
 
-    if (param_get(PARAM_AK45_ENABLE) >= 0.5f) {
+    if (param_get(PARAM_HIP_L_ENABLE) >= 0.5f || param_get(PARAM_HIP_R_ENABLE) >= 0.5f) {
         hip_motors_poll();
         g_state.hip_l_pos_rad   = hm_L.pos_rad;
         g_state.hip_r_pos_rad   = hm_R.pos_rad;
@@ -482,7 +551,7 @@ static void read_sensors() {
         g_state.hip_r_current_a = hm_R.current_A;
     }
 
-    if (param_get(PARAM_WHEEL_ENABLE) >= 0.5f) {
+    if (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f || param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) {
         wheel_motors_poll();
         wheel_motors_pet_watchdog();
     }
@@ -532,11 +601,16 @@ static void radio_update() {
             comm_log(LOG_LEVEL_INFO, "Radio: armed -> RUNNING");
             stateMachine_request_running();
         }
-    } else if (!armed && s_was_armed && g_state.state == STATE_RUNNING) {
+    }
+    s_was_armed = armed;
+
+    // Disarm is level-based, not edge-based: a CH10 drop during JUMPING would
+    // consume the edge with no effect (disarm only latches from RUNNING); this
+    // catches it the tick the jump completes and RUNNING is re-entered.
+    if (!armed && g_state.state == STATE_RUNNING) {
         comm_log(LOG_LEVEL_INFO, "Radio: disarmed -> STANDBY");
         stateMachine_disarm_running();
     }
-    s_was_armed = armed;
 
     static bool s_was_calib = false;
     bool calib = alive && (ch5 > 1990);
@@ -682,12 +756,30 @@ void loop() {
     sd_logger_service();            // 1 sector/tick + auto-stop
     sd_logger_service_transfer();   // paced chunk streaming during a GET
 
+    // Deferred param flash flush — a LittleFS rewrite stalls the loop for
+    // several ms, so never while balancing (RUNNING/JUMPING).
+    param_flush_service(g_state.state != STATE_RUNNING && g_state.state != STATE_JUMPING);
+
     // Send telemetry at 50 Hz (every 10th tick of the 500 Hz loop)
     static uint8_t telem_div = 0;
     if (++telem_div >= 10) {
         telem_div = 0;
-        if (param_get(PARAM_WHEEL_ENABLE) >= 0.5f) wheel_motors_request_vbus();
+        if (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f || param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) wheel_motors_request_vbus();
         send_telemetry();
+    }
+
+    // Loop-overrun detection: count ticks whose work time blew the 2 ms
+    // budget; surfaced via HEALTH_LOOP_OVERRUN + a rate-limited WARN log.
+    uint32_t work_us = micros() - t_start;
+    if (work_us > 2000) {
+        s_overrun_count++;
+        s_last_overrun_ms = millis();
+        static uint32_t s_last_log_ms = 0;
+        if (millis() - s_last_log_ms >= 1000) {
+            s_last_log_ms = millis();
+            comm_log(LOG_LEVEL_WARN, "Loop overrun: %lu us (count %lu)",
+                     (unsigned long)work_us, (unsigned long)s_overrun_count);
+        }
     }
 
     while (micros() - t_start < 2000) {}

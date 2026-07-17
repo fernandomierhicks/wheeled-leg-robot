@@ -1,7 +1,11 @@
 from datetime import datetime
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QColor, QTextCharFormat, QTextCursor
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QApplication, QCheckBox, QHBoxLayout, QLabel, QPlainTextEdit,
+    QPushButton, QVBoxLayout, QWidget,
+)
 
 from .telemetry_bus import TelemetryBus
 from .theme import BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
@@ -53,14 +57,30 @@ class RobotLogWidget(QWidget):
         self._btn_warn.toggled.connect( lambda v: self._set_filter("WARN",  v))
         self._btn_error.toggled.connect(lambda v: self._set_filter("ERROR", v))
 
+        self._chk_autoscroll = QCheckBox("Auto-scroll")
+        self._chk_autoscroll.setChecked(True)
+        self._chk_autoscroll.setStyleSheet(f"color: {DIM}; font-size: 10px;")
+
+        self._btn_copy = QPushButton("Copy")
+        self._btn_copy.setFixedHeight(20)
+        self._btn_copy.setStyleSheet(
+            f"QPushButton{{background:{SURFACE};color:{DIM};font-size:10px;font-weight:bold;"
+            f"border:1px solid {BORDER};border-radius:3px;padding:0px 8px}}"
+            f"QPushButton:hover{{background:{BORDER};color:{TEXT}}}"
+        )
+        self._btn_copy.setToolTip("Copy the visible log to the clipboard")
+        self._btn_copy.clicked.connect(self._copy_log)
+
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(0, 0, 0, 0)
         toolbar.setSpacing(6)
         toolbar.addWidget(hdr)
         toolbar.addStretch()
+        toolbar.addWidget(self._chk_autoscroll)
         toolbar.addWidget(self._btn_info)
         toolbar.addWidget(self._btn_warn)
         toolbar.addWidget(self._btn_error)
+        toolbar.addWidget(self._btn_copy)
 
         # ── Text area ─────────────────────────────────────────────────────────
         self._log = QPlainTextEdit()
@@ -84,6 +104,11 @@ class RobotLogWidget(QWidget):
     def _set_filter(self, level: str, visible: bool):
         self._show[level] = visible
 
+    def _copy_log(self):
+        QApplication.clipboard().setText(self._log.toPlainText())
+        self._btn_copy.setText("Copied!")
+        QTimer.singleShot(1000, lambda: self._btn_copy.setText("Copy"))
+
     def _append(self, text: str, color: str):
         ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         fmt = QTextCharFormat()
@@ -92,7 +117,8 @@ class RobotLogWidget(QWidget):
         cur.movePosition(QTextCursor.MoveOperation.End)
         cur.setCharFormat(fmt)
         cur.insertText(f"[{ts}] {text}\n")
-        self._log.verticalScrollBar().setValue(self._log.verticalScrollBar().maximum())
+        if self._chk_autoscroll.isChecked():
+            self._log.verticalScrollBar().setValue(self._log.verticalScrollBar().maximum())
 
     def _on_packet(self, info: dict):
         ptype = info.get("ptype")

@@ -91,6 +91,9 @@ class RawDataTab(QWidget):
         r = self._add_row(g, r, ("TYPE",     "—"),  ("VERSION",  "—"))
         r = self._add_row(g, r, ("SOURCE",   "—"),  ("SEQ",      "—"))
         r = self._add_row(g, r, ("LEN",      "—"),  ("CHECKSUM", "—"))
+        r = self._section(g, r, "Link health (active transport, lifetime)")
+        r = self._add_row(g, r, ("CRC drops",  "—"), ("Seq gaps",  "—"))
+        r = self._add_row(g, r, ("Pair drops", "—"), ("",          ""))
         self._add_tab(tabs, "Frame", content, r)
 
     def _build_imu_tab(self, tabs: QTabWidget):
@@ -241,6 +244,13 @@ class RawDataTab(QWidget):
         self._set("LEN",      str(info.get("length", "—")))
         chk = info.get("checksum")
         self._set("CHECKSUM", f"0x{chk:02X}" if chk is not None else "—")
+
+        crc_drops  = info.get("link_crc_drops", 0)
+        seq_gaps   = info.get("link_seq_gaps", 0)
+        pair_drops = info.get("link_pair_drops", 0)
+        self._set("CRC drops",  str(crc_drops),  RED if crc_drops else GREEN)
+        self._set("Seq gaps",   str(seq_gaps),   RED if seq_gaps else GREEN)
+        self._set("Pair drops", str(pair_drops), RED if pair_drops else GREEN)
 
         if info.get("ptype") != 0x01:
             return

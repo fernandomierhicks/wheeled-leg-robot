@@ -67,7 +67,10 @@ typedef struct __attribute__((packed)) {
 //   [seq]                 1 byte  — rolling 0-255 tx counter
 //   [len_lo][len_hi]      2 bytes — payload length, little-endian
 //   [...payload...]       len bytes
-//   [checksum]            1 byte  — XOR(type,version,source,seq,len_lo,len_hi,payload[0..n-1])
+//   [checksum]            1 byte  — CRC-8 (poly 0x07, init 0x00, MSB-first) over
+//                                   type,version,source,seq,len_lo,len_hi,payload[0..n-1]
+//                                   (was 1-byte XOR before 2026-07-13 — flag-day change,
+//                                    all three ends must be updated together)
 //   [COMM_END]            1 byte  — 0xEF
 
 // ── Fault codes (robot_state == STATE_ESTOP → fault_code says why) ────────────
@@ -82,9 +85,11 @@ typedef struct __attribute__((packed)) {
 #define FAULT_HIP_LARGE_POS_CMD  0x04  // commanded position jump exceeded MAX_HIP_DELTA_RAD
 #define FAULT_CALIBRATION_TIMEOUT 0x05 // hardstop not found within CALIB_SAFETY_BOUND_RAD
 #define FAULT_HUMAN_ESTOP        0x06  // ESTOP requested by user via GUI button or radio
-#define FAULT_PARAM_OUT_OF_BOUNDS 0x07 // param write rejected — value outside [min, max]
+// 0x07 reserved — was FAULT_PARAM_OUT_OF_BOUNDS (removed; out-of-range writes always clamp)
 #define FAULT_PITCH_WATCHDOG     0x08  // |pitch| > 50° for > 200 ms
 #define FAULT_WHEEL_RUNAWAY      0x09  // wheel velocity exceeded 2× soft governor limit
+#define FAULT_IMU_LOST           0x0A  // IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)
+#define FAULT_WHEEL_FEEDBACK_LOST 0x0B // wheel encoder timeout or ODrive error while RUNNING/JUMPING
 
 // ── Fault severity tiers (used by state machine + GUI recovery panel) ────────
 // IMPORTANT: when adding fault codes, update fault_severity() below too.
@@ -102,7 +107,6 @@ inline fault_severity_t fault_severity(uint8_t code) {
         case FAULT_WHEEL_RUNAWAY:         return FAULT_SEVERITY_SOFT;
         case FAULT_PITCH_WATCHDOG:
         case FAULT_CALIBRATION_TIMEOUT:   return FAULT_SEVERITY_REPOSITION;
-        case FAULT_PARAM_OUT_OF_BOUNDS:
         case FAULT_HIP_LARGE_POS_CMD:     return FAULT_SEVERITY_GUI_FIX;
         default:                          return FAULT_SEVERITY_REBOOT;
     }
@@ -338,6 +342,7 @@ static_assert(sizeof(LogDataHeader) == 8, "LogDataHeader must be 8 bytes");
 #define HEALTH_YAW_PI_SAT        (1u << 8)  // tau_yaw clamped at torque_max this tick
 #define HEALTH_WM_L_VEL_LIMITED  (1u << 9)  // soft governor clamping left wheel
 #define HEALTH_WM_R_VEL_LIMITED  (1u << 10) // soft governor clamping right wheel
+#define HEALTH_LOOP_OVERRUN      (1u << 11) // control-loop work exceeded the 2 ms budget within the last second
 
 // ── Payload: command ──────────────────────────────────────────────────────────
 #define CMD_PAYLOAD_V1  1
@@ -350,6 +355,7 @@ typedef struct __attribute__((packed)) {
 // ── Command IDs ───────────────────────────────────────────────────────────────
 // MIRROR: software/gui/hip_motors.py  _CMD_ID_* constants must stay in sync
 #define CMD_ID_SET_MODE   0x01  // payload: uint8_t target_state (RobotStateEnum)
+#define CMD_ID_PING       0x02  // payload: none — GUI heartbeat; feeds the MANUAL GUI watchdog only
 #define CMD_ID_HIP        0x05  // payload: uint8_t motor_id, uint8_t sub_cmd [, 5×float]
 #define CMD_ID_REBOOT     0x06  // payload: none — triggers a full MCU reset (reruns setup())
 #define CMD_ID_WHEEL      0x07  // payload: uint8_t sub_cmd [, data]

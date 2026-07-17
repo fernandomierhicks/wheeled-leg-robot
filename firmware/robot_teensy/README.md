@@ -36,6 +36,14 @@ Two-microcontroller architecture for a wheeled-leg balancing robot.
          software/gui/main.py
 ```
 
+**Network exposure (accepted risk — home lab only):** the ESP32 TCP command
+port (`:5006`) accepts a connection from **any device on the WLAN** and will
+forward mode changes, hip MIT commands, and reboots to the Teensy; telemetry
+is UDP-broadcast to `255.255.255.255:5005`. There is no authentication. Do
+not operate the robot on an untrusted network; if this ever matters, cheap
+hardening options are accept-first-client-only or a magic token as the first
+bytes of a TCP session.
+
 **Key buses on Teensy:**
 - CAN2 @ 1 Mbps → AK45-10 hip motors (MIT Cheetah protocol)
 - CAN3 @ 1 Mbps → ODrive wheel motors
@@ -137,9 +145,11 @@ Set in `g_state.fault_code` before entering `STATE_ESTOP`. Non-zero only while i
 | `0x04` | `FAULT_HIP_LARGE_POS_CMD` | Hip position jump exceeded `MAX_HIP_DELTA_RAD` | GUI_FIX |
 | `0x05` | `FAULT_CALIBRATION_TIMEOUT` | Hardstop not found within `CALIB_SAFETY_BOUND_RAD` | REPOSITION |
 | `0x06` | `FAULT_HUMAN_ESTOP` | ESTOP requested by GUI or radio | SOFT |
-| `0x07` | `FAULT_PARAM_OUT_OF_BOUNDS` | Param write rejected — value outside `[min, max]` | GUI_FIX |
+| `0x07` | *(reserved)* | Was `FAULT_PARAM_OUT_OF_BOUNDS` — removed; out-of-range param writes always clamp | — |
 | `0x08` | `FAULT_PITCH_WATCHDOG` | `|pitch| > 50°` for > 200 ms | REPOSITION |
 | `0x09` | `FAULT_WHEEL_RUNAWAY` | Wheel velocity exceeded 2× soft governor limit | SOFT |
+| `0x0A` | `FAULT_IMU_LOST` | IMU left NOMINAL while RUNNING/JUMPING (silence or heavy packet loss) | REBOOT |
+| `0x0B` | `FAULT_WHEEL_FEEDBACK_LOST` | Wheel encoder timeout or ODrive error while RUNNING/JUMPING | REBOOT |
 
 **Severity tiers:** SOFT → ESTOP→STANDBY directly; REPOSITION → reposition robot then reset; GUI_FIX → fix param in GUI then reset; REBOOT → power-cycle required.
 

@@ -231,11 +231,12 @@ _FAULT_SEVERITY = {
     0x09: "SOFT",        # WHEEL_RUNAWAY
     0x08: "REPOSITION",  # PITCH_WATCHDOG
     0x05: "RECALIBRATE", # CALIBRATION_TIMEOUT (reposition + re-run calib)
-    0x07: "GUI_FIX",     # PARAM_OUT_OF_BOUNDS
     0x04: "GUI_FIX",     # HIP_LARGE_POS_CMD
     0x01: "REBOOT",      # IMU_ERROR
     0x02: "REBOOT",      # HIP_INIT_TIMEOUT
     0x03: "REBOOT",      # HIP_FEEDBACK_LOST
+    0x0A: "REBOOT",      # IMU_LOST
+    0x0B: "REBOOT",      # WHEEL_FEEDBACK_LOST
 }
 
 # ── Battery status widget ─────────────────────────────────────────────────────
@@ -245,6 +246,10 @@ class BatteryStatusWidget(QWidget):
     _VMAX = 25.2   # 4.2 V/cell × 6S
     _VMIN = 21.0   # 3.5 V/cell × 6S (display empty)
     _NBARS = 5
+    # A wheel side that's disabled (wheel_l/r_enable=0) never gets its vbus
+    # requested by firmware, so it reads a permanent 0.0 — exclude it from the
+    # average instead of dragging a real ~24V reading down to ~12V.
+    _VBUS_MIN_VALID = 5.0
 
     def __init__(self):
         super().__init__()
@@ -265,7 +270,10 @@ class BatteryStatusWidget(QWidget):
         vr = info.get("wm_r_vbus")
         if vl is None or vr is None:
             return
-        vbus = (vl + vr) * 0.5
+        readings = [v for v in (vl, vr) if v > self._VBUS_MIN_VALID]
+        if not readings:
+            return
+        vbus = sum(readings) / len(readings)
         low = self._num_bars(vbus) <= 1
         if low and not self._blink_timer.isActive():
             self._blink_timer.start()
@@ -828,6 +836,14 @@ class MainWindow(QMainWindow):
 
         self._base_title = self.windowTitle()
         TelemetryBus.instance().playback_state_changed.connect(self._on_playback_state)
+
+        # 10 Hz heartbeat feeding the firmware MANUAL-mode GUI watchdog (500 ms):
+        # if the GUI dies, pings stop and the robot exits MANUAL / idles wheels.
+        from tabs.comm_commands import send_ping
+        self._ping_timer = QTimer(self)
+        self._ping_timer.setInterval(100)
+        self._ping_timer.timeout.connect(send_ping)
+        self._ping_timer.start()
 
         self._on_source_changed(sm.active)
 
