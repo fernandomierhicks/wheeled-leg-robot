@@ -14,7 +14,7 @@
 // ── Config ───────────────────────────────────────────────────────────────────
 static constexpr uint32_t IMU_RATE_HZ       = 400;
 static constexpr uint32_t TIMEOUT_MS        = 100;   // data silence while actively polling before ERROR
-static constexpr uint32_t RETRY_INTERVAL_MS = 1000;
+static constexpr uint8_t  MAX_INIT_ATTEMPTS = 2;     // it's a fast digital device — a couple of quick tries, then give up
 static constexpr uint32_t LOSS_WINDOW_MS    = 1000;
 static constexpr float    LOSS_THRESHOLD    = 0.10f;
 static constexpr uint8_t  MAX_DRAIN_EVENTS  = 8;     // GRV + RV + Gyro + LinAccel per cycle
@@ -38,7 +38,7 @@ static float     _accel_y        = 0.0f;
 static float     _accel_z        = 0.0f;
 static float     _packet_loss    = 0.0f;
 static uint32_t  _last_update_ms = 0;
-static uint32_t  _retry_due_ms   = 0;
+static uint8_t   _init_attempts  = 0;   // resets on imu_init() and on any fresh reconnect attempt
 
 // Packet loss tracking
 static uint32_t  _loss_window_start = 0;
@@ -94,8 +94,17 @@ static bool enable_reports() {
     return true;
 }
 
-// Blocks ~100 ms on first connection while BNO086 completes its reset handshake.
-// On retries from ERROR state this is acceptable since motion is gated on NOMINAL.
+// Blocks ~0.7-1.0 s: begin_SPI()/sh2_open()/sh2_getProdIds() inside the
+// Adafruit_BNO08x/SH2 stack are all synchronous with no timeout of their own
+// (measured via test_imu SH2 DEBUG output: hardwareReset ~30 ms + sh2_open
+// ~150 ms + getProdIds ~690 ms). Only ever called from the INITIALIZING/ERROR
+// case in imu_update() below — reached at boot (run to completion by the
+// blocking wait in setup(), since STARTUP has no 500 Hz budget to protect —
+// see main.cpp) or on an init failure retry within that same boot attempt.
+// A sensor that goes silent mid-operation (NOMINAL/DEGRADED -> ERROR) does
+// NOT come back through here — that path is terminal by design so a live
+// loop() tick is never stalled by a reconnect attempt; see the silence-
+// timeout comment in imu_update().
 static bool attempt_init() {
     if (!_sensor.begin_SPI(PIN_IMU_CS, PIN_IMU_INT)) {
         // Adafruit_BNO08x::_init() leaks its SHTP pool slot on failure (never
@@ -150,7 +159,7 @@ static void track_packet(uint8_t seq) {
 // ── Public API ────────────────────────────────────────────────────────────────
 void imu_init() {
     _state             = ImuState::INITIALIZING;
-    _retry_due_ms      = 0;
+    _init_attempts     = 0;
     _rv_seq_valid      = false;
     _packet_loss       = 0.0f;
     reset_loss_window(millis());
@@ -164,9 +173,17 @@ void imu_update() {
     case ImuState::NOT_READY:
         return;
 
+    // INITIALIZING means "still trying" (startup_fail() in state_machine.cpp
+    // only faults on ERROR, so staying INITIALIZING here keeps the robot in
+    // STARTUP without tripping ESTOP mid-attempt). ERROR is reached only once
+    // MAX_INIT_ATTEMPTS is exhausted, and is then final — no more attempts are
+    // made until imu_init() runs again (i.e. a reboot). It's a fast digital
+    // device: a real connection succeeds on the first try, so there's no
+    // value in pacing retries — back-to-back is fine.
     case ImuState::INITIALIZING:
     case ImuState::ERROR:
-        if (now < _retry_due_ms) return;
+        if (_init_attempts >= MAX_INIT_ATTEMPTS) return;
+        _init_attempts++;
         if (attempt_init()) {
             _state          = ImuState::NOMINAL;
             _last_update_ms = millis();
@@ -174,8 +191,7 @@ void imu_update() {
             _packet_loss    = 0.0f;
             reset_loss_window(_last_update_ms);
         } else {
-            _state        = ImuState::ERROR;
-            _retry_due_ms = now + RETRY_INTERVAL_MS;
+            _state = (_init_attempts >= MAX_INIT_ATTEMPTS) ? ImuState::ERROR : ImuState::INITIALIZING;
         }
         return;
 
@@ -224,9 +240,16 @@ void imu_update() {
 
     // Sensor silence timeout — we only reach here while NOMINAL/DEGRADED (i.e.
     // actively polling), so data silence alone is enough to declare ERROR.
+    // Terminal, no auto-reconnect: a mid-operation dropout means the robot is
+    // already past STARTUP (running_imu_fault()/other state logic reacts to
+    // leaving NOMINAL immediately), and attempt_init() blocks ~1 s — fine for
+    // STARTUP's one-time blocking wait in setup(), not for a live loop() tick.
+    // Locking out further attempt_init() calls here (rather than resetting
+    // _init_attempts for a fresh retry budget, as before) means recovery
+    // requires an explicit reboot (imu_init() resets the budget).
     if (now - _last_update_ms > TIMEOUT_MS) {
-        _state        = ImuState::ERROR;
-        _retry_due_ms = now + RETRY_INTERVAL_MS;
+        _state         = ImuState::ERROR;
+        _init_attempts = MAX_INIT_ATTEMPTS;
         return;
     }
 

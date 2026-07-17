@@ -221,6 +221,14 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         return;
     }
 
+    // ── Param reset: revert all writable params to compile-time defaults ──────
+    if (cmd_id == CMD_ID_PARAM_RESET_DEFAULTS) {
+        comm_log(LOG_LEVEL_WARN, "CMD param_reset_defaults");
+        param_reset_defaults();
+        for (uint16_t i = 0; i < param_count(); i++) send_param_report(i);  // refresh GUI table
+        return;
+    }
+
     // ── SD log control: start/stop/list/get/delete ─────────────────────────────
     if (cmd_id == CMD_ID_LOG && len >= 2) {
         uint8_t sub = payload[1];
@@ -264,7 +272,34 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     }
 }
 
+// ── Hardware watchdog ─────────────────────────────────────────────────────────
+// Resets the MCU if it's not petted for this long. Needed because a stuck
+// driver call can otherwise hang forever with no recovery — e.g. the BNO08x
+// sh2 library's getProdIds request has no timeout of its own (sh2.c
+// opProcess(): a zero timeout_us disables its bail-out entirely), so a
+// non-responding IMU (loose SPI connector) can freeze the whole control loop
+// with no crash and no reboot. Gated on PARAM_WATCHDOG_ENABLE (default off);
+// when on, armed partway through setup() (see the param_init() block below)
+// and petted through every long step from that point on (IMU wait, etc.),
+// then petted once per tick in loop().
+static constexpr uint32_t WATCHDOG_TIMEOUT_MS = 2000;  // WDOG1 granularity: 0.5 s steps
+
+static void watchdog_enable(uint32_t timeout_ms) {
+    uint16_t wt = (uint16_t)(timeout_ms / 500) - 1;  // timeout = (WT+1) * 0.5 s
+    // SRS and WDA both read 1 at reset and are negative-edge triggered: writing
+    // a 0 to either (i.e. leaving it out of this value) fires an immediate
+    // reset / WDOG_B assertion right here. Must explicitly write 1 to both.
+    WDOG1_WCR = WDOG_WCR_WDZST | WDOG_WCR_WDE | WDOG_WCR_SRS | WDOG_WCR_WDA | WDOG_WCR_WT(wt);
+}
+
+static void watchdog_pet() {
+    WDOG1_WSR = 0x5555;
+    WDOG1_WSR = 0xAAAA;
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
+
+static void check_imu_state();  // defined below; logs IMU state transitions (incl. init failure/retry)
 
 void setup() {
     Serial.begin(115200);
@@ -302,12 +337,14 @@ void setup() {
         g_led.solid(c[0], c[1], c[2]);
         uint32_t step_start = millis();
         while (millis() - step_start < 180) {
+            watchdog_pet();
             g_buzzer.update();
             delay(2);
         }
     }
     g_buzzer.off();
     g_led.off();
+    watchdog_pet();
 
     g_led.pulse(255, 255, 255, 2000);  // STARTUP: white breathe
 
@@ -328,6 +365,15 @@ void setup() {
     g_buzzer.set_enabled(param_get(PARAM_BUZZER_ENABLE) >= 0.5f);
     g_led.set_enabled(param_get(PARAM_LED_ENABLE)       >= 0.5f);
 
+    // Hardware watchdog: gated on PARAM_WATCHDOG_ENABLE (default off). Enabled
+    // here (after param_init(), rather than at the very top of setup()) so a
+    // persisted on/off choice is actually honored — WDOG1's enable bit is
+    // write-once, so this is the only point where the decision can be made.
+    // Boot steps before this point (rainbow, buzzer, SD/IBus init) therefore
+    // run without watchdog coverage; the documented risk this guards against
+    // (a stuck IMU/CAN driver call) only arises later, in loop().
+    if (param_get(PARAM_WATCHDOG_ENABLE) >= 0.5f) watchdog_enable(WATCHDOG_TIMEOUT_MS);
+
     // Flag any single motor disabled for bench testing — distinct from the
     // "whole subsystem off" logs below, so a single-leg setup is obvious at boot.
     if (!hip_l_en)   comm_log(LOG_LEVEL_WARN, "Bench-test mode: hip_l disabled (hip_l_enable=0)");
@@ -342,8 +388,21 @@ void setup() {
     comm_log(LOG_LEVEL_INFO, "IBus RX ready (Serial4)");
 
     if (imu_en) {
+        // Blocking: STARTUP is the one phase that doesn't need to hold the
+        // 500 Hz tick budget (no torque is commanded until STANDBY+), so we
+        // wait right here for IMU health to resolve one way or the other
+        // instead of smearing attempt_init()'s ~1 s SPI/SH2 handshake across
+        // loop() ticks — that used to show up as ~875000 us "Loop overrun"
+        // warnings and let "Setup complete" print before IMU health was
+        // actually known. Reuses the same MAX_INIT_ATTEMPTS budget a runtime
+        // reconnect gets (see IMU.cpp); the outcome (NOMINAL/ERROR) is logged
+        // by check_imu_state() on the first loop() tick below.
         imu_init();
         comm_log(LOG_LEVEL_INFO, "IMU initializing...");
+        while (imu_state() == ImuState::INITIALIZING) {
+            watchdog_pet();
+            imu_update();
+        }
     } else {
         comm_log(LOG_LEVEL_WARN, "IMU disabled (imu_enable=0)");
     }
@@ -369,7 +428,11 @@ void setup() {
 
     controlLoop_init();
     stateMachine_init();
-    comm_log(LOG_LEVEL_INFO, "Setup complete");
+    watchdog_pet();
+    // "Startup complete" is logged from the state machine (on_standby/on_estop
+    // in state_machine.cpp) once STARTUP actually resolves — not here, since
+    // IMU health is still pending at this point (imu_init() is non-blocking;
+    // see the imu_en block above).
 }
 
 // ── Loop overrun tracking ─────────────────────────────────────────────────────
@@ -496,6 +559,23 @@ static void update_buzzer() {
 
 static void update_led() {
     static RobotStateEnum prev = (RobotStateEnum)0xFF;
+    static uint32_t s_imu_alert_next_ms = 0;
+
+    // IMU-fault alert: brief red flash overlaid on STANDBY's amber pulse, repeating
+    // every 2 s. STANDBY has no automatic ESTOP on IMU loss (only STARTUP/RUNNING
+    // do — see startup_fail()/running_imu_fault() in state_machine.cpp), so without
+    // this a dead/disconnected IMU is otherwise silent until you try to arm.
+    bool imu_fault = (g_state.state == STATE_STANDBY) &&
+                      (param_get(PARAM_IMU_ENABLE) >= 0.5f) &&
+                      (imu_state() != ImuState::NOMINAL);
+    if (imu_fault && !s_profile_flash_until_ms) {
+        uint32_t now = millis();
+        if (now >= s_imu_alert_next_ms) {
+            s_profile_flash_rgb[0] = 255; s_profile_flash_rgb[1] = 0; s_profile_flash_rgb[2] = 0;
+            s_profile_flash_until_ms = now + 150;
+            s_imu_alert_next_ms     = now + 2000;
+        }
+    }
 
     // Profile-change flash takes priority for its duration, then restores state LED.
     if (s_profile_flash_until_ms) {
@@ -729,7 +809,7 @@ static void check_imu_state() {
             comm_log(LOG_LEVEL_WARN,  "IMU: degraded — %.0f%% loss",
                      imu_packet_loss() * 100.0f);                        break;
         case ImuState::ERROR:
-            comm_log(LOG_LEVEL_ERROR, "IMU: error — retrying in 1 s");  break;
+            comm_log(LOG_LEVEL_ERROR, "IMU: failed to connect — giving up until reboot");  break;
         default: break;
     }
 }
@@ -738,6 +818,7 @@ static void check_imu_state() {
 
 void loop() {
     uint32_t t_start = micros();
+    watchdog_pet();
 
     receive_commands();
     read_sensors();
@@ -770,8 +851,11 @@ void loop() {
 
     // Loop-overrun detection: count ticks whose work time blew the 2 ms
     // budget; surfaced via HEALTH_LOOP_OVERRUN + a rate-limited WARN log.
+    // Skipped during STARTUP — the 500 Hz budget isn't required there (no
+    // torque is commanded yet), so a slow tick while e.g. hip motors are
+    // still coming up isn't a real problem worth counting/warning about.
     uint32_t work_us = micros() - t_start;
-    if (work_us > 2000) {
+    if (work_us > 2000 && g_state.state != STATE_STARTUP) {
         s_overrun_count++;
         s_last_overrun_ms = millis();
         static uint32_t s_last_log_ms = 0;

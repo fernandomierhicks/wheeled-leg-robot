@@ -128,6 +128,7 @@ static void on_standby()  {
     bool from_calib    = (g_state.state == STATE_CALIBRATION);
     bool from_estop    = (g_state.state == STATE_ESTOP);  // soft-clear path
     bool from_manual   = (g_state.state == STATE_MANUAL);
+    bool from_startup  = (g_state.state == STATE_STARTUP);
     g_state.state = STATE_STANDBY;
     hip_motors_clear_setpoints();  // revert to zero-torque ping (e.g. after CALIBRATION)
     g_state.whl_tau_l = 0.0f;
@@ -139,6 +140,9 @@ static void on_standby()  {
         wheel_motors_set_mode(WheelMode::IDLE);
         wheel_motors_clear_errors();
     }
+    // Startup succeeded: IMU (if enabled) reached NOMINAL and both hip motors
+    // replied — startup_ok() is the only path into STANDBY from STARTUP.
+    if (entering && from_startup) comm_log(LOG_LEVEL_INFO, "Startup complete");
     if (entering) comm_log(LOG_LEVEL_INFO, "-> STANDBY");
     if (from_running) g_buzzer.play(DISARMED_MELODY, sizeof(DISARMED_MELODY) / sizeof(DISARMED_MELODY[0]), 200);
     if (from_estop) {
@@ -330,7 +334,8 @@ static void on_jumping() {
     }
 }
 static void on_estop() {
-    bool entering = (g_state.state != STATE_ESTOP);
+    bool entering     = (g_state.state != STATE_ESTOP);
+    bool from_startup = (g_state.state == STATE_STARTUP);
     g_state.state = STATE_ESTOP;
     if (entering) {
         // Discard ALL queued requests so nothing stale fires after a future
@@ -345,6 +350,10 @@ static void on_estop() {
         s_req_standby        = false;
         s_req_reset          = false;
         s_req_soft_clear     = false;
+        // Startup failed (or was aborted by ESTOP) before it could resolve —
+        // the specific reason (IMU/hip) was already logged by startup_fail()
+        // just before this transition fired.
+        if (from_startup) comm_log(LOG_LEVEL_ERROR, "Startup complete with errors");
         comm_log(LOG_LEVEL_ERROR, "-> ESTOP [fault 0x%02X]", g_state.fault_code);
         g_buzzer.play(ESTOP_MELODY, sizeof(ESTOP_MELODY) / sizeof(ESTOP_MELODY[0]), 200);
         wheel_motors_set_mode(WheelMode::IDLE);

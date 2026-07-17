@@ -11,7 +11,7 @@ enum class ImuState : uint8_t {
     INITIALIZING = 1,  // begin_SPI() in progress / waiting for retry
     NOMINAL      = 2,  // data flowing, packet loss < 10%
     DEGRADED     = 3,  // data flowing but >= 10% packet loss
-    ERROR        = 4,  // init failed or sensor silent > 100 ms; retrying every 1 s
+    ERROR        = 4,  // init failed, or sensor went silent > 100 ms mid-operation; terminal — no auto-reconnect, requires imu_init() (reboot)
 };
 
 // Call once; sets state to INITIALIZING. Actual init runs inside imu_update().
