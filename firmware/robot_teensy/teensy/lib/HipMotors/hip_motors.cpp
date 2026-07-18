@@ -92,11 +92,18 @@ static void pack_and_send(uint32_t id, float pos, float vel, float kp, float kd,
         }
     }
 
-    uint16_t p   = float_to_uint(pos,    P_MIN,  P_MAX,  16);
-    uint16_t v   = float_to_uint(vel,    V_MIN,  V_MAX,  12);
-    uint16_t kp_ = float_to_uint(kp,     KP_MIN, KP_MAX, 12);
-    uint16_t kd_ = float_to_uint(kd,     KD_MIN, KD_MAX, 12);
-    uint16_t t   = float_to_uint(torque, T_MIN,  T_MAX,  12);
+    // Left hip is physically mirrored relative to right — negate pos/vel/torque
+    // here, once, so every caller (calibration, jump FSM, GUI MIT frames, radio
+    // hip command) can work in one consistent frame where positive means the
+    // same physical direction on both sides, same as WheelMotors does for R.
+    float pos_hw = pos, vel_hw = vel, torque_hw = torque;
+    if (id == AK45_ID_L) { pos_hw = -pos_hw; vel_hw = -vel_hw; torque_hw = -torque_hw; }
+
+    uint16_t p   = float_to_uint(pos_hw,    P_MIN,  P_MAX,  16);
+    uint16_t v   = float_to_uint(vel_hw,    V_MIN,  V_MAX,  12);
+    uint16_t kp_ = float_to_uint(kp,        KP_MIN, KP_MAX, 12);
+    uint16_t kd_ = float_to_uint(kd,        KD_MIN, KD_MAX, 12);
+    uint16_t t   = float_to_uint(torque_hw, T_MIN,  T_MAX,  12);
 
     uint8_t buf[8];
     buf[0] = p >> 8;
@@ -124,9 +131,16 @@ static void rx_callback(const CAN_message_t& msg) {
     uint16_t raw_vel = ((uint16_t)msg.buf[3] << 4) | (msg.buf[4] >> 4);
     uint16_t raw_cur = ((uint16_t)(msg.buf[4] & 0xF) << 8) | msg.buf[5];
 
-    ax->pos_rad    = uint_to_float(raw_pos, P_MIN, P_MAX, 16);
-    ax->vel_rad_s  = uint_to_float(raw_vel, V_MIN, V_MAX, 12);
-    ax->current_A  = uint_to_float(raw_cur, I_MIN, I_MAX, 12);
+    float pos = uint_to_float(raw_pos, P_MIN, P_MAX, 16);
+    float vel = uint_to_float(raw_vel, V_MIN, V_MAX, 12);
+    float cur = uint_to_float(raw_cur, I_MIN, I_MAX, 12);
+    // Left hip is physically mirrored relative to right — negate feedback here
+    // so downstream code (gain scheduling, FF1 current sum, telemetry, GUI)
+    // sees a consistent frame; must match the TX-side flip in pack_and_send().
+    if (msg.id == AK45_ID_L) { pos = -pos; vel = -vel; cur = -cur; }
+    ax->pos_rad    = pos;
+    ax->vel_rad_s  = vel;
+    ax->current_A  = cur;
     ax->last_fb_ms = millis();
     ax->ever_heard = true;
 }
@@ -156,11 +170,14 @@ void hip_motors_poll() {
 
     if ((hm_L.mit_active || hm_R.mit_active) && (now - last_enter_ms) >= MIT_REENTER_MS) {
         hip_motors_enter_mit();
-        comm_log(LOG_LEVEL_INFO, "Hip MIT re-enter");
     }
 
-    // ESTOP or a stale (unrefreshed) setpoint both fall back to the safe ping.
-    if (g_state.state == STATE_ESTOP) {
+    // ESTOP or a stale (unrefreshed) setpoint both fall back to the safe ping —
+    // except during the brief, time-bounded gentle-cutoff ramp (see
+    // state_machine.cpp on_estop()), which needs its tapering setpoint to
+    // survive for its ~1 s duration instead of being zeroed the instant
+    // STATE_ESTOP is entered.
+    if (g_state.state == STATE_ESTOP && !stateMachine_is_estop_hip_ramping()) {
         hm_sp_L.active = false;
         hm_sp_R.active = false;
     }

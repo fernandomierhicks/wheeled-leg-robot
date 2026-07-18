@@ -420,7 +420,16 @@ void setup() {
         wheel_motors_init();
         wheel_motors_set_mode(WheelMode::IDLE);
         wheel_motors_clear_errors();
-        delay(300);  // wait for ODrive to send a fresh heartbeat with cleared error state
+        // Keep petting IMU's silence watchdog during this wait — a blind
+        // delay(300) here starves imu_update() for longer than IMU.cpp's
+        // 100 ms TIMEOUT_MS, which falsely declares a healthy, already-
+        // connected sensor ERROR (its liveness clock goes stale even though
+        // the sensor itself is fine). See IMU.cpp imu_update() silence check.
+        uint32_t t_wheel_wait = millis();
+        while (millis() - t_wheel_wait < 300) {
+            watchdog_pet();
+            if (imu_en) imu_update();
+        }
         comm_log(LOG_LEVEL_INFO, "Wheel CAN init OK");
     } else {
         comm_log(LOG_LEVEL_WARN, "Wheel motors disabled (wheel_l_enable=0, wheel_r_enable=0)");
@@ -440,6 +449,22 @@ void setup() {
 // SD-transfer stalls become visible (see param_flush_service / R1).
 static uint32_t s_overrun_count   = 0;
 static uint32_t s_last_overrun_ms = 0;
+
+// ── Loop section profiler (PARAM_LOOP_PROFILE_ENABLE) ────────────────────────
+// Rolling max per section since the last print, reset every print. Max (not
+// average) on purpose — an intermittent CAN retry or flash stall is exactly
+// what "Loop overrun" is chasing, and an average would wash it out.
+struct LoopProfile {
+    uint32_t recv, imu, hip, wheel, ibus, sens_total, imu_chk, radio, ctrl, led, buz, sd, flash, telem;
+    uint32_t telem_fill, telem_esp, telem_usb;
+};
+static LoopProfile s_prof_max        = {};
+static uint32_t    s_prof_last_ms    = 0;
+
+static inline void prof_mark(uint32_t& slot, uint32_t t0) {
+    uint32_t dt = micros() - t0;
+    if (dt > slot) slot = dt;
+}
 
 // ── Telemetry ─────────────────────────────────────────────────────────────────
 
@@ -476,8 +501,13 @@ static void fill_telemetry(TelemetryPayload& t) {
     t.hip_r_pos_rad    = g_state.hip_r_pos_rad;
     t.whl_tau_l        = g_state.whl_tau_l;
     t.whl_tau_r        = g_state.whl_tau_r;
-    t.roll_rad         = imu_roll();
-    t.yaw_rad          = imu_yaw();
+    // Sim-pitch bench-test injects a fake pitch in place of the real IMU reading
+    // (see read_sensors()) — zero roll/yaw alongside it so the GUI/3D model shows
+    // pure pitch rather than mixing injected pitch with whatever roll/yaw the
+    // bench happens to be sitting at.
+    bool sim_pitch_active = param_get(PARAM_ENABLE_SIM_PITCH_RAD) >= 0.5f;
+    t.roll_rad         = sim_pitch_active ? 0.0f : imu_roll();
+    t.yaw_rad          = sim_pitch_active ? 0.0f : imu_yaw();
     t.robot_state      = (uint8_t)g_state.state;
     t.fault_code       = g_state.fault_code;
     t.test_val         = sinf(2.0f * (float)M_PI * 2.0f * millis() / 1000.0f);
@@ -498,8 +528,8 @@ static void fill_telemetry(TelemetryPayload& t) {
     t.wm_mode          = (uint8_t)wm_mode;
     for (int i = 0; i < 4; i++) t.tof_dist_mm[i] = g_tof.dist_mm[i];
     // V5 — IMU rates + linear acceleration
-    t.roll_rate_rads        = imu_roll_rate();
-    t.yaw_rate_rads         = imu_yaw_rate();
+    t.roll_rate_rads        = sim_pitch_active ? 0.0f : imu_roll_rate();
+    t.yaw_rate_rads         = sim_pitch_active ? 0.0f : imu_yaw_rate();
     t.accel_x_ms2           = imu_accel_x();
     t.accel_y_ms2           = imu_accel_y();
     t.accel_z_ms2           = imu_accel_z();
@@ -535,16 +565,25 @@ static void fill_telemetry(TelemetryPayload& t) {
     t.pitch_trim_rad        = param_get(PARAM_RADIO_PITCH_TRIM);
 }
 
-static void send_telemetry() {
+static void send_telemetry(bool prof) {
+    uint32_t t0 = micros();
     TelemetryPayload telem;
     fill_telemetry(telem);
+    if (prof) prof_mark(s_prof_max.telem_fill, t0);
+
     const uint8_t* tp = (const uint8_t*)&telem;
+
+    t0 = micros();
     g_comm.send(COMM_TYPE_TELEM_A, TELEM_VERSION, tp,               TELEM_A_LEN);
     g_comm.send(COMM_TYPE_TELEM_B, TELEM_VERSION, tp + TELEM_A_LEN, TELEM_B_LEN);
+    if (prof) prof_mark(s_prof_max.telem_esp, t0);
+
+    t0 = micros();
     if (Serial) {
         g_comm_usb.send(COMM_TYPE_TELEM_A, TELEM_VERSION, tp,               TELEM_A_LEN);
         g_comm_usb.send(COMM_TYPE_TELEM_B, TELEM_VERSION, tp + TELEM_A_LEN, TELEM_B_LEN);
     }
+    if (prof) prof_mark(s_prof_max.telem_usb, t0);
 }
 
 // ── LED ───────────────────────────────────────────────────────────────────────
@@ -616,15 +655,30 @@ static void receive_commands() {
     g_comm_usb.update();
 }
 
-static void read_sensors() {
+static void read_sensors(bool prof) {
+    uint32_t t0;
+
     if (param_get(PARAM_IMU_ENABLE) >= 0.5f) {
+        t0 = micros();
         imu_update();
-        g_state.pitch_rad       = -imu_pitch();       // IMU mounted inverted: negate to match robot +X=forward convention
-        g_state.pitch_rate_rads = -imu_pitch_rate();
+        if (prof) prof_mark(s_prof_max.imu, t0);
+        g_state.pitch_rad       = imu_pitch();        // raw IMU pitch already matches robot +X=forward convention as mounted
+        g_state.pitch_rate_rads = imu_pitch_rate();
     }
 
+    // ── Sim-pitch injection (bench-test, no arming required) ───────────────────
+    // Overrides IMU pitch/pitch-rate with fake values so telemetry (GUI/3D model)
+    // and, once armed, the LQR all see the same injected pitch. Applied every
+    // loop regardless of state so it's visible in STANDBY without arming.
+    if (param_get(PARAM_ENABLE_SIM_PITCH_RAD) >= 0.5f)
+        g_state.pitch_rad = param_get(PARAM_SIM_PITCH_RAD);
+    if (param_get(PARAM_ENABLE_SIM_PITCH_RATE) >= 0.5f)
+        g_state.pitch_rate_rads = param_get(PARAM_SIM_PITCH_RATE_RAD_S);
+
     if (param_get(PARAM_HIP_L_ENABLE) >= 0.5f || param_get(PARAM_HIP_R_ENABLE) >= 0.5f) {
+        t0 = micros();
         hip_motors_poll();
+        if (prof) prof_mark(s_prof_max.hip, t0);
         g_state.hip_l_pos_rad   = hm_L.pos_rad;
         g_state.hip_r_pos_rad   = hm_R.pos_rad;
         g_state.hip_l_current_a = hm_L.current_A;
@@ -632,14 +686,18 @@ static void read_sensors() {
     }
 
     if (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f || param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) {
+        t0 = micros();
         wheel_motors_poll();
         wheel_motors_pet_watchdog();
+        if (prof) prof_mark(s_prof_max.wheel, t0);
     }
 
+    t0 = micros();
     g_ibus.update();
     for (uint8_t i = 1; i <= IBUS_NUM_CH; i++)
         param_force_set(PARAM_IBUS_CH0 + (i - 1), (float)g_ibus.channel(i));
     param_force_set(PARAM_IBUS_ALIVE, g_ibus.alive() ? 1.0f : 0.0f);
+    if (prof) prof_mark(s_prof_max.ibus, t0);
 }
 
 // ── Radio melodies ────────────────────────────────────────────────────────────
@@ -820,14 +878,18 @@ void loop() {
     uint32_t t_start = micros();
     watchdog_pet();
 
-    receive_commands();
-    read_sensors();
-    check_imu_state();
-    radio_update();
-    run_control_loop();
-    update_led();
-    update_buzzer();
+    bool prof = param_get(PARAM_LOOP_PROFILE_ENABLE) >= 0.5f;
+    uint32_t t0;
 
+    t0 = micros(); receive_commands();     if (prof) prof_mark(s_prof_max.recv,       t0);
+    t0 = micros(); read_sensors(prof);     if (prof) prof_mark(s_prof_max.sens_total, t0);
+    t0 = micros(); check_imu_state();      if (prof) prof_mark(s_prof_max.imu_chk,    t0);
+    t0 = micros(); radio_update();         if (prof) prof_mark(s_prof_max.radio,      t0);
+    t0 = micros(); run_control_loop();     if (prof) prof_mark(s_prof_max.ctrl,       t0);
+    t0 = micros(); update_led();           if (prof) prof_mark(s_prof_max.led,        t0);
+    t0 = micros(); update_buzzer();        if (prof) prof_mark(s_prof_max.buz,        t0);
+
+    t0 = micros();
     if (sd_logger_is_active()) {
         static LogRecord rec;
         fill_telemetry(rec.telem);
@@ -836,17 +898,42 @@ void loop() {
     }
     sd_logger_service();            // 1 sector/tick + auto-stop
     sd_logger_service_transfer();   // paced chunk streaming during a GET
+    if (prof) prof_mark(s_prof_max.sd, t0);
 
     // Deferred param flash flush — a LittleFS rewrite stalls the loop for
     // several ms, so never while balancing (RUNNING/JUMPING).
+    t0 = micros();
     param_flush_service(g_state.state != STATE_RUNNING && g_state.state != STATE_JUMPING);
+    if (prof) prof_mark(s_prof_max.flash, t0);
 
     // Send telemetry at 50 Hz (every 10th tick of the 500 Hz loop)
+    t0 = micros();
     static uint8_t telem_div = 0;
     if (++telem_div >= 10) {
         telem_div = 0;
         if (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f || param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) wheel_motors_request_vbus();
-        send_telemetry();
+        send_telemetry(prof);
+    }
+    if (prof) prof_mark(s_prof_max.telem, t0);
+
+    if (prof && millis() - s_prof_last_ms >= 1000) {
+        s_prof_last_ms = millis();
+        comm_log(LOG_LEVEL_INFO,
+            "LoopProf(us) recv=%lu sens=%lu imu_chk=%lu radio=%lu ctrl=%lu led=%lu buz=%lu sd=%lu flash=%lu telem=%lu",
+            (unsigned long)s_prof_max.recv,   (unsigned long)s_prof_max.sens_total,
+            (unsigned long)s_prof_max.imu_chk,(unsigned long)s_prof_max.radio,
+            (unsigned long)s_prof_max.ctrl,   (unsigned long)s_prof_max.led,
+            (unsigned long)s_prof_max.buz,    (unsigned long)s_prof_max.sd,
+            (unsigned long)s_prof_max.flash,  (unsigned long)s_prof_max.telem);
+        comm_log(LOG_LEVEL_INFO,
+            "LoopProf/sens(us) imu=%lu hip=%lu wheel=%lu ibus=%lu",
+            (unsigned long)s_prof_max.imu, (unsigned long)s_prof_max.hip,
+            (unsigned long)s_prof_max.wheel, (unsigned long)s_prof_max.ibus);
+        comm_log(LOG_LEVEL_INFO,
+            "LoopProf/telem(us) fill=%lu esp=%lu usb=%lu",
+            (unsigned long)s_prof_max.telem_fill, (unsigned long)s_prof_max.telem_esp,
+            (unsigned long)s_prof_max.telem_usb);
+        s_prof_max = {};
     }
 
     // Loop-overrun detection: count ticks whose work time blew the 2 ms

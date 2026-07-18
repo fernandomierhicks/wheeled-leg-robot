@@ -13,8 +13,11 @@
 // ── Param IDs ─────────────────────────────────────────────────────────────────
 // Convention: high byte = group, low byte = index within group.
 // IMPORTANT: After adding a param here and in param_registry.cpp, update
-//            software/gui/params_tab.py (_SUBGROUPS) so the GUI shows it
-//            in the correct section.
+//            software/gui/tabs/params_tab.py:
+//              - _SUBGROUPS, so the GUI shows it in the correct section
+//              - _PARAM_DEFS, adding this id's (name, description) entry —
+//                name copied from param_registry.cpp, description from the
+//                comment on this param's #define below.
 
 // GROUP_SYSTEM — peripheral enable flags (bench-test without full hardware)
 // 0 = peripheral not connected: init/poll is skipped, and the state machine
@@ -47,10 +50,22 @@
 // until the next reset, regardless of this param.
 #define PARAM_WATCHDOG_ENABLE 0x0009  // 1 = enable hardware watchdog; default 0 (disabled)
 
+// Loop section profiler — when 1, main.cpp loop() times each top-level section
+// (and read_sensors()'s imu/hip/wheel/ibus sub-calls) and logs the rolling max
+// per section once a second, then resets. Debug aid for chasing "Loop overrun"
+// warnings; not persisted so it can't accidentally survive a reboot and spam logs.
+#define PARAM_LOOP_PROFILE_ENABLE 0x000A
+
 // GROUP_HIP — hip motor behaviour
 #define PARAM_ESTOP_HIP_DISABLE   0x0200  // 1=exit MIT on ESTOP entry and re-enter on reset, 0=leave MIT running
-// TODO: add PARAM_HIP_RUNNING_KP (0x0201), PARAM_HIP_RUNNING_KD (0x0202), PARAM_HIP_RUNNING_TFF (0x0203)
-//       once hip-stiffness tuning experiments begin (currently hardcoded in state_machine.cpp:117-119)
+#define PARAM_HIP_RUNNING_KP      0x0201  // MIT position gain used for hip setpoints while RUNNING (control_loop.cpp)
+#define PARAM_HIP_RUNNING_KD      0x0202  // MIT damping gain used for hip setpoints while RUNNING (control_loop.cpp)
+#define PARAM_HIP_RUNNING_TFF     0x0203  // MIT feedforward torque used for hip setpoints while RUNNING (control_loop.cpp)
+// kp/tff ramp from 0 to their running value over this many seconds after
+// entering RUNNING, so the hip eases into the commanded position instead of
+// snapping there at full stiffness. kd is applied at full value throughout
+// (damping only, no position pull). 0 = no ramp (snap immediately, old behavior).
+#define PARAM_HIP_RUNNING_RAMP_TIME_S 0x0204
 
 // GROUP_WHEEL — wheel motor settings
 // Note: ODrive PID gains (vel_gain, pos_gain, current_lim, etc.) are not exposed here because
@@ -98,14 +113,35 @@
 #define PARAM_CALIB_RETRACT_ENABLE 0x0110  // 1 = run SEEK_BOTTOM (retract); default 0
 #define PARAM_CALIB_EXTEND_ENABLE  0x0111  // 1 = run SEEK_TOP (extend) after retract; default 0
 
+// Once an axis reaches its held home position, kp/kd ramp from the hold
+// values down to zero over this many seconds before calibration_done() fires
+// — so exiting CALIBRATION (which drops the setpoint entirely) never yanks
+// torque from a nonzero value to zero in a single tick. 0 = no ramp (snap to
+// zero-torque immediately, old behavior).
+#define PARAM_CALIB_RAMPDOWN_TIME_S 0x0112
+
 // GROUP_CONTROL — LQR controller settings
 #define PARAM_LQR_ENABLE              0x0400  // 1 = wheel torque output active; 0 = LQR runs but outputs zero
 #define PARAM_SIM_PITCH_RAD           0x0401  // pitch value to inject when PARAM_ENABLE_SIM_PITCH_RAD=1
 #define PARAM_ENABLE_SIM_PITCH_RAD    0x0420  // 1 = use sim_pitch_rad instead of real IMU pitch
 #define PARAM_SIM_PITCH_RATE_RAD_S    0x0421  // pitch rate value to inject when PARAM_ENABLE_SIM_PITCH_RATE=1
 #define PARAM_ENABLE_SIM_PITCH_RATE   0x0422  // 1 = use sim_pitch_rate_rad_s instead of real IMU pitch rate
+// |pitch| > 50 deg for > 200 ms -> ESTOP (FAULT_PITCH_WATCHDOG). Default 1
+// (enabled) and NOT persisted — always starts back on after reboot, so a
+// bench-test disable never silently survives into a real run.
+#define PARAM_PITCH_WATCHDOG_ENABLE   0x0423
 #define PARAM_LQR_TORQUE_LIMIT        0x0402  // |tau_sym| clamp [N·m]; default 1.0, hard max 7.0
 #define PARAM_WHEEL_VEL_LIMIT_TURNS_S 0x0403  // per-tick soft governor [turns/s]; ESTOP at 2×
+// LQR gain table (Phase 5) — computed offline by lqr.py self-test (Q_pitch=0.01,
+// Q_pitch_rate=0.1884, Q_vel=0.00508442, R=100.0). alpha=0 -> retracted (Q_RET),
+// alpha=1 -> extended (Q_EXT); K_VEL is invariant across leg height (see
+// control_loop.cpp interpolation). Exposed at runtime for bring-up bench
+// testing — start near 0 and ramp toward the computed defaults.
+#define PARAM_LQR_K_PITCH_RET         0x0424  // pitch gain, fully retracted; default -13.0495742
+#define PARAM_LQR_K_RATE_RET          0x0425  // pitch-rate gain, fully retracted; default -2.18083692
+#define PARAM_LQR_K_PITCH_EXT         0x0426  // pitch gain, fully extended; default -7.92908352
+#define PARAM_LQR_K_RATE_EXT          0x0427  // pitch-rate gain, fully extended; default -1.69084204
+#define PARAM_LQR_K_VEL               0x0428  // velocity-error gain (invariant); default -7.13051190e-03
 // Velocity PI (Phase 3)
 #define PARAM_VEL_PI_EN               0x0404  // 1 = velocity PI active; 0 = theta_ref fixed at 0
 #define PARAM_VEL_PI_KP               0x0405  // proportional gain [rad/(m/s)]

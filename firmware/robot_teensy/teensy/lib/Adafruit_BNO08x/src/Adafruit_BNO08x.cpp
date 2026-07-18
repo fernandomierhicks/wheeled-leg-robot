@@ -164,7 +164,8 @@ bool Adafruit_BNO08x::begin_SPI(uint8_t cs_pin, uint8_t int_pin,
     delete spi_dev; // remove old interface
   }
   spi_dev = new Adafruit_SPIDevice(cs_pin,
-                                   1000000,               // frequency
+                                   3000000,               // frequency — BNO086 datasheet max;
+                                                           // see components/characterization/IMU_Adafruit
                                    SPI_BITORDER_MSBFIRST, // bit order
                                    SPI_MODE3,             // data mode
                                    theSPI);
@@ -547,13 +548,14 @@ static int spihal_open(sh2_Hal_t *self) {
 }
 
 static bool spihal_wait_for_int(void) {
-  for (int i = 0; i < 500; i++) {
+  // Tight spin instead of delay(1)-per-poll — eliminates up to ~2 ms dead
+  // time per SHTP read (header + payload each wait for INT); see
+  // components/characterization/IMU_Adafruit/IMU_adafruit.MD.
+  uint32_t start = micros();
+  while ((micros() - start) < 500000) {  // 500 ms timeout, same budget as before
     if (!digitalRead(_int_pin))
       return true;
-    // Serial.print(".");
-    delay(1);
   }
-  // Serial.println("Timed out!");
   hal_hardwareReset();
 
   return false;

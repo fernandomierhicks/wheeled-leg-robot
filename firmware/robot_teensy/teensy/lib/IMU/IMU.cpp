@@ -10,6 +10,7 @@
 #include <sh2.h>
 #include "config.h"
 #include "IMU.h"
+#include "comm_protocol.h"
 
 // ── Config ───────────────────────────────────────────────────────────────────
 static constexpr uint32_t IMU_RATE_HZ       = 400;
@@ -184,14 +185,22 @@ void imu_update() {
     case ImuState::ERROR:
         if (_init_attempts >= MAX_INIT_ATTEMPTS) return;
         _init_attempts++;
-        if (attempt_init()) {
-            _state          = ImuState::NOMINAL;
-            _last_update_ms = millis();
-            _rv_seq_valid   = false;
-            _packet_loss    = 0.0f;
-            reset_loss_window(_last_update_ms);
-        } else {
-            _state = (_init_attempts >= MAX_INIT_ATTEMPTS) ? ImuState::ERROR : ImuState::INITIALIZING;
+        {
+            uint32_t t0 = millis();
+            bool ok = attempt_init();
+            uint32_t dt = millis() - t0;
+            comm_log(LOG_LEVEL_INFO, "IMU attempt %u/%u: %s (%lu ms)",
+                     (unsigned)_init_attempts, (unsigned)MAX_INIT_ATTEMPTS,
+                     ok ? "OK" : "FAIL", (unsigned long)dt);
+            if (ok) {
+                _state          = ImuState::NOMINAL;
+                _last_update_ms = millis();
+                _rv_seq_valid   = false;
+                _packet_loss    = 0.0f;
+                reset_loss_window(_last_update_ms);
+            } else {
+                _state = (_init_attempts >= MAX_INIT_ATTEMPTS) ? ImuState::ERROR : ImuState::INITIALIZING;
+            }
         }
         return;
 

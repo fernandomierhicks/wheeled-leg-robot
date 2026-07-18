@@ -111,10 +111,10 @@ Any device on the home network can connect to `<esp32>:5006` and issue mode chan
 - Unconditional `wheel_motors_send()` every tick as implicit watchdog pet + stale-torque flush ✓ (good design)
 
 **Issues:**
-- **C1 — Controller state not reset on RUNNING entry.** `s_vel_integral`, `s_theta_ref_rlt`, `s_yaw_integral` persist across disarm→arm cycles (reset only when the PI is *disabled*). Reset in `on_running()` when `entering`.
-- **C2 — FF terms can exceed `PARAM_LQR_TORQUE_LIMIT`** (added after the tau_sym clamp, re-clamped only at hard 7 N·m). If intentional, document; if not, clamp the sum at the test limit. → open question.
-- **C3 — Pitch trim plumbed (CH7 → param → telemetry) but not applied** — TODO at control_loop.cpp:190 is accurate; tracked.
-- **C5 — Hip gains in RUNNING hardcoded** (`RUNNING_KP/KD` 5.0/0.5) — the param_ids.h TODO for `PARAM_HIP_RUNNING_KP/KD` stands, and its comment points at the wrong file ("state_machine.cpp:117-119" → control_loop.cpp:16-18).
+- **C1 — Controller state not reset on RUNNING entry — ✅ FIXED 2026-07-17.** `s_vel_integral`, `s_theta_ref_rlt`, `s_prev_v_desired`, `s_yaw_integral` persisted across disarm→arm cycles (reset only when the PI is *disabled*). **Fix:** new `controlLoop_reset()` ([control_loop.cpp](firmware/robot_teensy/teensy/src/control_loop.cpp)), called from `on_running()` when `entering` ([state_machine.cpp:200](firmware/robot_teensy/teensy/src/state_machine.cpp#L200)).
+- **C2 — FF terms could exceed `PARAM_LQR_TORQUE_LIMIT` — ✅ FIXED 2026-07-17.** Previously added after the tau_sym clamp and re-clamped only at the hard 7 N·m motor limit. **Fix (per user decision):** the mixed `tau_L`/`tau_R` (sym + yaw + FF) is now also clamped to `PARAM_LQR_TORQUE_LIMIT` before the hard 7 N·m backstop clamp ([control_loop.cpp:247-251](firmware/robot_teensy/teensy/src/control_loop.cpp)) — the test-limit knob is now authoritative over the whole output.
+- **C3 — Pitch trim plumbed (CH7 → param → telemetry) but not applied** — TODO at control_loop.cpp:190 is accurate; tracked. **Deferred** — user chose to skip for now (2026-07-17); the "LQR error only" vs. "also offset vel-PI setpoint" decision is still open when this is picked back up.
+- **C5 — Hip gains in RUNNING hardcoded — ✅ FIXED 2026-07-17.** `RUNNING_KP/KD/TFF` (5.0/0.5/0.0) are now `PARAM_HIP_RUNNING_KP/KD/TFF` (0x0201-0x0203, GROUP_HIP, persistent, live-tunable from the GUI Parameters tab) instead of compile-time constants — see [param_ids.h](firmware/robot_teensy/teensy/lib/ParamRegistry/param_ids.h), [param_registry.cpp](firmware/robot_teensy/teensy/lib/ParamRegistry/param_registry.cpp), [control_loop.cpp](firmware/robot_teensy/teensy/src/control_loop.cpp).
 - The JUMPING phase logic (4-layer torque protection: softstart, distance ramp-out, speed taper, hard margin cutoff) is genuinely well done.
 
 ---
@@ -352,7 +352,7 @@ Ordered so each phase is independently flashable/testable. **Bench note:** left 
 - **Verify:** visual pass over every tab live on bench; all controls reachable at 1280×800.
 
 ### Phase 4 — Refactors / dead code (§10)
-Dead code deletion; `shared/state_colors.h` + fault X-macro; GUI single state map; SerialPortManager public write; `check_protocol_sync.py`; C1 controller-state reset on arm; C2 decision; C5 hip RUNNING gains as params.
+Dead code deletion; `shared/state_colors.h` + fault X-macro; GUI single state map; SerialPortManager public write; `check_protocol_sync.py`. ~~C1 controller-state reset on arm; C2 decision; C5 hip RUNNING gains as params~~ — done early, 2026-07-17 (see §4).
 - **Verify:** both firmwares compile; GUI runs; sync-check passes; calibration single-frame/tick confirmed (already from P0).
 
 ### Phase 5 — Documentation (§11 + §12)
@@ -366,7 +366,7 @@ After each firmware phase: clean `pio run -e teensy41` / `-e esp32dev`; flash be
 
 ## Open questions
 1. ~~F7: what MANUAL GUI-watchdog timeout do you want (500 ms doc'd vs 5 s coded)?~~ **Resolved:** 500 ms, made viable by the new 10 Hz `CMD_ID_PING` GUI heartbeat. If WiFi shows spurious MANUAL exits on the bench, raise to 1000 ms (one constant in state_machine.cpp).
-2. C2: should FF1+FF2 respect `PARAM_LQR_TORQUE_LIMIT` or only the 7 N·m hard clamp?
+2. ~~C2: should FF1+FF2 respect `PARAM_LQR_TORQUE_LIMIT` or only the 7 N·m hard clamp?~~ **Resolved 2026-07-17:** yes, sym+FF mix now clamped to `PARAM_LQR_TORQUE_LIMIT`.
 3. ~~F9: open TCP command port acceptable for now (doc-only)?~~ **Resolved:** accepted risk, documented in firmware README; hardening options noted there.
 4. AK45 zeroing flash-wear (§13) — do you have the CubeMars doc handy?
 5. Dashboard redesign (9.1): keep the test_val sine widget anywhere, or retire it now that CRC/gap counters exist?

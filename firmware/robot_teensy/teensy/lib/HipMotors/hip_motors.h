@@ -1,6 +1,11 @@
 #pragma once
 #include <stdint.h>
 
+// pos_rad/vel_rad_s/current_A are in the firmware-frame convention: L's raw
+// CAN feedback is negated in rx_callback() so positive means the same
+// physical direction on both L and R (they're physically mirrored motors).
+// Commands (pos/vel/torque args below) use the same firmware-frame
+// convention — pack_and_send() applies the matching negation for L on TX.
 struct HipAxisState {
     float    pos_rad;      // rotor position [rad]
     float    vel_rad_s;    // rotor velocity [rad/s]

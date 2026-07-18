@@ -11,6 +11,9 @@ Telemetry fields used (TelemetryPayload V3, comm_protocol.h):
     wm_l_error, wm_r_error               — ODrive Axis_Error bitmask
     wm_l_state, wm_r_state               — ODrive Axis_State (1=IDLE, 8=CLOSED_LOOP)
     wm_mode                              — current WheelMode (0-3)
+    whl_tau_l, whl_tau_r                 — LQR-commanded wheel torque [N·m] (control_loop.cpp),
+                                            plotted as "cmd" outside MANUAL since the GUI isn't
+                                            the one driving the wheels then
 """
 
 import math
@@ -347,14 +350,19 @@ class _WheelPanel(QWidget):
             self._lbl_sp_unit.setText(unit)
 
     def update_data(self, vel: float, pos: float, vbus: float,
-                    error: int, state_id: int):
+                    error: int, state_id: int, fw_tau: float = 0.0):
         self._latest_vel      = vel
         self._latest_pos      = pos
         self._latest_vbus     = vbus
         self._latest_err      = error
         self._latest_state_id = state_id
         self._vel_buf.append(vel)
-        self._cmd_buf.append(self._latest_cmd)
+        # Outside MANUAL, the GUI isn't the one commanding the wheels — the
+        # balance controller drives them directly via CAN (control_loop.cpp),
+        # so _latest_cmd (only updated by this GUI's own Send/wave/diff
+        # controls) would just plot a stale value. Plot the firmware's actual
+        # torque command from telemetry instead.
+        self._cmd_buf.append(self._latest_cmd if self._in_manual else fw_tau)
         self._pos_buf.append(pos)
 
     # ── commands ──────────────────────────────────────────────────────────────
@@ -760,6 +768,7 @@ class WheelMotorsTab(QWidget):
             vbus=vbus_l,
             error=info.get("wm_l_error",      0),
             state_id=info.get("wm_l_state",   0),
+            fw_tau=info.get("whl_tau_l",      0.0),
         )
         self._panel_R.update_data(
             vel=info.get("wm_r_vel_turns_s", 0.0),
@@ -767,6 +776,7 @@ class WheelMotorsTab(QWidget):
             vbus=vbus_r,
             error=info.get("wm_r_error",      0),
             state_id=info.get("wm_r_state",   0),
+            fw_tau=info.get("whl_tau_r",      0.0),
         )
         self._vbus_L_buf.append(vbus_l)
         self._vbus_R_buf.append(vbus_r)

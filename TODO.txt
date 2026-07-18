@@ -22,18 +22,8 @@ Parameter or menu options via remote?
 
 
 
-
-
-
 ----------------------------------------------------------CAD
 Todo list in CAD folder
-
-
-----------------------------WIRING
-XT60+fuse to power cable
-
-
-
 
 
 -------------------------------------------------------Jump
@@ -51,7 +41,6 @@ Brake hard (or just jump without braking — the hip extension alone might be en
 Jump
 Retract legs immediately after liftoff
 Land (somehow...)
-
 
 
 
@@ -77,14 +66,3 @@ Do 30min anticogging run or longer for both motors
 
 
 
-
-
-
--AI usage 
-
-fernandomierhicks	35%	    Sunday 8PM
-fernandomierhicks1	10%	    Monday 12pm
-fernandomierhicks2	11%	    Monday 12PM
-
-
-One long OPUS task ( like planning for high datarate logging. ), 7minutes consumes 25% 5-hour limit and 3% weekly limit. 

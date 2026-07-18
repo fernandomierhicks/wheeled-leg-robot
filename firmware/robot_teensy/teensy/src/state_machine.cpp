@@ -66,6 +66,14 @@ static State* S_JUMPING;
 
 // ── ESTOP hip-disable tracking ────────────────────────────────────────────────
 static bool s_estop_hip_disabled = false;  // set when MIT was killed on ESTOP entry
+static bool s_hip_disarm_ramping = false;  // set while ramping hip torque down after a RUNNING->STANDBY disarm
+
+// ── ESTOP gentle hip-cutoff ramp ───────────────────────────────────────────────
+// Set on ESTOP entry (see on_estop()) from whatever controlLoop_reset_estop_ramp()
+// found actually active; clears (and runs the normal hip MIT exit) once the
+// 1 s ramp finishes. Wheels are not ramped — wheel_motors_set_mode(IDLE) still
+// runs immediately on ESTOP entry, same as before.
+static bool s_estop_hip_ramping = false;
 
 // ── Pending mode-change requests (set by command handler) ─────────────────────
 static volatile bool s_req_manual        = false;
@@ -116,6 +124,13 @@ static void on_startup()  {
     if (entering) {
         g_state.fault_code = FAULT_NONE;
         comm_log(LOG_LEVEL_INFO, "-> STARTUP");
+        // A reset can cut the gentle ESTOP hip ramp short (on_estop() won't
+        // run again once we've left STATE_ESTOP to finish it) — drop the
+        // cached setpoint so a stale nonzero-kp command doesn't linger.
+        if (s_estop_hip_ramping) {
+            s_estop_hip_ramping = false;
+            hip_motors_clear_setpoints();
+        }
     }
     if (s_estop_hip_disabled) {
         s_estop_hip_disabled = false;
@@ -130,7 +145,23 @@ static void on_standby()  {
     bool from_manual   = (g_state.state == STATE_MANUAL);
     bool from_startup  = (g_state.state == STATE_STARTUP);
     g_state.state = STATE_STANDBY;
-    hip_motors_clear_setpoints();  // revert to zero-torque ping (e.g. after CALIBRATION)
+
+    // Ramp hip torque down instead of snapping to zero when disarming out of
+    // RUNNING — same rate as the arm-in ramp (PARAM_HIP_RUNNING_RAMP_TIME_S).
+    // A 0 s ramp param falls straight through to the old snap-to-zero behavior.
+    if (entering && from_running && param_get(PARAM_HIP_RUNNING_RAMP_TIME_S) > 0.0f) {
+        controlLoop_reset_hip_disarm_ramp();
+        s_hip_disarm_ramping = true;
+    }
+    if (s_hip_disarm_ramping) {
+        if (!controlLoop_run_hip_disarm_ramp()) {
+            s_hip_disarm_ramping = false;
+            hip_motors_clear_setpoints();
+        }
+    } else {
+        hip_motors_clear_setpoints();  // revert to zero-torque ping (e.g. after CALIBRATION)
+    }
+
     g_state.whl_tau_l = 0.0f;
     g_state.whl_tau_r = 0.0f;
     if (from_calib) calibration_abort();
@@ -148,6 +179,10 @@ static void on_standby()  {
     if (from_estop) {
         // Soft-clear: clear fault and restore hip MIT mode skipped by bypassing STARTUP.
         g_state.fault_code = FAULT_NONE;
+        // A soft-clear can cut the gentle ESTOP hip ramp short — the setpoint
+        // clear above (hip_motors_clear_setpoints()) already made that safe;
+        // just drop the now-stale flag.
+        s_estop_hip_ramping = false;
         if (s_estop_hip_disabled) {
             s_estop_hip_disabled = false;
             if (param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) hip_motors_enter_mit();
@@ -191,12 +226,18 @@ static void on_calibration() {
     calibration_update();
 }
 static void on_running() {
-    bool entering = (g_state.state != STATE_RUNNING);
+    bool entering     = (g_state.state != STATE_RUNNING);
+    bool from_jumping = (g_state.state == STATE_JUMPING);
     g_state.state = STATE_RUNNING;
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> RUNNING (armed)");
         g_buzzer.play(ARMED_MELODY, sizeof(ARMED_MELODY) / sizeof(ARMED_MELODY[0]), 200);
         wheel_motors_set_mode(WheelMode::TORQUE);
+        controlLoop_reset();  // C1: clear integrators/rate-limit state so each arm starts clean
+        // Skip on a jump landing — the hips are already stiffly holding the
+        // post-jump position (on_jumping's JP_DONE); re-ramping kp from 0
+        // here would loosen them right when they need to hold.
+        if (!from_jumping) controlLoop_reset_hip_ramp();
     }
     controlLoop_run();
 }
@@ -333,6 +374,15 @@ static void on_jumping() {
         hip_motors_set_setpoint_R(s_jp_nom_R, 0.0f, kp, kd, 0.0f);
     }
 }
+// Immediate hip cutoff — the pre-ramp behavior, now also used to finalize the
+// gentle ramp once it completes.
+static void estop_cut_hip() {
+    if (param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) {
+        hip_motors_exit_mit();
+        s_estop_hip_disabled = true;
+    }
+}
+
 static void on_estop() {
     bool entering     = (g_state.state != STATE_ESTOP);
     bool from_startup = (g_state.state == STATE_STARTUP);
@@ -356,11 +406,24 @@ static void on_estop() {
         if (from_startup) comm_log(LOG_LEVEL_ERROR, "Startup complete with errors");
         comm_log(LOG_LEVEL_ERROR, "-> ESTOP [fault 0x%02X]", g_state.fault_code);
         g_buzzer.play(ESTOP_MELODY, sizeof(ESTOP_MELODY) / sizeof(ESTOP_MELODY[0]), 200);
+
+        // Wheels: kill power immediately — no reason to keep driving a wheel
+        // through an emergency stop.
         wheel_motors_set_mode(WheelMode::IDLE);
-        if (param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) {
-            hip_motors_exit_mit();
-            s_estop_hip_disabled = true;
-        }
+
+        // Hips: gentle 1 s ramp instead of an instant cutoff if a hip was
+        // actively being commanded (RUNNING/JUMPING/CALIBRATION/MANUAL) —
+        // avoids a leg buckling out from under the robot's own weight on a
+        // mid-motion ESTOP. No active setpoint cuts immediately here, exactly
+        // like before.
+        controlLoop_reset_estop_ramp();
+        s_estop_hip_ramping = controlLoop_estop_ramp_has_hip();
+        if (!s_estop_hip_ramping) estop_cut_hip();
+    }
+
+    if (s_estop_hip_ramping && !controlLoop_run_estop_ramp()) {
+        estop_cut_hip();
+        s_estop_hip_ramping = false;
     }
 }
 
@@ -608,3 +671,4 @@ void stateMachine_request_jump() {
     if (g_state.state == STATE_RUNNING) s_req_jump = true;
 }
 void stateMachine_ping_gui_watchdog()   { s_last_gui_packet_ms = millis(); }
+bool stateMachine_is_estop_hip_ramping() { return s_estop_hip_ramping; }

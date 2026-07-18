@@ -15,11 +15,11 @@ def _kill_other_instances():
 
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QTabWidget, QWidget,
+    QApplication, QMainWindow, QTabWidget, QSplitter, QWidget,
     QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame, QMessageBox, QMenu,
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont, QPainter, QColor, QPen
+from PyQt6.QtCore import Qt, QTimer, QSettings
+from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QAction, QIcon
 
 from tabs.theme import APP_STYLE, BORDER, TEXT, DIM, GREEN, ORANGE, RED, BLUE, YELLOW, WHITE
 from tabs.robot_log_widget import RobotLogWidget
@@ -39,6 +39,8 @@ from tabs.source_manager import SourceManager, TRANSPORT_LABEL
 from tabs.comm_commands import send_set_mode, send_reboot, send_soft_clear, STATE_STARTUP, STATE_STANDBY, STATE_ESTOP
 
 _BG = "#0b0b18"
+
+_ICON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.ico")
 
 # ── Test-val mini chart ───────────────────────────────────────────────────────
 
@@ -773,6 +775,59 @@ class StatusBar:
     def clear_version_mismatch(self):
         self._mismatch_lbl.setVisible(False)
 
+def _as_list(value) -> list:
+    """QSettings round-trips a single-item list as a bare string on some
+    platforms/formats — normalize back to a list so callers can iterate."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return list(value)
+
+
+# ── Floating tab window ───────────────────────────────────────────────────────
+
+class FloatingTabWindow(QMainWindow):
+    """A tab popped out of the main window into its own top-level window.
+
+    Closing the window docks the tab back (to the left pane) rather than
+    destroying it — every tab holds live TelemetryBus subscriptions that
+    can't be recreated, since MainWindow only constructs each one once.
+    """
+
+    def __init__(self, title: str, widget: QWidget, main_window: "MainWindow"):
+        super().__init__()
+        self.setWindowTitle(title)
+        self.resize(700, 700)
+        self._main_window = main_window
+        self._title = title
+        self._widget = widget
+        self._returned = False
+        self.setCentralWidget(widget)
+        # QTabWidget explicitly hides pages that aren't the active tab, and
+        # that hidden flag persists across reparenting — force it visible.
+        widget.show()
+
+        self.menuBar().addAction("Put Back in Main Window", self.close)
+
+    def closeEvent(self, event):
+        # Reached both from the menu action above and from the OS close (X)
+        # button — either way, return the tab to the main window instead of
+        # destroying it (it holds live TelemetryBus subscriptions that can't
+        # be recreated). Guarded so a second close() call is a harmless no-op
+        # rather than re-triggering the dock logic.
+        if not self._returned:
+            self._returned = True
+            self._main_window._dock_floating_tab(self)
+        event.accept()
+
+    def take_widget(self) -> QWidget:
+        """Detach and return the hosted widget without destroying it."""
+        widget = self.centralWidget()
+        self.setCentralWidget(QWidget())  # leave something trivial in its place
+        return widget
+
+
 # ── Main window ───────────────────────────────────────────────────────────────
 
 class MainWindow(QMainWindow):
@@ -800,19 +855,6 @@ class MainWindow(QMainWindow):
         from tabs.wifi_transport import WifiTransport
         WifiTransport.instance().start()
 
-        tabs = QTabWidget()
-        tabs.addTab(RobotVisualizerTab(), "Visualizer")
-        tabs.addTab(DashboardTab(),       "Dashboard")
-        tabs.addTab(ImuTab(),             "IMU")
-        tabs.addTab(RawDataTab(),         "Raw Data")
-        tabs.addTab(HipMotorsTab(),       "Hip Motors")
-        tabs.addTab(ParamsTab(),          "Parameters")
-        tabs.addTab(WheelMotorsTab(),     "Wheel Motors")
-        tabs.addTab(ControllersTab(),     "Controllers")
-        tabs.addTab(RadioTab(),           "Radio")
-        tabs.addTab(LogsTab(),            "Logs")
-        self._flash_tab_idx = tabs.addTab(FlashMonitorTab(), "Flash & Monitor")
-
         self._log_pane = RobotLogWidget()
         self._log_pane.setContentsMargins(8, 2, 8, 6)
 
@@ -824,15 +866,45 @@ class MainWindow(QMainWindow):
         self._central_style_live = f"QFrame#central {{ background: {_BG}; border: 3px solid transparent; }}"
         self._central_style_playback = f"QFrame#central {{ background: {_BG}; border: 3px solid {ORANGE}; }}"
         central.setStyleSheet(self._central_style_live)
+
+        # Up to 2 tab panes side-by-side in a splitter, with the robot log
+        # always pinned full-width below — right-click a tab for "Split
+        # Right"/"Move to ... Pane"/"Float in New Window" (see
+        # _show_tab_context_menu). The right pane is created on demand and
+        # collapses away once its last tab leaves, so with nothing split or
+        # floated this looks exactly like a single plain QTabWidget.
+        self._split = QSplitter(Qt.Orientation.Horizontal)
+        self._left_pane = self._make_tab_pane()
+        self._right_pane = None
+        self._floating: dict[QWidget, FloatingTabWindow] = {}
+        self._split.addWidget(self._left_pane)
+
         central_lay = QVBoxLayout(central)
         central_lay.setContentsMargins(0, 0, 0, 0)
         central_lay.setSpacing(0)
-        central_lay.addWidget(tabs)
-        central_lay.addWidget(self._log_pane)
+        central_lay.addWidget(self._split, 1)
+        central_lay.addWidget(self._log_pane, 0)
         self.setCentralWidget(central)
         self._central = central
 
-        tabs.currentChanged.connect(self._on_tab_changed)
+        tab_defs = [
+            ("Visualizer",      RobotVisualizerTab()),
+            ("Dashboard",       DashboardTab()),
+            ("IMU",             ImuTab()),
+            ("Raw Data",        RawDataTab()),
+            ("Hip Motors",      HipMotorsTab()),
+            ("Parameters",      ParamsTab()),
+            ("Wheel Motors",    WheelMotorsTab()),
+            ("Controllers",     ControllersTab()),
+            ("Radio",           RadioTab()),
+            ("Logs",            LogsTab()),
+            ("Flash & Monitor", FlashMonitorTab()),
+        ]
+        for title, widget in tab_defs:
+            self._left_pane.addTab(widget, title)
+        self._tab_widgets = {title: widget for title, widget in tab_defs}
+
+        self._restore_layout()
 
         self._base_title = self.windowTitle()
         TelemetryBus.instance().playback_state_changed.connect(self._on_playback_state)
@@ -851,8 +923,166 @@ class MainWindow(QMainWindow):
         self._central.setStyleSheet(self._central_style_playback if active else self._central_style_live)
         self.setWindowTitle(f"[PLAYBACK] {self._base_title}" if active else self._base_title)
 
-    def _on_tab_changed(self, idx: int):
-        self._log_pane.setVisible(idx != self._flash_tab_idx)
+    # ── Split-pane / floating tab management ──────────────────────────────
+
+    def _make_tab_pane(self) -> QTabWidget:
+        pane = QTabWidget()
+        pane.setMovable(True)
+        pane.tabBar().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        pane.tabBar().customContextMenuRequested.connect(
+            lambda pos, pane=pane: self._show_tab_context_menu(pane, pos)
+        )
+        return pane
+
+    def _show_tab_context_menu(self, pane: QTabWidget, pos):
+        idx = pane.tabBar().tabAt(pos)
+
+        menu = QMenu(self)
+        if idx != -1:
+            widget = pane.widget(idx)
+            title = pane.tabText(idx)
+
+            if pane is self._left_pane:
+                label = "Split Right →" if self._right_pane is None else "Move to Right Pane"
+                menu.addAction(label, lambda: self._move_tab_to_pane(widget, title, "right"))
+            else:
+                menu.addAction("Move to Left Pane", lambda: self._move_tab_to_pane(widget, title, "left"))
+            # Visualizer/IMU embed a pyqtgraph OpenGL view, which doesn't survive
+            # being reparented into a new top-level window's GL context —
+            # observed to throw GL errors or hard-crash the app.
+            if title not in ("Visualizer", "IMU"):
+                menu.addAction("Float in New Window", lambda: self._float_tab(widget, title))
+            menu.addSeparator()
+
+        menu.addAction("Restore Default Layout", self._restore_default_layout)
+        menu.exec(pane.tabBar().mapToGlobal(pos))
+
+    def _restore_default_layout(self):
+        """Undo split panes / floated windows and put every tab back in a
+        single left pane, in the original registration order."""
+        for win in list(self._floating.values()):
+            win.close()  # closeEvent docks the tab back into the left pane
+
+        if self._right_pane is not None:
+            for title in [self._right_pane.tabText(i) for i in range(self._right_pane.count())]:
+                self._move_tab_to_pane(self._tab_widgets[title], title, "left")
+
+        self._reorder_pane_tabs(self._left_pane, list(self._tab_widgets.keys()))
+        self._left_pane.setCurrentIndex(0)
+
+    def _remove_tab_from_current_location(self, widget: QWidget):
+        for pane in (self._left_pane, self._right_pane):
+            if pane is None:
+                continue
+            idx = pane.indexOf(widget)
+            if idx != -1:
+                pane.removeTab(idx)
+                return
+        win = self._floating.pop(widget, None)
+        if win is not None:
+            win.take_widget()
+            win._returned = True  # caller is placing the widget elsewhere itself
+            win.close()
+
+    def _move_tab_to_pane(self, widget: QWidget, title: str, target: str):
+        self._remove_tab_from_current_location(widget)
+        if target == "right" and self._right_pane is None:
+            self._right_pane = self._make_tab_pane()
+            self._split.addWidget(self._right_pane)
+            self._split.setSizes([1, 1])
+        pane = self._left_pane if target == "left" else self._right_pane
+        pane.addTab(widget, title)
+        pane.setCurrentWidget(widget)
+        self._collapse_empty_pane()
+
+    def _float_tab(self, widget: QWidget, title: str):
+        self._remove_tab_from_current_location(widget)
+        win = FloatingTabWindow(title, widget, self)
+        win.show()
+        self._floating[widget] = win
+        self._collapse_empty_pane()
+
+    def _dock_floating_tab(self, win: "FloatingTabWindow"):
+        title = win._title
+        widget = win.take_widget()
+        self._floating.pop(widget, None)
+        self._left_pane.addTab(widget, title)
+        self._left_pane.setCurrentWidget(widget)
+
+    def _collapse_empty_pane(self):
+        if self._right_pane is not None and self._right_pane.count() == 0:
+            self._right_pane.setParent(None)
+            self._right_pane.deleteLater()
+            self._right_pane = None
+        if self._left_pane.count() == 0 and self._right_pane is not None:
+            self._left_pane, self._right_pane = self._right_pane, self._left_pane
+            self._right_pane.setParent(None)
+            self._right_pane.deleteLater()
+            self._right_pane = None
+
+    # ── Split/float layout persistence ────────────────────────────────────
+
+    def closeEvent(self, event):
+        self._save_layout()
+        super().closeEvent(event)
+
+    def _reorder_pane_tabs(self, pane: QTabWidget, order: list[str]):
+        for target_idx, title in enumerate(order):
+            for i in range(pane.count()):
+                if pane.tabText(i) == title:
+                    if i != target_idx:
+                        pane.tabBar().moveTab(i, target_idx)
+                    break
+
+    def _save_layout(self):
+        settings = QSettings("WheeledLegRobot", "GUI")
+        settings.setValue("mainWindow/geometry", self.saveGeometry())
+        settings.setValue(
+            "layout/left_tabs",
+            [self._left_pane.tabText(i) for i in range(self._left_pane.count())],
+        )
+        settings.setValue(
+            "layout/right_tabs",
+            [self._right_pane.tabText(i) for i in range(self._right_pane.count())]
+            if self._right_pane is not None else [],
+        )
+        if self._right_pane is not None:
+            settings.setValue("layout/splitter_sizes", self._split.sizes())
+        settings.setValue("layout/floating_tabs", [win._title for win in self._floating.values()])
+        for win in self._floating.values():
+            settings.setValue(f"layout/floating_geometry/{win._title}", win.saveGeometry())
+
+    def _restore_layout(self):
+        settings = QSettings("WheeledLegRobot", "GUI")
+        geometry = settings.value("mainWindow/geometry")
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+
+        for title in _as_list(settings.value("layout/right_tabs")):
+            widget = self._tab_widgets.get(title)
+            if widget is not None:
+                self._move_tab_to_pane(widget, title, "right")
+
+        sizes = settings.value("layout/splitter_sizes")
+        if sizes and self._right_pane is not None:
+            try:
+                self._split.setSizes([int(s) for s in sizes])
+            except (TypeError, ValueError):
+                pass
+
+        for title in _as_list(settings.value("layout/floating_tabs")):
+            widget = self._tab_widgets.get(title)
+            if widget is None:
+                continue
+            self._float_tab(widget, title)
+            win = self._floating.get(widget)
+            win_geometry = settings.value(f"layout/floating_geometry/{title}")
+            if win is not None and win_geometry is not None:
+                win.restoreGeometry(win_geometry)
+
+        self._reorder_pane_tabs(self._left_pane, _as_list(settings.value("layout/left_tabs")))
+        if self._right_pane is not None:
+            self._reorder_pane_tabs(self._right_pane, _as_list(settings.value("layout/right_tabs")))
 
     def _on_source_changed(self, device: str):
         if device:
@@ -892,9 +1122,18 @@ class MainWindow(QMainWindow):
 
 def main():
     _kill_other_instances()
+
+    if sys.platform == "win32":
+        # Without an explicit AppUserModelID, Windows groups this process under
+        # python.exe's own taskbar icon instead of the one we set below.
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("WheeledLegRobot.GUI")
+
     app = QApplication(sys.argv)
     app.setStyleSheet(APP_STYLE)
+    app.setWindowIcon(QIcon(_ICON_PATH))
     win = MainWindow()
+    win.setWindowIcon(QIcon(_ICON_PATH))
     win.show()
     sys.exit(app.exec())
 

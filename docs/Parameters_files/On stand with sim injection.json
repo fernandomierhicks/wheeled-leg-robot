@@ -1,0 +1,390 @@
+{
+  "0x0000": {
+    "name": "imu_enable",
+    "value": 1.0
+  },
+  "0x0003": {
+    "name": "buzzer_enable",
+    "value": 0.0
+  },
+  "0x0004": {
+    "name": "led_enable",
+    "value": 1.0
+  },
+  "0x0005": {
+    "name": "hip_l_enable",
+    "value": 1.0
+  },
+  "0x0006": {
+    "name": "hip_r_enable",
+    "value": 1.0
+  },
+  "0x0007": {
+    "name": "wheel_l_enable",
+    "value": 1.0
+  },
+  "0x0008": {
+    "name": "wheel_r_enable",
+    "value": 1.0
+  },
+  "0x0009": {
+    "name": "watchdog_enable",
+    "value": 0.0
+  },
+  "0x000A": {
+    "name": "loop_profile_enable",
+    "value": 0.0
+  },
+  "0x0100": {
+    "name": "calib_seek_speed",
+    "value": 0.17453
+  },
+  "0x0101": {
+    "name": "calib_kp_bottom",
+    "value": 16.0
+  },
+  "0x0102": {
+    "name": "calib_kd",
+    "value": 0.05
+  },
+  "0x0103": {
+    "name": "calib_hold_kp",
+    "value": 1.0
+  },
+  "0x0104": {
+    "name": "calib_hold_kd",
+    "value": 0.05
+  },
+  "0x0105": {
+    "name": "calib_stall_cur_btm",
+    "value": 7.0
+  },
+  "0x0106": {
+    "name": "calib_stall_db",
+    "value": 0.015
+  },
+  "0x0107": {
+    "name": "calib_stall_ticks",
+    "value": 60.0
+  },
+  "0x0108": {
+    "name": "calib_margin",
+    "value": 0.17453
+  },
+  "0x0109": {
+    "name": "calib_safety_bound",
+    "value": 1.5708
+  },
+  "0x010A": {
+    "name": "calib_l_seek_dir",
+    "value": 1.0
+  },
+  "0x010B": {
+    "name": "calib_r_seek_dir",
+    "value": 1.0
+  },
+  "0x010C": {
+    "name": "calib_done",
+    "value": 1.0
+  },
+  "0x010D": {
+    "name": "calib_bound_top",
+    "value": 3.14159
+  },
+  "0x010E": {
+    "name": "calib_kp_top",
+    "value": 32.0
+  },
+  "0x010F": {
+    "name": "calib_stall_cur_top",
+    "value": 6.0
+  },
+  "0x0110": {
+    "name": "calib_retract_en",
+    "value": 1.0
+  },
+  "0x0111": {
+    "name": "calib_extend_en",
+    "value": 1.0
+  },
+  "0x0112": {
+    "name": "calib_rampdown_s",
+    "value": 4.0
+  },
+  "0x0200": {
+    "name": "estop_hip_disable",
+    "value": 1.0
+  },
+  "0x0201": {
+    "name": "hip_running_kp",
+    "value": 20.0
+  },
+  "0x0202": {
+    "name": "hip_running_kd",
+    "value": 0.5
+  },
+  "0x0203": {
+    "name": "hip_running_tff",
+    "value": 0.0
+  },
+  "0x0204": {
+    "name": "hip_running_ramp_s",
+    "value": 3.0
+  },
+  "0x0300": {
+    "name": "wm_enc_timeout_ms",
+    "value": 20.0
+  },
+  "0x0400": {
+    "name": "lqr_enable",
+    "value": 0.0
+  },
+  "0x0401": {
+    "name": "sim_pitch_rad",
+    "value": 0.0
+  },
+  "0x0402": {
+    "name": "lqr_torque_limit",
+    "value": 1.0
+  },
+  "0x0403": {
+    "name": "wm_vel_limit",
+    "value": 3.0
+  },
+  "0x0404": {
+    "name": "vel_pi_en",
+    "value": 0.0
+  },
+  "0x0405": {
+    "name": "vel_pi_kp",
+    "value": 0.2
+  },
+  "0x0406": {
+    "name": "vel_pi_ki",
+    "value": 0.1
+  },
+  "0x0407": {
+    "name": "vel_pi_kff",
+    "value": 0.1049
+  },
+  "0x0408": {
+    "name": "vel_pi_theta_max",
+    "value": 0.698
+  },
+  "0x0409": {
+    "name": "vel_pi_rate_lim",
+    "value": 1.745
+  },
+  "0x040A": {
+    "name": "vel_pi_int_max",
+    "value": 1.0
+  },
+  "0x040B": {
+    "name": "v_cmd_ms",
+    "value": 0.0
+  },
+  "0x040C": {
+    "name": "yaw_pi_en",
+    "value": 0.0
+  },
+  "0x040D": {
+    "name": "yaw_pi_kp",
+    "value": 0.1
+  },
+  "0x040E": {
+    "name": "yaw_pi_ki",
+    "value": 0.2
+  },
+  "0x040F": {
+    "name": "yaw_pi_torque_max",
+    "value": 0.5
+  },
+  "0x0410": {
+    "name": "yaw_pi_int_max",
+    "value": 0.5
+  },
+  "0x0411": {
+    "name": "omega_cmd_rds",
+    "value": 0.0
+  },
+  "0x0412": {
+    "name": "ff1_alpha",
+    "value": 0.0
+  },
+  "0x0413": {
+    "name": "ff2_alpha",
+    "value": 0.0
+  },
+  "0x0414": {
+    "name": "ff1_kt_hip",
+    "value": 1.2732
+  },
+  "0x0415": {
+    "name": "jump_enable",
+    "value": 0.0
+  },
+  "0x0416": {
+    "name": "jump_torque_max",
+    "value": 0.0
+  },
+  "0x0417": {
+    "name": "jump_crouch_time",
+    "value": 0.3
+  },
+  "0x0418": {
+    "name": "jump_ramp_up",
+    "value": 0.05
+  },
+  "0x0419": {
+    "name": "jump_ramp_down",
+    "value": 0.08
+  },
+  "0x041A": {
+    "name": "jump_omega_max",
+    "value": 40.0
+  },
+  "0x041B": {
+    "name": "jump_hs_margin",
+    "value": 0.06
+  },
+  "0x041C": {
+    "name": "jump_kp",
+    "value": 80.0
+  },
+  "0x041D": {
+    "name": "jump_kd",
+    "value": 1.0
+  },
+  "0x041E": {
+    "name": "jump_ext_kd",
+    "value": 0.1
+  },
+  "0x041F": {
+    "name": "jump_ext_timeout",
+    "value": 0.15
+  },
+  "0x0420": {
+    "name": "enable_sim_pitch",
+    "value": 1.0
+  },
+  "0x0421": {
+    "name": "sim_pitch_rate",
+    "value": 0.0
+  },
+  "0x0422": {
+    "name": "enable_sim_prate",
+    "value": 1.0
+  },
+  "0x0423": {
+    "name": "pitch_watchdog_en",
+    "value": 0.0
+  },
+  "0x0500": {
+    "name": "radio_hip_cmd",
+    "value": 0.487
+  },
+  "0x0501": {
+    "name": "radio_vel_max",
+    "value": 0.2
+  },
+  "0x0502": {
+    "name": "radio_yaw_max",
+    "value": 0.5
+  },
+  "0x0503": {
+    "name": "radio_pitch_trim",
+    "value": -0.08727
+  },
+  "0x0510": {
+    "name": "profile1_vel_max",
+    "value": 0.2
+  },
+  "0x0511": {
+    "name": "profile1_yaw_max",
+    "value": 0.5
+  },
+  "0x0512": {
+    "name": "profile1_torque_lim",
+    "value": 1.0
+  },
+  "0x0513": {
+    "name": "profile2_vel_max",
+    "value": 0.5
+  },
+  "0x0514": {
+    "name": "profile2_yaw_max",
+    "value": 1.0
+  },
+  "0x0515": {
+    "name": "profile2_torque_lim",
+    "value": 2.0
+  },
+  "0x0516": {
+    "name": "profile3_vel_max",
+    "value": 1.0
+  },
+  "0x0517": {
+    "name": "profile3_yaw_max",
+    "value": 2.0
+  },
+  "0x0518": {
+    "name": "profile3_torque_lim",
+    "value": 4.0
+  },
+  "0x0519": {
+    "name": "active_profile",
+    "value": 0.0
+  },
+  "0x0600": {
+    "name": "ibus_ch0",
+    "value": 0.0
+  },
+  "0x0601": {
+    "name": "ibus_ch1",
+    "value": 0.0
+  },
+  "0x0602": {
+    "name": "ibus_ch2",
+    "value": 0.0
+  },
+  "0x0603": {
+    "name": "ibus_ch3",
+    "value": 0.0
+  },
+  "0x0604": {
+    "name": "ibus_ch4",
+    "value": 0.0
+  },
+  "0x0605": {
+    "name": "ibus_ch5",
+    "value": 0.0
+  },
+  "0x0606": {
+    "name": "ibus_ch6",
+    "value": 0.0
+  },
+  "0x0607": {
+    "name": "ibus_ch7",
+    "value": 0.0
+  },
+  "0x0608": {
+    "name": "ibus_ch8",
+    "value": 0.0
+  },
+  "0x0609": {
+    "name": "ibus_ch9",
+    "value": 0.0
+  },
+  "0x060A": {
+    "name": "ibus_ch10",
+    "value": 0.0
+  },
+  "0x060B": {
+    "name": "ibus_ch11",
+    "value": 0.0
+  },
+  "0x060C": {
+    "name": "ibus_ch12",
+    "value": 0.0
+  }
+}

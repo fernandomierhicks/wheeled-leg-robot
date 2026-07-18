@@ -30,13 +30,16 @@ static const uint32_t FLUSH_QUIET_MS   = 1000;
 // ── Registry table ────────────────────────────────────────────────────────────
 // Add new params here. Defaults are the compile-time values previously in config.h.
 // IMPORTANT: After adding a param here and in param_ids.h, update
-//            software/gui/params_tab.py (_SUBGROUPS) so the GUI shows it
-//            in the correct section.
+//            software/gui/tabs/params_tab.py:
+//              - _SUBGROUPS, so the GUI shows it in the correct section
+//              - _PARAM_DEFS, adding this id's (name, description) entry —
+//                name copied from the "name" string below, description from
+//                the comment on this param's #define in param_ids.h.
 // clang-format off
 static Param g_params[] = {
     // id                        group          name                     value     min       max     flags                   on_change
     // GROUP_SYSTEM — peripheral enable flags (bench-test without full hardware)
-    {PARAM_IMU_ENABLE,    GROUP_SYSTEM, "imu_enable",    1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_IMU_ENABLE,    GROUP_SYSTEM, "imu_enable",    0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_BUZZER_ENABLE, GROUP_SYSTEM, "buzzer_enable", 1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_LED_ENABLE,    GROUP_SYSTEM, "led_enable",    1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
 
@@ -49,7 +52,16 @@ static Param g_params[] = {
 
     {PARAM_WATCHDOG_ENABLE, GROUP_SYSTEM, "watchdog_enable", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
 
+    // Debug: 1 = log a per-second breakdown of loop() section timing (see
+    // param_ids.h). Not persisted — always starts off.
+    {PARAM_LOOP_PROFILE_ENABLE, GROUP_SYSTEM, "loop_profile_enable", 0.0f, 0.0f, 1.0f, 0, nullptr},
+
     {PARAM_ESTOP_HIP_DISABLE, GROUP_HIP,   "estop_hip_disable",  1.0f,      0.0f,     1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    // C5: previously hardcoded RUNNING_KP/KD/TFF constants in control_loop.cpp — soft, initial testing values kept as defaults
+    {PARAM_HIP_RUNNING_KP,    GROUP_HIP,   "hip_running_kp",     5.0f,      0.0f,   100.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_HIP_RUNNING_KD,    GROUP_HIP,   "hip_running_kd",     0.5f,      0.0f,     5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_HIP_RUNNING_TFF,   GROUP_HIP,   "hip_running_tff",    0.0f,     -5.0f,     5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_HIP_RUNNING_RAMP_TIME_S, GROUP_HIP, "hip_running_ramp_s", 2.0f,  0.0f,     10.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_SEEK_SPEED,  GROUP_CALIB, "calib_seek_speed",  0.17453f,  0.01f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_KP_BOTTOM,   GROUP_CALIB, "calib_kp_bottom",   16.0f,     0.0f,   500.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_KD,          GROUP_CALIB, "calib_kd",           0.05f,    0.0f,     5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
@@ -62,8 +74,9 @@ static Param g_params[] = {
     {PARAM_CALIB_KP_TOP,        GROUP_CALIB, "calib_kp_top",        32.0f, 0.0f,  500.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_STALL_CUR_TOP, GROUP_CALIB, "calib_stall_cur_top",  1.5f, 0.1f,   10.0f, PARAM_FLAG_PERSISTENT, nullptr},
     // Retract and extend both enabled. READONLY, edit + reflash to change.
-    {PARAM_CALIB_RETRACT_ENABLE, GROUP_CALIB, "calib_retract_en", 0.0f, 0.0f, 1.0f, PARAM_FLAG_READONLY, nullptr},
-    {PARAM_CALIB_EXTEND_ENABLE,  GROUP_CALIB, "calib_extend_en",  1.0f, 0.0f, 1.0f, PARAM_FLAG_READONLY, nullptr},
+    {PARAM_CALIB_RETRACT_ENABLE, GROUP_CALIB, "calib_retract_en", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_CALIB_EXTEND_ENABLE,  GROUP_CALIB, "calib_extend_en",  1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_CALIB_RAMPDOWN_TIME_S, GROUP_CALIB, "calib_rampdown_s", 2.0f, 0.0f, 10.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_STALL_DEADBAND, GROUP_CALIB, "calib_stall_db",  0.015f,   0.001f,  0.5f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_STALL_TICKS, GROUP_CALIB, "calib_stall_ticks",  60.0f,    5.0f,  500.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_MARGIN,      GROUP_CALIB, "calib_margin",       0.17453f, 0.0f,    1.5708f, PARAM_FLAG_PERSISTENT, nullptr},
@@ -88,8 +101,17 @@ static Param g_params[] = {
     {PARAM_ENABLE_SIM_PITCH_RAD,    GROUP_CONTROL, "enable_sim_pitch",    0.0f,    0.0f,    1.0f,  0,                     nullptr},
     {PARAM_SIM_PITCH_RATE_RAD_S,    GROUP_CONTROL, "sim_pitch_rate",      0.0f,  -10.0f,   10.0f, 0,                     nullptr},
     {PARAM_ENABLE_SIM_PITCH_RATE,   GROUP_CONTROL, "enable_sim_prate",    0.0f,    0.0f,    1.0f,  0,                     nullptr},
+    {PARAM_PITCH_WATCHDOG_ENABLE,   GROUP_CONTROL, "pitch_watchdog_en",    1.0f,    0.0f,    1.0f,  0,                     nullptr},
     {PARAM_LQR_TORQUE_LIMIT,        GROUP_CONTROL, "lqr_torque_limit",    1.0f,    0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_WHEEL_VEL_LIMIT_TURNS_S, GROUP_CONTROL, "wm_vel_limit",        3.0f,    1.0f,   20.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    // LQR gain table (Phase 5) — see param_ids.h. Range floor keeps sign fixed
+    // (magnitude only) so bring-up ramps from near-zero toward the computed
+    // default rather than risking a sign flip into positive feedback.
+    {PARAM_LQR_K_PITCH_RET, GROUP_CONTROL, "lqr_k_pitch_ret", -13.0495742f, -20.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_LQR_K_RATE_RET,  GROUP_CONTROL, "lqr_k_rate_ret",   -2.18083692f, -5.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_LQR_K_PITCH_EXT, GROUP_CONTROL, "lqr_k_pitch_ext",  -7.92908352f,-15.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_LQR_K_RATE_EXT,  GROUP_CONTROL, "lqr_k_rate_ext",   -1.69084204f, -5.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_LQR_K_VEL,       GROUP_CONTROL, "lqr_k_vel",        -7.13051190e-03f, -0.05f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
     // Velocity PI (Phase 3)
     {PARAM_VEL_PI_EN,               GROUP_CONTROL, "vel_pi_en",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
     {PARAM_VEL_PI_KP,               GROUP_CONTROL, "vel_pi_kp",           0.2f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},

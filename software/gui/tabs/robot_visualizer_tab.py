@@ -183,7 +183,7 @@ def _solve_ik(q_hip: float) -> dict | None:
 
 
 def _solve_ik_right(q_r: float) -> dict | None:
-    return _solve_ik(-q_r)
+    return _solve_ik(q_r)
 
 
 # Fallback pose used when the live hip angle doesn't solve (e.g. raw encoder
@@ -1180,7 +1180,7 @@ class RobotVisualizerTab(QWidget):
                    R @ _ry(q_l), _FR_JOINT, _R_MOUNT_LEFT)
         _set_frame(self._fr_hip_R,
                    R @ np.array([0.0, -_LEG_Y, _A_Z]),
-                   R @ _ry(-q_r), _FR_JOINT, _R_MOUNT_RIGHT)
+                   R @ _ry(q_r), _FR_JOINT, _R_MOUNT_RIGHT)
 
         if ik_l:
             _set_frame(self._fr_wheel_L,
@@ -1344,7 +1344,7 @@ class RobotVisualizerTab(QWidget):
         self._redraw(q_l, q_r, pitch, roll, yaw, whl_angle_l, whl_angle_r)
 
         # ── IK for leg extension (health-indicator text; matches _redraw's
-        # sign convention — right leg mirrors q_r) ───────────────────────────
+        # sign convention — right hip uses q_r directly, same sign as left) ──
         ik_l = _solve_ik(q_l)
         ik_r = _solve_ik_right(q_r)
 

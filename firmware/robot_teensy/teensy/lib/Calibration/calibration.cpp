@@ -14,6 +14,11 @@ enum CalibAxisState : uint8_t {
     CAL_SEEK_BOTTOM,
     CAL_SEEK_TOP,
     CAL_RETURN_HOME,
+    // Reached home; kp/kd ramping from hold values down to zero before
+    // CAL_DONE. calibration_done() stays false throughout so STATE_CALIBRATION
+    // doesn't exit to STANDBY (which drops the setpoint entirely) until torque
+    // is already at zero — see PARAM_CALIB_RAMPDOWN_TIME_S.
+    CAL_RAMPDOWN,
     CAL_DONE,
     CAL_FAULT,
     // Retract found and zeroed, but PARAM_CALIB_EXTEND_ENABLE=0 — hold here
@@ -31,11 +36,35 @@ struct CalibAxis {
     float          seek_dir;     // sign toward the "bottom" hardstop
     float          home_target;  // midpoint of the computed limits
     float          start_pos;    // position when calibration_start() was called
+    uint32_t       rampdown_start_ms;  // millis() when CAL_RAMPDOWN began
+    float          kp_out;        // slew-limited kp actually being sent (SEEK_*/RETURN_HOME)
+    float          kp0_rampdown;  // kp CAL_RAMPDOWN ramps down from — whatever kp_out was
+    float          kd0_rampdown;  // at the instant home was reached, not a fixed hold_kp/kd
 };
 
 static CalibAxis ax_L, ax_R;
 static bool s_done_announced  = false;
 static bool s_fault_announced = false;
+
+// Slew-rate-limits kp/kd toward their per-phase target instead of jumping
+// instantly at SEEK_BOTTOM<->SEEK_TOP<->RETURN_HOME boundaries (each phase
+// uses a different kp for its own stall-detection tuning) — otherwise
+// commanding a large position error at a suddenly-different stiffness is a
+// felt torque jerk. Reuses PARAM_CALIB_RAMPDOWN_TIME_S as the "how gentle"
+// knob so there's one setting for calibration smoothness; 0 = instant
+// (old behavior). Scaled off calib_kp_top since it's the largest constant
+// in play, so a full 0->top swing takes ramp_s and smaller swings scale down.
+static float slew_toward(float current, float target, float max_step) {
+    float d = target - current;
+    if (d >  max_step) d =  max_step;
+    if (d < -max_step) d = -max_step;
+    return current + d;
+}
+static float kp_slew_step() {
+    float ramp_s = param_get(PARAM_CALIB_RAMPDOWN_TIME_S);
+    if (ramp_s <= 0.0f) return 1.0e9f;  // instant
+    return param_get(PARAM_CALIB_KP_TOP) / (ramp_s * CONTROL_HZ);
+}
 
 // ── Buzzer cues ──────────────────────────────────────────────────────────────
 
@@ -83,7 +112,8 @@ static void update_axis(CalibAxis& ax, HipAxisState& hm, HipLimits& lim,
 
             float dir = (ax.state == CAL_SEEK_BOTTOM) ? ax.seek_dir : -ax.seek_dir;
             ax.ramp_target += dir * seek_speed * dt;
-            send(ax.ramp_target, 0.0f, kp, kd, 0.0f);
+            ax.kp_out = slew_toward(ax.kp_out, kp, kp_slew_step());
+            send(ax.ramp_target, 0.0f, ax.kp_out, kd, 0.0f);
 
             bool stalled = fabsf(hm.pos_rad - ax.prev_pos) < stall_db &&
                            fabsf(hm.current_A) > stall_cur;
@@ -167,27 +197,50 @@ static void update_axis(CalibAxis& ax, HipAxisState& hm, HipLimits& lim,
 
         case CAL_RETURN_HOME: {
             float seek_speed = param_get(PARAM_CALIB_SEEK_SPEED);
-            float kp         = param_get(PARAM_CALIB_KP_BOTTOM);  // reused for the traverse-home move
             float kd         = param_get(PARAM_CALIB_KD);
-            float hold_kp    = param_get(PARAM_CALIB_HOLD_KP);
-            float hold_kd    = param_get(PARAM_CALIB_HOLD_KD);
+            ax.kp_out = slew_toward(ax.kp_out, param_get(PARAM_CALIB_KP_BOTTOM), kp_slew_step());
             float step  = seek_speed * dt;
             float error = ax.home_target - ax.ramp_target;
             if (fabsf(error) <= step) {
                 ax.ramp_target = ax.home_target;
-                send(ax.ramp_target, 0.0f, hold_kp, hold_kd, 0.0f);
-                ax.state = CAL_DONE;
+                send(ax.ramp_target, 0.0f, ax.kp_out, kd, 0.0f);
+                ax.state             = CAL_RAMPDOWN;
+                ax.rampdown_start_ms = millis();
+                // Continue smoothly from whatever kp/kd was actually in effect
+                // this instant — not a fixed hold_kp/hold_kd, which would just
+                // move the jump here instead of removing it.
+                ax.kp0_rampdown      = ax.kp_out;
+                ax.kd0_rampdown      = kd;
                 comm_log(LOG_LEVEL_INFO, "%s: done, holding @ %.3f rad", tag, ax.ramp_target);
                 comm_send_calib_event(axis_id, CALIB_EVENT_DONE, ax.ramp_target, lim.min_rad, lim.max_rad);
             } else {
                 ax.ramp_target += (error > 0.0f) ? step : -step;
-                send(ax.ramp_target, 0.0f, kp, kd, 0.0f);
+                send(ax.ramp_target, 0.0f, ax.kp_out, kd, 0.0f);
+            }
+            break;
+        }
+
+        // Hold position fixed at home; ramp kp/kd from whatever was in effect
+        // when home was reached down to zero, so the eventual setpoint-clear
+        // on entering STANDBY is a no-op torque-wise.
+        case CAL_RAMPDOWN: {
+            float ramp_s  = param_get(PARAM_CALIB_RAMPDOWN_TIME_S);
+            float elapsed = (millis() - ax.rampdown_start_ms) / 1000.0f;
+            float alpha   = (ramp_s > 0.0f) ? (1.0f - elapsed / ramp_s) : 0.0f;
+            if (alpha < 0.0f) alpha = 0.0f;
+            send(ax.ramp_target, 0.0f, alpha * ax.kp0_rampdown, alpha * ax.kd0_rampdown, 0.0f);
+            if (alpha <= 0.0f) {
+                ax.state = CAL_DONE;
+                comm_log(LOG_LEVEL_INFO, "%s: torque ramped to zero", tag);
             }
             break;
         }
 
         case CAL_DONE:
-            send(ax.ramp_target, 0.0f, param_get(PARAM_CALIB_HOLD_KP), param_get(PARAM_CALIB_HOLD_KD), 0.0f);
+            // Reached only once CAL_RAMPDOWN has already brought torque to
+            // zero — send(0 kp/kd) here is a no-op vs. hip_motors_clear_setpoints()
+            // on the STANDBY transition that follows immediately after.
+            send(ax.ramp_target, 0.0f, 0.0f, 0.0f, 0.0f);
             break;
 
         // Retract-only bench test: hold at the zeroed retract hardstop indefinitely.

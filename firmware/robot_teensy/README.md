@@ -102,7 +102,36 @@ Gains are scheduled with leg height (α ∈ [0,1], retracted→extended).
 Outer loops: velocity PI (sets θ_ref), yaw PI (differential torque).  
 Feedforward: FF1 cancels hip reaction torque; FF2 adds gravity compensation.
 
-## Robot states (`teensy/src/robot_state.h` + `state_machine.cpp`)
+## Motor direction / sign conventions
+
+Every place a sign flip or direction constant is applied between a "positive means X physically" intent and the raw motor command. Reference for bench-testing motor direction (`ControllersTest.md` Phase 1) and for anyone chasing a motor spinning the wrong way.
+
+### All sign-affecting entities
+
+| # | Name | Type | Location | Current value |
+|---|---|---|---|---|
+| 1 | Wheel L TX (no flip — reference side) | hardcoded | `teensy/lib/WheelMotors/wheel_motors.cpp:144` (`L_hw = L`) | identity (+1) |
+| 2 | Wheel R TX flip | hardcoded | `wheel_motors.cpp:145` (`R_hw = -R`) | −1, unconditional |
+| 3 | Wheel R RX flip (encoder feedback) | hardcoded | `wheel_motors.cpp:64` (`pos = -pos; vel = -vel;`) | −1, unconditional |
+| 4 | Yaw→per-wheel torque split | hardcoded (structural) | `teensy/src/control_loop.cpp:242-243` | `tau_L = tau_sym + tau_yaw`, `tau_R = tau_sym − tau_yaw` |
+| 5 | Hip L TX flip (commanded pos/vel/torque) | hardcoded | `teensy/lib/HipMotors/hip_motors.cpp:95-100` (`pack_and_send`) | −1, unconditional, applied when `id == AK45_ID_L` |
+| 6 | Hip L RX flip (pos/vel/current feedback) | hardcoded | `hip_motors.cpp:137-140` (`rx_callback`) | −1, unconditional, applied when `msg.id == AK45_ID_L` |
+| 7 | Hip L/R hardstop seek direction | runtime param, `PARAM_FLAG_READONLY` | `teensy/lib/ParamRegistry/param_registry.cpp:82,85` | `+1.0` for both — identical, because #5/#6 already handle the mirroring, exactly like wheels (`hip_motors.h:1-4` explains the frame) |
+| 8 | Hip normalized-command mapping | hardcoded (structural) | `teensy/lib/HipMotors/hip_motors.cpp:277-282` (`hip_cmd_to_setpoints`) | `t∈[0,1]` (0=retract, 1=extend) → `pos = max_rad − t·span` when `dir>0` — same formula, same sign, both sides |
+| 9 | GUI hip jog slider → raw degrees | GUI-side, not firmware | `software/gui/tabs/hip_motors.py:493-501` | slider low end → `lo_deg` (≈ `min_rad`), slider high end → `hi_deg` (≈ `max_rad`) — **raw degrees, not the normalized `t`**; now the same physical sense on both sides since #5/#6 unify the frame |
+
+Note: `teensy/src/config.h:56` has a stale comment claiming "R seek dir −1" — that's out of date; #7 above (`param_registry.cpp`, both `+1.0`) is ground truth.
+
+### Per-motor: what positive should do
+
+| Motor | Applicable entities | Positive command means |
+|---|---|---|
+| **wheel_left** | #1 (no flip), #4 (`+tau_yaw` term) | Positive torque/velocity → wheel drives robot **forward (+X)**. This is the reference side; should stay unflipped. |
+| **wheel_right** | #2, #3 (−1 flip both ways), #4 (`−tau_yaw` term) | Positive torque/velocity, in the *firmware-frame* value (same value the control loop and GUI use, before the internal CAN flip) → wheel also drives robot **forward (+X)** — same convention as left, because the −1 flip compensates for the physically mirrored mounting. Flip should stay in place; do not "fix" it by changing sign elsewhere. |
+| **hip_right** | #7 (`dir_R=+1`), #8 | Reference side, no CAN-level flip. Raw MIT position: **more negative = leg extends**, near `max_rad` (≈0) = **retracted**. Increasing position retracts the leg. Via GUI jog slider (#9): dragging toward the **low** end extends, toward the **high** end retracts. |
+| **hip_left** | #5, #6 (−1 flip both ways), #7 (`dir_L=+1`, same as R), #8 | Positive command/position, in the *firmware-frame* value (same value calibration, jump FSM, GUI, and radio all use, before the internal CAN flip) → behaves identically to hip_right: more negative = extend, increasing = retract. The −1 flip at the CAN boundary compensates for the physically mirrored mounting, so nothing above `hip_motors.cpp` needs to know left and right are wired differently. **Requires recalibration** after this fix — the previous calibration's zero point and limits were established in the old (unflipped, backwards) frame. |
+
+
 
 Full FSM diagram: `teensy/state_machine.md`.
 

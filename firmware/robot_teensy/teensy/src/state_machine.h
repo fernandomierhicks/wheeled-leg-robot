@@ -37,6 +37,12 @@ void stateMachine_request_soft_clear();
 // the originating state. Called internally by req_running() on denied arm attempt.
 void stateMachine_request_cmd_reject();
 
+// True while the gentle post-ESTOP hip ramp (state_machine.cpp's on_estop())
+// is actively holding/tapering a setpoint. hip_motors_poll()'s normal
+// "ESTOP always falls back to the zero-torque ping" guard checks this so the
+// ramp's setpoints aren't clobbered the instant STATE_ESTOP is entered.
+bool stateMachine_is_estop_hip_ramping();
+
 // Called by the command handler each time a GUI command packet arrives
 // (the GUI sends CMD_ID_PING at 10 Hz as a heartbeat). Feeds the MANUAL-mode
 // watchdog: if no call for >MANUAL_GUI_TIMEOUT_MS (state_machine.cpp,

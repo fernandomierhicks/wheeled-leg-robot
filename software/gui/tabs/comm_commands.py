@@ -122,6 +122,12 @@ def send_param_set(param_id: int, value: float):
     send_frame(build_frame(struct.pack("<BHf", CMD_ID_PARAM_SET, param_id, value)))
 
 
+def send_param_get(param_id: int):
+    """Send CMD_ID_PARAM_GET for one parameter. Firmware replies with a single PARAM_REPORT."""
+    import struct
+    send_frame(build_frame(struct.pack("<BH", CMD_ID_PARAM_GET, param_id)))
+
+
 def send_param_get_all():
     """Send CMD_ID_PARAM_GET 0xFFFF — firmware replies with one PARAM_REPORT per param."""
     import struct

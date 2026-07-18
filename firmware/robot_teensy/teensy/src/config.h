@@ -48,7 +48,10 @@
 #define ODESC_NODE_R        1           // ODrive axis 1 — right wheel
 #define CAN_BAUD            1000000UL   // 1 Mbps
 #define HIP_CAN_TIMEOUT_MS  50          // AK45 MIT feedback watchdog (looser than wheel encoders)
-#define CAN_INTER_FRAME_US  500         // gap between back-to-back TX frames
+#define CAN_INTER_FRAME_US  100         // gap between back-to-back TX frames — under
+                                          // re-characterization, was 500; a standard 8-byte
+                                          // CAN frame at 1 Mbps takes ~110-130us worst-case
+                                          // (bit-stuffed), so 500 was ~4x that
 
 // --- Hip hardstop calibration ---
 // Tunable calibration parameters are now in ParamRegistry (param_ids.h / param_registry.cpp).
