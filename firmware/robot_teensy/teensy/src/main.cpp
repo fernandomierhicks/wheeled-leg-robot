@@ -178,6 +178,10 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         if (target == STATE_STARTUP)     stateMachine_request_reset();
         if (target == STATE_CALIBRATION) stateMachine_request_calibration();
         if (target == STATE_ESTOP)       stateMachine_request_estop();
+        // STATE_RUNNING: previously radio-only (CH10 arm switch, main.cpp radio_update()).
+        // Routed through the identical req_running() gate in state_machine.cpp — same
+        // IMU/calibration/motor-enable checks apply, no separate/weaker path.
+        if (target == STATE_RUNNING)     stateMachine_request_running();
         return;
     }
 
@@ -757,8 +761,9 @@ static void read_sensors(bool prof) {
 }
 
 // ── Radio melodies ────────────────────────────────────────────────────────────
-static const BuzzerNote RADIO_ACQ_MELODY[]  = {{76, 80, 0}};             // E5 — single: "link up"
-static const BuzzerNote RADIO_LOST_MELODY[] = {{64, 100, 30}, {60, 150, 0}}; // E4→C4 desc: "link lost"
+static const BuzzerNote RADIO_ACQ_MELODY[]    = {{76, 80, 0}};             // E5 — single: "link up"
+static const BuzzerNote RADIO_LOST_MELODY[]   = {{64, 100, 30}, {60, 150, 0}}; // E4→C4 desc: "link lost"
+static const BuzzerNote ARM_IGNORED_MELODY[]  = {{69, 60, 40}, {69, 60, 0}};   // A4-A4 double-tap: "not ready, try again"
 
 // ── Radio interpretation ───────────────────────────────────────────────────────
 // CH10 > 1990: arm into RUNNING (requires prior calibration).
@@ -791,9 +796,17 @@ static void radio_update() {
             fault_severity(g_state.fault_code) == FAULT_SEVERITY_SOFT) {
             comm_log(LOG_LEVEL_INFO, "Radio: soft-clear ESTOP [0x%02X]", g_state.fault_code);
             stateMachine_request_soft_clear();
-        } else {
+        } else if (g_state.state == STATE_STANDBY) {
             comm_log(LOG_LEVEL_INFO, "Radio: armed -> RUNNING");
             stateMachine_request_running();
+        } else {
+            // stateMachine_request_running() only latches from STANDBY, so a flip
+            // that lands mid-transition (e.g. tail end of CALIBRATION, or still in
+            // STARTUP) is otherwise silently dropped with no operator feedback.
+            comm_log(LOG_LEVEL_WARN, "Radio: arm ignored, not in STANDBY (state=%d)", (int)g_state.state);
+            g_buzzer.play(ARM_IGNORED_MELODY, sizeof(ARM_IGNORED_MELODY) / sizeof(ARM_IGNORED_MELODY[0]), 120);
+            s_profile_flash_rgb[0] = 255; s_profile_flash_rgb[1] = 0; s_profile_flash_rgb[2] = 255;
+            s_profile_flash_until_ms = millis() + 200;
         }
     }
     s_was_armed = armed;
