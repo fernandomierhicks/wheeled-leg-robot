@@ -8,6 +8,8 @@
 #include <driver/dac.h>
 #include <driver/uart.h>
 #include <esp_system.h>
+#include <esp_task_wdt.h>  // uplink_task watchdog — see esp_task_wdt_init() in setup()
+#include <lwip/sockets.h>  // select()/fd_set for the TCP write-readiness pre-check below
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 #include <string.h>
@@ -467,6 +469,14 @@ typedef struct {
 
 static QueueHandle_t      g_uplink_q        = nullptr;
 static uint32_t           g_uplink_drops    = 0;   // frames dropped because queue was full
+static uint32_t           g_tcp_send_skipped = 0;  // TCP sends skipped because the socket
+                                                    // wasn't write-ready — see the select()
+                                                    // pre-check in uplink_task: WiFiClient::write()
+                                                    // has a hardcoded 10x1s blocking retry loop
+                                                    // (framework source, not ours to change) that
+                                                    // was observed hanging uplink_task for so long
+                                                    // the task watchdog fired — this counter tracks
+                                                    // how often that's being avoided.
 static volatile uint16_t  g_tcp_send_max_us = 0;   // like g_udp_send_max_us; core 0 writes,
                                                     // core 1 reads/resets in send_wifi_diag —
                                                     // volatile 16-bit access is atomic on Xtensa,
@@ -650,6 +660,12 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
 static void uplink_task(void*) {
     UplinkFrame f;
     for (;;) {
+        // Subscribed to the task watchdog in setup(): if anything below ever
+        // blocks for esp_task_wdt_init()'s timeout, the panic handler reboots
+        // us instead of the whole uplink pipeline (USB + WiFi) silently going
+        // dark forever. This isn't just theoretical — it's exactly how the
+        // g_comm_tcp->send() hang below was root-caused (Phase 7, UARTplat.md).
+        esp_task_wdt_reset();
         if (xQueueReceive(g_uplink_q, &f, pdMS_TO_TICKS(100)) == pdTRUE) {
             if (f.type == COMM_TYPE_WIFI_DIAG) {
                 g_usb_diag.send(f.type, f.version, f.payload, f.len);
@@ -671,10 +687,35 @@ static void uplink_task(void*) {
 #if WIFI_ENABLED
                 if (xSemaphoreTake(g_tcp_mutex, portMAX_DELAY) == pdTRUE) {
                     if (g_comm_tcp && g_tcp_client.connected()) {
-                        uint32_t t0 = micros();
-                        g_comm_tcp->send(f.type, f.version, f.payload, f.len);
-                        uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
-                        if (dt > g_tcp_send_max_us) g_tcp_send_max_us = dt;
+                        // WiFiClient::write() (framework source) retries up to 10x
+                        // with a 1 s select() each — up to 10 s blocking — if the
+                        // peer stops draining the socket. That happens while
+                        // holding g_tcp_mutex, which then also stalls loop()'s
+                        // g_comm_tcp->update()/accept path on core 1, and since
+                        // uplink_task is the sole drain point for the WiFi UDP/USB
+                        // queue too, EVERYTHING (not just TCP) went dark until the
+                        // 10 s retry gave up — root-caused via esp_task_wdt, which
+                        // caught uplink_task stuck mid-send() every time (Phase 7,
+                        // UARTplat.md). Fix: our own quick (1 ms) write-readiness
+                        // check first, skip (drop and count) instead of risking it.
+                        int fd = g_tcp_client.fd();
+                        bool writable = false;
+                        if (fd >= 0) {
+                            fd_set wset;
+                            struct timeval tv = {0, 1000};  // 1 ms
+                            FD_ZERO(&wset);
+                            FD_SET(fd, &wset);
+                            writable = select(fd + 1, nullptr, &wset, nullptr, &tv) > 0
+                                       && FD_ISSET(fd, &wset);
+                        }
+                        if (writable) {
+                            uint32_t t0 = micros();
+                            g_comm_tcp->send(f.type, f.version, f.payload, f.len);
+                            uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
+                            if (dt > g_tcp_send_max_us) g_tcp_send_max_us = dt;
+                        } else {
+                            ++g_tcp_send_skipped;
+                        }
                     }
                     xSemaphoreGive(g_tcp_mutex);
                 }
@@ -2108,8 +2149,8 @@ static const char* reset_reason_name(esp_reset_reason_t r) {
 
 void setup() {
     Serial.begin(921600);
-    Serial.printf("[ESP32] reset reason: %d (%s)\n",
-                  (int)esp_reset_reason(), reset_reason_name(esp_reset_reason()));
+    esp_reset_reason_t rr = esp_reset_reason();
+    Serial.printf("[ESP32] reset reason: %d (%s)\n", (int)rr, reset_reason_name(rr));
     Serial2.setRxBufferSize(4096);
     Serial2.begin(TEENSY_UART_BAUD, SERIAL_8N1, TEENSY_UART_RX, TEENSY_UART_TX);
     uart_set_rx_full_threshold(UART_NUM_2, 32);  // fire ISR every 32 bytes (80 µs at 4 Mbaud) leaving 96 bytes / 192 µs of headroom vs the default 120-byte threshold (8 bytes / 16 µs)
@@ -2122,7 +2163,14 @@ void setup() {
 
     g_uplink_q  = xQueueCreate(UPLINK_QUEUE_LEN, sizeof(UplinkFrame));
     g_tcp_mutex = xSemaphoreCreateMutex();
-    xTaskCreatePinnedToCore(uplink_task, "uplink", 4096, nullptr, 2, nullptr, 0);
+    TaskHandle_t uplink_task_handle = nullptr;
+    xTaskCreatePinnedToCore(uplink_task, "uplink", 4096, nullptr, 2, &uplink_task_handle, 0);
+    // Root-caused a WiFiClient::write() hang here (Phase 7, UARTplat.md) via
+    // this exact watchdog — keeping it as permanent defense-in-depth: if
+    // uplink_task ever blocks for any other reason, a 5 s panic-reboot beats
+    // the whole USB+WiFi uplink pipeline going silent forever.
+    esp_task_wdt_init(5, true);
+    esp_task_wdt_add(uplink_task_handle);
 
 #if WIFI_ENABLED
     WiFi.setSleep(false);
