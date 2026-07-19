@@ -19,6 +19,17 @@ Scenario JSON fields (all optional except duration_s):
     snapshot_period_s     float — interval for periodic counter snapshots, so the
                                   report shows a trend over time, not just start/end
                                   totals (default 30)
+    corrupt_injections     list — stress-test entries, each {"t_s": float, "target":
+                                  0|1, "count": int}: at t_s seconds into the timed
+                                  window, sends CMD_ID_TEST_INJECT_CORRUPT asking the
+                                  firmware to deliberately flip the CRC-8 on its next
+                                  `count` outgoing TELEM_A frames — target 0 = Teensy's
+                                  UART send to the ESP32, target 1 = ESP32's WiFi UDP
+                                  send to the GUI. Verifies the receiving side's CRC-8
+                                  check actually detects and drops a bad frame (watch
+                                  injection_results in the report for observed vs.
+                                  expected drop deltas), not just "hasn't seen
+                                  corruption yet". See comm_commands.send_test_inject_corrupt().
     report_path           str   — output path, relative to software/gui/; default
                                   "logs/<name>_report.json"
 
@@ -45,7 +56,7 @@ from PyQt6.QtCore import QObject, QTimer
 
 from .telemetry_bus import TelemetryBus
 from .source_manager import SourceManager
-from .comm_commands import send_param_get_all
+from .comm_commands import send_param_get_all, send_test_inject_corrupt
 from .wifi_transport import WifiTransport
 
 _GUI_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # software/gui/
@@ -107,6 +118,7 @@ class AutomationRunner(QObject):
         self._churn_period_s      = self._scenario.get("tcp_churn_period_s")
         self._bootstrap_timeout_s = float(self._scenario.get("bootstrap_timeout_s", 30))
         self._snapshot_period_s   = float(self._scenario.get("snapshot_period_s", 30))
+        self._corrupt_injections  = self._scenario.get("corrupt_injections", [])
 
         self._latest: dict = {}
         self._last_uptime_ms: int | None = None
@@ -147,6 +159,8 @@ class AutomationRunner(QObject):
         self._link_pair_drops = _DeltaCounter()
 
         self._snapshots: list[dict] = []
+        self._injection_results: list[dict] = []
+        self._injection_timers: list[QTimer] = []  # kept alive; see _schedule_injections
 
         self._dump_timer = QTimer(self)
         self._dump_timer.setInterval(max(50, int(self._dump_period_s * 1000)))
@@ -187,11 +201,57 @@ class AutomationRunner(QObject):
         if self._churn_timer is not None:
             self._churn_timer.start()
         self._snapshot_timer.start()
+        self._schedule_injections()
         self._end_timer.setInterval(max(50, int(self._duration_s * 1000)))
         self._end_timer.start()
         print(f"[Automation] '{self._name}' timed window started: duration={self._duration_s}s "
               f"dump_period={self._dump_period_s}s churn_period={self._churn_period_s} "
-              f"snapshot_period={self._snapshot_period_s}s", flush=True)
+              f"snapshot_period={self._snapshot_period_s}s "
+              f"corrupt_injections={len(self._corrupt_injections)}", flush=True)
+
+    def _schedule_injections(self):
+        for spec in self._corrupt_injections:
+            t = QTimer(self)
+            t.setSingleShot(True)
+            t.setInterval(max(0, int(float(spec.get("t_s", 0)) * 1000)))
+            t.timeout.connect(lambda spec=spec: self._run_injection(spec))
+            t.start()
+            self._injection_timers.append(t)
+
+    def _run_injection(self, spec: dict):
+        target = int(spec.get("target", 0))
+        count = int(spec.get("count", 1))
+        # target 0 (UART): ESP32's own WIFI_DIAG.wifi_uart_crc_drops is the
+        # ground truth for "did the ESP32's CRC check catch it".
+        # target 1 (WiFi): this GUI's own link_crc_drops (PacketDecoder for
+        # the "wifi" transport) is the ground truth — see comm_commands.
+        counter = self._uart_teensy_to_esp32_crc if target == 0 else self._link_crc_drops
+        before = counter.last
+        print(f"[Automation] injecting {count} corrupt frame(s), target="
+              f"{'UART' if target == 0 else 'WiFi'}, crc_drops before={before}", flush=True)
+        send_test_inject_corrupt(count, target)
+
+        def check():
+            after = counter.last
+            observed = None if (before is None or after is None) else after - before
+            result = {
+                "t_s": round(time.time() - self._start_wall, 2),
+                "target": "uart" if target == 0 else "wifi",
+                "expected_count": count,
+                "crc_drops_before": before,
+                "crc_drops_after": after,
+                "observed_delta": observed,
+                "detected_all": observed == count,
+            }
+            self._injection_results.append(result)
+            print(f"[Automation] injection result: {result}", flush=True)
+
+        check_timer = QTimer(self)
+        check_timer.setSingleShot(True)
+        check_timer.setInterval(2000)  # give the frame(s) time to send + be counted
+        check_timer.timeout.connect(check)
+        check_timer.start()
+        self._injection_timers.append(check_timer)
 
     def _on_bootstrap_timeout(self):
         if self._timed_window_started:
@@ -392,6 +452,13 @@ class AutomationRunner(QObject):
                 "link_seq_gaps": self._link_seq_gaps.as_dict(),
                 "link_pair_drops": self._link_pair_drops.as_dict(),
             },
+
+            # Deliberate stress-test corruption (see corrupt_injections in the module
+            # docstring). NOT folded into "pass"/fail_reasons above: a successful
+            # injection *should* show up as a real crc_drops/missed_ticks increment
+            # (that's the corrupted frame being correctly detected and dropped) —
+            # judge each injection by its own detected_all flag here instead.
+            "injection_results": self._injection_results,
 
             "snapshots": self._snapshots,
         }

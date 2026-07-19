@@ -29,6 +29,7 @@ CMD_ID_PARAM_SET = 0x10
 CMD_ID_PARAM_GET = 0x11
 CMD_ID_LOG       = 0x12
 CMD_ID_PARAM_RESET_DEFAULTS = 0x13
+CMD_ID_TEST_INJECT_CORRUPT  = 0x14
 
 # Log sub-commands (comm_protocol.h LOG_SUB_*)
 LOG_SUB_START  = 0x01
@@ -137,6 +138,24 @@ def send_param_reset_defaults():
     its compile-time default, persists it, and replies with a full PARAM_REPORT dump."""
     import struct
     send_frame(build_frame(struct.pack("<B", CMD_ID_PARAM_RESET_DEFAULTS)))
+
+
+def send_test_inject_corrupt(count: int = 1, target: int = 0):
+    """TEST ONLY (Phase 9, UARTplat.md stress testing): deliberately flip the
+    CRC-8 byte on the next `count` outgoing TELEM_A frames, to verify the
+    receiving side's checksum check actually detects and drops bad frames
+    rather than just "hasn't seen corruption yet".
+
+    target=0 (UART): Teensy's next `count` sends to the ESP32 over Serial5 —
+        forwarded through by the ESP32 like any command. Watch the ESP32's
+        wifi_uart_crc_drops (WIFI_DIAG field) for the count to land.
+    target=1 (WiFi): ESP32's next `count` UDP datagrams to the GUI — this
+        command is intercepted by the ESP32 itself (forward_to_teensy()),
+        never reaches the Teensy. Watch this GUI's own link_crc_drops
+        (PacketDecoder, TelemetryBus "wifi" source) for the count to land.
+    """
+    import struct
+    send_frame(build_frame(struct.pack("<BBB", CMD_ID_TEST_INJECT_CORRUPT, count, target)))
 
 
 def send_wheel_set_mode(mode: int):
