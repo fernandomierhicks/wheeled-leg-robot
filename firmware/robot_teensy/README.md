@@ -228,6 +228,195 @@ Params (GUI → Teensy):
 
 **Propagation checklist** when adding/removing telemetry fields: see the `PROPAGATION CHECKLIST` comment in `shared/comm_protocol.h`.
 
+## Stress-test & fault-injection instrumentation
+
+Built during the Phase 7-9 WiFi reboot-loop / reliability investigation (see
+`UARTplat.md` at the repo root for the full narrative — root causes found,
+fixes applied, and verification history). Kept in permanently, not stripped
+from builds: gated by explicit commands, inert by default (zero behavior
+change unless a test harness deliberately arms them). Use this instead of
+writing new ad-hoc test scripts — it already speaks the real wire protocol
+through the real Teensy/ESP32/GUI stack.
+
+### Deliberate frame corruption (`CMD_ID_TEST_INJECT_CORRUPT`, `0x14`)
+
+Asks the Teensy or ESP32 to deliberately damage its own next N outgoing
+`TELEM_A` frames, to verify a receiver's `CommLink` parser actually detects
+and drops a bad frame rather than accepting garbage. Payload:
+`uint8_t count, uint8_t target, uint8_t mode` (`target`/`mode` default to
+0/1 for backward compat with older callers).
+
+| Field | Values | Meaning |
+|---|---|---|
+| `count` | 1-255 | how many upcoming `TELEM_A` sends to damage |
+| `target` | 0 = UART | Teensy's next `count` sends to the ESP32 over Serial5 — forwarded through by the ESP32 like any command |
+| | 1 = WiFi | ESP32's next `count` UDP datagrams to the GUI — intercepted by the ESP32 itself (`forward_to_teensy()`), never reaches the Teensy |
+| `mode` | 1 = CRC | flips the CRC-8 byte (checksum-compare path) |
+| | 2 = END | flips the END byte (`PS_END` bad-byte path) |
+| | 3 = length | claims an oversized on-wire length (length-guard/resync path, `CommLink.cpp` Fix 2) |
+
+Implemented via `CommLink::send()`'s `corrupt_mode_for_test` parameter
+(`shared/CommLink/CommLink.{h,cpp}`) — default `0` = no corruption, so every
+real call site is unaffected. Armed/consumed by `g_test_corrupt_remaining` /
+`g_test_corrupt_mode` (Teensy, `teensy/src/main.cpp`) and
+`g_test_corrupt_wifi_remaining` / `g_test_corrupt_wifi_mode` (ESP32,
+`esp32/src/main.cpp`).
+
+GUI sender: `comm_commands.send_test_inject_corrupt(count, target, mode)`
+(`software/gui/tabs/comm_commands.py`). Ground truth for whether it worked:
+watch `WIFI_DIAG.wifi_uart_crc_drops` for `target=0`, or this GUI's own
+`link_crc_drops` (`PacketDecoder`, "wifi" transport) for `target=1` — note
+mode 2 (END byte) frames are correctly rejected but don't increment either
+counter (a GUI-side observability gap, not a detection failure — see
+`command_corruption_probes` below for a mode-agnostic way to confirm this).
+
+### Command-frame corruption, receive side (`build_frame_corrupted()`)
+
+The corruption above only exercises the *send* side (Teensy/ESP32 sending a
+deliberately bad `TELEM_A`). `comm_commands.build_frame_corrupted(payload,
+mode)` builds a COMMAND frame with the same 3 corruption modes, for testing
+the *receive* side of the identical `CommLink` parser instead — i.e.
+confirming a malformed frame from the GUI can't get misdispatched as a
+command. Send with `comm_commands.send_frame(...)` like any other frame.
+
+### GUI automation harness (`main.py --automation <scenario.json>`)
+
+```
+python software/gui/main.py --automation path/to/scenario.json
+```
+
+Forces WiFi as the active transport, drives load through the real senders
+(`comm_commands.py`, `WifiTransport`) for a fixed duration, and writes a
+report to `software/gui/logs/<name>_report.json` before exiting — no GUI
+interaction needed. Implemented in `software/gui/tabs/automation_runner.py`
+(`AutomationRunner`); full field docs are in its module docstring.
+
+| Scenario field | Type | Meaning |
+|---|---|---|
+| `name` | str | used in the default report filename |
+| `duration_s` | float | timed run length, starting once WiFi telemetry is first seen |
+| `param_dump_period_s` | float | interval between `PARAM_GET(0xFFFF)` dumps (load generator; default 5) |
+| `tcp_churn_period_s` | float | if set, force-close/reopen the GUI's own WiFi TCP command socket on this interval |
+| `bootstrap_timeout_s` | float | max wait for first WiFi telemetry packet before starting anyway (default 30) |
+| `snapshot_period_s` | float | interval for periodic counter snapshots (default 30) |
+| `corrupt_injections` | list | `{t_s, target: 0\|1, count, mode: 1\|2\|3}` — see corruption command above |
+| `rogue_tcp_connects` | list | `{t_s, hold_ms}` — opens a second, independent raw TCP connection to the ESP32's command port alongside the GUI's own, to verify the accept-swap logic (`loop()`, `esp32/src/main.cpp`) survives an interloper client cleanly and the GUI's own connection self-heals afterward |
+| `command_corruption_probes` | list | `{t_s, mode: 1\|2\|3, param_id}` — sends a corrupted `PARAM_GET`, confirms no reply leaked, then sends a valid follow-up and confirms the parser resynced (receive-side guard + recovery, mode-agnostic) |
+| `report_path` | str | output path, relative to `software/gui/`; default `logs/<name>_report.json` |
+
+Report highlights: `pass`/`fail_reasons` (note — **expect `pass: false`
+whenever `corrupt_injections` is used**; the injected CRC/seq-gap counters
+are exactly what the pass/fail check watches, so a "failing" report from a
+corruption-injection scenario is normal, not a regression), `reboot_count`/
+`reboot_events` (from `wifi_esp_uptime_ms` decreasing between packets),
+`telemetry.actual_hz`/`inter_arrival_jitter`, per-direction UART counters,
+`link_down_events`, `wifi_link_quality`, `injection_results`,
+`rogue_connect_results`, `command_probe_results`.
+
+Past example scenarios (kept for reference) and their reports:
+`software/gui/logs/wifi_*_report.json`.
+
+### Arm / state-machine stress test (`trigger_running_test.py`, `stress_test_arm.py`)
+
+Built to bench-verify the arm state machine (`state_machine.cpp`) without
+needing hands on the physical RC transmitter — e.g. after touching
+`req_running()`/`req_calibration()` or the radio arm path in
+`main.cpp radio_update()`. Standalone (pyserial only, no Qt — same pattern as
+`tools/trigger_log_test.py`), in `software/gui/tools/`.
+
+**`CMD_ID_SET_MODE(STATE_RUNNING)` is now a real command**, not just a radio
+trigger — previously `on_command()`'s `SET_MODE` handler had no `RUNNING`
+branch at all, so arming was only reachable via the physical CH10 switch
+(`radio_update()`). It's now routed through the identical `req_running()`
+gate the radio path uses (same IMU/calibration/motor-enable checks), so
+there's no separate/weaker software arm path.
+
+**`PARAM_RUNNING_WHEEL_BYPASS_EN`** (`0x0429`, `run_wheel_bypass_en`) — lets
+`req_running()` arm with `wheel_l/r_enable` off, for a pure
+command/state-machine smoke test with zero real torque anywhere when
+combined with `hip_l/r_enable` also off (bypassed via the existing
+`PARAM_CALIB_BYPASS_EN`). Independent of `PARAM_CALIB_BYPASS_EN`, which only
+ever covered the hip check — that asymmetry was the bug this param fixes.
+**Not persisted** — always boots to 0 (bypass off), unlike
+`PARAM_CALIB_BYPASS_EN`, so it can't be left silently armed across a power
+cycle.
+
+**Known gotcha — no software disarm-from-RUNNING path.** `SET_MODE(STANDBY)`
+calls `stateMachine_exit_manual()`, which only fires from `MANUAL`/
+`CALIBRATION` (see its guard comment in `state_machine.cpp`) — sending it
+from `RUNNING` is a no-op. The only software-only way back to `STANDBY` is
+`SET_MODE(ESTOP)` then `SET_MODE(STANDBY)` (soft-clear — `FAULT_HUMAN_ESTOP`
+is `FAULT_SEVERITY_SOFT`, no full reset needed). Both scripts below use this
+workaround internally (`to_standby()` / recovery step).
+
+**Known gotcha — radio disarm interlock fires regardless of arm source.**
+`radio_update()`'s disarm check is level-based and unconditional:
+```cpp
+bool armed = alive && (ch10 > 1990);
+if (!armed && g_state.state == STATE_RUNNING) stateMachine_disarm_running();
+```
+`alive` (iBus signal) is false whenever no RC receiver is connected, so
+`armed` is always false — meaning a software-triggered `RUNNING` gets
+disarmed again on the very next ~2 ms tick unless a live receiver also has
+CH10 physically held up. This is intentional (RUNNING should only *persist*
+with a live radio link corroborating "armed", regardless of entry path) —
+confirmed and left as-is rather than "fixed". Both tools below account for
+this: they check for the `-> RUNNING (armed)` log line (the `on_running()`
+entry action — a guaranteed one-shot event) rather than expecting the
+`TELEM_A` `robot_state` field to still read `RUNNING` by the time they check,
+since the armed state can be shorter than one telemetry period.
+
+#### `trigger_running_test.py` — single arm + confirm
+
+```
+python trigger_running_test.py [port]
+```
+
+Sends `CMD_ID_SET_MODE(STATE_RUNNING)` once and reports whether the state
+machine actually armed, via `comm_log` lines and live `TELEM_A` decoding
+(`tabs.telem_format.decode_telem_a`, Qt-free, imported directly). Prints the
+pre-arm state first and warns if it isn't `STANDBY` (the request will be a
+silent no-op — `stateMachine_request_running()`'s own `STANDBY`-only latch).
+
+#### `stress_test_arm.py` — multi-round stress test
+
+```
+python stress_test_arm.py [--port COM12] [--rounds 5]
+```
+
+Per round: a fuzzed out-of-range `SET_MODE` target (expect safe no-op, no
+crash), a `CALIBRATION` request (expect denial while hips are disabled), an
+arm into `RUNNING` (expect the `-> RUNNING (armed)` log line, then recovery
+to `STANDBY`), and explicit recovery before the next round. Prints a
+pass/fail summary table at the end and exits non-zero on any failure.
+
+**Safety gate, checked live before anything else runs:** reads
+`hip_l/r_enable`, `wheel_l/r_enable`, `imu_enable`, `calib_bypass_en`, and
+`run_wheel_bypass_en` via `CMD_ID_PARAM_GET` and aborts if any motor-enable
+param is actually on (RUNNING would command real torque), or if
+`imu_enable`/`calib_bypass_en` are off (test wouldn't be meaningful/would be
+denied outright). `run_wheel_bypass_en` is the one param it will flip on
+itself if needed — safe because it's non-persistent — and it flips it back
+off during cleanup regardless of pass/fail.
+
+**Out of scope — no software RC channel injection.** Neither tool can
+simulate physical transmitter input. `PARAM_IBUS_CH*` and the radio-derived
+params (`radio_vel_max`, `radio_yaw_max`, `active_profile`, ...) are all
+`PARAM_FLAG_READONLY` — firmware-written mirrors of the real iBus receiver,
+with no command-side injection point. Profile switching (CH9) in particular
+has no non-radio trigger at all right now. "Radio commands" in these tools
+means the same *state transitions* the radio triggers (`CALIBRATION`,
+`RUNNING`), issued instead through `CMD_ID_SET_MODE`.
+
+### ESP-IDF task watchdog (diagnostic, not invoked manually)
+
+`esp_task_wdt_init()`/`esp_task_wdt_add(uplink_task_handle)` in
+`esp32/src/main.cpp` — kept permanently as a safety net, not a test you run.
+This is what caught `uplink_task` hanging inside a blocking
+`WiFiClient::write()` call (Phase 9, root cause of the wildly inconsistent
+early WiFi test results) — if `uplink_task` ever stalls again, it force-
+reboots via the watchdog instead of silently going dark.
+
 ## Each driver has its own README
 
 See `teensy/lib/<DriverName>/README.md` for wiring, API, and gotchas.  
