@@ -516,10 +516,12 @@ static bool req_running() {
         }
         comm_log(LOG_LEVEL_WARN, "Running mode ARMED without calibration (calib_bypass_en=1) — hip limits unenforced.");
     }
-    bool bypass_hip_check = param_get(PARAM_CALIB_BYPASS_EN) >= 0.5f;
+    bool bypass_hip_check   = param_get(PARAM_CALIB_BYPASS_EN)         >= 0.5f;
+    bool bypass_wheel_check = param_get(PARAM_RUNNING_WHEEL_BYPASS_EN) >= 0.5f;
     if ((!bypass_hip_check &&
          (param_get(PARAM_HIP_L_ENABLE) < 0.5f || param_get(PARAM_HIP_R_ENABLE) < 0.5f)) ||
-        param_get(PARAM_WHEEL_L_ENABLE) < 0.5f || param_get(PARAM_WHEEL_R_ENABLE) < 0.5f) {
+        (!bypass_wheel_check &&
+         (param_get(PARAM_WHEEL_L_ENABLE) < 0.5f || param_get(PARAM_WHEEL_R_ENABLE) < 0.5f))) {
         comm_log(LOG_LEVEL_WARN, "Running mode denied: bench-test mode (a motor is disabled)");
         stateMachine_request_cmd_reject();
         return false;

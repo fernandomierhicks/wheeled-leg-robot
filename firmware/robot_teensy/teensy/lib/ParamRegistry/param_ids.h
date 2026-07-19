@@ -151,6 +151,14 @@
 #define PARAM_LQR_K_PITCH_EXT         0x0426  // pitch gain, fully extended; default -7.92908352
 #define PARAM_LQR_K_RATE_EXT          0x0427  // pitch-rate gain, fully extended; default -1.69084204
 #define PARAM_LQR_K_VEL               0x0428  // velocity-error gain (invariant); default -7.13051190e-03
+
+// Bypass wheel-enable requirement for RUNNING mode — lets req_running()
+// (state_machine.cpp) arm with wheel_l/r_enable off (e.g. a software-triggered
+// RUNNING smoke test with hips also disabled, no real torque anywhere).
+// Independent of PARAM_CALIB_BYPASS_EN, which only covers the hip check.
+// Not persisted — always boots to 0 (bypass off) so it can't be left on
+// silently across a power cycle.
+#define PARAM_RUNNING_WHEEL_BYPASS_EN 0x0429
 // Velocity PI (Phase 3)
 #define PARAM_VEL_PI_EN               0x0404  // 1 = velocity PI active; 0 = theta_ref fixed at 0
 #define PARAM_VEL_PI_KP               0x0405  // proportional gain [rad/(m/s)]

@@ -47,8 +47,8 @@ static Param g_params[] = {
     // disconnected. See param_ids.h for details.
     {PARAM_HIP_L_ENABLE,   GROUP_SYSTEM, "hip_l_enable",   0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_HIP_R_ENABLE,   GROUP_SYSTEM, "hip_r_enable",   0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_WHEEL_L_ENABLE, GROUP_SYSTEM, "wheel_l_enable", 1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_WHEEL_R_ENABLE, GROUP_SYSTEM, "wheel_r_enable", 1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_WHEEL_L_ENABLE, GROUP_SYSTEM, "wheel_l_enable", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_WHEEL_R_ENABLE, GROUP_SYSTEM, "wheel_r_enable", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
 
     {PARAM_WATCHDOG_ENABLE, GROUP_SYSTEM, "watchdog_enable", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
 
@@ -115,6 +115,8 @@ static Param g_params[] = {
     {PARAM_LQR_K_PITCH_EXT, GROUP_CONTROL, "lqr_k_pitch_ext",  -7.92908352f,-15.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_LQR_K_RATE_EXT,  GROUP_CONTROL, "lqr_k_rate_ext",   -1.69084204f, -5.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_LQR_K_VEL,       GROUP_CONTROL, "lqr_k_vel",        -7.13051190e-03f, -0.05f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    // Not persisted (see param_ids.h) — always boots to 0 (bypass off).
+    {PARAM_RUNNING_WHEEL_BYPASS_EN, GROUP_CONTROL, "run_wheel_bypass_en", 0.0f, 0.0f, 1.0f, 0, nullptr},
     // Velocity PI (Phase 3)
     {PARAM_VEL_PI_EN,               GROUP_CONTROL, "vel_pi_en",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
     {PARAM_VEL_PI_KP,               GROUP_CONTROL, "vel_pi_kp",           0.2f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
