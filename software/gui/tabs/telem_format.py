@@ -42,6 +42,7 @@ _FAULT_NAMES = {
     0x09: "WHEEL_RUNAWAY",
     0x0A: "IMU_LOST",
     0x0B: "WHEEL_FEEDBACK_LOST",
+    0x0C: "WHEEL_INIT_TIMEOUT",
 }
 # MIRROR: fault_description() in firmware/robot_teensy/esp32/src/main.cpp — keep wording
 # in sync whenever a fault is added/changed (that copy must stay ASCII-only, no UTF-8).
@@ -56,7 +57,8 @@ _FAULT_DESCRIPTIONS = {
     0x08: "|pitch| > 50° for > 200 ms — robot tipped",
     0x09: "Wheel velocity exceeded 2× soft governor limit",
     0x0A: "IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)",
-    0x0B: "Wheel encoder timeout or ODrive error while RUNNING/JUMPING",
+    0x0B: "Wheel encoder timeout or ODrive error during operation",
+    0x0C: "No CAN reply from wheel motors within 2 s of boot",
 }
 
 # Struct formats for split telemetry (V9, packed, little-endian)

@@ -130,6 +130,10 @@ static bool cmd_allowed(uint8_t cmd_id, RobotStateEnum s) {
     }
 }
 
+// Very short chirp for a param write while STANDBY — distinct from RADIO_ACQ_MELODY
+// (main.cpp's radio_update()) so the two aren't confused on the bench.
+static const BuzzerNote PARAM_SET_CHIRP[] = {{84, 30, 0}};  // C6, 30 ms
+
 // ── Command handler ───────────────────────────────────────────────────────────
 
 static void on_command(uint8_t type, uint8_t version, uint8_t source,
@@ -231,7 +235,16 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         memcpy(&id,  payload + 1, 2);
         memcpy(&val, payload + 3, 4);
         comm_log(LOG_LEVEL_INFO, "CMD param_set 0x%04X = %.4f", id, val);
-        param_set(id, val);  // out-of-range values clamp to [min, max]
+        float old_val = param_get(id);
+        ParamSetResult set_result = param_set(id, val);  // out-of-range values clamp to [min, max]
+        // send_reliable() (GUI comm_commands.py) retries the identical (id, val) up to
+        // 3x every 250 ms until it sees the PARAM_REPORT echo, so a slow link can deliver
+        // the same value more than once — only chirp when it actually changed.
+        if (g_state.state == STATE_STANDBY &&
+            (set_result == ParamSetResult::OK || set_result == ParamSetResult::CLAMPED) &&
+            param_get(id) != old_val) {
+            g_buzzer.play(PARAM_SET_CHIRP, 1, 120);
+        }
         // Echo back actual (possibly clamped) value
         Param p; uint16_t idx = 0;
         while (param_by_index(idx, &p)) { if (p.id == id) { send_param_report(idx); break; } idx++; }
@@ -842,8 +855,8 @@ static void radio_update() {
         if (profile != s_last_profile) {
             s_last_profile = profile;
             param_force_set(PARAM_ACTIVE_PROFILE, (float)profile);
-            param_set(PARAM_RADIO_VEL_MAX,    param_get(PROFILE_VEL[profile]));
-            param_set(PARAM_RADIO_YAW_MAX,    param_get(PROFILE_YAW[profile]));
+            param_force_set(PARAM_RADIO_VEL_MAX, param_get(PROFILE_VEL[profile]));
+            param_force_set(PARAM_RADIO_YAW_MAX, param_get(PROFILE_YAW[profile]));
             s_trq_target = param_get(PROFILE_TORQUE[profile]); // applied via slew below
             comm_log(LOG_LEVEL_INFO, "Radio: speed profile %u", (unsigned)(profile + 1));
 
@@ -872,12 +885,12 @@ static void radio_update() {
             static constexpr float TRQ_SLEW_STEP = 5.0f * 0.002f; // 5 N·m/s @ 500 Hz
             float cur = param_get(PARAM_LQR_TORQUE_LIMIT);
             if (s_trq_target >= cur) {
-                param_set(PARAM_LQR_TORQUE_LIMIT, s_trq_target);
+                param_force_set(PARAM_LQR_TORQUE_LIMIT, s_trq_target);
                 s_trq_target = -1.0f;
             } else {
                 float next = cur - TRQ_SLEW_STEP;
                 if (next <= s_trq_target) { next = s_trq_target; s_trq_target = -1.0f; }
-                param_set(PARAM_LQR_TORQUE_LIMIT, next);
+                param_force_set(PARAM_LQR_TORQUE_LIMIT, next);
             }
         }
 

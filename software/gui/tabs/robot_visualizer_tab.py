@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
-from PyQt6.QtCore import Qt, QRectF, QPointF
+from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush
 from PyQt6.QtWidgets import (
     QGroupBox, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget,
@@ -776,6 +776,17 @@ class RobotVisualizerTab(QWidget):
 
         TelemetryBus.instance().packet.connect(self._on_packet)
 
+        # 3-D scene redraw is expensive (rebuilds several mesh/IK computations
+        # per call) — decouple it from raw packet arrival rate/jitter onto a
+        # fixed-interval timer holding the latest pose, same pattern as
+        # controllers_tab.py's chart timer. Bursty/uneven packet arrival then
+        # renders as smooth motion instead of visibly jerky motion.
+        self._latest_pose: tuple | None = None
+        self._scene_timer = QTimer(self)
+        self._scene_timer.setInterval(33)  # ~30 Hz
+        self._scene_timer.timeout.connect(self._redraw_latest)
+        self._scene_timer.start()
+
     # ── Left panel ───────────────────────────────────────────────────────────
 
     def _build_left_panel(self) -> QWidget:
@@ -1139,6 +1150,10 @@ class RobotVisualizerTab(QWidget):
 
     # ── Core GL update (unchanged) ────────────────────────────────────────────
 
+    def _redraw_latest(self) -> None:
+        if self._latest_pose is not None:
+            self._redraw(*self._latest_pose)
+
     def _redraw(self, q_l: float, q_r: float,
                 pitch: float, roll: float, yaw: float,
                 whl_angle_l: float = 0.0, whl_angle_r: float = 0.0) -> None:
@@ -1341,7 +1356,8 @@ class RobotVisualizerTab(QWidget):
         whl_angle_r = info.get("wm_r_pos_turns", 0.0) * 2.0 * math.pi
 
         # ── 3-D scene ────────────────────────────────────────────────────────
-        self._redraw(q_l, q_r, pitch, roll, yaw, whl_angle_l, whl_angle_r)
+        # Actual redraw deferred to _redraw_latest() on a fixed-interval timer.
+        self._latest_pose = (q_l, q_r, pitch, roll, yaw, whl_angle_l, whl_angle_r)
 
         # ── IK for leg extension (health-indicator text; matches _redraw's
         # sign convention — right hip uses q_r directly, same sign as left) ──

@@ -866,7 +866,8 @@ static const char* fault_description(uint8_t code) {
         case FAULT_PITCH_WATCHDOG:     return "|pitch| > 50 deg for > 200 ms - robot tipped";
         case FAULT_WHEEL_RUNAWAY:      return "Wheel velocity exceeded 2x soft governor limit";
         case FAULT_IMU_LOST:           return "IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)";
-        case FAULT_WHEEL_FEEDBACK_LOST:return "Wheel encoder timeout or ODrive error while RUNNING/JUMPING";
+        case FAULT_WHEEL_FEEDBACK_LOST:return "Wheel encoder timeout or ODrive error during operation";
+        case FAULT_WHEEL_INIT_TIMEOUT: return "No CAN reply from wheel motors within 2 s of boot";
         default:                       return "Unknown fault";
     }
 }

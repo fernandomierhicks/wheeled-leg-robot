@@ -92,7 +92,8 @@ typedef struct __attribute__((packed)) {
 #define FAULT_PITCH_WATCHDOG     0x08  // |pitch| > 50° for > 200 ms
 #define FAULT_WHEEL_RUNAWAY      0x09  // wheel velocity exceeded 2× soft governor limit
 #define FAULT_IMU_LOST           0x0A  // IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)
-#define FAULT_WHEEL_FEEDBACK_LOST 0x0B // wheel encoder timeout or ODrive error while RUNNING/JUMPING
+#define FAULT_WHEEL_FEEDBACK_LOST 0x0B // wheel encoder timeout or ODrive error during operation
+#define FAULT_WHEEL_INIT_TIMEOUT 0x0C  // no CAN reply from wheel motors within 2 s of boot
 
 // ── Fault severity tiers (used by state machine + GUI recovery panel) ────────
 // IMPORTANT: when adding fault codes, update fault_severity() below too.

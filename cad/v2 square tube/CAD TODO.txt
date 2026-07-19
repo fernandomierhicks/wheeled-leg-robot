@@ -1,11 +1,6 @@
 CAD TODO
 
 
-
-
-
-
-
 Disasemble RX receiver, put it somewhere that doesn't occupy space?
 
 Laser mount

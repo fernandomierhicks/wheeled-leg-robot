@@ -431,7 +431,7 @@ static void on_estop() {
 
 static bool startup_ok() {
     bool imu_ok = (param_get(PARAM_IMU_ENABLE) < 0.5f) || (imu_state() == ImuState::NOMINAL);
-    return imu_ok && hip_motors_ok();
+    return imu_ok && hip_motors_ok() && wheel_motors_ok();
 }
 static bool startup_fail() {
     if (param_get(PARAM_IMU_ENABLE) >= 0.5f && imu_state() == ImuState::ERROR) {
@@ -446,12 +446,27 @@ static bool startup_fail() {
         g_state.fault_code = FAULT_HIP_INIT_TIMEOUT;
         return true;
     }
+    bool wl_missing = (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f) && !wm_L.ever_heard;
+    bool wr_missing = (param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) && !wm_R.ever_heard;
+    if (millis() > 2000 && (wl_missing || wr_missing)) {
+        comm_log(LOG_LEVEL_ERROR, "FAULT: wheel init timeout (L=%d R=%d)", (int)wm_L.ever_heard, (int)wm_R.ever_heard);
+        g_state.fault_code = FAULT_WHEEL_INIT_TIMEOUT;
+        return true;
+    }
     return false;
 }
-static bool standby_hip_fault() {
+// Checked from nearly every state (see stateMachine_init()) — a motor feedback
+// dropout is a global ESTOP trigger, not just a RUNNING-time concern.
+static bool motor_feedback_fault() {
     if (!hip_motors_ok()) {
         comm_log(LOG_LEVEL_ERROR, "FAULT: hip feedback lost");
         g_state.fault_code = FAULT_HIP_FEEDBACK_LOST;
+        return true;
+    }
+    if (!wheel_motors_ok()) {
+        comm_log(LOG_LEVEL_ERROR, "FAULT: wheel feedback lost L(ok=%d e=%lu) R(ok=%d e=%lu)",
+                 (int)wm_L.ok, (unsigned long)wm_L.error, (int)wm_R.ok, (unsigned long)wm_R.error);
+        g_state.fault_code = FAULT_WHEEL_FEEDBACK_LOST;
         return true;
     }
     return false;
@@ -463,17 +478,6 @@ static bool running_imu_fault() {
     if (imu_state() == ImuState::NOMINAL) return false;
     comm_log(LOG_LEVEL_ERROR, "FAULT: IMU lost (imu_state=%d)", (int)imu_state());
     g_state.fault_code = FAULT_IMU_LOST;
-    return true;
-}
-// RUNNING/JUMPING only: mirrors standby_hip_fault() for the wheels — encoder
-// silence or a latched ODrive error means the balancer has no actuator.
-static bool running_wheel_fault() {
-    bool l_bad = (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f) && (!wm_L.ok || wm_L.error);
-    bool r_bad = (param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) && (!wm_R.ok || wm_R.error);
-    if (!l_bad && !r_bad) return false;
-    comm_log(LOG_LEVEL_ERROR, "FAULT: wheel fb lost L(ok=%d e=%lu) R(ok=%d e=%lu)",
-             (int)wm_L.ok, (unsigned long)wm_L.error, (int)wm_R.ok, (unsigned long)wm_R.error);
-    g_state.fault_code = FAULT_WHEEL_FEEDBACK_LOST;
     return true;
 }
 static bool req_manual()        { bool v = s_req_manual;  s_req_manual  = false; return v; }
@@ -505,11 +509,16 @@ static bool req_running() {
         return false;
     }
     if (!hm_limits_L.valid || !hm_limits_R.valid) {
-        comm_log(LOG_LEVEL_WARN, "Running mode denied: calibrate first (limits not valid).");
-        stateMachine_request_cmd_reject();
-        return false;
+        if (param_get(PARAM_CALIB_BYPASS_EN) < 0.5f) {
+            comm_log(LOG_LEVEL_WARN, "Running mode denied: calibrate first (limits not valid).");
+            stateMachine_request_cmd_reject();
+            return false;
+        }
+        comm_log(LOG_LEVEL_WARN, "Running mode ARMED without calibration (calib_bypass_en=1) — hip limits unenforced.");
     }
-    if (param_get(PARAM_HIP_L_ENABLE)   < 0.5f || param_get(PARAM_HIP_R_ENABLE)   < 0.5f ||
+    bool bypass_hip_check = param_get(PARAM_CALIB_BYPASS_EN) >= 0.5f;
+    if ((!bypass_hip_check &&
+         (param_get(PARAM_HIP_L_ENABLE) < 0.5f || param_get(PARAM_HIP_R_ENABLE) < 0.5f)) ||
         param_get(PARAM_WHEEL_L_ENABLE) < 0.5f || param_get(PARAM_WHEEL_R_ENABLE) < 0.5f) {
         comm_log(LOG_LEVEL_WARN, "Running mode denied: bench-test mode (a motor is disabled)");
         stateMachine_request_cmd_reject();
@@ -562,46 +571,44 @@ void stateMachine_init() {
     S_STARTUP->addTransition(startup_ok,   S_STANDBY);
     S_STARTUP->addTransition(startup_fail, S_ESTOP);
 
-    S_STANDBY->addTransition(req_estop,         S_ESTOP);
-    S_STANDBY->addTransition(standby_hip_fault, S_ESTOP);
-    S_STANDBY->addTransition(req_manual,        S_MANUAL);
-    S_STANDBY->addTransition(req_calibration,   S_CALIBRATION);
-    S_STANDBY->addTransition(req_running,       S_RUNNING);
-    S_STANDBY->addTransition(req_cmd_reject,    S_CMD_REJECT);
+    S_STANDBY->addTransition(req_estop,            S_ESTOP);
+    S_STANDBY->addTransition(motor_feedback_fault, S_ESTOP);
+    S_STANDBY->addTransition(req_manual,           S_MANUAL);
+    S_STANDBY->addTransition(req_calibration,      S_CALIBRATION);
+    S_STANDBY->addTransition(req_running,          S_RUNNING);
+    S_STANDBY->addTransition(req_cmd_reject,       S_CMD_REJECT);
 
-    S_MANUAL ->addTransition(req_estop,         S_ESTOP);
-    S_MANUAL ->addTransition(standby_hip_fault, S_ESTOP);
-    S_MANUAL ->addTransition(req_standby,       S_STANDBY);
-    S_MANUAL ->addTransition(manual_gui_timeout, S_STANDBY);
+    S_MANUAL ->addTransition(req_estop,            S_ESTOP);
+    S_MANUAL ->addTransition(motor_feedback_fault, S_ESTOP);
+    S_MANUAL ->addTransition(req_standby,          S_STANDBY);
+    S_MANUAL ->addTransition(manual_gui_timeout,   S_STANDBY);
 
     S_CALIBRATION->addTransition(req_estop,             S_ESTOP);
-    S_CALIBRATION->addTransition(standby_hip_fault,     S_ESTOP);
+    S_CALIBRATION->addTransition(motor_feedback_fault,  S_ESTOP);
     S_CALIBRATION->addTransition(calibration_failed_fn, S_ESTOP);
     S_CALIBRATION->addTransition(calibration_done_fn,   S_STANDBY);
     S_CALIBRATION->addTransition(req_standby,           S_STANDBY);
 
-    S_RUNNING->addTransition(req_estop,           S_ESTOP);
-    S_RUNNING->addTransition(standby_hip_fault,   S_ESTOP);
-    S_RUNNING->addTransition(running_imu_fault,   S_ESTOP);
-    S_RUNNING->addTransition(running_wheel_fault, S_ESTOP);
-    S_RUNNING->addTransition(req_disarm_running,  S_STANDBY);
-    S_RUNNING->addTransition(req_jump,            S_JUMPING);
+    S_RUNNING->addTransition(req_estop,            S_ESTOP);
+    S_RUNNING->addTransition(motor_feedback_fault, S_ESTOP);
+    S_RUNNING->addTransition(running_imu_fault,    S_ESTOP);
+    S_RUNNING->addTransition(req_disarm_running,   S_STANDBY);
+    S_RUNNING->addTransition(req_jump,             S_JUMPING);
 
-    S_JUMPING->addTransition(req_estop,           S_ESTOP);
-    S_JUMPING->addTransition(standby_hip_fault,   S_ESTOP);
-    S_JUMPING->addTransition(running_imu_fault,   S_ESTOP);
-    S_JUMPING->addTransition(running_wheel_fault, S_ESTOP);
-    S_JUMPING->addTransition(jump_done,           S_RUNNING);
+    S_JUMPING->addTransition(req_estop,            S_ESTOP);
+    S_JUMPING->addTransition(motor_feedback_fault, S_ESTOP);
+    S_JUMPING->addTransition(running_imu_fault,    S_ESTOP);
+    S_JUMPING->addTransition(jump_done,            S_RUNNING);
 
     S_ESTOP  ->addTransition(req_soft_clear,     S_STANDBY);
     S_ESTOP  ->addTransition(req_reset,          S_STARTUP);
 
-    // req_estop/standby_hip_fault checked first, same as every other state —
+    // req_estop/motor_feedback_fault checked first, same as every other state —
     // without these, an ESTOP request during the ~1 s reject transient would
     // sit latched and only take effect once cmd_reject_done() fires.
-    S_CMD_REJECT->addTransition(req_estop,         S_ESTOP);
-    S_CMD_REJECT->addTransition(standby_hip_fault, S_ESTOP);
-    S_CMD_REJECT->addTransition(cmd_reject_done,   S_STANDBY);
+    S_CMD_REJECT->addTransition(req_estop,            S_ESTOP);
+    S_CMD_REJECT->addTransition(motor_feedback_fault, S_ESTOP);
+    S_CMD_REJECT->addTransition(cmd_reject_done,      S_STANDBY);
 
     g_state.state = STATE_STARTUP;
 }

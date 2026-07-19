@@ -230,3 +230,9 @@ void wheel_motors_clear_errors() {
     wm_R.error = 0;
     comm_log(LOG_LEVEL_INFO, "WheelMotors: clear_errors sent");
 }
+
+bool wheel_motors_ok() {
+    bool l_ok = (param_get(PARAM_WHEEL_L_ENABLE) < 0.5f) || (wm_L.ok && !wm_L.error);
+    bool r_ok = (param_get(PARAM_WHEEL_R_ENABLE) < 0.5f) || (wm_R.ok && !wm_R.error);
+    return l_ok && r_ok;
+}

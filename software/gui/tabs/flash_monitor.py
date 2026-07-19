@@ -490,6 +490,11 @@ class DevicePanel(QWidget):
         self._pio         = PioRunner(self)
         self._auto_scroll = True
         self._flashing    = False
+        # Set only by the user's own Disconnect click (not by flash-release or a
+        # real link drop) so _auto_scan() doesn't silently reopen the port a
+        # moment later — the ESP32's USB-serial bridge stays enumerated across a
+        # target reset, so auto-scan would otherwise fight every Disconnect.
+        self._user_disconnected = False
         self._log_path    = LOG_DIR / f"{device}.log"
         self._decoder     = PacketDecoder(device, self)
 
@@ -667,7 +672,7 @@ class DevicePanel(QWidget):
         return self._port_combo.currentText().split(" ")[0]
 
     def _auto_scan(self):
-        if self._reader or self._flashing:
+        if self._reader or self._flashing or self._user_disconnected:
             return
         if self._device in SerialPortManager.instance().scan():
             self._refresh_ports()
@@ -675,8 +680,10 @@ class DevicePanel(QWidget):
 
     def _toggle_connect(self, checked: bool):
         if checked:
+            self._user_disconnected = False
             self._open_port()
         else:
+            self._user_disconnected = True
             self._close_port()
 
     def _open_port(self):

@@ -39,14 +39,14 @@ static const uint32_t FLUSH_QUIET_MS   = 1000;
 static Param g_params[] = {
     // id                        group          name                     value     min       max     flags                   on_change
     // GROUP_SYSTEM — peripheral enable flags (bench-test without full hardware)
-    {PARAM_IMU_ENABLE,    GROUP_SYSTEM, "imu_enable",    0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_IMU_ENABLE,    GROUP_SYSTEM, "imu_enable",    1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_BUZZER_ENABLE, GROUP_SYSTEM, "buzzer_enable", 1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_LED_ENABLE,    GROUP_SYSTEM, "led_enable",    1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
 
     // Per-motor presence flags — set to 0 to bench-test with that motor physically
     // disconnected. See param_ids.h for details.
-    {PARAM_HIP_L_ENABLE,   GROUP_SYSTEM, "hip_l_enable",   1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_HIP_R_ENABLE,   GROUP_SYSTEM, "hip_r_enable",   1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_HIP_L_ENABLE,   GROUP_SYSTEM, "hip_l_enable",   0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_HIP_R_ENABLE,   GROUP_SYSTEM, "hip_r_enable",   0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_WHEEL_L_ENABLE, GROUP_SYSTEM, "wheel_l_enable", 1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_WHEEL_R_ENABLE, GROUP_SYSTEM, "wheel_r_enable", 1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
 
@@ -77,6 +77,7 @@ static Param g_params[] = {
     {PARAM_CALIB_RETRACT_ENABLE, GROUP_CALIB, "calib_retract_en", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_EXTEND_ENABLE,  GROUP_CALIB, "calib_extend_en",  1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_RAMPDOWN_TIME_S, GROUP_CALIB, "calib_rampdown_s", 2.0f, 0.0f, 10.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_CALIB_BYPASS_EN,   GROUP_CALIB, "calib_bypass_en",  1.0f, 0.0f, 1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_STALL_DEADBAND, GROUP_CALIB, "calib_stall_db",  0.015f,   0.001f,  0.5f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_STALL_TICKS, GROUP_CALIB, "calib_stall_ticks",  60.0f,    5.0f,  500.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_CALIB_MARGIN,      GROUP_CALIB, "calib_margin",       0.17453f, 0.0f,    1.5708f, PARAM_FLAG_PERSISTENT, nullptr},
@@ -96,13 +97,15 @@ static Param g_params[] = {
     {PARAM_CALIB_SAFETY_BOUND_TOP, GROUP_CALIB, "calib_bound_top", 3.14159f, 0.5f, 6.28319f, PARAM_FLAG_READONLY, nullptr},
 
     // GROUP_CONTROL — LQR controller settings
-    {PARAM_LQR_ENABLE,              GROUP_CONTROL, "lqr_enable",          0.0f,    0.0f,    1.0f,  0,                     nullptr},
+    {PARAM_LQR_ENABLE,              GROUP_CONTROL, "lqr_enable",          1.0f,    0.0f,    1.0f,  0,                     nullptr},
     {PARAM_SIM_PITCH_RAD,           GROUP_CONTROL, "sim_pitch_rad",       0.0f,   -1.5708f, 1.5708f, 0,                  nullptr},
     {PARAM_ENABLE_SIM_PITCH_RAD,    GROUP_CONTROL, "enable_sim_pitch",    0.0f,    0.0f,    1.0f,  0,                     nullptr},
     {PARAM_SIM_PITCH_RATE_RAD_S,    GROUP_CONTROL, "sim_pitch_rate",      0.0f,  -10.0f,   10.0f, 0,                     nullptr},
     {PARAM_ENABLE_SIM_PITCH_RATE,   GROUP_CONTROL, "enable_sim_prate",    0.0f,    0.0f,    1.0f,  0,                     nullptr},
     {PARAM_PITCH_WATCHDOG_ENABLE,   GROUP_CONTROL, "pitch_watchdog_en",    1.0f,    0.0f,    1.0f,  0,                     nullptr},
-    {PARAM_LQR_TORQUE_LIMIT,        GROUP_CONTROL, "lqr_torque_limit",    1.0f,    0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    // Firmware-slewed from the active CH9 profile's torque_lim (main.cpp radio_update());
+    // not independently persisted — READONLY|COMMAND matches other profile/radio-derived params.
+    {PARAM_LQR_TORQUE_LIMIT,        GROUP_CONTROL, "lqr_torque_limit",    0.1f,    0.0f,    7.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
     {PARAM_WHEEL_VEL_LIMIT_TURNS_S, GROUP_CONTROL, "wm_vel_limit",        3.0f,    1.0f,   20.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     // LQR gain table (Phase 5) — see param_ids.h. Range floor keeps sign fixed
     // (magnitude only) so bring-up ramps from near-zero toward the computed
@@ -123,8 +126,8 @@ static Param g_params[] = {
     {PARAM_V_CMD_MS,                GROUP_CONTROL, "v_cmd_ms",            0.0f,   -2.0f,    2.0f,  0,                     nullptr},
     // Yaw PI (Phase 4)
     {PARAM_YAW_PI_EN,               GROUP_CONTROL, "yaw_pi_en",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
-    {PARAM_YAW_PI_KP,               GROUP_CONTROL, "yaw_pi_kp",           0.1f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_YAW_PI_KI,               GROUP_CONTROL, "yaw_pi_ki",           0.2f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_YAW_PI_KP,               GROUP_CONTROL, "yaw_pi_kp",           0.1f,    -1.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_YAW_PI_KI,               GROUP_CONTROL, "yaw_pi_ki",           0.2f,    -1.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_YAW_PI_TORQUE_MAX,       GROUP_CONTROL, "yaw_pi_torque_max",   0.5f,    0.0f,    3.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_YAW_PI_INT_MAX,          GROUP_CONTROL, "yaw_pi_int_max",      0.5f,    0.0f,    3.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_OMEGA_CMD_RDS,           GROUP_CONTROL, "omega_cmd_rds",       0.0f,   -4.0f,    4.0f,  0,                     nullptr},
@@ -152,19 +155,21 @@ static Param g_params[] = {
 
     // GROUP_COMMAND — radio-derived setpoints (firmware-written, never persisted)
     {PARAM_RADIO_HIP_CMD,        GROUP_COMMAND, "radio_hip_cmd",        0.0f,  0.0f,    1.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_RADIO_VEL_MAX,        GROUP_COMMAND, "radio_vel_max",        0.5f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_RADIO_YAW_MAX,        GROUP_COMMAND, "radio_yaw_max",        1.0f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    // Firmware-copied from the active CH9 profile's vel_max/yaw_max (main.cpp radio_update());
+    // not independently persisted — READONLY|COMMAND matches other profile/radio-derived params.
+    {PARAM_RADIO_VEL_MAX,        GROUP_COMMAND, "radio_vel_max",        0.5f,  0.0f,    2.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
+    {PARAM_RADIO_YAW_MAX,        GROUP_COMMAND, "radio_yaw_max",        1.0f,  0.0f,    4.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
     {PARAM_RADIO_PITCH_TRIM,     GROUP_COMMAND, "radio_pitch_trim",     0.0f, -0.0873f, 0.0873f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
     // Speed profiles — each set of three is copied into the active params when CH9 switches
     {PARAM_PROFILE_1_VEL_MAX,    GROUP_COMMAND, "profile1_vel_max",     0.2f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_PROFILE_1_YAW_MAX,    GROUP_COMMAND, "profile1_yaw_max",     0.5f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_1_TORQUE_LIM, GROUP_COMMAND, "profile1_torque_lim",  1.0f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_1_TORQUE_LIM, GROUP_COMMAND, "profile1_torque_lim",  0.01f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_PROFILE_2_VEL_MAX,    GROUP_COMMAND, "profile2_vel_max",     0.5f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_PROFILE_2_YAW_MAX,    GROUP_COMMAND, "profile2_yaw_max",     1.0f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_2_TORQUE_LIM, GROUP_COMMAND, "profile2_torque_lim",  2.0f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_2_TORQUE_LIM, GROUP_COMMAND, "profile2_torque_lim",  0.05f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_PROFILE_3_VEL_MAX,    GROUP_COMMAND, "profile3_vel_max",     1.0f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_PROFILE_3_YAW_MAX,    GROUP_COMMAND, "profile3_yaw_max",     2.0f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_3_TORQUE_LIM, GROUP_COMMAND, "profile3_torque_lim",  4.0f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {PARAM_PROFILE_3_TORQUE_LIM, GROUP_COMMAND, "profile3_torque_lim",  0.1f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
     {PARAM_ACTIVE_PROFILE,       GROUP_COMMAND, "active_profile",       0.0f,  0.0f,    2.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
 
     // GROUP_IBUS — RC receiver live channel readings (firmware-written via param_force_set)

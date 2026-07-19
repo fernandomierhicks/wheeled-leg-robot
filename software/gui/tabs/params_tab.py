@@ -29,6 +29,10 @@ _FLAG_PERSISTENT      = 1 << 0
 _FLAG_READONLY        = 1 << 1
 _FLAG_COMMAND         = 1 << 2
 
+# Range column width — kept narrow (elided with a hover tooltip for the full
+# text) so Description gets most of the row.
+_RANGE_COL_WIDTH = 80
+
 # ── Group map (param_ids.h GROUP_*) ───────────────────────────────────────────
 _GROUP_NAMES = {
     0x00: "System",
@@ -207,7 +211,9 @@ _PARAM_DEFS: dict[int, tuple[str, str]] = {
     0x0400: ("lqr_enable", "1 = wheel torque output active; 0 = LQR runs but outputs zero."),
     0x0401: ("sim_pitch_rad", "Pitch value injected in place of real IMU pitch when "
              "enable_sim_pitch=1."),
-    0x0402: ("lqr_torque_limit", "|tau_sym| clamp [N·m]; default 1.0, hard max 7.0."),
+    0x0402: ("lqr_torque_limit", "|tau_sym| clamp [N·m]; hard max 7.0. READONLY — slewed "
+             "automatically from the active CH9 speed profile's torque_lim. Edit "
+             "profile1/2/3_torque_lim instead."),
     0x0403: ("wm_vel_limit", "Per-tick soft wheel velocity governor [turns/s]; ESTOP at 2x this."),
     # Velocity PI
     0x0404: ("vel_pi_en", "1 = velocity PI active; 0 = theta_ref fixed at 0."),
@@ -260,8 +266,10 @@ _PARAM_DEFS: dict[int, tuple[str, str]] = {
     # GROUP_COMMAND
     0x0500: ("radio_hip_cmd", "Hip extension command from CH3 [0=retracted, 1=extended]; "
              "firmware-written, stale when the radio link is dead."),
-    0x0501: ("radio_vel_max", "Max forward speed mapped from full CH2 deflection [m/s]."),
-    0x0502: ("radio_yaw_max", "Max yaw rate mapped from full CH4 deflection [rad/s]."),
+    0x0501: ("radio_vel_max", "Max forward speed mapped from full CH2 deflection [m/s]. READONLY "
+             "— copied from the active CH9 profile's vel_max. Edit profile1/2/3_vel_max instead."),
+    0x0502: ("radio_yaw_max", "Max yaw rate mapped from full CH4 deflection [rad/s]. READONLY "
+             "— copied from the active CH9 profile's yaw_max. Edit profile1/2/3_yaw_max instead."),
     0x0503: ("radio_pitch_trim", "Pitch equilibrium trim from CH7 [rad]; hook only, not yet "
              "applied to LQR."),
     0x0510: ("profile1_vel_max", "Speed profile 1 (slow) max forward speed [m/s]; CH9 "
@@ -292,6 +300,30 @@ def _hline(color: str = BORDER) -> QFrame:
     f.setStyleSheet(f"color: {color};")
     f.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     return f
+
+
+class _ElidedLabel(QLabel):
+    """QLabel that elides long text with '…' to fit its current width, and
+    always shows the untruncated text as a hover tooltip."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(parent)
+        self._full_text = ""
+        self.set_full_text(text)
+
+    def set_full_text(self, text: str):
+        self._full_text = text
+        self.setToolTip(text)
+        self._reflow()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reflow()
+
+    def _reflow(self):
+        elided = self.fontMetrics().elidedText(
+            self._full_text, Qt.TextElideMode.ElideRight, self.width())
+        super().setText(elided)
 
 
 def _flag_text(flags: int) -> str:
@@ -381,9 +413,9 @@ class _ParamRow(QWidget):
 
         range_txt = (f"[{min_val:.4g} … {max_val:.4g}]"
                      if min_val is not None and max_val is not None else "…")
-        self._range_lbl = QLabel(range_txt)
+        self._range_lbl = _ElidedLabel(range_txt)
         self._range_lbl.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-size: 10px;")
-        self._range_lbl.setMinimumWidth(130)
+        self._range_lbl.setFixedWidth(_RANGE_COL_WIDTH)
         lay.addWidget(self._range_lbl)
 
         self._flag_lbl = QLabel(_flag_text(flags) if flags is not None else "…")
@@ -392,10 +424,8 @@ class _ParamRow(QWidget):
         self._flag_lbl.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-size: 10px;")
         lay.addWidget(self._flag_lbl)
 
-        desc_lbl = QLabel(description)
+        desc_lbl = _ElidedLabel(description)
         desc_lbl.setStyleSheet(f"color: {DIM}; font-size: 10px;")
-        if description:
-            desc_lbl.setToolTip(description)
         lay.addWidget(desc_lbl, stretch=1)
 
     def update_value(self, value: float, min_val: float, max_val: float, flags: int):
@@ -404,7 +434,7 @@ class _ParamRow(QWidget):
         readonly = bool(flags & _FLAG_READONLY)
         self._edit.setEnabled(not readonly)
         self._btn.setEnabled(not readonly)
-        self._range_lbl.setText(f"[{min_val:.4g} … {max_val:.4g}]")
+        self._range_lbl.set_full_text(f"[{min_val:.4g} … {max_val:.4g}]")
         self._flag_lbl.setText(_flag_text(flags))
         self._flag_lbl.setToolTip(_flag_tooltip(flags))
         self._edit.setText(f"{value:.6g}")
@@ -612,7 +642,7 @@ class ParamsTab(QWidget):
         col_lay.setContentsMargins(6, 3, 6, 3)
         col_lay.setSpacing(8)
         for txt, w in [("Name", 190), ("ID", 52), ("Value", 96), ("Set", 34),
-                       ("Range", 130), ("Flags", 40)]:
+                       ("Range", _RANGE_COL_WIDTH), ("Flags", 40)]:
             lbl = QLabel(txt)
             lbl.setFixedWidth(w)
             lbl.setStyleSheet(f"color: {DIM}; font-size: 10px; font-weight: bold;")

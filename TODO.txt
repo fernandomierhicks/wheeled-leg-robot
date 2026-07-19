@@ -6,14 +6,18 @@
 ---Fernandos note dont change below
 
 
-Path to be able to Verify all controllers per Handoff.MD:
+Limit siwthc instead of hardstops? Move entire leg forward to better cpature CG. then limit switch at the current hardstop. Longer lever from coupler to limit switch. 
+-Build in adjustability (slotted bracket) so you can tune the exact trigger angle post-assembly and match left/right legs — any asymmetry between the two legs' home offsets will bias the balance controller.
+-Use NC (normally closed) wiring if the switch supports it, so a broken wire or connector pop reads as "triggered/fault" rather than silently reading as "never triggered" — fails safe.
+-Overtravel margin: pick a switch with enough spec'd overtravel to survive the motor's stopping latency (time from trigger to actual motor stop) at your homing speed, so you're not relying on zero-latency stop.
 
 
+WIFI- test with actual GUI
 
 
+YAW-Flip control signal and TX? its backwards in gains and in remote. 
 
-
-
+Do export of gains. 
 
 ------------------------------------------------------firmware
 --------------------------NON-CRITICAL

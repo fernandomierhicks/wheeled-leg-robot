@@ -120,6 +120,13 @@
 // zero-torque immediately, old behavior).
 #define PARAM_CALIB_RAMPDOWN_TIME_S 0x0112
 
+// Bypass hardstop calibration requirement for RUNNING mode — lets req_running()
+// (state_machine.cpp) arm the balance controller without a completed
+// calibration (hm_limits_L/R.valid). For bench-testing only: with this on, hip
+// position limits are unenforced, so the hips can travel to their physical
+// hardstops uncontrolled. Persisted. Default 0 (bypass off).
+#define PARAM_CALIB_BYPASS_EN 0x0113
+
 // GROUP_CONTROL — LQR controller settings
 #define PARAM_LQR_ENABLE              0x0400  // 1 = wheel torque output active; 0 = LQR runs but outputs zero
 #define PARAM_SIM_PITCH_RAD           0x0401  // pitch value to inject when PARAM_ENABLE_SIM_PITCH_RAD=1
@@ -130,7 +137,9 @@
 // (enabled) and NOT persisted — always starts back on after reboot, so a
 // bench-test disable never silently survives into a real run.
 #define PARAM_PITCH_WATCHDOG_ENABLE   0x0423
-#define PARAM_LQR_TORQUE_LIMIT        0x0402  // |tau_sym| clamp [N·m]; default 1.0, hard max 7.0
+#define PARAM_LQR_TORQUE_LIMIT        0x0402  // |tau_sym| clamp [N·m]; READONLY — slewed automatically
+                                               // from the active CH9 speed profile's torque_lim (see
+                                               // PARAM_PROFILE_*_TORQUE_LIM below); hard max 7.0
 #define PARAM_WHEEL_VEL_LIMIT_TURNS_S 0x0403  // per-tick soft governor [turns/s]; ESTOP at 2×
 // LQR gain table (Phase 5) — computed offline by lqr.py self-test (Q_pitch=0.01,
 // Q_pitch_rate=0.1884, Q_vel=0.00508442, R=100.0). alpha=0 -> retracted (Q_RET),
@@ -177,8 +186,10 @@
 
 // GROUP_COMMAND — high-freq setpoints from radio/GUI
 #define PARAM_RADIO_HIP_CMD        0x0500  // hip extension command from CH3 [0=retracted, 1=extended]; stale when radio dead
-#define PARAM_RADIO_VEL_MAX        0x0501  // max forward speed mapped from full CH2 deflection [m/s]
-#define PARAM_RADIO_YAW_MAX        0x0502  // max yaw rate mapped from full CH4 deflection [rad/s]
+#define PARAM_RADIO_VEL_MAX        0x0501  // max forward speed mapped from full CH2 deflection [m/s];
+                                            // READONLY — copied from the active CH9 profile's vel_max
+#define PARAM_RADIO_YAW_MAX        0x0502  // max yaw rate mapped from full CH4 deflection [rad/s];
+                                            // READONLY — copied from the active CH9 profile's yaw_max
 #define PARAM_RADIO_PITCH_TRIM     0x0503  // pitch equilibrium trim from CH7 [rad]; hook only, not yet applied to LQR
 // Speed profiles (CH9 3-position switch selects profile 0/1/2)
 #define PARAM_PROFILE_1_VEL_MAX    0x0510  // profile 1 (slow) max forward speed [m/s]

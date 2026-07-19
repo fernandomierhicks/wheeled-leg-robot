@@ -47,6 +47,10 @@ void wheel_motors_pet_watchdog();
 // Send CLEAR_ERRORS to both axes (clears latched ODrive faults).
 void wheel_motors_clear_errors();
 
+// True when every enabled axis (PARAM_WHEEL_{L,R}_ENABLE) has fresh encoder
+// feedback and no latched ODrive error. Mirrors hip_motors_ok().
+bool wheel_motors_ok();
+
 // Request bus voltage from both axes (ODrive replies asynchronously via CAN).
 // Call this, then read wm_L.vbus / wm_R.vbus a few ms later.
 void wheel_motors_request_vbus();

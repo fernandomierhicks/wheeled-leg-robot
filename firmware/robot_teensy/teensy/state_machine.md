@@ -7,30 +7,29 @@ stateDiagram-v2
     [*] --> STARTUP
 
     STARTUP --> ESTOP   : GUI/radio ESTOP (checked first)
-    STARTUP --> STANDBY : IMU NOMINAL + both motors heard
-    STARTUP --> ESTOP   : IMU ERROR — OR — motors silent after 2 s
+    STARTUP --> STANDBY : IMU NOMINAL + all enabled hip/wheel motors heard
+    STARTUP --> ESTOP   : IMU ERROR — OR — hip/wheel motors silent after 2 s
 
-    STANDBY --> ESTOP        : hip feedback lost (CAN timeout 20 ms)
+    STANDBY --> ESTOP        : motor feedback lost (hip CAN timeout 20 ms, or wheel encoder timeout/ODrive error)
     STANDBY --> ESTOP        : GUI/radio ESTOP
     STANDBY --> MANUAL       : GUI "Enter Manual"
     STANDBY --> CALIBRATION  : GUI "Calibrate" — OR — CH5 > 1990 µs (rising edge)
     STANDBY --> RUNNING      : CH10 > 1990 µs (rising edge) + hm_limits valid
     STANDBY --> CMD_REJECT   : CH10 > 1990 µs but hm_limits not valid
 
-    MANUAL  --> ESTOP   : hip feedback lost (CAN timeout 20 ms)
+    MANUAL  --> ESTOP   : motor feedback lost (hip CAN timeout 20 ms, or wheel encoder timeout/ODrive error)
     MANUAL  --> ESTOP   : GUI/radio ESTOP
     MANUAL  --> STANDBY : GUI "Exit Manual"
     MANUAL  --> STANDBY : GUI silent > 500 ms (watchdog)
 
-    CALIBRATION --> ESTOP   : hip feedback lost (CAN timeout 20 ms)
+    CALIBRATION --> ESTOP   : motor feedback lost (hip CAN timeout 20 ms, or wheel encoder timeout/ODrive error)
     CALIBRATION --> ESTOP   : hardstop not found within CALIB_SAFETY_BOUND_RAD
     CALIBRATION --> ESTOP   : GUI/radio ESTOP
     CALIBRATION --> STANDBY : both hips homed (limits computed, holding at midpoint)
     CALIBRATION --> STANDBY : GUI "Exit Manual" (abort)
 
-    RUNNING --> ESTOP   : hip feedback lost (CAN timeout 20 ms)
+    RUNNING --> ESTOP   : motor feedback lost (hip CAN timeout 20 ms, or wheel encoder timeout/ODrive error)
     RUNNING --> ESTOP   : IMU leaves NOMINAL (FAULT_IMU_LOST)
-    RUNNING --> ESTOP   : wheel encoder timeout / ODrive error (FAULT_WHEEL_FEEDBACK_LOST)
     RUNNING --> ESTOP   : GUI/radio ESTOP
     RUNNING --> STANDBY : CH10 drops below 1990 µs (level-based — also catches drops during JUMPING)
 
@@ -43,7 +42,7 @@ stateDiagram-v2
 
 | State | LED | Description |
 |---|---|---|
-| STARTUP | white breathe | IMU + hip motor init. Waits for IMU NOMINAL and both motors to reply on CAN. |
+| STARTUP | white breathe | IMU + hip/wheel motor init. Waits for IMU NOMINAL and all enabled hip/wheel motors to reply on CAN. |
 | STANDBY | amber breathe | MIT keepalive active (zero-torque ping every loop). No torque output. |
 | CALIBRATION | blue breathe | Hardstop sweep per hip (see below). Sets `hm_limits_{L,R}.valid` on success. |
 | RUNNING | green blink | Balance control active. Entered via CH10 arm only if both hip limits are valid. |
@@ -106,7 +105,7 @@ On exit to STANDBY: plays DISARMED_MELODY (triggered in `on_standby()`).
 4. `on_manual()` dispatches `g_hip_cmd` if pending (ENABLE / DISABLE / ZERO / MIT)
 5. Keepalive CAN frames stop — GUI must send MIT cmds each loop
 6. `hip_motors_poll()` still re-enters MIT every ~4 s as safety net
-7. `standby_hip_fault()` checked every tick → ESTOP if CAN silent > 20 ms
+7. `motor_feedback_fault()` checked every tick → ESTOP if hip CAN silent > 20 ms or wheel encoder feedback lost
 8. **GUI watchdog**: any `COMM_TYPE_COMMAND` packet resets a 500 ms timer. If the timer expires (GUI crash / disconnect), auto-exits to STANDBY. Timer is reset fresh on MANUAL entry.
 
 ## ESTOP detail
@@ -127,6 +126,7 @@ On exit to STANDBY: plays DISARMED_MELODY (triggered in `on_standby()`).
 | `FAULT_CALIBRATION_TIMEOUT` | Hardstop not found within `CALIB_SAFETY_BOUND_RAD` |
 | `FAULT_HUMAN_ESTOP` | ESTOP triggered by GUI button or radio |
 | `FAULT_IMU_LOST` | IMU left NOMINAL while RUNNING/JUMPING (silence or heavy packet loss) |
-| `FAULT_WHEEL_FEEDBACK_LOST` | Wheel encoder timeout or ODrive error while RUNNING/JUMPING |
+| `FAULT_WHEEL_FEEDBACK_LOST` | Wheel encoder timeout or ODrive error in STANDBY / MANUAL / CALIBRATION / RUNNING |
+| `FAULT_WHEEL_INIT_TIMEOUT` | One or both wheel motors never replied within 2 s of boot |
 
 Full code/severity table: `firmware/robot_teensy/README.md`.

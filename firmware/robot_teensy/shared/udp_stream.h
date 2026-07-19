@@ -30,7 +30,7 @@ public:
     size_t write(const uint8_t* buf, size_t len) override {
         _udp.beginPacket(_host, _port);
         size_t n = _udp.write(buf, len);
-        _udp.endPacket();
+        if (!_udp.endPacket()) _fail_count++;
         return n;
     }
 
@@ -45,10 +45,14 @@ public:
     int peek()  override { return -1; }
     void flush() override {}
 
+    // Count of endPacket() failures (0 = success in Arduino's WiFiUDP API).
+    uint32_t failCount() const { return _fail_count; }
+
 private:
     WiFiUDP     _udp;
     const char* _host = nullptr;
     uint16_t    _port = 0;
+    uint32_t    _fail_count = 0;
 };
 
 #endif // ARDUINO_ARCH_ESP32

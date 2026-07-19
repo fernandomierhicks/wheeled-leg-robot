@@ -5,8 +5,8 @@ from collections import deque
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QCheckBox, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
-    QScrollArea, QSlider, QSplitter, QVBoxLayout, QWidget,
+    QCheckBox, QDoubleSpinBox, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
+    QLabel, QScrollArea, QSlider, QSplitter, QVBoxLayout, QWidget,
 )
 
 from .comm_commands import send_param_get, send_param_set
@@ -21,22 +21,47 @@ _HEALTH_YAW_PI_SAT       = 1 << 8
 _HEALTH_WM_L_VEL_LIMITED = 1 << 9
 _HEALTH_WM_R_VEL_LIMITED = 1 << 10
 
-# LQR gain params (Phase 5) — runtime-tunable in firmware (param_ids.h), no
-# longer hardcoded here. Requested once on first telemetry and kept current
-# via PARAM_REPORT echoes (ptype 0x06), so edits made in the Params tab
-# (Control > LQR Gains) show up here too. alpha=0 -> retracted, alpha=1 -> extended.
+# ── Controller gain params (param_ids.h) — runtime-tunable in firmware, no
+# longer hardcoded here. Each is rendered as an up/down spinbox (_GainSpinBox)
+# next to its owning controller's section; edited value round-trips through
+# CMD_ID_PARAM_SET, and the box stays synced to the live value via
+# PARAM_REPORT echoes (ptype 0x06) — including edits made elsewhere (e.g. the
+# Params tab). alpha=0 -> retracted, alpha=1 -> extended (LQR gain table).
 _PARAM_LQR_K_PITCH_RET = 0x0424
 _PARAM_LQR_K_RATE_RET  = 0x0425
 _PARAM_LQR_K_PITCH_EXT = 0x0426
 _PARAM_LQR_K_RATE_EXT  = 0x0427
 _PARAM_LQR_K_VEL       = 0x0428
+_PARAM_VEL_PI_KP       = 0x0405
+_PARAM_VEL_PI_KI       = 0x0406
+_PARAM_VEL_PI_KFF      = 0x0407
+_PARAM_YAW_PI_KP       = 0x040D
+_PARAM_YAW_PI_KI       = 0x040E
+_PARAM_FF1_ALPHA       = 0x0412
+_PARAM_FF2_ALPHA       = 0x0413
 
-_GAIN_PARAM_LABELS: dict[int, str] = {
-    _PARAM_LQR_K_PITCH_RET: "K_pitch_ret",
-    _PARAM_LQR_K_RATE_RET:  "K_rate_ret",
-    _PARAM_LQR_K_PITCH_EXT: "K_pitch_ext",
-    _PARAM_LQR_K_RATE_EXT:  "K_rate_ext",
-    _PARAM_LQR_K_VEL:       "K_vel",
+# param_id -> (label, decimals, step). Steps are a starting increment for the
+# up/down arrows; the actual editable range comes from the firmware's
+# PARAM_REPORT min/max, applied once the first report arrives. 2 decimals for
+# everything except K_vel, whose default (~-0.0071) would round to 0.00 and
+# become unreadable/unsettable at 2 decimals.
+_GAIN_DEFS: dict[int, tuple[str, int, float]] = {
+    # LQR Balance Controller
+    _PARAM_LQR_K_PITCH_RET: ("K_pitch_ret", 2, 0.05),
+    _PARAM_LQR_K_RATE_RET:  ("K_rate_ret",  2, 0.02),
+    _PARAM_LQR_K_PITCH_EXT: ("K_pitch_ext", 2, 0.05),
+    _PARAM_LQR_K_RATE_EXT:  ("K_rate_ext",  2, 0.02),
+    _PARAM_LQR_K_VEL:       ("K_vel",       4, 0.0005),
+    # Velocity PI
+    _PARAM_VEL_PI_KP:  ("kp",  2, 0.01),
+    _PARAM_VEL_PI_KI:  ("ki",  2, 0.01),
+    _PARAM_VEL_PI_KFF: ("kff", 2, 0.01),
+    # Yaw PI
+    _PARAM_YAW_PI_KP: ("kp", 2, 0.01),
+    _PARAM_YAW_PI_KI: ("ki", 2, 0.01),
+    # Feedforward
+    _PARAM_FF1_ALPHA: ("ff1_alpha", 2, 0.01),
+    _PARAM_FF2_ALPHA: ("ff2_alpha", 2, 0.01),
 }
 
 # Sim-pitch injection params (param_ids.h) — bench-test only, no arming
@@ -99,6 +124,60 @@ class _ValueCell(QWidget):
     def set(self, value: float | int, fmt: str = "+.4f", color: str = TEXT):
         self._val.setText(format(value, fmt))
         self._set_style(color)
+
+
+class _GainSpinBox(QDoubleSpinBox):
+    """Up/down numeric box bound 1:1 to a single ParamRegistry gain. Editing
+    it (arrows, scroll, or typing + Enter/blur) sends CMD_ID_PARAM_SET;
+    apply_report() pushes a live PARAM_REPORT value back in without
+    re-triggering a redundant send."""
+
+    def __init__(self, param_id: int, decimals: int, step: float):
+        super().__init__()
+        self._id = param_id
+        self._suppress = False
+        self.setDecimals(decimals)
+        self.setSingleStep(step)
+        self.setRange(-1e6, 1e6)  # narrowed to the real min/max on first report
+        self.setKeyboardTracking(False)  # only fire valueChanged on Enter/blur/arrows, not per keystroke
+        self.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.setFixedWidth(96)
+        # Border/background/buttons/arrows come from the shared QDoubleSpinBox
+        # rule in theme.py's APP_STYLE — only override the size-specific bits
+        # this compact cell needs (smaller font than the app default).
+        self.setStyleSheet(
+            f"QDoubleSpinBox{{font-family:Consolas;font-size:10px;font-weight:bold;}}"
+        )
+        self.valueChanged.connect(self._on_user_change)
+
+    def apply_report(self, value: float, min_val: float, max_val: float):
+        self._suppress = True
+        if max_val > min_val:
+            self.setRange(min_val, max_val)
+        self.setValue(value)
+        self._suppress = False
+
+    def _on_user_change(self, val: float):
+        if self._suppress:
+            return
+        send_param_set(self._id, val)
+
+
+class _GainCell(QWidget):
+    """Name label stacked over a _GainSpinBox — same compact-cell look as
+    _ValueCell, but editable."""
+
+    def __init__(self, name: str, param_id: int, decimals: int, step: float):
+        super().__init__()
+        self.spin = _GainSpinBox(param_id, decimals, step)
+        lbl = QLabel(name)
+        lbl.setStyleSheet(f"color: {DIM}; font-size: 10px;")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(2, 2, 2, 2)
+        lay.setSpacing(2)
+        lay.addWidget(lbl)
+        lay.addWidget(self.spin)
 
 
 class _StatusPill(QLabel):
@@ -396,18 +475,23 @@ class ControllersTab(QWidget):
             flags_row.addWidget(p)
         flags_row.addStretch()
 
-        # ── Live LQR gain labels (from ParamRegistry, not hardcoded) ────────────
-        gains_row = QHBoxLayout()
-        gains_row.setContentsMargins(0, 0, 0, 0)
-        gains_row.setSpacing(0)
-        self._gain_lbls: dict[int, QLabel] = {}
-        for pid, name in _GAIN_PARAM_LABELS.items():
-            g = QLabel(f"{name} = —")
-            g.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-size: 10px; padding: 0 12px 0 0;")
-            gains_row.addWidget(g)
-            self._gain_lbls[pid] = g
-        gains_row.addStretch()
+        # ── Live, editable controller gains (from ParamRegistry, not hardcoded) ─
+        # One _GainSpinBox per param in _GAIN_DEFS, requested once on first
+        # telemetry and kept current via PARAM_REPORT echoes (ptype 0x06).
+        self._gain_boxes: dict[int, _GainSpinBox] = {}
         self._gains_requested = False
+
+        def _gain_row(*param_ids: int) -> QHBoxLayout:
+            h = QHBoxLayout()
+            h.setContentsMargins(0, 0, 0, 0)
+            h.setSpacing(6)
+            for pid in param_ids:
+                name, decimals, step = _GAIN_DEFS[pid]
+                cell = _GainCell(name, pid, decimals, step)
+                self._gain_boxes[pid] = cell.spin
+                h.addWidget(cell)
+            h.addStretch()
+            return h
 
         # ── Value cells ───────────────────────────────────────────────────────
         self._v_pitch     = _ValueCell("pitch",     "deg")
@@ -453,20 +537,24 @@ class ControllersTab(QWidget):
         il.addWidget(_hline())
 
         il.addWidget(_section_label("LQR Balance Controller"))
-        il.addLayout(gains_row)
+        il.addLayout(_gain_row(_PARAM_LQR_K_PITCH_RET, _PARAM_LQR_K_RATE_RET,
+                                _PARAM_LQR_K_PITCH_EXT, _PARAM_LQR_K_RATE_EXT, _PARAM_LQR_K_VEL))
         il.addLayout(_row(self._v_pitch, self._v_pitch_r, self._v_vel_avg))
         il.addLayout(_row(self._v_tau_sym, self._v_whl_tau_l, self._v_whl_tau_r))
         il.addWidget(_hline())
 
         il.addWidget(_section_label("Velocity PI  (Phase 3 — active when non-zero)"))
+        il.addLayout(_gain_row(_PARAM_VEL_PI_KP, _PARAM_VEL_PI_KI, _PARAM_VEL_PI_KFF))
         il.addLayout(_row(self._v_v_ref, self._v_theta_ref))
         il.addWidget(_hline())
 
         il.addWidget(_section_label("Yaw PI  (Phase 4 — active when non-zero)"))
+        il.addLayout(_gain_row(_PARAM_YAW_PI_KP, _PARAM_YAW_PI_KI))
         il.addLayout(_row(self._v_omega_cmd, self._v_tau_yaw))
         il.addWidget(_hline())
 
         il.addWidget(_section_label("Feedforward  (Phase 6 — active when non-zero)"))
+        il.addLayout(_gain_row(_PARAM_FF1_ALPHA, _PARAM_FF2_ALPHA))
         il.addLayout(_row(self._v_ff1, self._v_ff2))
         il.addWidget(_hline())
 
@@ -503,10 +591,10 @@ class ControllersTab(QWidget):
 
         if ptype == 0x06:
             pid = info.get("param_id")
+            box = self._gain_boxes.get(pid)
             val = info.get("param_value")
-            lbl = self._gain_lbls.get(pid)
-            if lbl is not None and val is not None:
-                lbl.setText(f"{_GAIN_PARAM_LABELS[pid]} = {val:+.5g}")
+            if box is not None and val is not None:
+                box.apply_report(val, info.get("param_min", 0.0), info.get("param_max", 0.0))
             return
 
         if ptype != 0x01:
@@ -514,7 +602,7 @@ class ControllersTab(QWidget):
 
         if not self._gains_requested:
             self._gains_requested = True
-            for pid in _GAIN_PARAM_LABELS:
+            for pid in self._gain_boxes:
                 send_param_get(pid)
 
         pitch    = info.get("pitch_rad", 0.0)

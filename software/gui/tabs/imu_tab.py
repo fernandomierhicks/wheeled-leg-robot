@@ -226,6 +226,17 @@ class ImuTab(QWidget):
 
         TelemetryBus.instance().packet.connect(self._on_packet)
 
+        # 3-D scene + chart redraws are expensive relative to raw packet rate —
+        # decouple them from packet arrival jitter onto a fixed-interval timer
+        # holding the latest orientation, same pattern as controllers_tab.py's
+        # chart timer / robot_visualizer_tab.py's scene timer. Cheap per-packet
+        # work (readout labels, buffer appends) still happens in _on_packet.
+        self._latest_orientation: tuple[float, float, float] | None = None
+        self._scene_timer = QTimer(self)
+        self._scene_timer.setInterval(33)  # ~30 Hz
+        self._scene_timer.timeout.connect(self._redraw_scene)
+        self._scene_timer.start()
+
     # ── Telemetry handler ─────────────────────────────────────────────────────
 
     def _on_packet(self, info: dict):
@@ -263,33 +274,27 @@ class ImuTab(QWidget):
         )
         self._vals["State"].setText(state)
 
-        # Rotation matrix R = Rz(yaw) @ Ry(pitch) @ Rx(roll)
-        cp, sp = math.cos(pitch), math.sin(pitch)
-        cr, sr = math.cos(roll),  math.sin(roll)
-        cy, sy = math.cos(yaw),   math.sin(yaw)
-        R = np.array([
-            [cy*cp,  cy*sp*sr - sy*cr,  cy*sp*cr + sy*sr],
-            [sy*cp,  sy*sp*sr + cy*cr,  sy*sp*cr - cy*sr],
-            [-sp,    cp*sr,             cp*cr            ],
-        ])
-        for vec0, line in self._axis_lines:
-            pts = np.array([[0, 0, 0], R @ vec0], dtype=np.float32)
-            line.setData(pos=pts)
-        for pts0, line in self._body_lines:
-            line.setData(pos=(R @ pts0.T).T.astype(np.float32))
+        # Orientation for the 3-D scene, and rolling chart buffers — cheap, kept
+        # per-packet. Actual redraw deferred to _redraw_scene() on a timer.
+        self._latest_orientation = (pitch, roll, yaw)
 
-        # Gyro chart — all 3 rates live
         self._pitch_rate_buf.append(pitch_rate)
         self._roll_rate_buf.append(roll_rate)
         self._yaw_rate_buf.append(yaw_rate)
+
+        self._ax_buf.append(accel_x)
+        self._ay_buf.append(accel_y)
+        self._az_buf.append(accel_z)
+
+    def _redraw_scene(self):
+        if self._latest_orientation is not None:
+            pitch, roll, yaw = self._latest_orientation
+            _apply_rotation(pitch, roll, yaw, self._axis_lines, self._body_lines)
+
         self._pitch_rate_curve.setData(list(self._pitch_rate_buf))
         self._roll_rate_curve.setData(list(self._roll_rate_buf))
         self._yaw_rate_curve.setData(list(self._yaw_rate_buf))
 
-        # Accel chart — all 3 axes live
-        self._ax_buf.append(accel_x)
-        self._ay_buf.append(accel_y)
-        self._az_buf.append(accel_z)
         self._ax_curve.setData(list(self._ax_buf))
         self._ay_curve.setData(list(self._ay_buf))
         self._az_curve.setData(list(self._az_buf))

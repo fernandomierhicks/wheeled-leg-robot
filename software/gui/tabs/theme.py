@@ -1,3 +1,5 @@
+import os
+
 BG      = "#12121e"
 SURFACE = "#1a1a2e"
 BORDER  = "#2a2a4a"
@@ -10,6 +12,19 @@ BLUE    = "#448aff"
 YELLOW  = "#ffe57f"
 WHITE   = "#ffffff"
 MONO    = "Consolas, 'Courier New', monospace"
+
+# ── Icon assets for QSS-styled control subcontrols (checkbox check mark,
+# spinbox up/down arrows) — QSS url() needs forward slashes even on Windows.
+_ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+
+
+def _asset_url(name: str) -> str:
+    return os.path.join(_ASSETS_DIR, name).replace("\\", "/")
+
+
+_ICON_CHECK         = _asset_url("check.svg")
+_ICON_CHEVRON_UP    = _asset_url("chevron_up.svg")
+_ICON_CHEVRON_DOWN  = _asset_url("chevron_down.svg")
 
 APP_STYLE = f"""
 QMainWindow, QWidget {{
@@ -68,8 +83,57 @@ QLineEdit {{
     padding: 3px 8px;
     border-radius: 3px;
 }}
-QCheckBox {{ color: {DIM}; }}
-QCheckBox::indicator:checked {{ background: {BLUE}; border: 1px solid {BLUE}; }}
+QCheckBox {{ color: {DIM}; spacing: 6px; }}
+QCheckBox::indicator {{
+    width: 13px;
+    height: 13px;
+    border: 1px solid {BORDER};
+    border-radius: 3px;
+    background: {SURFACE};
+}}
+QCheckBox::indicator:hover {{ border: 1px solid {BLUE}; }}
+QCheckBox::indicator:checked {{
+    background: {GREEN};
+    border: 1px solid {GREEN};
+    image: url({_ICON_CHECK});
+}}
+QCheckBox::indicator:disabled {{ background: {BG}; border: 1px solid {BORDER}; }}
+QSpinBox, QDoubleSpinBox {{
+    background: {SURFACE};
+    color: {TEXT};
+    border: 1px solid {BORDER};
+    border-radius: 3px;
+    padding: 2px 4px;
+}}
+QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {BLUE}; }}
+QSpinBox:disabled, QDoubleSpinBox:disabled {{ background: {BG}; color: {DIM}; }}
+QSpinBox::up-button, QDoubleSpinBox::up-button {{
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 14px;
+    border-left: 1px solid {BORDER};
+    border-bottom: 1px solid {BORDER};
+    background: {SURFACE};
+}}
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 14px;
+    border-left: 1px solid {BORDER};
+    background: {SURFACE};
+}}
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{ background: {BORDER}; }}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+    image: url({_ICON_CHEVRON_UP});
+    width: 8px;
+    height: 5px;
+}}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+    image: url({_ICON_CHEVRON_DOWN});
+    width: 8px;
+    height: 5px;
+}}
 QFrame[frameShape="5"] {{ color: {BORDER}; }}
 QScrollBar:vertical {{
     background: {SURFACE}; width: 8px;
