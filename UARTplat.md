@@ -302,9 +302,59 @@ Not yet pushed — ask before pushing, per standing instructions.
 
 ---
 
-## 5. If anything here turns out stale
+## 6. Phase 9 — a second, worse bug found via the new GUI tooling (2026-07-19)
 
-This file was accurate as of commit `8c9a84a` (Phase 8). If `git log`
+The Phase 8 automation harness only reported coarse pass/fail. Asked to run
+a real 10-minute packet-loss/jitter/UART-health campaign, the GUI tooling
+was extended with actual measurements (received Hz vs. expected, inter-
+arrival jitter percentiles, both UART directions' drop deltas, link-up/
+down events — see `tabs/automation_runner.py`'s module docstring for the
+methodology, including why `link_seq_gaps` isn't used for loss
+measurement). Short trial runs with the *real* measurements surfaced a
+second bug, worse than the Phase 7 pbuf_free crash: `uplink_task` would
+intermittently go **completely silent** — zero output on USB relay and
+WiFi UDP, including the WIFI_DIAG heartbeat that's supposed to be
+independent of everything — for periods well beyond any one test's
+duration, with no crash and no reboot.
+
+Root-caused with a new ESP-IDF task watchdog (`esp_task_wdt`, kept as
+permanent defense-in-depth) subscribed to `uplink_task`: 6 for 6
+reproductions caught it stuck inside `g_comm_tcp->send()`. Arduino-ESP32's
+`WiFiClient::write()` (framework source) retries up to 10x with a 1 s
+`select()` each — up to 10 s blocking — whenever the TCP peer stops
+draining the socket; `uplink_task` holds `g_tcp_mutex` for that entire
+call, which stalls `loop()`'s TCP path on core 1 too, and since
+`uplink_task` is the sole drain point for the WiFi UDP/USB queues, the
+whole uplink pipeline went dark until the retry gave up. Fixed with a
+1 ms `select()`-based write-readiness pre-check — skip and count instead
+of risking the block. Commits `e740e7d` (firmware) and `b744688` (GUI
+analysis + a related `WifiTransport` shutdown-race fix the new automation
+harness exposed).
+
+**Verified on hardware, full 10 minutes**: 30013/30004 packets (50.01 Hz),
+0 reboots, jitter max 141 ms (down from 8-20 **seconds** pre-fix), 0 UART
+drops ESP32→Teensy, near-zero (17 seq gaps / 1 CRC over 600 s, ~0.03%)
+Teensy→ESP32 — see `software/gui/logs/wifi_10min_verification_report.json`.
+That small residual isn't further root-caused; it's an order of magnitude
+below anything that mattered before this session and didn't recur as a
+reboot or silence, so it was left as a known, very minor imperfection
+rather than chased further.
+
+Two environment gotchas from Phase 7/8 (§5 above) still apply. One more
+from this phase: reflashing the ESP32 (`pio run -t upload`) triggers the
+same hardware reset as a fresh USB-serial attach — useful as a "reboot it
+without physical access" substitute (used this session at the user's
+suggestion when they weren't home to power-cycle it), but each reset
+costs ~3s of WiFi reconnect time before telemetry resumes, worth knowing
+before assuming a short post-flash test window is "broken."
+
+Not yet pushed — ask before pushing, per standing instructions.
+
+---
+
+## 7. If anything here turns out stale
+
+This file was accurate as of commit `b744688` (Phase 9). If `git log`
 shows commits past that under a different subject line, someone has
 already made progress beyond this note — read those commit messages
 first rather than assuming this file is still the frontier.
