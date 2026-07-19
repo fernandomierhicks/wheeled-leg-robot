@@ -7,6 +7,7 @@
 #include <VL53L1X.h>
 #include <driver/dac.h>
 #include <driver/uart.h>
+#include <esp_system.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 #include <string.h>
@@ -472,7 +473,10 @@ static volatile uint16_t  g_tcp_send_max_us = 0;   // like g_udp_send_max_us; co
                                                     // same reasoning as g_udp_send_max_us below.
 
 // Guards g_comm_tcp / g_tcp_client: loop() (core 1) replaces them on new client
-// accept while uplink_task (core 0) sends through them — without this they race.
+// accept and reads via g_comm_tcp->update(), while uplink_task (core 0) sends
+// through them — without this they race. Concurrent WiFiClient read (loop) +
+// write (uplink_task) on the same socket from different cores corrupts lwIP's
+// pbuf chain (assert "pbuf_free: p->ref > 0" -> reboot). Phase 7, UARTplat.md.
 static SemaphoreHandle_t g_tcp_mutex = nullptr;
 
 // Pending one-shot debug lines set by loop()/on_teensy_packet (core 1) and
@@ -2066,7 +2070,12 @@ static void send_esp32_status() {
     Esp32StatusPayload s;
     s.uptime_ms            = millis();
     s.wifi_ok              = (WiFi.status() == WL_CONNECTED) ? 1 : 0;
+    // g_tcp_client is shared with uplink_task (core 0, sends under g_tcp_mutex)
+    // and loop()'s accept/update (also under g_tcp_mutex) — see g_tcp_mutex
+    // declaration. This read must take the same lock.
+    xSemaphoreTake(g_tcp_mutex, portMAX_DELAY);
     s.tcp_client_connected = (g_comm_tcp && g_tcp_client.connected()) ? 1 : 0;
+    xSemaphoreGive(g_tcp_mutex);
     s.rssi_dbm             = (WiFi.status() == WL_CONNECTED) ? (int8_t)WiFi.RSSI() : 0;
     s.reserved             = 0;
     s.uplink_drops         = (uint16_t)min((uint32_t)0xFFFF, g_uplink_drops);
@@ -2077,8 +2086,30 @@ static void send_esp32_status() {
 
 // ── Setup / loop ──────────────────────────────────────────────────────────────
 
+// Human-readable reset cause, printed once at boot — cheap insurance so a
+// future crash/reboot investigation starts from this line instead of
+// re-deriving cause from raw serial-log archaeology (see Phase 7, UARTplat.md,
+// where the pbuf_free/g_tcp_mutex bug was found this way).
+static const char* reset_reason_name(esp_reset_reason_t r) {
+    switch (r) {
+        case ESP_RST_POWERON:   return "POWERON";
+        case ESP_RST_EXT:       return "EXT_PIN";
+        case ESP_RST_SW:        return "SW (esp_restart)";
+        case ESP_RST_PANIC:     return "PANIC (exception/abort)";
+        case ESP_RST_INT_WDT:   return "INT_WDT";
+        case ESP_RST_TASK_WDT:  return "TASK_WDT";
+        case ESP_RST_WDT:       return "OTHER_WDT";
+        case ESP_RST_DEEPSLEEP: return "DEEPSLEEP_WAKE";
+        case ESP_RST_BROWNOUT:  return "BROWNOUT";
+        case ESP_RST_SDIO:      return "SDIO";
+        default:                return "UNKNOWN";
+    }
+}
+
 void setup() {
     Serial.begin(921600);
+    Serial.printf("[ESP32] reset reason: %d (%s)\n",
+                  (int)esp_reset_reason(), reset_reason_name(esp_reset_reason()));
     Serial2.setRxBufferSize(4096);
     Serial2.begin(TEENSY_UART_BAUD, SERIAL_8N1, TEENSY_UART_RX, TEENSY_UART_TX);
     uart_set_rx_full_threshold(UART_NUM_2, 32);  // fire ISR every 32 bytes (80 µs at 4 Mbaud) leaving 96 bytes / 192 µs of headroom vs the default 120-byte threshold (8 bytes / 16 µs)
@@ -2182,8 +2213,14 @@ void loop() {
     }
 
 #if WIFI_ENABLED
-    if (g_comm_tcp && g_tcp_client.connected())
+    if (g_comm_tcp && g_tcp_client.connected()) {
+        // See g_tcp_mutex declaration — must not race uplink_task's send (core 0).
+        // update() is non-blocking (drains only what's already buffered), so this
+        // critical section stays microsecond-scale.
+        xSemaphoreTake(g_tcp_mutex, portMAX_DELAY);
         g_comm_tcp->update();
+        xSemaphoreGive(g_tcp_mutex);
+    }
 
     if (WiFi.status() == WL_CONNECTED && !g_wifi_inited) {
         g_tcp_server.begin();
