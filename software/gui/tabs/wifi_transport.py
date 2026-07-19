@@ -1,4 +1,4 @@
-"""wifi_transport.py — UDP telemetry receiver + TCP command sender for ESP32 WiFi mode.
+"""wifi_transport.py — UDP telemetry receiver + TCP command sender/receiver for ESP32 WiFi mode.
 
 Telemetry path: ESP32 broadcasts CommLink frames as UDP datagrams on port 5005.
                 WifiTransport listens, feeds bytes into PacketDecoder, and
@@ -7,8 +7,19 @@ Telemetry path: ESP32 broadcasts CommLink frames as UDP datagrams on port 5005.
 Command path:   When a UDP packet arrives the sender IP is recorded.
                 send() opens a TCP connection to <ip>:5006 (lazily, on first call)
                 and writes CommLink command frames — ESP32 forwards them to Teensy.
+                The ESP32 also sends every reply frame (PARAM_REPORT, ACK,
+                LOG_INFO/LOG_DATA, CALIB_EVENT, TOF, comm_log LOG messages —
+                everything except TELEM_A/B/WIFI_DIAG, which additionally go out
+                over UDP too) back over this same TCP connection; run()'s select()
+                loop below reads it. Found missing entirely (write-only socket,
+                nothing ever called .recv() on it) via WiFi command-guard testing,
+                UARTplat.md Phase 9 — before this fix, single-param reads, log
+                downloads, calibration feedback, and ToF were silently
+                non-functional over WiFi, invisible because regular telemetry
+                (UDP-only) looked fine throughout.
 """
 
+import select
 import socket
 import threading
 import time
@@ -107,11 +118,23 @@ class WifiTransport(QThread):
 
         self._decoder = PacketDecoder("wifi")
         self._decoder.packet_decoded.connect(lambda _: None)  # keep signal wired
+        # Separate decoder for the TCP command-response byte stream — TCP is a
+        # continuous stream (unlike UDP's one-datagram-per-feed() calls), so it
+        # needs its own independent parse buffer; reusing self._decoder would
+        # interleave UDP datagram bytes and TCP stream bytes into the same _buf.
+        # Same device string ("wifi") as self._decoder, so both land on the same
+        # TelemetryBus/LogPacketBus via PacketDecoder's own SourceManager gating
+        # (flash_monitor.py) — no separate wiring needed. The ESP32's uplink_task
+        # sends every frame type over TCP unconditionally (not just command
+        # replies) *in addition to* sending TELEM_A/B/WIFI_DIAG over UDP — so
+        # without skip_emit_types those three would arrive and get delivered
+        # twice (once per transport), doubling the apparent telemetry rate.
+        self._tcp_decoder = PacketDecoder("wifi", skip_emit_types=frozenset({0x10, 0x11, 0x14, 0x15}))
+        self._tcp_decoder.packet_decoded.connect(lambda _: None)
 
         udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         udp.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)  # ~1 MB: survive GUI stalls/bursts
-        udp.settimeout(TIMEOUT_S)
         try:
             udp.bind(("", UDP_PORT))
         except Exception as e:
@@ -121,31 +144,65 @@ class WifiTransport(QThread):
         sm = SourceManager.instance()
 
         while not self._stop_requested.is_set():
+            with self._tcp_lock:
+                tcp_sock = self._tcp_sock
+            read_fds = [udp]
+            if tcp_sock is not None and tcp_sock.fileno() != -1:
+                read_fds.append(tcp_sock)
+
             try:
-                data, (src_ip, _) = udp.recvfrom(4096)
-            except socket.timeout:
+                ready, _, errored = select.select(read_fds, [], read_fds, TIMEOUT_S)
+            except Exception as e:
+                # Most likely tcp_sock was closed by send() between the snapshot
+                # above and this call (rare, self-heals next iteration).
+                print(f"[WifiTransport] select() error: {e}")
+                time.sleep(0.1)
+                continue
+
+            if udp in ready:
+                try:
+                    data, (src_ip, _) = udp.recvfrom(4096)
+                except Exception as e:
+                    print(f"[WifiTransport] UDP error: {e}")
+                    break
+
+                if not self._connected or src_ip != self._esp_ip:
+                    self._esp_ip = src_ip
+                    with self._tcp_lock:
+                        self._close_tcp()   # reset TCP so it reconnects to new IP
+                        self._fail_count        = 0
+                        self._next_connect_time = 0.0
+                    if not self._connected:
+                        self._connected = True
+                        sm._on_opened("wifi")
+
+                self._decoder.feed(data)
+
+            if tcp_sock is not None and (tcp_sock in ready or tcp_sock in errored):
+                try:
+                    data = tcp_sock.recv(4096)
+                except Exception:
+                    data = None
+                if not data:
+                    # Peer closed or errored — only close if send() hasn't already
+                    # swapped in a different socket since our snapshot above.
+                    with self._tcp_lock:
+                        if self._tcp_sock is tcp_sock:
+                            self._close_tcp()
+                else:
+                    self._tcp_decoder.feed(data)
+
+            if not ready and not errored:
+                # Nothing ready within TIMEOUT_S — same "link looks dead" signal
+                # the old bare UDP socket.timeout used to provide. Driven by UDP
+                # silence only (matches prior behavior): TCP being quiet is
+                # normal whenever no commands are in flight, not a disconnect.
                 if self._connected:
                     self._connected = False
                     self._esp_ip = None
                     with self._tcp_lock:
                         self._close_tcp()
                     sm._on_released("wifi")
-                continue
-            except Exception as e:
-                print(f"[WifiTransport] UDP error: {e}")
-                break
-
-            if not self._connected or src_ip != self._esp_ip:
-                self._esp_ip = src_ip
-                with self._tcp_lock:
-                    self._close_tcp()   # reset TCP so it reconnects to new IP
-                    self._fail_count        = 0
-                    self._next_connect_time = 0.0
-                if not self._connected:
-                    self._connected = True
-                    sm._on_opened("wifi")
-
-            self._decoder.feed(data)
 
         udp.close()
 

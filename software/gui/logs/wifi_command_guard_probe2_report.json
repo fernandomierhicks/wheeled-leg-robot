@@ -1,0 +1,155 @@
+{
+  "name": "wifi_command_guard_probe2",
+  "duration_s": 56.0,
+  "actual_elapsed_s": 56.0,
+  "pass": true,
+  "fail_reasons": [],
+  "reboot_count": 0,
+  "reboot_events": [],
+  "wifi_never_connected": false,
+  "tcp_churn_count": 0,
+  "telemetry": {
+    "received_count": 2813,
+    "expected_count_from_loop_count": 1,
+    "expected_count_from_duration_at_50hz": 2800,
+    "actual_hz": 50.23,
+    "missed_ticks": 0,
+    "missed_ticks_pct": 0.0,
+    "inter_arrival_jitter": {
+      "n": 2812,
+      "p50_ms": 8.800199982943013,
+      "p95_ms": 63.65666999481617,
+      "p99_ms": 70.56887602433561,
+      "max_ms": 74.69330000458285,
+      "mean_ms": 19.90795056899075,
+      "stdev_ms": 21.28643651186508
+    }
+  },
+  "uart_esp32_to_teensy": {
+    "rx_drops": {
+      "start": 0,
+      "end": 0,
+      "delta": 0
+    },
+    "seq_gaps": {
+      "start": 0,
+      "end": 0,
+      "delta": 0
+    }
+  },
+  "uart_teensy_to_esp32": {
+    "crc_drops": {
+      "start": 31,
+      "end": 31,
+      "delta": 0
+    },
+    "seq_gaps": {
+      "start": 850,
+      "end": 850,
+      "delta": 0
+    }
+  },
+  "link_down_events": [],
+  "wifi_link_quality": {
+    "rssi_dbm_min": -64,
+    "rssi_dbm_max": -61,
+    "rssi_dbm_mean": -61.8,
+    "free_heap": {
+      "start": 72120,
+      "end": 70844,
+      "delta": -1276
+    },
+    "wifi_reconnect_count": {
+      "start": 0,
+      "end": 0,
+      "delta": 0
+    },
+    "udp_send_fail_count": {
+      "start": 24,
+      "end": 24,
+      "delta": 0
+    },
+    "uplink_queue_drops": {
+      "start": 207,
+      "end": 207,
+      "delta": 0
+    }
+  },
+  "gui_decode_counters_reference_only": {
+    "note": "link_crc_drops/link_seq_gaps mix TELEM's and WIFI_DIAG's independent seq counters on one decoder (see module docstring) \u2014 not used for pass/fail, shown for reference only.",
+    "link_crc_drops": {
+      "start": 0,
+      "end": 0,
+      "delta": 0
+    },
+    "link_seq_gaps": {
+      "start": 1432,
+      "end": 72930,
+      "delta": 71498
+    },
+    "link_pair_drops": {
+      "start": 0,
+      "end": 0,
+      "delta": 0
+    }
+  },
+  "injection_results": [],
+  "rogue_connect_results": [],
+  "command_probe_results": [
+    {
+      "t_s": 6.0,
+      "mode": "baseline (no corruption)",
+      "param_id": 0,
+      "baseline_got_reply": true
+    },
+    {
+      "t_s": 16.08,
+      "mode": "crc",
+      "param_id": 0,
+      "corrupted_frame_rejected": true,
+      "parser_recovered": true
+    },
+    {
+      "t_s": 30.06,
+      "mode": "end",
+      "param_id": 0,
+      "corrupted_frame_rejected": true,
+      "parser_recovered": true
+    },
+    {
+      "t_s": 44.11,
+      "mode": "length",
+      "param_id": 0,
+      "corrupted_frame_rejected": true,
+      "parser_recovered": true
+    }
+  ],
+  "snapshots": [
+    {
+      "t_s": 50.1,
+      "telem_count": 2517,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 0,
+      "wifi_uart_crc_drops": 31,
+      "wifi_uart_seq_gaps": 850,
+      "rssi_dbm": -62,
+      "free_heap": 70844,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 56.0,
+      "telem_count": 2813,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 0,
+      "wifi_uart_crc_drops": 31,
+      "wifi_uart_seq_gaps": 850,
+      "rssi_dbm": -62,
+      "free_heap": 70844,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    }
+  ]
+}

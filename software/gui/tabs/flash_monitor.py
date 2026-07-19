@@ -206,9 +206,10 @@ _WIFI_DIAG_V2_LEN     = 38
 class PacketDecoder(QObject):
     packet_decoded = pyqtSignal(dict)
 
-    def __init__(self, device: str = "", parent=None):
+    def __init__(self, device: str = "", parent=None, skip_emit_types: frozenset[int] = frozenset()):
         super().__init__(parent)
         self._device      = device
+        self._skip_emit_types = skip_emit_types  # ptypes to parse/count but not forward downstream
         self._buf         = b""
         self._telem_a_buf: dict | None = None  # holds decoded TELEM_A waiting for TELEM_B
         # Link-health counters for this transport (audit W1/W3/W4) — attached to
@@ -390,21 +391,22 @@ class PacketDecoder(QObject):
             except Exception:
                 pass
             self.packet_decoded.emit(info)
-            from .source_manager import SourceManager
-            if ptype in (0x12, 0x13):
-                # Same duplicate-suppression as telemetry below: with Teensy USB,
-                # ESP32 USB, and WiFi all potentially connected simultaneously,
-                # every transport independently decodes and would otherwise
-                # re-emit the identical LOG_INFO/LOG_DATA packet (e.g. one
-                # directory ENTRY per active link) — only the active source emits.
-                if SourceManager.instance().is_active(self._device):
-                    from .log_bus import LogPacketBus
-                    LogPacketBus.instance().packet.emit(info)
-            else:
-                from .telemetry_bus import TelemetryBus
-                bus = TelemetryBus.instance()
-                if not bus.playback_active and SourceManager.instance().is_active(self._device):
-                    bus.packet.emit(info)
+            if ptype not in self._skip_emit_types:
+                from .source_manager import SourceManager
+                if ptype in (0x12, 0x13):
+                    # Same duplicate-suppression as telemetry below: with Teensy USB,
+                    # ESP32 USB, and WiFi all potentially connected simultaneously,
+                    # every transport independently decodes and would otherwise
+                    # re-emit the identical LOG_INFO/LOG_DATA packet (e.g. one
+                    # directory ENTRY per active link) — only the active source emits.
+                    if SourceManager.instance().is_active(self._device):
+                        from .log_bus import LogPacketBus
+                        LogPacketBus.instance().packet.emit(info)
+                else:
+                    from .telemetry_bus import TelemetryBus
+                    bus = TelemetryBus.instance()
+                    if not bus.playback_active and SourceManager.instance().is_active(self._device):
+                        bus.packet.emit(info)
             self._buf = self._buf[total:]
 
 

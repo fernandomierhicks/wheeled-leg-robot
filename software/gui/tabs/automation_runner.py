@@ -53,6 +53,24 @@ Scenario JSON fields (all optional except duration_s):
                                   not a QTimer callback, so the blocking socket calls
                                   don't stall the main thread's telemetry-timestamp
                                   bookkeeping. Results land in rogue_connect_results.
+    command_corruption_probes list — entries, each {"t_s": float, "mode": 1|2|3,
+                                  "param_id": int (default 0)}: at t_s, sends a
+                                  deliberately corrupted CMD_ID_PARAM_GET(param_id) —
+                                  via comm_commands.build_frame_corrupted(), same 3 modes
+                                  as corrupt_injections — to the ESP32's TCP command
+                                  channel, waits 1s and checks whether a PARAM_REPORT for
+                                  that param_id arrived anyway (it shouldn't — the
+                                  corrupted frame should never reach on_command()), then
+                                  immediately sends an *uncorrupted* PARAM_GET for the
+                                  same param_id and checks a PARAM_REPORT arrives within
+                                  1s (proving the parser fully resynced, not just that
+                                  the bad frame vanished). This checks the *receive* side
+                                  of the guard — corrupt_injections/CommLink::send()
+                                  above only cover the *send* side (TELEM frames going
+                                  out). Both directions use the same shared CommLink
+                                  parser class, so in principle this should already be
+                                  guarded identically; this is an empirical check of that
+                                  architectural claim, not a new guard being added.
     report_path           str   — output path, relative to software/gui/; default
                                   "logs/<name>_report.json"
 
@@ -74,6 +92,7 @@ import json
 import os
 import socket
 import statistics
+import struct
 import threading
 import time
 
@@ -81,7 +100,10 @@ from PyQt6.QtCore import QObject, QTimer
 
 from .telemetry_bus import TelemetryBus
 from .source_manager import SourceManager
-from .comm_commands import send_param_get_all, send_test_inject_corrupt
+from .comm_commands import (
+    send_param_get_all, send_test_inject_corrupt, send_param_get,
+    build_frame_corrupted, send_frame, CMD_ID_PARAM_GET,
+)
 from .wifi_transport import WifiTransport, TCP_PORT
 
 _GUI_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # software/gui/
@@ -145,6 +167,7 @@ class AutomationRunner(QObject):
         self._snapshot_period_s   = float(self._scenario.get("snapshot_period_s", 30))
         self._corrupt_injections  = self._scenario.get("corrupt_injections", [])
         self._rogue_tcp_connects  = self._scenario.get("rogue_tcp_connects", [])
+        self._command_corruption_probes = self._scenario.get("command_corruption_probes", [])
 
         self._latest: dict = {}
         self._last_uptime_ms: int | None = None
@@ -189,6 +212,9 @@ class AutomationRunner(QObject):
         self._injection_timers: list[QTimer] = []  # kept alive; see _schedule_injections
         self._rogue_connect_results: list[dict] = []
         self._rogue_connect_timers: list[QTimer] = []  # kept alive; see _schedule_rogue_connects
+        self._command_probe_results: list[dict] = []
+        self._command_probe_timers: list[QTimer] = []  # kept alive; see _schedule_command_probes
+        self._param_report_arrivals: dict[int, list[float]] = {}  # param_id -> [t_wall_s, ...]
 
         self._dump_timer = QTimer(self)
         self._dump_timer.setInterval(max(50, int(self._dump_period_s * 1000)))
@@ -231,13 +257,15 @@ class AutomationRunner(QObject):
         self._snapshot_timer.start()
         self._schedule_injections()
         self._schedule_rogue_connects()
+        self._schedule_command_probes()
         self._end_timer.setInterval(max(50, int(self._duration_s * 1000)))
         self._end_timer.start()
         print(f"[Automation] '{self._name}' timed window started: duration={self._duration_s}s "
               f"dump_period={self._dump_period_s}s churn_period={self._churn_period_s} "
               f"snapshot_period={self._snapshot_period_s}s "
               f"corrupt_injections={len(self._corrupt_injections)} "
-              f"rogue_tcp_connects={len(self._rogue_tcp_connects)}", flush=True)
+              f"rogue_tcp_connects={len(self._rogue_tcp_connects)} "
+              f"command_corruption_probes={len(self._command_corruption_probes)}", flush=True)
 
     def _schedule_injections(self):
         for spec in self._corrupt_injections:
@@ -338,6 +366,78 @@ class AutomationRunner(QObject):
         self._rogue_connect_results.append(result)
         print(f"[Automation] rogue TCP connect result: {result}", flush=True)
 
+    def _schedule_command_probes(self):
+        for spec in self._command_corruption_probes:
+            t = QTimer(self)
+            t.setSingleShot(True)
+            t.setInterval(max(0, int(float(spec.get("t_s", 0)) * 1000)))
+            t.timeout.connect(lambda spec=spec: self._run_command_probe(spec))
+            t.start()
+            self._command_probe_timers.append(t)
+
+    def _run_command_probe(self, spec: dict):
+        mode = int(spec.get("mode", 1))
+        mode_name = {0: "baseline (no corruption)", 1: "crc", 2: "end", 3: "length"}.get(mode, str(mode))
+        param_id = int(spec.get("param_id", 0))
+        wait_ms = int(spec.get("wait_ms", 1000))
+        t_s = round(time.time() - self._start_wall, 2)
+
+        before_count = len(self._param_report_arrivals.get(param_id, []))
+
+        if mode == 0:
+            # Baseline: no corruption at all — isolates whether the request/reply
+            # mechanism itself (not the corruption guard) is what's under test.
+            print(f"[Automation] sending baseline (uncorrupted) PARAM_GET(id={param_id})...", flush=True)
+            send_param_get(param_id)
+        else:
+            print(f"[Automation] sending corrupted PARAM_GET(id={param_id}) mode={mode_name} "
+                  f"to command channel...", flush=True)
+            payload = struct.pack("<BH", CMD_ID_PARAM_GET, param_id)
+            send_frame(build_frame_corrupted(payload, mode))
+
+        def check_after_corrupt():
+            after_count = len(self._param_report_arrivals.get(param_id, []))
+            if mode == 0:
+                result = {
+                    "t_s": t_s, "mode": mode_name, "param_id": param_id,
+                    "baseline_got_reply": after_count > before_count,
+                }
+                self._command_probe_results.append(result)
+                print(f"[Automation] command corruption probe result: {result}", flush=True)
+                return
+
+            corrupted_frame_rejected = after_count == before_count
+            print(f"[Automation] sending valid follow-up PARAM_GET(id={param_id}) "
+                  f"to confirm parser resync...", flush=True)
+            recovery_before = after_count
+            send_param_get(param_id)
+
+            def check_recovery():
+                recovery_after = len(self._param_report_arrivals.get(param_id, []))
+                result = {
+                    "t_s": t_s,
+                    "mode": mode_name,
+                    "param_id": param_id,
+                    "corrupted_frame_rejected": corrupted_frame_rejected,
+                    "parser_recovered": recovery_after > recovery_before,
+                }
+                self._command_probe_results.append(result)
+                print(f"[Automation] command corruption probe result: {result}", flush=True)
+
+            rt = QTimer(self)
+            rt.setSingleShot(True)
+            rt.setInterval(wait_ms)
+            rt.timeout.connect(check_recovery)
+            rt.start()
+            self._command_probe_timers.append(rt)
+
+        ct = QTimer(self)
+        ct.setSingleShot(True)
+        ct.setInterval(wait_ms)
+        ct.timeout.connect(check_after_corrupt)
+        ct.start()
+        self._command_probe_timers.append(ct)
+
     def _on_bootstrap_timeout(self):
         if self._timed_window_started:
             return
@@ -367,6 +467,11 @@ class AutomationRunner(QObject):
             return  # don't count pre-bootstrap traffic toward the timed stats
 
         ptype = info.get("ptype")
+
+        if ptype == 0x06:  # PARAM_REPORT — tracked for command_corruption_probes
+            pid = info.get("param_id")
+            if pid is not None:
+                self._param_report_arrivals.setdefault(pid, []).append(time.time() - self._start_wall)
 
         if ptype == 0x01:  # merged TELEM (TELEM_A + TELEM_B, correctly paired)
             self._telem_count += 1
@@ -545,6 +650,7 @@ class AutomationRunner(QObject):
             # judge each injection by its own detected_all flag here instead.
             "injection_results": self._injection_results,
             "rogue_connect_results": self._rogue_connect_results,
+            "command_probe_results": self._command_probe_results,
 
             "snapshots": self._snapshots,
         }

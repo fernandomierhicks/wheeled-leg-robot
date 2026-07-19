@@ -70,6 +70,41 @@ def build_frame(payload: bytes) -> bytes:
     return bytes([COMM_START_A, COMM_START_B]) + header + payload + bytes([crc, COMM_END])
 
 
+def build_frame_corrupted(payload: bytes, mode: int = 1) -> bytes:
+    """TEST ONLY: build a COMMAND frame with one field deliberately damaged, to verify
+    the receiving side's CommLink parser (Teensy/ESP32, shared/CommLink/CommLink.cpp)
+    rejects it cleanly rather than misdispatching a garbled command. Mirrors
+    CommLink::send()'s corrupt_mode_for_test on the firmware send side, applied here on
+    the GUI's send side to test the *receive* path for COMMAND frames specifically —
+    the same shared parser class that already guards TELEM frames also handles every
+    incoming COMMAND frame (g_comm/g_comm_usb.onPacket(on_command) on the Teensy,
+    g_comm_tcp/g_usb.onPacket(forward_to_teensy) on the ESP32), so this is checking that
+    architectural claim empirically rather than adding a new guard.
+
+    mode 1 = flipped CRC-8 byte (checksum-compare path)
+    mode 2 = flipped END byte (PS_END bad-byte path)
+    mode 3 = oversized on-wire length claim (length-guard/resync path)
+    None of the three modes touch payload bytes — cmd_id and any command args are
+    always intact; only whether the *frame* is accepted changes.
+    """
+    seq = _seq[0] & 0xFF
+    _seq[0] += 1
+    plen = len(payload)
+    header = bytes([COMM_TYPE_CMD, CMD_PAYLOAD_V, COMM_SRC_PC,
+                    seq, plen & 0xFF, (plen >> 8) & 0xFF])
+    crc = crc8(header + payload)
+    frame = bytearray(bytes([COMM_START_A, COMM_START_B]) + header + payload + bytes([crc, COMM_END]))
+    if mode == 1:
+        frame[-2] ^= 0xFF  # flip CRC byte
+    elif mode == 2:
+        frame[-1] ^= 0xFF  # flip END byte
+    elif mode == 3:
+        bogus_len = 512 + 50  # matches firmware COMM_MAX_PAYLOAD + margin
+        frame[6] = bogus_len & 0xFF
+        frame[7] = (bogus_len >> 8) & 0xFF
+    return bytes(frame)
+
+
 def send_frame(frame: bytes):
     """Send a frame over the single active transport (matches whichever
     device SourceManager has picked for telemetry: USB serial to esp32/teensy,
