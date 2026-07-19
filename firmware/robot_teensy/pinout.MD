@@ -13,7 +13,7 @@
 | AK45 UART | Teensy 4.1 | Serial2 / Serial3 | 2-wire TX/RX, pins 7–8 / 14–15 |
 | RGB status LED | Teensy 4.1 | PWM (pins 2/3/4) | 33 Ω series resistor |
 | Passive buzzer | Teensy 4.1 | PWM (pin 5) | PWM tone output |
-| ESP32 link | Teensy 4.1 ↔ ESP32 | Serial5 / UART2 | 1.2 Mbaud, pins 20/21 ↔ GPIO16/17 |
+| ESP32 link | Teensy 4.1 ↔ ESP32 | Serial5 / UART2 | 4 Mbaud, pins 20/21 ↔ GPIO16/17 |
 | 2.0″ TFT display (ST7789) | ESP32 | VSPI (GPIO18/23, CS=5, DC=2, RST=4, BLK=15) | 240×320, adafruit ST7789 lib |
 | VL53L1X ToF sensors (×4) | ESP32 | I2C (GPIO21/22) + XSHUT (GPIO14, 27, 26, 25) | Addresses 0x30–0x33 |
 | NeoPixel strip (WS2812B, 30 LEDs) | ESP32 | GPIO13 (FastLED) | 5V power from buck; level-shift if needed |

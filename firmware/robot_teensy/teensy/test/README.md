@@ -4,8 +4,8 @@ PlatformIO Unity tests, one per subdirectory. Environment is `test_teensy` in
 `../platformio.ini` (`test_filter = test_*`, excludes `src/`), except
 `test_comm_usb` which has its own `test_comm_usb` env.
 
-Available: `test_buzzer`, `test_comm_usb`, `test_esp32_link`, `test_hip_motor`,
-`test_imu`, `test_rc`, `test_telemetry`, `test_uart_hw`, `test_wheel_motor`.
+Available: `test_buzzer`, `test_comm_usb`, `test_hip_motor`,
+`test_imu`, `test_rc`, `test_uart_hw`, `test_wheel_motor`.
 
 ## Running from the CLI
 

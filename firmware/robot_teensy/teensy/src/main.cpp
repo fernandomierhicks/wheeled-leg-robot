@@ -90,6 +90,24 @@ static void send_param_report(uint16_t idx) {
     if (Serial) g_comm_usb.send(COMM_TYPE_PARAM_REPORT, PARAM_REPORT_PAYLOAD_V1, &rpt, sizeof(rpt));
 }
 
+// ── Paced param dump (PARAM_GET 0xFFFF / PARAM_RESET_DEFAULTS reply) ─────────
+// Sending all ~60 PARAM_REPORTs in one burst can overflow the 512 B Serial5 TX
+// buffer and blocks the 500 Hz loop for several ms. Instead, the command
+// handlers below just arm this cursor; service_param_dump() — called once per
+// loop() tick, alongside receive_commands() — sends a few at a time.
+// 4 x 45 B = 180 B/tick fits the TX buffer without blocking; a ~60-param dump
+// finishes in ~30 ms. See Phase 2, UARTplat.md.
+static uint16_t s_param_dump_cursor = 0xFFFF;  // >= param_count() => idle
+
+static void service_param_dump() {
+    uint16_t sent = 0;
+    while (sent < 4 && s_param_dump_cursor < param_count()) {
+        send_param_report(s_param_dump_cursor);
+        s_param_dump_cursor++;
+        sent++;
+    }
+}
+
 // ── Command permission matrix ─────────────────────────────────────────────────
 // Single place that decides which commands are accepted in which state.
 // Commands are requests: anything rejected here is logged and dropped, so it
@@ -213,7 +231,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         uint16_t id;
         memcpy(&id, payload + 1, 2);
         if (id == 0xFFFF) {
-            for (uint16_t i = 0; i < param_count(); i++) send_param_report(i);
+            s_param_dump_cursor = 0;  // paced by service_param_dump() in loop()
         } else {
             Param p; uint16_t idx = 0;
             while (param_by_index(idx, &p)) { if (p.id == id) { send_param_report(idx); break; } idx++; }
@@ -225,7 +243,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     if (cmd_id == CMD_ID_PARAM_RESET_DEFAULTS) {
         comm_log(LOG_LEVEL_WARN, "CMD param_reset_defaults");
         param_reset_defaults();
-        for (uint16_t i = 0; i < param_count(); i++) send_param_report(i);  // refresh GUI table
+        s_param_dump_cursor = 0;  // paced refresh of the GUI table (service_param_dump() in loop())
         return;
     }
 
@@ -307,6 +325,11 @@ void setup() {
     // instead of blocking ~1.6 ms and adding jitter to the 2 ms control loop.
     static uint8_t s_esp32_tx_buf[512];
     Serial5.addMemoryForWrite(s_esp32_tx_buf, sizeof(s_esp32_tx_buf));
+    // 2048-byte RX ring (default is 64 B, ~160 us at 4 Mbaud): the loop only
+    // drains it every 2 ms, so any inbound burst > 64 B between services was
+    // silently lost. See Phase 2, UARTplat.md.
+    static uint8_t s_esp32_rx_buf[2048];
+    Serial5.addMemoryForRead(s_esp32_rx_buf, sizeof(s_esp32_rx_buf));
     Serial5.begin(ESP32_BAUD);
     // Fix 5: flush any boot-noise that arrived before the parser was ready
     delay(10);
@@ -882,6 +905,7 @@ void loop() {
     uint32_t t0;
 
     t0 = micros(); receive_commands();     if (prof) prof_mark(s_prof_max.recv,       t0);
+    service_param_dump();
     t0 = micros(); read_sensors(prof);     if (prof) prof_mark(s_prof_max.sens_total, t0);
     t0 = micros(); check_imu_state();      if (prof) prof_mark(s_prof_max.imu_chk,    t0);
     t0 = micros(); radio_update();         if (prof) prof_mark(s_prof_max.radio,      t0);
