@@ -339,9 +339,12 @@ void controlLoop_run() {
         float soft_limit = param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
 
         // Mix: symmetric + yaw differential + symmetric FF terms
+        // Driving the left wheel harder than the right yaws the robot right (-Z),
+        // so positive tau_yaw (commanding +yaw, CCW from above) must add to the
+        // right wheel and subtract from the left.
         float tau_ff_sym = tau_ff1 + tau_ff2;
-        tau_L = g_state.tau_sym + tau_yaw + tau_ff_sym;
-        tau_R = g_state.tau_sym - tau_yaw + tau_ff_sym;
+        tau_L = g_state.tau_sym - tau_yaw + tau_ff_sym;
+        tau_R = g_state.tau_sym + tau_yaw + tau_ff_sym;
 
         // C2: clamp the mixed output (incl. FF) to the adjustable test limit —
         // FF terms are no longer exempt from PARAM_LQR_TORQUE_LIMIT.
