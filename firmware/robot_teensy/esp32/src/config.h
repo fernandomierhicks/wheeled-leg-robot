@@ -4,6 +4,9 @@
 #define TEENSY_UART_BAUD  4000000UL
 #define TEENSY_UART_RX    16
 #define TEENSY_UART_TX    17
+#define UPLINK_QUEUE_LEN        24      // uplink_task queue depth — ~200 ms absorb at 100 frames/s
+#define TEENSY_LINK_TIMEOUT_MS  1500    // single truth for "Teensy link up": TFT active-state,
+                                         // Neopixel linked-state, and face-mode connected-state
 
 // --- 2.0" TFT display (GMT020-02-9P, ST7789, SPI) ---
 // VSPI bus: SCK=18, MOSI=23 (hardware defaults, shared)
@@ -24,3 +27,38 @@
 // 0 = PERS_ENGINEERING (telemetry panels), 1 = PERS_FACE (animated eyes)
 // Change this to switch the power-on default; later the Teensy can override live.
 #define DEFAULT_DISPLAY_PERSONALITY  0
+
+// --- WiFi telemetry campaign build-time toggles ---
+// All overridable via PLATFORMIO_BUILD_FLAGS (-D...) without editing this file,
+// so test variants can be flashed without dirtying the tree.
+#ifndef WIFI_TELEM_MODE
+#define WIFI_TELEM_MODE      1   // 0=broadcast, 1=unicast to WIFI_UNICAST_IP (default —
+                                 //   campaign result 2026-07-18: unicast eliminates the
+                                 //   DTIM-clumping that made broadcast telemetry choppy)
+#endif
+#ifndef WIFI_UNICAST_IP
+#define WIFI_UNICAST_IP      ""  // baked in by flash_monitor.py at flash time (auto-detected
+                                 //   PC LAN IP); falls back to broadcast-like failure if unset —
+                                 //   set explicitly via PLATFORMIO_BUILD_FLAGS if flashing outside the GUI
+#endif
+#ifndef WIFI_TELEM_COMBINED
+#define WIFI_TELEM_COMBINED  0   // 0=split A/B (current), 1=single combined datagram (0x15)
+#endif
+#ifndef WIFI_TX_POWER_MAX
+#define WIFI_TX_POWER_MAX    0   // 0=default, 1=WiFi.setTxPower(max) in setup()
+#endif
+#ifndef NEO_ENABLED
+#define NEO_ENABLED          1   // 0=skip starting neo_task (FastLED isolation test)
+#endif
+#ifndef DISPLAY_ENABLED
+#define DISPLAY_ENABLED      1   // 0=skip starting display_task (core-0 contention isolation —
+                                 //   the display is the heaviest core-0 load)
+#endif
+#ifndef WIFI_DIAG_HZ
+#define WIFI_DIAG_HZ         2
+#endif
+#ifndef WIFI_TRANSPORT_GATING
+#define WIFI_TRANSPORT_GATING 0  // 0=always send WiFi telemetry when connected (current), 1=honor
+                                 //   CMD_ID_SET_TELEM_TRANSPORT and suppress WiFi telemetry sends
+                                 //   when the GUI has announced it's reading USB instead
+#endif

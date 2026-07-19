@@ -7,6 +7,8 @@
 #include <VL53L1X.h>
 #include <driver/dac.h>
 #include <driver/uart.h>
+#include <freertos/queue.h>
+#include <freertos/semphr.h>
 #include <string.h>
 #include <math.h>
 #include "config.h"
@@ -114,6 +116,14 @@ static volatile uint32_t g_uart_seq_gaps   = 0;  // lifetime frames lost (CommLi
 static volatile uint8_t  g_uart_crc_rate   = 0;  // CRC drops in last 2 s window
 static volatile uint8_t  g_uart_gap_rate   = 0;  // seq gaps  in last 2 s window
 
+// ── WiFi diagnostics (loop.cpp, core 1) ───────────────────────────────────────
+static volatile uint16_t g_loop_max_us            = 0;  // max loop() duration since last diag tick
+static volatile uint16_t g_udp_send_max_us        = 0;  // max time inside UDPStream::write() since last diag tick
+static volatile uint16_t g_wifi_reconnect_count   = 0;
+// §2b: which link the GUI last announced it's reading — WIFI_DIAG_TRANSPORT_*.
+// BOTH_LEGACY until a CMD_ID_SET_TELEM_TRANSPORT arrives (gating disabled or no announcement yet).
+static volatile uint8_t  g_active_telem_transport = WIFI_DIAG_TRANSPORT_BOTH_LEGACY;
+
 // ── Distance → color (green → yellow → red) ──────────────────────────────────
 
 static CRGB dist_to_color(uint16_t d) {
@@ -128,13 +138,13 @@ static CRGB dist_to_color(uint16_t d) {
 
 // ── Animations ────────────────────────────────────────────────────────────────
 
-// DISCONNECTED — dim gray ghost comet orbiting the perimeter
+// DISCONNECTED (no Teensy heard) — dim red slow pulse, all LEDs. Deliberately a
+// different color family from STARTUP (white) and every state color, and dimmer/
+// slower than anim_fault's alarm pulse — this means "no Teensy link", not an
+// active fault.
 static void anim_ghost_comet(CRGB* buf, uint32_t tick) {
-    fill_solid(buf, NUM_LEDS, CRGB::Black);
-    int head = (int)((tick / 4u) % NUM_LEDS);
-    const uint8_t kBri[7] = {90, 65, 48, 34, 22, 13, 6};
-    for (int t = 0; t < 7; t++)
-        buf[(head - t + NUM_LEDS) % NUM_LEDS] = CRGB(kBri[t], kBri[t], kBri[t]);
+    uint8_t bri = map(sin8((uint8_t)tick), 0, 255, 8, 70);
+    fill_solid(buf, NUM_LEDS, CRGB(bri, 0, 0));
 }
 
 // STARTUP — white cascade: each side breathes with 90° phase offset (CW wave)
@@ -294,7 +304,7 @@ static void neo_task(void*) {
 
     for (;;) {
         uint8_t state  = g_robot_state;
-        bool    linked = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < 3000);
+        bool    linked = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < TEENSY_LINK_TIMEOUT_MS);
 
         if (state != last_state || linked != last_linked) {
             memcpy(neo_snap, leds, sizeof(leds));
@@ -425,14 +435,72 @@ static void tof_task(void*) {
 static CommLink g_teensy(Serial2, COMM_SRC_ESP32);
 static CommLink g_usb(Serial,    COMM_SRC_ESP32);
 
+// Dedicated diagnostics links — TX-only (never .update()'d), so they never steal
+// bytes from g_usb/g_teensy's RX parsers. Kept separate from g_telem_udp so their
+// own _seq_tx counters don't interleave into the telemetry seq stream that the
+// A/B pairing metric depends on.
+static CommLink g_usb_diag(Serial, COMM_SRC_ESP32);
+
 // ── WiFi / TCP / UDP ──────────────────────────────────────────────────────────
 
 static WiFiServer  g_tcp_server(CMD_TCP_PORT);
 static WiFiClient  g_tcp_client;
 static CommLink*   g_comm_tcp   = nullptr;
 static UDPStream   g_udp_stream;
+static UDPStream   g_udp_diag_stream;
+static CommLink    g_wifi_diag(g_udp_diag_stream, COMM_SRC_ESP32);
 static CommLink    g_telem_udp(g_udp_stream, COMM_SRC_ESP32);
 static bool        g_wifi_inited = false;
+
+// ── Uplink queue (decouples the UART parse path from network/USB sends) ──────
+// on_teensy_packet() (core 1, runs synchronously inside g_teensy.update()'s
+// drain loop) must never block on network I/O — blocking sends there used to
+// stall the parser under WiFi load and make the TFT falsely declare NO TEENSY.
+// It only memcpy's each frame into this queue; uplink_task (core 0) performs
+// the actual USB/TCP/UDP sends. See Phase 1, UARTplat.md.
+typedef struct {
+    uint8_t  type, version;
+    uint16_t len;
+    uint8_t  payload[COMM_MAX_PAYLOAD];
+} UplinkFrame;                                    // 516 B
+
+static QueueHandle_t      g_uplink_q        = nullptr;
+static uint32_t           g_uplink_drops    = 0;   // frames dropped because queue was full
+static volatile uint16_t  g_tcp_send_max_us = 0;   // like g_udp_send_max_us; core 0 writes,
+                                                    // core 1 reads/resets in send_wifi_diag —
+                                                    // volatile 16-bit access is atomic on Xtensa,
+                                                    // same reasoning as g_udp_send_max_us below.
+
+// Guards g_comm_tcp / g_tcp_client: loop() (core 1) replaces them on new client
+// accept while uplink_task (core 0) sends through them — without this they race.
+static SemaphoreHandle_t g_tcp_mutex = nullptr;
+
+// Pending one-shot debug lines set by loop()/on_teensy_packet (core 1) and
+// printed by uplink_task (core 0). After this phase uplink_task is the only
+// Serial writer; any other core printing directly here would interleave plain
+// text into the binary CommLink stream mid-frame.
+static volatile bool g_dbg_version_mismatch_pending = false;
+static volatile uint8_t g_dbg_mismatch_version       = 0;
+static char           g_dbg_wifi_ip[24]              = {0};
+static volatile bool  g_dbg_wifi_ip_pending           = false;
+static char           g_dbg_tcp_client_ip[24]         = {0};
+static volatile bool  g_dbg_tcp_client_pending        = false;
+
+// Enqueue one frame for uplink_task. Never blocks: on a full queue, drops the
+// oldest queued frame to make room (never blocks the caller — see 2.1).
+static void enqueue_uplink(uint8_t type, uint8_t version, const void* payload, uint16_t len) {
+    UplinkFrame f;
+    f.type    = type;
+    f.version = version;
+    f.len     = len;
+    memcpy(f.payload, payload, len);
+    if (xQueueSend(g_uplink_q, &f, 0) != pdTRUE) {
+        static UplinkFrame scratch;
+        xQueueReceive(g_uplink_q, &scratch, 0);
+        xQueueSend(g_uplink_q, &f, 0);
+        ++g_uplink_drops;
+    }
+}
 
 // ── Command routing ───────────────────────────────────────────────────────────
 
@@ -501,6 +569,16 @@ static void log_command(const uint8_t* payload, uint16_t len) {
 static void forward_to_teensy(uint8_t type, uint8_t version, uint8_t /*source*/,
                                const uint8_t* payload, uint16_t len) {
     if (type == COMM_TYPE_COMMAND) {
+#if WIFI_TRANSPORT_GATING
+        // §2b: GUI telling the ESP32 which link it's reading. Intercepted here,
+        // before the blind forward — the Teensy must never see this cmd_id.
+        if (len >= 1 && payload[0] == CMD_ID_SET_TELEM_TRANSPORT) {
+            bool suppress = (len >= 2) && (payload[1] != 0);
+            g_active_telem_transport = suppress ? WIFI_DIAG_TRANSPORT_USB_ONLY
+                                                 : WIFI_DIAG_TRANSPORT_WIFI_ONLY;
+            return;
+        }
+#endif
         g_teensy.send(type, version, payload, len);
         log_command(payload, len);
     }
@@ -517,22 +595,17 @@ static bool             s_telem_fresh  = false;  // complete A+B pair ready in s
 
 static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
                               const uint8_t* payload, uint16_t len) {
-    // Forward every packet upstream regardless of type
-    g_usb.send(type, version, payload, len);
-#if WIFI_ENABLED
-    if (g_comm_tcp && g_tcp_client.connected())
-        g_comm_tcp->send(type, version, payload, len);
-    if ((type == COMM_TYPE_TELEM_A || type == COMM_TYPE_TELEM_B) && g_wifi_inited)
-        g_telem_udp.send(type, version, payload, len);
-#endif
+    // Forward every packet upstream regardless of type — but only enqueue here;
+    // uplink_task (core 0) performs the actual sends so this parse path never blocks.
+    enqueue_uplink(type, version, payload, len);
 
     // Version mismatch: flag on either half so display updates immediately
     if ((type == COMM_TYPE_TELEM_A || type == COMM_TYPE_TELEM_B) && version != TELEM_VERSION) {
         if (!g_version_mismatch) {
-            g_version_mismatch = true;
-            g_display_dirty    = true;
-            Serial.printf("[VERSION MISMATCH] Teensy telem v%u, expected v%u — reflash both boards\n",
-                          version, TELEM_VERSION);
+            g_version_mismatch             = true;
+            g_display_dirty                = true;
+            g_dbg_mismatch_version         = version;
+            g_dbg_version_mismatch_pending = true;
         }
         if (!g_teensy_ever_heard) g_display_dirty = true;
         g_last_teensy_ms    = millis();
@@ -561,6 +634,78 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
     if (!g_teensy_ever_heard) g_display_dirty = true;
     g_last_teensy_ms    = millis();
     g_teensy_ever_heard = true;
+}
+
+// ── Uplink task (core 0) ──────────────────────────────────────────────────────
+// The only writer to Serial (UART0), the TCP client, and the telemetry/diag UDP
+// sockets (see Phase 1, UARTplat.md). Drains frames enqueued by on_teensy_packet()
+// and send_wifi_diag() (both core 1) and performs the sends that used to run
+// inline in the UART parse path. Uses a bounded wait (not portMAX_DELAY) so the
+// pending debug-print flags below still get serviced promptly even if the
+// Teensy link itself is down (e.g. WiFi/TCP connect events with no Teensy present).
+static void uplink_task(void*) {
+    UplinkFrame f;
+    for (;;) {
+        if (xQueueReceive(g_uplink_q, &f, pdMS_TO_TICKS(100)) == pdTRUE) {
+            if (f.type == COMM_TYPE_WIFI_DIAG) {
+                g_usb_diag.send(f.type, f.version, f.payload, f.len);
+#if WIFI_ENABLED
+                if (g_wifi_inited)
+                    g_wifi_diag.send(f.type, f.version, f.payload, f.len);
+#endif
+            } else if (f.type == COMM_TYPE_TELEM_FULL_WIFI) {
+#if WIFI_ENABLED
+                if (g_wifi_inited) {
+                    uint32_t t0 = micros();
+                    g_telem_udp.send(f.type, f.version, f.payload, f.len);
+                    uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
+                    if (dt > g_udp_send_max_us) g_udp_send_max_us = dt;
+                }
+#endif
+            } else {
+                g_usb.send(f.type, f.version, f.payload, f.len);
+#if WIFI_ENABLED
+                if (xSemaphoreTake(g_tcp_mutex, portMAX_DELAY) == pdTRUE) {
+                    if (g_comm_tcp && g_tcp_client.connected()) {
+                        uint32_t t0 = micros();
+                        g_comm_tcp->send(f.type, f.version, f.payload, f.len);
+                        uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
+                        if (dt > g_tcp_send_max_us) g_tcp_send_max_us = dt;
+                    }
+                    xSemaphoreGive(g_tcp_mutex);
+                }
+#if !WIFI_TELEM_COMBINED
+                if ((f.type == COMM_TYPE_TELEM_A || f.type == COMM_TYPE_TELEM_B) && g_wifi_inited
+#if WIFI_TRANSPORT_GATING
+                    && g_active_telem_transport != WIFI_DIAG_TRANSPORT_USB_ONLY
+#endif
+                ) {
+                    uint32_t t0 = micros();
+                    g_telem_udp.send(f.type, f.version, f.payload, f.len);
+                    uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
+                    if (dt > g_udp_send_max_us) g_udp_send_max_us = dt;
+                }
+#endif
+#endif
+            }
+        }
+
+        if (g_dbg_version_mismatch_pending) {
+            g_dbg_version_mismatch_pending = false;
+            Serial.printf("[VERSION MISMATCH] Teensy telem v%u, expected v%u — reflash both boards\n",
+                          g_dbg_mismatch_version, TELEM_VERSION);
+        }
+        if (g_dbg_wifi_ip_pending) {
+            g_dbg_wifi_ip_pending = false;
+            Serial.print("[WiFi] IP: ");
+            Serial.println(g_dbg_wifi_ip);
+        }
+        if (g_dbg_tcp_client_pending) {
+            g_dbg_tcp_client_pending = false;
+            Serial.print("[TCP] client: ");
+            Serial.println(g_dbg_tcp_client_ip);
+        }
+    }
 }
 
 // ── Display ───────────────────────────────────────────────────────────────────
@@ -1568,7 +1713,7 @@ static void face_update_blink(uint32_t now) {
 
 static void face_update_pupils(uint32_t now) {
     const MoodParams& mp = kMoodTable[g_face.mood];
-    bool connected = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < 1000);
+    bool connected = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < TEENSY_LINK_TIMEOUT_MS);
 
     if (g_face.mood == MOOD_ALERT && connected) {
         float tx = constrain(g_telem_roll_rad  * mp.pupil_scale * FACE_PUPIL_TRAVEL / 0.3f,
@@ -1753,7 +1898,7 @@ static void update_display() {
 
     uint8_t  state     = g_robot_state;
     uint8_t  fault     = g_fault_code;
-    bool     active    = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < 1000);
+    bool     active    = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < TEENSY_LINK_TIMEOUT_MS);
     float    pitch     = g_telem_pitch_rad;
     float    roll      = g_telem_roll_rad;
     float    hip_l     = g_telem_hip_l_rad;
@@ -1854,6 +1999,50 @@ static void display_task(void*) {
     }
 }
 
+// ── WiFi diagnostics ─────────────────────────────────────────────────────────
+
+static void send_wifi_diag() {
+    WifiDiagPayload d;
+    d.esp_uptime_ms   = millis();
+    d.rssi_dbm        = (WiFi.status() == WL_CONNECTED) ? (int8_t)WiFi.RSSI() : 0;
+    d.wifi_channel    = (uint8_t)WiFi.channel();
+    d.wifi_status     = (uint8_t)WiFi.status();
+    d.tx_power_raw    = (uint8_t)WiFi.getTxPower();
+    d.free_heap       = ESP.getFreeHeap();
+    d.min_free_heap   = ESP.getMinFreeHeap();
+    d.loop_max_us     = g_loop_max_us;
+    d.udp_send_max_us = g_udp_send_max_us;
+    g_loop_max_us     = 0;
+    g_udp_send_max_us = 0;
+    d.wifi_reconnect_count = g_wifi_reconnect_count;
+    d.udp_send_fail_count  = (uint16_t)min((uint32_t)0xFFFF, g_udp_stream.failCount());
+    d.build_variant_flags =
+#if WIFI_TELEM_MODE
+        WIFI_DIAG_FLAG_UNICAST |
+#endif
+#if WIFI_TELEM_COMBINED
+        WIFI_DIAG_FLAG_COMBINED |
+#endif
+#if WIFI_TX_POWER_MAX
+        WIFI_DIAG_FLAG_TX_POWER_MAX |
+#endif
+#if !NEO_ENABLED
+        WIFI_DIAG_FLAG_NEO_DISABLED |
+#endif
+#if !DISPLAY_ENABLED
+        WIFI_DIAG_FLAG_DISPLAY_DISABLED |
+#endif
+#if WIFI_TRANSPORT_GATING
+        WIFI_DIAG_FLAG_TRANSPORT_GATING |
+#endif
+        0;
+    d.active_telem_transport = g_active_telem_transport;
+
+    // Enqueued like every other uplink frame — uplink_task (core 0) is the only
+    // writer to Serial/UDP now; a direct send here would race with it.
+    enqueue_uplink(COMM_TYPE_WIFI_DIAG, WIFI_DIAG_PAYLOAD_V1, &d, sizeof(d));
+}
+
 // ── Setup / loop ──────────────────────────────────────────────────────────────
 
 void setup() {
@@ -1868,21 +2057,34 @@ void setup() {
     g_teensy.onPacket(on_teensy_packet);
     g_usb.onPacket(forward_to_teensy);
 
+    g_uplink_q  = xQueueCreate(UPLINK_QUEUE_LEN, sizeof(UplinkFrame));
+    g_tcp_mutex = xSemaphoreCreateMutex();
+    xTaskCreatePinnedToCore(uplink_task, "uplink", 4096, nullptr, 2, nullptr, 0);
+
 #if WIFI_ENABLED
     WiFi.setSleep(false);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
+#if WIFI_TX_POWER_MAX
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);
+#endif
 #endif
 
+#if NEO_ENABLED
     xTaskCreatePinnedToCore(neo_task,     "neo",  4096, nullptr, 1, nullptr, 0);
+#endif
 #if LASERS_ENABLED
     xTaskCreatePinnedToCore(tof_task,     "tof",  4096, nullptr, 1, nullptr, 0);
 #endif
+#if DISPLAY_ENABLED
     xTaskCreatePinnedToCore(display_task, "disp", 6144, nullptr, 1, nullptr, 0);
+#endif
 
     Serial.println("[ESP32] ready");
 }
 
 void loop() {
+    uint32_t t_loop_start = micros();
+
     g_teensy.update();
     g_usb.update();
 
@@ -1931,6 +2133,18 @@ void loop() {
         g_telem_ff2_out         = pkt.ff2_out;
         g_telem_jump_state      = pkt.jump_state;
 
+#if WIFI_ENABLED && WIFI_TELEM_COMBINED
+        // Reuses the already-reassembled TelemetryPayload — no new reassembly logic.
+        // Enqueued (not sent directly) — uplink_task (core 0) owns g_telem_udp now.
+        if (g_wifi_inited
+#if WIFI_TRANSPORT_GATING
+            && g_active_telem_transport != WIFI_DIAG_TRANSPORT_USB_ONLY
+#endif
+        ) {
+            enqueue_uplink(COMM_TYPE_TELEM_FULL_WIFI, TELEM_VERSION, &pkt, sizeof(pkt));
+        }
+#endif
+
         // (Gap detection moved to CommLink's per-link seq counter — see
         // g_teensy.rx_seq_gaps(), mirrored into g_uart_seq_gaps by display_task.)
     }
@@ -1941,10 +2155,19 @@ void loop() {
 
     if (WiFi.status() == WL_CONNECTED && !g_wifi_inited) {
         g_tcp_server.begin();
-        g_udp_stream.beginSend("255.255.255.255", TELEM_UDP_PORT);
+        // Unicast needs a real target IP; fall back to broadcast if it wasn't
+        // baked in at flash time (e.g. a raw `pio run -t upload` outside the
+        // GUI's Flash & Monitor tab, which auto-injects it) so telemetry never
+        // silently goes dark.
+        const char* telem_target = "255.255.255.255";
+#if WIFI_TELEM_MODE
+        if (WIFI_UNICAST_IP[0] != '\0') telem_target = WIFI_UNICAST_IP;
+#endif
+        g_udp_stream.beginSend(telem_target, TELEM_UDP_PORT);
+        g_udp_diag_stream.beginSend(telem_target, TELEM_UDP_PORT);
         g_wifi_inited = true;
-        Serial.print("[WiFi] IP: ");
-        Serial.println(WiFi.localIP());
+        WiFi.localIP().toString().toCharArray(g_dbg_wifi_ip, sizeof(g_dbg_wifi_ip));
+        g_dbg_wifi_ip_pending = true;
     }
 
     static uint32_t last_reconnect_ms = 0;
@@ -1953,9 +2176,17 @@ void loop() {
         if (millis() - last_reconnect_ms > 5000) {
             WiFi.begin(WIFI_SSID, WIFI_PASS);
             last_reconnect_ms = millis();
+            g_wifi_reconnect_count++;
         }
     }
 #endif
+
+    // WiFi diagnostics: over USB always, over WiFi UDP when connected (see send_wifi_diag()).
+    static uint32_t last_diag_ms = 0;
+    if (millis() - last_diag_ms >= (1000 / WIFI_DIAG_HZ)) {
+        last_diag_ms = millis();
+        send_wifi_diag();
+    }
 
     // Send ToF packet to Teensy (and USB) at 20 Hz when new sensor data is ready
     static uint32_t last_tof_ms = 0;
@@ -1975,13 +2206,20 @@ void loop() {
     if (g_wifi_inited && g_tcp_server.hasClient()) {
         WiFiClient c = g_tcp_server.available();
         if (c) {
+            // Guard against uplink_task (core 0) sending through g_comm_tcp/g_tcp_client
+            // while we replace them — see g_tcp_mutex declaration (Phase 1, UARTplat.md).
+            xSemaphoreTake(g_tcp_mutex, portMAX_DELAY);
             g_tcp_client = c;
             delete g_comm_tcp;
             g_comm_tcp = new CommLink(g_tcp_client, COMM_SRC_ESP32);
             g_comm_tcp->onPacket(forward_to_teensy);
-            Serial.print("[TCP] client: ");
-            Serial.println(g_tcp_client.remoteIP());
+            g_tcp_client.remoteIP().toString().toCharArray(g_dbg_tcp_client_ip, sizeof(g_dbg_tcp_client_ip));
+            xSemaphoreGive(g_tcp_mutex);
+            g_dbg_tcp_client_pending = true;
         }
     }
 #endif
+
+    uint16_t loop_dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t_loop_start));
+    if (loop_dt > g_loop_max_us) g_loop_max_us = loop_dt;
 }
