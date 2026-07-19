@@ -453,18 +453,26 @@ typedef struct __attribute__((packed)) {
 #define CMD_ID_PARAM_RESET_DEFAULTS  0x13  // payload: none — reverts all writable params to
                                             // compile-time defaults, replies with a full PARAM_REPORT dump
 #define CMD_ID_TEST_INJECT_CORRUPT   0x14  // TEST ONLY (Phase 9, UARTplat.md stress testing):
-                                            // payload: uint8_t count, uint8_t target
+                                            // payload: uint8_t count, uint8_t target, uint8_t mode
                                             // target 0 = UART (Teensy's next `count` outgoing
-                                            //   TELEM_A frames to the ESP32 get a flipped CRC-8;
-                                            //   forwarded through by the ESP32 like any command)
+                                            //   TELEM_A frames to the ESP32 get corrupted per
+                                            //   `mode`; forwarded through by the ESP32 like any
+                                            //   command)
                                             // target 1 = WiFi (ESP32's next `count` outgoing
-                                            //   TELEM_A UDP datagrams to the GUI get a flipped
-                                            //   CRC-8; intercepted by the ESP32, never forwarded
-                                            //   to the Teensy — see forward_to_teensy())
-                                            // Verifies the receiving side's checksum actually
-                                            // detects and drops a bad frame, not just "hasn't
-                                            // seen corruption yet". target byte omitted (len==2)
-                                            // is treated as target 0 for backward compatibility.
+                                            //   TELEM_A UDP datagrams to the GUI get corrupted
+                                            //   per `mode`; intercepted by the ESP32, never
+                                            //   forwarded to the Teensy — see forward_to_teensy())
+                                            // mode 1 = flipped CRC-8 byte (default; matches
+                                            //   CommLink::send()'s corrupt_mode_for_test values)
+                                            // mode 2 = flipped END byte
+                                            // mode 3 = oversized on-wire length field (exercises
+                                            //   the receiver's length-guard / resync path)
+                                            // Verifies the receiving side's parser defenses
+                                            // actually detect and drop a bad frame, not just
+                                            // "hasn't seen corruption yet". target byte omitted
+                                            // (len==2) is treated as target 0; mode byte omitted
+                                            // (len<4) is treated as mode 1, both for backward
+                                            // compatibility.
 
 // Log sub-commands (CMD_ID_LOG payload byte 1)
 #define LOG_SUB_START     0x01  // + uint32_t duration_ms (0 = log until STOP)

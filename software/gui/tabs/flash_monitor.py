@@ -177,6 +177,11 @@ _COMM_MAGIC    = bytes([0xAA, 0x55])  # two-byte start marker
 _COMM_END      = 0xEF
 _HEADER_SZ     = 8   # magic(2) + type + version + source + seq + len_lo + len_hi
 _OVERHEAD      = 10  # header(8) + checksum(1) + end(1)
+_COMM_MAX_PAYLOAD = 512  # mirrors firmware CommLink.h COMM_MAX_PAYLOAD — a corrupted length
+                          # field otherwise stalls _parse() waiting for bytes that will never
+                          # arrive, swallowing subsequent legitimate datagrams into the search
+                          # (Fix 2 equivalent; found via WiFi corruption-injection testing,
+                          # Phase 9, UARTplat.md)
 _TELEM_VERSION = 9   # must match TELEM_VERSION in shared/comm_protocol.h
 _TELEM_A_LEN   = 118
 _TELEM_B_LEN   = 124
@@ -233,6 +238,10 @@ class PacketDecoder(QObject):
             source  = self._buf[4]
             seq     = self._buf[5]
             length  = self._buf[6] | (self._buf[7] << 8)
+            if length > _COMM_MAX_PAYLOAD:
+                self._crc_drops += 1
+                self._buf = self._buf[1:]
+                continue
             total   = _OVERHEAD + length
             if len(self._buf) < total:
                 return

@@ -55,6 +55,12 @@ class WifiTransport(QThread):
 
     # ── Public API ────────────────────────────────────────────────────────────
 
+    @property
+    def esp_ip(self) -> str | None:
+        """ESP32's current IP, learned from the source address of the last UDP
+        telemetry datagram. None until the first packet arrives."""
+        return self._esp_ip
+
     def stop(self, wait_ms: int = 3500):
         """Ask run()'s loop to exit and block until it does (or wait_ms elapses).
         Call before app.quit() in any programmatic-shutdown path — see

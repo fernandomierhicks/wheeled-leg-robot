@@ -96,9 +96,10 @@ static void send_param_report(uint16_t idx) {
 }
 
 // TEST ONLY (Phase 9, UARTplat.md stress testing): armed by CMD_ID_TEST_INJECT_CORRUPT,
-// consumed one-at-a-time by send_telemetry() to deliberately send bad-CRC frames to
+// consumed one-at-a-time by send_telemetry() to deliberately send malformed frames to
 // the ESP32 and confirm its CommLink::update() actually detects and drops them.
 static volatile uint8_t g_test_corrupt_remaining = 0;
+static volatile uint8_t g_test_corrupt_mode = 1;  // CommLink::send() corrupt_mode_for_test value (1=CRC,2=END,3=length)
 
 // ── Paced param dump (PARAM_GET 0xFFFF / PARAM_RESET_DEFAULTS reply) ─────────
 // Sending all ~60 PARAM_REPORTs in one burst can overflow the 512 B Serial5 TX
@@ -287,7 +288,9 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     if (cmd_id == CMD_ID_TEST_INJECT_CORRUPT && len >= 2 &&
         (len < 3 || payload[2] == 0)) {
         g_test_corrupt_remaining = payload[1];
-        comm_log(LOG_LEVEL_WARN, "TEST: injecting %u corrupt frame(s) to ESP32", payload[1]);
+        g_test_corrupt_mode = (len >= 4) ? payload[3] : 1;
+        comm_log(LOG_LEVEL_WARN, "TEST: injecting %u corrupt frame(s) mode=%u to ESP32",
+                 payload[1], g_test_corrupt_mode);
         return;
     }
 
@@ -650,10 +653,10 @@ static void send_telemetry(bool prof) {
 
     t0 = micros();
     // TEST ONLY (Phase 9, UARTplat.md): corrupt just the A half so the ESP32's
-    // CRC check has exactly one bad frame per armed count to detect and drop.
-    bool corrupt_a = g_test_corrupt_remaining > 0;
-    if (corrupt_a) g_test_corrupt_remaining--;
-    g_comm.send(COMM_TYPE_TELEM_A, TELEM_VERSION, tp,               TELEM_A_LEN, corrupt_a);
+    // parser has exactly one bad frame per armed count to detect and drop.
+    uint8_t corrupt_mode = (g_test_corrupt_remaining > 0) ? g_test_corrupt_mode : 0;
+    if (g_test_corrupt_remaining > 0) g_test_corrupt_remaining--;
+    g_comm.send(COMM_TYPE_TELEM_A, TELEM_VERSION, tp,               TELEM_A_LEN, corrupt_mode);
     g_comm.send(COMM_TYPE_TELEM_B, TELEM_VERSION, tp + TELEM_A_LEN, TELEM_B_LEN);
     if (prof) prof_mark(s_prof_max.telem_esp, t0);
 

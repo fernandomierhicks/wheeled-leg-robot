@@ -583,8 +583,9 @@ static void log_command(const uint8_t* payload, uint16_t len) {
 // TEST ONLY (Phase 9, UARTplat.md stress testing): armed by CMD_ID_TEST_INJECT_CORRUPT
 // target=1 (WiFi), intercepted below — never forwarded to the Teensy. Consumed
 // one-at-a-time in uplink_task's TELEM_A UDP send to confirm the GUI's own
-// CRC-8 check actually detects and drops a deliberately bad datagram.
+// parser defenses actually detect and drop a deliberately malformed datagram.
 static volatile uint8_t g_test_corrupt_wifi_remaining = 0;
+static volatile uint8_t g_test_corrupt_wifi_mode = 1;  // CommLink::send() corrupt_mode_for_test value
 
 static void forward_to_teensy(uint8_t type, uint8_t version, uint8_t /*source*/,
                                const uint8_t* payload, uint16_t len) {
@@ -603,6 +604,7 @@ static void forward_to_teensy(uint8_t type, uint8_t version, uint8_t /*source*/,
         // Teensy — see g_test_corrupt_wifi_remaining declaration above.
         if (len >= 3 && payload[0] == CMD_ID_TEST_INJECT_CORRUPT && payload[2] == 1) {
             g_test_corrupt_wifi_remaining = payload[1];
+            g_test_corrupt_wifi_mode = (len >= 4) ? payload[3] : 1;
             return;
         }
         g_teensy.send(type, version, payload, len);
@@ -738,11 +740,12 @@ static void uplink_task(void*) {
 #endif
                 ) {
                     // TEST ONLY (Phase 9, UARTplat.md): corrupt just the A half so the
-                    // GUI's CRC check has exactly one bad datagram per armed count.
-                    bool corrupt_wifi = (f.type == COMM_TYPE_TELEM_A) && g_test_corrupt_wifi_remaining > 0;
-                    if (corrupt_wifi) g_test_corrupt_wifi_remaining--;
+                    // GUI's parser has exactly one bad datagram per armed count.
+                    bool corrupt_wifi_now = (f.type == COMM_TYPE_TELEM_A) && g_test_corrupt_wifi_remaining > 0;
+                    uint8_t corrupt_wifi_mode = corrupt_wifi_now ? g_test_corrupt_wifi_mode : 0;
+                    if (corrupt_wifi_now) g_test_corrupt_wifi_remaining--;
                     uint32_t t0 = micros();
-                    g_telem_udp.send(f.type, f.version, f.payload, f.len, corrupt_wifi);
+                    g_telem_udp.send(f.type, f.version, f.payload, f.len, corrupt_wifi_mode);
                     uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
                     if (dt > g_udp_send_max_us) g_udp_send_max_us = dt;
                 }

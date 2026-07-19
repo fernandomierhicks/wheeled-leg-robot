@@ -41,7 +41,7 @@ void CommLink::onPacket(CommPacketCb cb) {
 }
 
 void CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t len,
-                     bool corrupt_crc_for_test) {
+                     uint8_t corrupt_mode_for_test) {
     if (len > COMM_MAX_PAYLOAD) return;  // overflow guard — caller passed oversized payload
     uint8_t frame[10 + COMM_MAX_PAYLOAD];
 
@@ -68,8 +68,18 @@ void CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t
     frame[6] = len_lo;
     frame[7] = len_hi;
     memcpy(frame + 8, p, len);
-    frame[8 + len] = corrupt_crc_for_test ? (uint8_t)(crc ^ 0xFF) : crc;
-    frame[9 + len] = COMM_END;
+    frame[8 + len] = (corrupt_mode_for_test == 1) ? (uint8_t)(crc ^ 0xFF) : crc;
+    frame[9 + len] = (corrupt_mode_for_test == 2) ? (uint8_t)(COMM_END ^ 0xFF) : COMM_END;
+
+    // Mode 3: corrupt the on-wire length field AFTER the checksum was computed
+    // over the true length — simulates a length byte flipped in transit, not a
+    // sender-side miscalculation. Real payload bytes on the wire are unchanged
+    // (still `len` of them); only the header's claim about that count is wrong.
+    if (corrupt_mode_for_test == 3) {
+        uint16_t bogus_len = COMM_MAX_PAYLOAD + 50;
+        frame[6] = (uint8_t)(bogus_len & 0xFF);
+        frame[7] = (uint8_t)(bogus_len >> 8);
+    }
 
     _s.write(frame, 10 + len);
 }

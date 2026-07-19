@@ -20,16 +20,39 @@ Scenario JSON fields (all optional except duration_s):
                                   report shows a trend over time, not just start/end
                                   totals (default 30)
     corrupt_injections     list — stress-test entries, each {"t_s": float, "target":
-                                  0|1, "count": int}: at t_s seconds into the timed
-                                  window, sends CMD_ID_TEST_INJECT_CORRUPT asking the
-                                  firmware to deliberately flip the CRC-8 on its next
-                                  `count` outgoing TELEM_A frames — target 0 = Teensy's
-                                  UART send to the ESP32, target 1 = ESP32's WiFi UDP
-                                  send to the GUI. Verifies the receiving side's CRC-8
-                                  check actually detects and drops a bad frame (watch
-                                  injection_results in the report for observed vs.
-                                  expected drop deltas), not just "hasn't seen
-                                  corruption yet". See comm_commands.send_test_inject_corrupt().
+                                  0|1, "count": int, "mode": 1|2|3 (optional, default 1)}:
+                                  at t_s seconds into the timed window, sends
+                                  CMD_ID_TEST_INJECT_CORRUPT asking the firmware to
+                                  deliberately damage its next `count` outgoing TELEM_A
+                                  frames — target 0 = Teensy's UART send to the ESP32,
+                                  target 1 = ESP32's WiFi UDP send to the GUI. mode 1 =
+                                  flipped CRC-8 (checksum-compare path), mode 2 = flipped
+                                  END byte (PS_END bad-byte path), mode 3 = oversized
+                                  on-wire length claim (length-guard/resync path).
+                                  Verifies the receiving side's parser defenses actually
+                                  detect and drop a bad frame (watch injection_results in
+                                  the report for observed vs. expected drop deltas), not
+                                  just "hasn't seen corruption yet". See
+                                  comm_commands.send_test_inject_corrupt().
+    rogue_tcp_connects     list — robustness entries, each {"t_s": float,
+                                  "hold_ms": int (default 500)}: at t_s seconds into the
+                                  timed window, opens a second, independent raw TCP
+                                  connection to the ESP32's command port (alongside the
+                                  GUI's own WifiTransport connection), sends a few random
+                                  bytes, holds it open for hold_ms, then closes it. The
+                                  ESP32 has no auth and accepts any device on the WLAN
+                                  (documented risk) — its accept loop (loop(), esp32/src/
+                                  main.cpp) replaces g_comm_tcp/g_tcp_client on every new
+                                  client with no rejection of an existing one ("last
+                                  client wins"), which is exactly the code the pbuf_free
+                                  mutex fix (Phase 7, UARTplat.md) touched. This verifies
+                                  that a second/interloper client doesn't crash the ESP32
+                                  and that the GUI's own connection (self-healing by
+                                  design — see WifiTransport.send()'s exception handling)
+                                  recovers cleanly afterward. Run in a background thread,
+                                  not a QTimer callback, so the blocking socket calls
+                                  don't stall the main thread's telemetry-timestamp
+                                  bookkeeping. Results land in rogue_connect_results.
     report_path           str   — output path, relative to software/gui/; default
                                   "logs/<name>_report.json"
 
@@ -49,7 +72,9 @@ still recorded in the report for reference, clearly labeled as approximate.
 
 import json
 import os
+import socket
 import statistics
+import threading
 import time
 
 from PyQt6.QtCore import QObject, QTimer
@@ -57,7 +82,7 @@ from PyQt6.QtCore import QObject, QTimer
 from .telemetry_bus import TelemetryBus
 from .source_manager import SourceManager
 from .comm_commands import send_param_get_all, send_test_inject_corrupt
-from .wifi_transport import WifiTransport
+from .wifi_transport import WifiTransport, TCP_PORT
 
 _GUI_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # software/gui/
 _TELEM_TICK_LOOP_COUNTS = 10  # 500 Hz control loop / 50 Hz telemetry send rate
@@ -119,6 +144,7 @@ class AutomationRunner(QObject):
         self._bootstrap_timeout_s = float(self._scenario.get("bootstrap_timeout_s", 30))
         self._snapshot_period_s   = float(self._scenario.get("snapshot_period_s", 30))
         self._corrupt_injections  = self._scenario.get("corrupt_injections", [])
+        self._rogue_tcp_connects  = self._scenario.get("rogue_tcp_connects", [])
 
         self._latest: dict = {}
         self._last_uptime_ms: int | None = None
@@ -161,6 +187,8 @@ class AutomationRunner(QObject):
         self._snapshots: list[dict] = []
         self._injection_results: list[dict] = []
         self._injection_timers: list[QTimer] = []  # kept alive; see _schedule_injections
+        self._rogue_connect_results: list[dict] = []
+        self._rogue_connect_timers: list[QTimer] = []  # kept alive; see _schedule_rogue_connects
 
         self._dump_timer = QTimer(self)
         self._dump_timer.setInterval(max(50, int(self._dump_period_s * 1000)))
@@ -202,12 +230,14 @@ class AutomationRunner(QObject):
             self._churn_timer.start()
         self._snapshot_timer.start()
         self._schedule_injections()
+        self._schedule_rogue_connects()
         self._end_timer.setInterval(max(50, int(self._duration_s * 1000)))
         self._end_timer.start()
         print(f"[Automation] '{self._name}' timed window started: duration={self._duration_s}s "
               f"dump_period={self._dump_period_s}s churn_period={self._churn_period_s} "
               f"snapshot_period={self._snapshot_period_s}s "
-              f"corrupt_injections={len(self._corrupt_injections)}", flush=True)
+              f"corrupt_injections={len(self._corrupt_injections)} "
+              f"rogue_tcp_connects={len(self._rogue_tcp_connects)}", flush=True)
 
     def _schedule_injections(self):
         for spec in self._corrupt_injections:
@@ -221,15 +251,19 @@ class AutomationRunner(QObject):
     def _run_injection(self, spec: dict):
         target = int(spec.get("target", 0))
         count = int(spec.get("count", 1))
+        mode = int(spec.get("mode", 1))  # 1=CRC, 2=END byte, 3=oversized length
+        mode_name = {1: "crc", 2: "end", 3: "length"}.get(mode, str(mode))
         # target 0 (UART): ESP32's own WIFI_DIAG.wifi_uart_crc_drops is the
-        # ground truth for "did the ESP32's CRC check catch it".
+        # ground truth for "did the ESP32's parser catch it" (rx_drops, despite
+        # the field name, counts every parser rejection — bad CRC, bad END,
+        # length-guard, and timeout — not just checksum failures).
         # target 1 (WiFi): this GUI's own link_crc_drops (PacketDecoder for
         # the "wifi" transport) is the ground truth — see comm_commands.
         counter = self._uart_teensy_to_esp32_crc if target == 0 else self._link_crc_drops
         before = counter.last
         print(f"[Automation] injecting {count} corrupt frame(s), target="
-              f"{'UART' if target == 0 else 'WiFi'}, crc_drops before={before}", flush=True)
-        send_test_inject_corrupt(count, target)
+              f"{'UART' if target == 0 else 'WiFi'}, mode={mode_name}, drops before={before}", flush=True)
+        send_test_inject_corrupt(count, target, mode)
 
         def check():
             after = counter.last
@@ -237,6 +271,7 @@ class AutomationRunner(QObject):
             result = {
                 "t_s": round(time.time() - self._start_wall, 2),
                 "target": "uart" if target == 0 else "wifi",
+                "mode": mode_name,
                 "expected_count": count,
                 "crc_drops_before": before,
                 "crc_drops_after": after,
@@ -252,6 +287,56 @@ class AutomationRunner(QObject):
         check_timer.timeout.connect(check)
         check_timer.start()
         self._injection_timers.append(check_timer)
+
+    def _schedule_rogue_connects(self):
+        for spec in self._rogue_tcp_connects:
+            t = QTimer(self)
+            t.setSingleShot(True)
+            t.setInterval(max(0, int(float(spec.get("t_s", 0)) * 1000)))
+            t.timeout.connect(lambda spec=spec: self._run_rogue_connect(spec))
+            t.start()
+            self._rogue_connect_timers.append(t)
+
+    def _run_rogue_connect(self, spec: dict):
+        hold_ms = int(spec.get("hold_ms", 500))
+        esp_ip = WifiTransport.instance().esp_ip
+        t_s = round(time.time() - self._start_wall, 2)
+        if not esp_ip:
+            result = {"t_s": t_s, "hold_ms": hold_ms, "connected": False, "error": "no esp_ip known yet"}
+            self._rogue_connect_results.append(result)
+            print(f"[Automation] rogue TCP connect skipped: {result}", flush=True)
+            return
+        print(f"[Automation] opening rogue TCP connection to {esp_ip}:{TCP_PORT} "
+              f"(hold {hold_ms}ms)...", flush=True)
+        threading.Thread(target=self._rogue_connect_worker, args=(esp_ip, hold_ms, t_s), daemon=True).start()
+
+    def _rogue_connect_worker(self, esp_ip: str, hold_ms: int, t_s: float):
+        # Deliberately independent of WifiTransport's own TCP socket — this
+        # simulates a second, unrelated device on the WLAN opening a connection
+        # to the ESP32's unauthenticated command port while the GUI's own
+        # connection is active (see rogue_tcp_connects in the module docstring).
+        result = {"t_s": t_s, "hold_ms": hold_ms, "connected": False}
+        s = None
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(3.0)
+            s.connect((esp_ip, TCP_PORT))
+            result["connected"] = True
+            s.sendall(os.urandom(16))
+            time.sleep(hold_ms / 1000.0)
+            s.close()
+            s = None
+            result["closed_cleanly"] = True
+        except Exception as e:
+            result["error"] = str(e)
+        finally:
+            if s is not None:
+                try:
+                    s.close()
+                except Exception:
+                    pass
+        self._rogue_connect_results.append(result)
+        print(f"[Automation] rogue TCP connect result: {result}", flush=True)
 
     def _on_bootstrap_timeout(self):
         if self._timed_window_started:
@@ -459,6 +544,7 @@ class AutomationRunner(QObject):
             # (that's the corrupted frame being correctly detected and dropped) —
             # judge each injection by its own detected_all flag here instead.
             "injection_results": self._injection_results,
+            "rogue_connect_results": self._rogue_connect_results,
 
             "snapshots": self._snapshots,
         }

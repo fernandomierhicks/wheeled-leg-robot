@@ -47,12 +47,17 @@ public:
 
     // Assemble and transmit one framed packet. Full frame is written in a
     // single write() call so UDPStream can wrap it in one datagram.
-    // corrupt_crc_for_test: TEST ONLY (Phase 9, UARTplat.md) — flips the CRC-8
-    // byte before sending, to verify a receiver's checksum check actually
-    // rejects a bad frame. Default false: zero behavior change for every
-    // existing call site.
+    // corrupt_mode_for_test: TEST ONLY (Phase 9, UARTplat.md) — deliberately
+    // damages one already-checksummed field before sending, to verify a
+    // receiver's parser defenses actually catch it. 0 (default) = no
+    // corruption, zero behavior change for every existing call site.
+    //   1 = flip the CRC-8 byte (receiver's checksum compare should reject it)
+    //   2 = flip the END byte (receiver's PS_END bad-byte path should reject it)
+    //   3 = overwrite the on-wire length field with COMM_MAX_PAYLOAD+50 after
+    //       the checksum was computed over the true length (receiver's Fix 2
+    //       length guard should reject it immediately, before touching payload)
     void send(uint8_t type, uint8_t version, const void* payload, uint16_t len,
-              bool corrupt_crc_for_test = false);
+              uint8_t corrupt_mode_for_test = 0);
 
     // Drive the receive parser — call every main-loop iteration.
     void update();

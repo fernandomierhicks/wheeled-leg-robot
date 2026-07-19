@@ -140,11 +140,11 @@ def send_param_reset_defaults():
     send_frame(build_frame(struct.pack("<B", CMD_ID_PARAM_RESET_DEFAULTS)))
 
 
-def send_test_inject_corrupt(count: int = 1, target: int = 0):
-    """TEST ONLY (Phase 9, UARTplat.md stress testing): deliberately flip the
-    CRC-8 byte on the next `count` outgoing TELEM_A frames, to verify the
-    receiving side's checksum check actually detects and drops bad frames
-    rather than just "hasn't seen corruption yet".
+def send_test_inject_corrupt(count: int = 1, target: int = 0, mode: int = 1):
+    """TEST ONLY (Phase 9, UARTplat.md stress testing): deliberately damage the
+    next `count` outgoing TELEM_A frames per `mode`, to verify the receiving
+    side's parser defenses actually detect and drop bad frames rather than
+    just "hasn't seen corruption yet".
 
     target=0 (UART): Teensy's next `count` sends to the ESP32 over Serial5 —
         forwarded through by the ESP32 like any command. Watch the ESP32's
@@ -153,9 +153,16 @@ def send_test_inject_corrupt(count: int = 1, target: int = 0):
         command is intercepted by the ESP32 itself (forward_to_teensy()),
         never reaches the Teensy. Watch this GUI's own link_crc_drops
         (PacketDecoder, TelemetryBus "wifi" source) for the count to land.
+
+    mode=1 (default): flip the CRC-8 byte (checksum-compare path).
+    mode=2: flip the END byte (frame otherwise valid — PS_END bad-byte path).
+    mode=3: claim an oversized on-wire length (COMM_MAX_PAYLOAD+50 — receiver's
+        length-guard path, tests recovery/resync without ever reading the crc).
+    All three land on the same rx_drops/crc_drops counter — the firmware side
+    doesn't distinguish detection *reason*, only that a frame was rejected.
     """
     import struct
-    send_frame(build_frame(struct.pack("<BBB", CMD_ID_TEST_INJECT_CORRUPT, count, target)))
+    send_frame(build_frame(struct.pack("<BBBB", CMD_ID_TEST_INJECT_CORRUPT, count, target, mode)))
 
 
 def send_wheel_set_mode(mode: int):
