@@ -251,10 +251,60 @@ Prompt to commit + push at each green milestone (per standing preference).
 
 ---
 
-## 3. If anything here turns out stale
+## 4. Phase 7/8 — done (2026-07-19, follow-on session)
 
-This file was accurate as of commit `cab031d` / the README update
-immediately after it. If `git log` shows commits past that under a
-different subject line, someone (or a prior Phase-7 session) has already
-made progress beyond this handoff — read those commit messages first rather
-than assuming this file is still the frontier.
+A later session (this handoff's "fresh conversation") found the actual
+root cause on hardware before reaching this file's §2.1 sanity-check
+recipe: a raw serial-log scan (`software/gui/logs/esp32.log`, the
+`flash_monitor.py`-captured session log) turned up 101 identical
+`assert failed: pbuf_free (p->ref > 0)` crashes with matching backtraces
+— `loop()` (core 1) read the TCP command socket via `g_comm_tcp->update()`
+without `g_tcp_mutex` while `uplink_task` (core 0) wrote through the same
+socket under that mutex, a residual gap from Phase 1's refactor. Fixed
+and committed as `1e26dee`. Verified with ~11 minutes of continuous WiFi
+telemetry + TCP command traffic (steady ping, PARAM_GET dumps every 3s,
+7 forced TCP disconnect/reconnect cycles) and zero reboots, confirmed
+both by ESP32 uptime tracking and a byte-scan of the newly-appended log
+for crash signatures (zero matches).
+
+Per the user's explicit direction this session, `wifi_load_sim.py` /
+`wifi_capture.py` (§2.0 above) are **retired** — testing now goes through
+the real GUI instead of standalone protocol scripts. Replaced by:
+`software/gui/main.py --automation <scenario.json>` (see
+`tabs/automation_runner.py`'s module docstring for the scenario format)
+runs the actual `MainWindow` unattended for a fixed duration and writes
+a pass/fail JSON report — no synthetic traffic generator, no human
+clicking. A new WiFi tab (`tabs/wifi_diag_tab.py`) surfaces uptime/heap/
+reconnect-count fields not already on the Dashboard's `LinkHealthWidget`
+plus a reboot-event log. Committed as `8c9a84a`; the sanity-check report
+that verified the fix above is `software/gui/logs/wifi_fix_sanity_report.json`.
+
+**Two environment gotchas hit while running this, worth knowing about
+before re-running:**
+- Flashing the ESP32 main firmware via raw `pio run -t upload` (bypassing
+  the GUI's Flash & Monitor tab) skips the LAN-IP auto-detection
+  `flash_monitor.py` normally bakes in via `PLATFORMIO_BUILD_FLAGS
+  -DWIFI_UNICAST_IP=...` (see `_detect_lan_ip()`/`_flash()` there) — WiFi
+  telemetry silently has nowhere to go. If flashing outside the GUI, set
+  that flag by hand to this machine's current LAN IP.
+- On this machine, Windows Firewall had no rule at all for
+  `C:\Users\ferna\.platformio\penv\Scripts\python.exe` (the interpreter
+  the GUI actually runs under), so inbound UDP telemetry was silently
+  dropped with no interactive prompt reaching anyone in an unattended
+  session. Worked around by running the automation pass under the
+  already-firewall-allowed Windows Store Python
+  (`...WindowsApps\PythonSoftwareFoundation.Python.3.13...\python3.13.exe`,
+  which has PyQt6/pyqtgraph/psutil/pyserial installed). A one-time
+  elevated `New-NetFirewallRule` for the real interpreter would be the
+  permanent fix but needs admin rights this session didn't have.
+
+Not yet pushed — ask before pushing, per standing instructions.
+
+---
+
+## 5. If anything here turns out stale
+
+This file was accurate as of commit `8c9a84a` (Phase 8). If `git log`
+shows commits past that under a different subject line, someone has
+already made progress beyond this note — read those commit messages
+first rather than assuming this file is still the frontier.
