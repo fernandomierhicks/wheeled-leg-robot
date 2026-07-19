@@ -55,7 +55,10 @@
                                  //   the display is the heaviest core-0 load)
 #endif
 #ifndef WIFI_DIAG_HZ
-#define WIFI_DIAG_HZ         2
+#define WIFI_DIAG_HZ         5   // bumped 2->5 (Phase 3, UARTplat.md): snappier GUI ESP32-alive detection
+#endif
+#ifndef ESP32_STATUS_HZ
+#define ESP32_STATUS_HZ      5   // ESP32->Teensy link heartbeat rate (Phase 3, UARTplat.md)
 #endif
 #ifndef WIFI_TRANSPORT_GATING
 #define WIFI_TRANSPORT_GATING 0  // 0=always send WiFi telemetry when connected (current), 1=honor

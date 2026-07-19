@@ -12,6 +12,11 @@ _NO_DATA      = 0xFFFF
 _STATE_COLORS = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE, "STANDBY": YELLOW}
 _WM_STATES    = {1: "IDLE", 8: "CLOSED_LOOP"}
 _WM_MODES     = {0: "IDLE", 1: "VEL", 2: "POS", 3: "TRQ"}
+_WIFI_VARIANT_BITS = [
+    (1 << 0, "UNI"), (1 << 1, "COMB"), (1 << 2, "TXMAX"),
+    (1 << 3, "NO-NEO"), (1 << 4, "NO-DISP"), (1 << 5, "GATED"),
+]
+_WIFI_TRANSPORT_NAMES = {0: "BOTH/LEGACY", 1: "USB-ONLY", 2: "WIFI-ONLY"}
 
 
 class RawDataTab(QWidget):
@@ -94,6 +99,12 @@ class RawDataTab(QWidget):
         r = self._section(g, r, "Link health (active transport, lifetime)")
         r = self._add_row(g, r, ("CRC drops",  "—"), ("Seq gaps",  "—"))
         r = self._add_row(g, r, ("Pair drops", "—"), ("",          ""))
+        r = self._section(g, r, "WiFi diagnostics (WIFI_DIAG, ~2 Hz)")
+        r = self._add_row(g, r, ("RSSI",        "—"), ("Channel",         "—"))
+        r = self._add_row(g, r, ("Free heap",   "—"), ("Min free heap",   "—"))
+        r = self._add_row(g, r, ("Loop max",    "—"), ("UDP send max",    "—"))
+        r = self._add_row(g, r, ("Reconnects",  "—"), ("UDP send fails",  "—"))
+        r = self._add_row(g, r, ("Variant",     "—"), ("Active transport","—"))
         self._add_tab(tabs, "Frame", content, r)
 
     def _build_imu_tab(self, tabs: QTabWidget):
@@ -161,6 +172,9 @@ class RawDataTab(QWidget):
         r = self._add_row(g, r, ("ff1_out",              "—"),  ("ff2_out",             "—"))
         r = self._section(g, r, "Misc")
         r = self._add_row(g, r, ("test_val",             "—"),  ("health_flags",        "—"))
+        r = self._section(g, r, "ESP32 link (TELEM V9)")
+        r = self._add_row(g, r, ("esp32_link_ok",        "—"),  ("esp32_status_age_ms", "—"))
+        r = self._add_row(g, r, ("uart_rx_drops",        "—"),  ("uart_seq_gaps",       "—"))
         self._add_tab(tabs, "Control", content, r)
 
     def _build_rc_tof_tab(self, tabs: QTabWidget):
@@ -252,6 +266,26 @@ class RawDataTab(QWidget):
         self._set("Seq gaps",   str(seq_gaps),   RED if seq_gaps else GREEN)
         self._set("Pair drops", str(pair_drops), RED if pair_drops else GREEN)
 
+        if info.get("ptype") == 0x14:
+            rssi = info.get("wifi_rssi_dbm", 0)
+            self._set("RSSI", f"{rssi} dBm",
+                      GREEN if rssi > -65 else (YELLOW if rssi > -80 else RED))
+            self._set("Channel", str(info.get("wifi_channel", "—")))
+            self._set("Free heap", f"{info.get('wifi_free_heap', 0):,} B")
+            self._set("Min free heap", f"{info.get('wifi_min_free_heap', 0):,} B")
+            self._set("Loop max", f"{info.get('wifi_loop_max_us', 0)} us")
+            self._set("UDP send max", f"{info.get('wifi_udp_send_max_us', 0)} us")
+            reconnects = info.get("wifi_reconnect_count", 0)
+            self._set("Reconnects", str(reconnects), RED if reconnects else GREEN)
+            fails = info.get("wifi_udp_send_fail_count", 0)
+            self._set("UDP send fails", str(fails), RED if fails else GREEN)
+            flags = info.get("wifi_build_variant_flags", 0)
+            names = [name for bit, name in _WIFI_VARIANT_BITS if flags & bit]
+            self._set("Variant", "+".join(names) if names else "default")
+            transport = info.get("wifi_active_telem_transport", 0)
+            self._set("Active transport", _WIFI_TRANSPORT_NAMES.get(transport, str(transport)))
+            return
+
         if info.get("ptype") != 0x01:
             return
 
@@ -333,6 +367,13 @@ class RawDataTab(QWidget):
         self._set("test_val",            f"{f.get('test_val', 0.0):+.4f}")
         hflags = f.get("health_flags", 0)
         self._set("health_flags",        f"0x{hflags:04X}")
+        esp32_ok = f.get("esp32_link_ok")
+        self._set("esp32_link_ok",       "YES" if esp32_ok else "NO", GREEN if esp32_ok else RED)
+        self._set("esp32_status_age_ms", f"{f.get('esp32_status_age_ms', '—')} ms")
+        rx_drops = f.get("uart_rx_drops", 0)
+        seq_gaps = f.get("uart_seq_gaps", 0)
+        self._set("uart_rx_drops",       str(rx_drops), RED if rx_drops else GREEN)
+        self._set("uart_seq_gaps",       str(seq_gaps), RED if seq_gaps else GREEN)
 
         # RC / ToF tab
         self._set("ibus_alive",          "YES" if f.get("ibus_alive") else "NO",

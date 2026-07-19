@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 import serial
-from PyQt6.QtCore import QObject, QProcess, QThread, QTimer, pyqtSignal, Qt
+from PyQt6.QtCore import QObject, QProcess, QProcessEnvironment, QThread, QTimer, pyqtSignal, Qt
 from PyQt6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
@@ -13,7 +13,10 @@ from PyQt6.QtWidgets import (
 )
 
 from .port_manager import SerialPortManager
-from .telem_format import crc8 as _crc8, decode_telem_a as _decode_telem_a, decode_telem_b as _decode_telem_b
+from .telem_format import (
+    crc8 as _crc8, decode_telem_a as _decode_telem_a, decode_telem_b as _decode_telem_b,
+    decode_telem_full as _decode_telem_full,
+)
 from .theme import BG, BORDER, BLUE, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -62,6 +65,19 @@ DEVICE_LABEL = {"teensy": "TEENSY 4.1", "esp32": "ESP32 DevKit V1"}
 DEVICE_BAUD  = {"teensy": "115200",     "esp32": "921600"}
 
 BAUD_OPTIONS = ["9600", "115200", "230400", "460800", "921600", "1000000", "1200000"]
+
+
+def _detect_lan_ip() -> str | None:
+    """Best-effort local LAN IP (no traffic sent — UDP connect() just picks
+    the outbound interface). Used to bake the unicast telemetry target into
+    the ESP32 build at flash time."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return None
 
 # ── Serial reader thread ──────────────────────────────────────────────────────
 
@@ -120,10 +136,15 @@ class PioRunner(QObject):
         super().__init__(parent)
         self._proc: QProcess | None = None
 
-    def start(self, args: list[str], cwd: str):
+    def start(self, args: list[str], cwd: str, extra_env: dict[str, str] | None = None):
         self._proc = QProcess(self)
         self._proc.setWorkingDirectory(cwd)
         self._proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        if extra_env:
+            env = QProcessEnvironment.systemEnvironment()
+            for k, v in extra_env.items():
+                env.insert(k, v)
+            self._proc.setProcessEnvironment(env)
         self._proc.readyReadStandardOutput.connect(self._on_data)
         self._proc.finished.connect(self._on_finished)
         self._proc.start(PIO_EXE, args)
@@ -156,18 +177,23 @@ _COMM_MAGIC    = bytes([0xAA, 0x55])  # two-byte start marker
 _COMM_END      = 0xEF
 _HEADER_SZ     = 8   # magic(2) + type + version + source + seq + len_lo + len_hi
 _OVERHEAD      = 10  # header(8) + checksum(1) + end(1)
-_TELEM_VERSION = 8   # must match TELEM_VERSION in shared/comm_protocol.h
+_TELEM_VERSION = 9   # must match TELEM_VERSION in shared/comm_protocol.h
 _TELEM_A_LEN   = 118
-_TELEM_B_LEN   = 117
+_TELEM_B_LEN   = 124
 
 _TYPE_NAMES  = {
     0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG",
     0x05: "CALIB", 0x06: "PARAM", 0x07: "TOF",
     0x10: "TELEM_A", 0x11: "TELEM_B",
     0x12: "LOG_INFO", 0x13: "LOG_DATA",
+    0x14: "WIFI_DIAG", 0x15: "TELEM_FULL_WIFI",
 }
 _SRC_NAMES   = {0x01: "TEENSY", 0x02: "ESP32", 0x03: "PC"}
 _LOG_LEVELS  = {0x01: "INFO", 0x02: "WARN", 0x03: "ERROR"}
+_FMT_WIFI_DIAG   = "<IbBBBIIHHHHBB"  # WifiDiagPayload V1, 26 bytes, packed/no padding
+_WIFI_DIAG_LEN   = 26
+_FMT_WIFI_DIAG_V2_EXT = "<BBHHHHH"   # V2 additions appended after the V1 26 bytes (12 bytes)
+_WIFI_DIAG_V2_LEN     = 38
 # _decode_telem_a/_b, _FMT_TELEM_A/_B, _STATE_NAMES, _FAULT_NAMES,
 # _FAULT_DESCRIPTIONS now live in telem_format.py (shared with wlog_to_csv.py).
 
@@ -303,6 +329,55 @@ class PacketDecoder(QObject):
                         "log_chunk_index": chunk_index,
                         "log_data":        bytes(payload[8:8 + data_len]),
                     })
+                elif ptype == 0x14 and length >= _WIFI_DIAG_LEN:
+                    # WIFI_DIAG — ESP32-only link/loop diagnostics (WifiDiagPayload).
+                    (esp_uptime_ms, rssi_dbm, wifi_channel, wifi_status, tx_power_raw,
+                     free_heap, min_free_heap, loop_max_us, udp_send_max_us,
+                     wifi_reconnect_count, udp_send_fail_count,
+                     build_variant_flags, active_telem_transport) = \
+                        _struct.unpack_from(_FMT_WIFI_DIAG, payload)
+                    info.update({
+                        "wifi_esp_uptime_ms":        esp_uptime_ms,
+                        "wifi_rssi_dbm":             rssi_dbm,
+                        "wifi_channel":              wifi_channel,
+                        "wifi_status":               wifi_status,
+                        "wifi_tx_power_raw":         tx_power_raw,
+                        "wifi_free_heap":            free_heap,
+                        "wifi_min_free_heap":        min_free_heap,
+                        "wifi_loop_max_us":          loop_max_us,
+                        "wifi_udp_send_max_us":      udp_send_max_us,
+                        "wifi_reconnect_count":      wifi_reconnect_count,
+                        "wifi_udp_send_fail_count":  udp_send_fail_count,
+                        "wifi_build_variant_flags":  build_variant_flags,
+                        "wifi_active_telem_transport": active_telem_transport,
+                    })
+                    if length >= _WIFI_DIAG_V2_LEN:
+                        # V2 — Teensy-link status, the "ESP32 alive" carrier: this
+                        # packet arrives at 5 Hz independent of the Teensy link, so
+                        # it's what lets the GUI show ESP32-alive-but-Teensy-silent.
+                        (teensy_link_up, _reserved2, ms_since_teensy, uart_crc_drops,
+                         uart_seq_gaps, uplink_queue_drops, tcp_send_max_us) = \
+                            _struct.unpack_from(_FMT_WIFI_DIAG_V2_EXT, payload, _WIFI_DIAG_LEN)
+                        info.update({
+                            "wifi_teensy_link_up":     bool(teensy_link_up),
+                            "wifi_ms_since_teensy":    ms_since_teensy,
+                            "wifi_uart_crc_drops":     uart_crc_drops,
+                            "wifi_uart_seq_gaps":      uart_seq_gaps,
+                            "wifi_uplink_queue_drops": uplink_queue_drops,
+                            "wifi_tcp_send_max_us":    tcp_send_max_us,
+                        })
+                elif ptype == 0x15 and length == 242:
+                    # TELEM_FULL_WIFI — WIFI_TELEM_COMBINED variant: the full
+                    # TelemetryPayload as one datagram. Remap to look like a normal
+                    # TELEM packet (transparent to every existing tab).
+                    if version != _TELEM_VERSION:
+                        info["version_mismatch"] = True
+                        info["got_version"]      = version
+                        info["expected_version"] = _TELEM_VERSION
+                    else:
+                        info.update(_decode_telem_full(payload))
+                        info["ptype"]     = 0x01
+                        info["type_name"] = "TELEM"
             except Exception:
                 pass
             self.packet_decoded.emit(info)
@@ -672,9 +747,23 @@ class DevicePanel(QWidget):
         if port:
             args += ["--upload-port", port]
 
+        # ESP32 main firmware defaults to unicast WiFi telemetry (WIFI_TELEM_MODE=1
+        # in config.h) — it needs this machine's current LAN IP baked in at flash
+        # time via a build flag, since it can change (DHCP) and isn't known at
+        # compile time otherwise.
+        extra_env = None
+        if self._device == "esp32" and "esp32dev" in args and "upload" in args:
+            ip = _detect_lan_ip()
+            if ip:
+                self._append(f"[unicast telemetry target: {ip}]", DIM)
+                extra_env = {"PLATFORMIO_BUILD_FLAGS": f'-DWIFI_UNICAST_IP=\\"{ip}\\"'}
+            else:
+                self._append("[warning: could not detect LAN IP — unicast telemetry needs "
+                              "WIFI_UNICAST_IP set manually]", ORANGE)
+
         self._append(f"$ pio {' '.join(args)}", BLUE)
         self._set_flash_busy(True)
-        self._pio.start(args, PIO_DIR[self._device])
+        self._pio.start(args, PIO_DIR[self._device], extra_env)
 
     def _cancel_flash(self):
         self._pio.kill()

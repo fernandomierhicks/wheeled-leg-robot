@@ -27,6 +27,11 @@ HipCmd   g_hip_cmd = {};
 TofPayload g_tof         = {{0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF}, 0xFFFF, 0xFFFF};
 uint32_t   g_tof_last_ms = 0;
 
+// Latest ESP32_STATUS heartbeat (updated in on_command, read in fill_telemetry).
+// Telemetry only — never causes a fault or state change. See Phase 3, UARTplat.md.
+Esp32StatusPayload g_esp32_status      = {};
+uint32_t           s_last_esp32_status_ms = 0;
+
 // ── Logging ───────────────────────────────────────────────────────────────────
 
 void comm_log(uint8_t level, const char* fmt, ...) {
@@ -135,6 +140,13 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     if (type == COMM_TYPE_TOF && len >= (uint16_t)sizeof(TofPayload)) {
         memcpy(&g_tof, payload, sizeof(TofPayload));
         g_tof_last_ms = millis();
+        return;
+    }
+
+    // ESP32 status heartbeat: telemetry only, no fault/state change (Phase 3, UARTplat.md)
+    if (type == COMM_TYPE_ESP32_STATUS && len >= (uint16_t)sizeof(Esp32StatusPayload)) {
+        memcpy(&g_esp32_status, payload, sizeof(Esp32StatusPayload));
+        s_last_esp32_status_ms = millis();
         return;
     }
 
@@ -586,6 +598,14 @@ static void fill_telemetry(TelemetryPayload& t) {
     // V8 — radio channel assignments
     t.active_profile        = (uint8_t)param_get(PARAM_ACTIVE_PROFILE);
     t.pitch_trim_rad        = param_get(PARAM_RADIO_PITCH_TRIM);
+    // V9 — ESP32<->Teensy link supervision (telemetry only, see Phase 3, UARTplat.md)
+    uint32_t esp32_status_age = millis() - s_last_esp32_status_ms;
+    uint32_t uart_rx_drops    = g_comm.rx_drops();
+    uint32_t uart_seq_gaps    = g_comm.rx_seq_gaps();
+    t.esp32_link_ok       = (s_last_esp32_status_ms != 0 && esp32_status_age < 1000) ? 1 : 0;
+    t.esp32_status_age_ms = (uint16_t)(esp32_status_age > 65535 ? 65535 : esp32_status_age);
+    t.uart_rx_drops       = (uint16_t)(uart_rx_drops   > 65535 ? 65535 : uart_rx_drops);
+    t.uart_seq_gaps       = (uint16_t)(uart_seq_gaps   > 65535 ? 65535 : uart_seq_gaps);
 }
 
 static void send_telemetry(bool prof) {

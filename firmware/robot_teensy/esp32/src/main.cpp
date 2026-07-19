@@ -2038,9 +2038,40 @@ static void send_wifi_diag() {
         0;
     d.active_telem_transport = g_active_telem_transport;
 
+    // V2 — Teensy-link status, so the GUI can tell "ESP32 alive, Teensy silent"
+    // apart from "whole link down" even when WIFI_DIAG is the only thing arriving.
+    uint32_t since_teensy = millis() - g_last_teensy_ms;
+    d.teensy_link_up     = (g_teensy_ever_heard && since_teensy < TEENSY_LINK_TIMEOUT_MS) ? 1 : 0;
+    d.reserved2          = 0;
+    d.ms_since_teensy    = (uint16_t)min((uint32_t)0xFFFF, since_teensy);
+    d.uart_crc_drops     = (uint16_t)min((uint32_t)0xFFFF, g_teensy.rx_drops());
+    d.uart_seq_gaps      = (uint16_t)min((uint32_t)0xFFFF, g_teensy.rx_seq_gaps());
+    d.uplink_queue_drops = (uint16_t)min((uint32_t)0xFFFF, g_uplink_drops);
+    d.tcp_send_max_us    = g_tcp_send_max_us;
+    g_tcp_send_max_us    = 0;
+
     // Enqueued like every other uplink frame — uplink_task (core 0) is the only
     // writer to Serial/UDP now; a direct send here would race with it.
-    enqueue_uplink(COMM_TYPE_WIFI_DIAG, WIFI_DIAG_PAYLOAD_V1, &d, sizeof(d));
+    enqueue_uplink(COMM_TYPE_WIFI_DIAG, WIFI_DIAG_PAYLOAD_V2, &d, sizeof(d));
+}
+
+// ESP32->Teensy link heartbeat + ESP32 health, independent of the Teensy link's
+// own state — this is what lets the Teensy (and via telemetry, the GUI) tell
+// "ESP32 alive, Teensy silent" apart from "whole link down". Sent directly on
+// g_teensy (Serial2, core 1 — same core as the parser, tiny frame, non-blocking
+// at 4 Mbaud), not through the uplink queue: that queue is for Teensy->PC
+// traffic, this is ESP32->Teensy. Telemetry-only; never causes a fault.
+static void send_esp32_status() {
+    Esp32StatusPayload s;
+    s.uptime_ms            = millis();
+    s.wifi_ok              = (WiFi.status() == WL_CONNECTED) ? 1 : 0;
+    s.tcp_client_connected = (g_comm_tcp && g_tcp_client.connected()) ? 1 : 0;
+    s.rssi_dbm             = (WiFi.status() == WL_CONNECTED) ? (int8_t)WiFi.RSSI() : 0;
+    s.reserved             = 0;
+    s.uplink_drops         = (uint16_t)min((uint32_t)0xFFFF, g_uplink_drops);
+    s.uart_rx_drops        = (uint16_t)min((uint32_t)0xFFFF, g_teensy.rx_drops());
+    s.uart_seq_gaps        = (uint16_t)min((uint32_t)0xFFFF, g_teensy.rx_seq_gaps());
+    g_teensy.send(COMM_TYPE_ESP32_STATUS, ESP32_STATUS_PAYLOAD_V1, &s, sizeof(s));
 }
 
 // ── Setup / loop ──────────────────────────────────────────────────────────────
@@ -2186,6 +2217,13 @@ void loop() {
     if (millis() - last_diag_ms >= (1000 / WIFI_DIAG_HZ)) {
         last_diag_ms = millis();
         send_wifi_diag();
+    }
+
+    // ESP32->Teensy link heartbeat (see send_esp32_status()).
+    static uint32_t last_esp32_status_ms = 0;
+    if (millis() - last_esp32_status_ms >= (1000 / ESP32_STATUS_HZ)) {
+        last_esp32_status_ms = millis();
+        send_esp32_status();
     }
 
     // Send ToF packet to Teensy (and USB) at 20 Hz when new sensor data is ready

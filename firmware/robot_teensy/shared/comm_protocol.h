@@ -33,6 +33,9 @@
 #define COMM_TYPE_TELEM_B      0x11  // next  120 bytes of TelemetryPayload (frame = 130 bytes)
 #define COMM_TYPE_LOG_INFO     0x12  // Teensy→PC: SD-log directory / transfer metadata (LogInfoPayload)
 #define COMM_TYPE_LOG_DATA     0x13  // Teensy→PC: SD-log file chunk (LogDataHeader + raw bytes)
+#define COMM_TYPE_WIFI_DIAG    0x14  // ESP32→PC only: link/loop diagnostics (WifiDiagPayload)
+#define COMM_TYPE_TELEM_FULL_WIFI 0x15  // ESP32→PC, WiFi-only: full TelemetryPayload as one datagram (WIFI_TELEM_COMBINED)
+#define COMM_TYPE_ESP32_STATUS 0x16  // ESP32→Teensy: 5 Hz link heartbeat + ESP32 health (Esp32StatusPayload)
 
 // ── Calibration event sub-types ───────────────────────────────────────────────
 #define CALIB_EVENT_PAYLOAD_V1   1
@@ -122,6 +125,26 @@ typedef struct __attribute__((packed)) {
     uint16_t rear_min_mm;     // min(dist[2], dist[3]) — backward sensors
 } TofPayload;                 // 12 bytes
 
+// ── Payload: ESP32 status heartbeat (ESP32→Teensy, COMM_TYPE_ESP32_STATUS) ───
+// Sent at 5 Hz independent of the Teensy link's own health, so the Teensy (and
+// via TelemetryPayload, the GUI) can tell "ESP32 alive, Teensy silent" apart
+// from "whole link down". Telemetry-only — never causes a fault or state change.
+#define ESP32_STATUS_PAYLOAD_V1 1
+typedef struct __attribute__((packed)) {
+    uint32_t uptime_ms;
+    uint8_t  wifi_ok;               // WiFi.status() == WL_CONNECTED
+    uint8_t  tcp_client_connected;  // GUI TCP client attached
+    int8_t   rssi_dbm;
+    uint8_t  reserved;
+    uint16_t uplink_drops;          // ESP32 g_uplink_drops (clamped u16)
+    uint16_t uart_rx_drops;         // ESP32 g_teensy.rx_drops()    (Teensy→ESP32 dir)
+    uint16_t uart_seq_gaps;         // ESP32 g_teensy.rx_seq_gaps() (Teensy→ESP32 dir)
+} Esp32StatusPayload;               // 14 bytes
+
+#ifdef __cplusplus
+static_assert(sizeof(Esp32StatusPayload) == 14, "Esp32StatusPayload must be 14 bytes");
+#endif
+
 // ── Payload: telemetry ────────────────────────────────────────────────────────
 //
 // PROPAGATION CHECKLIST — touch ALL of these when adding/removing fields or bumping version:
@@ -180,9 +203,13 @@ typedef struct __attribute__((packed)) {
 //   [226]  uint32   loop_count
 //   [230]  uint8    active_profile                                            ← V8 start
 //   [231]  float    pitch_trim_rad
-//   [235]  ← end, sizeof = 235 bytes
+//   [235]  uint8    esp32_link_ok                                             ← V9 start
+//   [236]  uint16   esp32_status_age_ms
+//   [238]  uint16   uart_rx_drops
+//   [240]  uint16   uart_seq_gaps
+//   [242]  ← end, sizeof = 242 bytes
 //
-#define TELEM_VERSION  8  // bump when adding/removing struct fields; triggers mismatch errors
+#define TELEM_VERSION  9  // bump when adding/removing struct fields; triggers mismatch errors
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -254,17 +281,23 @@ typedef struct __attribute__((packed)) {
     // V8 additions
     uint8_t  active_profile;     // speed profile selected by CH9 (0=slow, 1=normal, 2=fast)
     float    pitch_trim_rad;     // pitch equilibrium trim from CH7 [rad]; hook only until LQR wired
-} TelemetryPayload;  // 235 bytes — TELEM_VERSION 8
+    // V9 additions — ESP32↔Teensy link supervision (7 bytes)
+    uint8_t  esp32_link_ok;       // 1 = ESP32_STATUS heard < 1000 ms ago
+    uint16_t esp32_status_age_ms; // ms since last ESP32_STATUS (clamped 65535)
+    uint16_t uart_rx_drops;       // Teensy g_comm.rx_drops()    (ESP32→Teensy dir, clamped)
+    uint16_t uart_seq_gaps;       // Teensy g_comm.rx_seq_gaps() (ESP32→Teensy dir, clamped)
+} TelemetryPayload;  // 242 bytes — TELEM_VERSION 9
 
 // Split offsets for two-packet telemetry (TELEM_A + TELEM_B)
 // Each frame ≤130 bytes — both drain safely with UART FIFO threshold=32
 #define TELEM_A_LEN  118u  // bytes   0-117: IMU, hip pos, RC, wheel motors
-#define TELEM_B_LEN  117u  // bytes 118-234: ToF, rates, accel, hip cmd, control internals, profile, pitch trim
+#define TELEM_B_LEN  124u  // bytes 118-241: ToF, rates, accel, hip cmd, control internals, profile,
+                           //                pitch trim, ESP32 link supervision
 
 #ifdef __cplusplus
-static_assert(sizeof(TelemetryPayload) == 235,
+static_assert(sizeof(TelemetryPayload) == 242,
     "TelemetryPayload size changed — bump TELEM_VERSION, update COMM_MAX_PAYLOAD, and see PROPAGATION CHECKLIST");
-static_assert(TELEM_A_LEN + TELEM_B_LEN == 235, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
+static_assert(TELEM_A_LEN + TELEM_B_LEN == 242, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
 #endif
 
 // ── High-datarate SD log (.wlog) ──────────────────────────────────────────────
@@ -291,8 +324,8 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
     uint32_t         t_micros; // micros() at capture — sub-ms inter-tick timing
-    TelemetryPayload telem;    // the exact 235-byte struct, TELEM_VERSION 8
-} LogRecord;                   // 239 bytes — one per control tick
+    TelemetryPayload telem;    // the exact 242-byte struct, TELEM_VERSION 9
+} LogRecord;                   // 246 bytes — one per control tick
 
 // ── Payload: COMM_TYPE_LOG_INFO (Teensy→PC) ──────────────────────────────────
 #define LOG_INFO_PAYLOAD_V1  1
@@ -322,7 +355,7 @@ typedef struct __attribute__((packed)) {
 
 #ifdef __cplusplus
 static_assert(sizeof(WlogHeader) == 32, "WlogHeader must be 32 bytes");
-static_assert(sizeof(LogRecord) == 239, "LogRecord must be sizeof(uint32)+sizeof(TelemetryPayload)");
+static_assert(sizeof(LogRecord) == 246, "LogRecord must be sizeof(uint32)+sizeof(TelemetryPayload)");
 static_assert(sizeof(LogInfoPayload) == 16, "LogInfoPayload must be 16 bytes");
 static_assert(sizeof(LogDataHeader) == 8, "LogDataHeader must be 8 bytes");
 // LOG_CHUNK_DATA + sizeof(LogDataHeader) <= COMM_MAX_PAYLOAD is checked in CommLink.h,
@@ -344,6 +377,52 @@ static_assert(sizeof(LogDataHeader) == 8, "LogDataHeader must be 8 bytes");
 #define HEALTH_WM_R_VEL_LIMITED  (1u << 10) // soft governor clamping right wheel
 #define HEALTH_LOOP_OVERRUN      (1u << 11) // control-loop work exceeded the 2 ms budget within the last second
 
+// ── Payload: WiFi diagnostics (COMM_TYPE_WIFI_DIAG, ESP32→PC only) ───────────
+#define WIFI_DIAG_PAYLOAD_V1  1
+#define WIFI_DIAG_PAYLOAD_V2  2  // adds Teensy-link status (the "ESP32 alive" carrier — see UARTplat.md)
+
+// build_variant_flags bits (WifiDiagPayload::build_variant_flags)
+#define WIFI_DIAG_FLAG_UNICAST          (1u << 0)
+#define WIFI_DIAG_FLAG_COMBINED         (1u << 1)
+#define WIFI_DIAG_FLAG_TX_POWER_MAX     (1u << 2)
+#define WIFI_DIAG_FLAG_NEO_DISABLED     (1u << 3)
+#define WIFI_DIAG_FLAG_DISPLAY_DISABLED (1u << 4)
+#define WIFI_DIAG_FLAG_TRANSPORT_GATING (1u << 5)
+
+// active_telem_transport values (WifiDiagPayload::active_telem_transport)
+#define WIFI_DIAG_TRANSPORT_BOTH_LEGACY 0  // gating disabled or no source announced
+#define WIFI_DIAG_TRANSPORT_USB_ONLY    1  // GUI announced USB active — WiFi telemetry suppressed
+#define WIFI_DIAG_TRANSPORT_WIFI_ONLY   2  // GUI announced WiFi active
+
+typedef struct __attribute__((packed)) {
+    uint32_t esp_uptime_ms;
+    int8_t   rssi_dbm;              // WiFi.RSSI()
+    uint8_t  wifi_channel;
+    uint8_t  wifi_status;
+    uint8_t  tx_power_raw;
+    uint32_t free_heap;
+    uint32_t min_free_heap;
+    uint16_t loop_max_us;           // max loop() duration since last diag tick, then reset
+    uint16_t udp_send_max_us;       // max time inside a single UDPStream::write() since last diag tick, then reset
+    uint16_t wifi_reconnect_count;
+    uint16_t udp_send_fail_count;
+    uint8_t  build_variant_flags;   // WIFI_DIAG_FLAG_*
+    uint8_t  active_telem_transport;// WIFI_DIAG_TRANSPORT_*
+    // V2 additions — Teensy-link status, so the GUI can tell "ESP32 alive, Teensy
+    // silent" apart from "whole link down" (12 bytes)
+    uint8_t  teensy_link_up;        // (millis() - g_last_teensy_ms) < TEENSY_LINK_TIMEOUT_MS
+    uint8_t  reserved2;
+    uint16_t ms_since_teensy;       // ms since last Teensy packet (clamped 65535)
+    uint16_t uart_crc_drops;        // g_teensy.rx_drops()    (Teensy→ESP32 dir)
+    uint16_t uart_seq_gaps;         // g_teensy.rx_seq_gaps() (Teensy→ESP32 dir)
+    uint16_t uplink_queue_drops;    // g_uplink_drops
+    uint16_t tcp_send_max_us;       // max blocking TCP write since last diag tick, then reset
+} WifiDiagPayload;  // 38 bytes — WIFI_DIAG_PAYLOAD_V2
+
+#ifdef __cplusplus
+static_assert(sizeof(WifiDiagPayload) == 38, "WifiDiagPayload must be 38 bytes");
+#endif
+
 // ── Payload: command ──────────────────────────────────────────────────────────
 #define CMD_PAYLOAD_V1  1
 
@@ -359,6 +438,9 @@ typedef struct __attribute__((packed)) {
 #define CMD_ID_HIP        0x05  // payload: uint8_t motor_id, uint8_t sub_cmd [, 5×float]
 #define CMD_ID_REBOOT     0x06  // payload: none — triggers a full MCU reset (reruns setup())
 #define CMD_ID_WHEEL      0x07  // payload: uint8_t sub_cmd [, data]
+#define CMD_ID_SET_TELEM_TRANSPORT 0x08  // PC→ESP32 only (intercepted, never forwarded to Teensy):
+                                          // payload: uint8_t suppress_wifi (0=send WiFi telemetry
+                                          // when connected [default], 1=suppress — GUI is on USB)
 
 // Wheel sub-commands (CMD_ID_WHEEL payload byte 1)
 #define WHEEL_SUB_SET_MODE     0x01  // payload: uint8_t mode (WheelMode)
