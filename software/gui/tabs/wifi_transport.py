@@ -68,6 +68,16 @@ class WifiTransport(QThread):
                 self._next_connect_time = time.monotonic() + min(5.0, 0.5 * 2 ** self._fail_count)
                 self._fail_count += 1
 
+    def force_reconnect(self):
+        """Close the TCP command socket now so the next send() reopens a fresh
+        connection — used by automation scenarios to reproduce the
+        '[TCP] client:'-accept-adjacent crash pattern (repeated connect/
+        disconnect churn) without touching the UDP telemetry listener."""
+        with self._tcp_lock:
+            self._close_tcp()
+            self._fail_count        = 0
+            self._next_connect_time = 0.0
+
     # ── Background thread ─────────────────────────────────────────────────────
 
     def run(self):

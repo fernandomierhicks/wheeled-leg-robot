@@ -35,6 +35,7 @@ from tabs.wheel_motors import WheelMotorsTab
 from tabs.controllers_tab import ControllersTab
 from tabs.log_playback import LogsTab, LogPlaybackController
 from tabs.log_transfer import LogTransferManager
+from tabs.wifi_diag_tab import WifiDiagTab
 from tabs.telemetry_bus import TelemetryBus
 from tabs.source_manager import SourceManager, TRANSPORT_LABEL
 from tabs.comm_commands import (
@@ -1189,6 +1190,7 @@ class MainWindow(QMainWindow):
             ("Wheel Motors",    WheelMotorsTab()),
             ("Controllers",     ControllersTab()),
             ("Radio",           RadioTab()),
+            ("WiFi",            WifiDiagTab()),
             ("Logs",            LogsTab()),
             ("Flash & Monitor", FlashMonitorTab()),
         ]
@@ -1457,6 +1459,13 @@ class MainWindow(QMainWindow):
 # ── Entry ─────────────────────────────────────────────────────────────────────
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--automation", type=str, default=None,
+                     help="Path to a JSON automation scenario (see tabs/automation_runner.py) "
+                          "— runs the scenario unattended against the real GUI and exits.")
+    args, _ = ap.parse_known_args()
+
     _kill_other_instances()
 
     if sys.platform == "win32":
@@ -1471,6 +1480,14 @@ def main():
     win = MainWindow()
     win.setWindowIcon(QIcon(_ICON_PATH))
     win.show()
+
+    if args.automation:
+        from tabs.automation_runner import AutomationRunner
+        # Held as a window attribute — a bare signal/timer connection does not
+        # keep a parentless QObject alive in PyQt6 (bit us before, see
+        # ReliableCommand's _in_flight set, UARTplat.md Phase 5).
+        win._automation_runner = AutomationRunner(args.automation, app)
+
     sys.exit(app.exec())
 
 if __name__ == "__main__":
