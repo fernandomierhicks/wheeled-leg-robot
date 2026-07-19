@@ -70,7 +70,6 @@ firmware/robot_teensy/
 │       ├── HipMotors/        ← AK45-10 MIT Cheetah CAN driver (CAN2)
 │       ├── WheelMotors/      ← ODrive CAN driver (CAN3)
 │       ├── IMU/              ← BNO086 SPI driver
-│       ├── Esp32Link/        ← UART link to ESP32 (CommLink)
 │       ├── LED/              ← Non-blocking RGB LED
 │       ├── Buzzer/           ← Non-blocking passive buzzer
 │       ├── CommLink/         ← Framed UART protocol (shared with ESP32)
@@ -188,15 +187,28 @@ Mirror `_FAULT_NAMES` / `_FAULT_DESCRIPTIONS` in `software/gui/flash_monitor.py`
 
 ```
 Teensy main.cpp  send_telemetry()
-    │  packs RobotState + sensor data into TelemetryPayload (235 bytes, see comm_protocol.h)
-    │  splits into TELEM_A (118 bytes, offset 0) + TELEM_B (117 bytes, offset 118)
+    │  packs RobotState + sensor data into TelemetryPayload (242 bytes, TELEM_VERSION 9,
+    │  see comm_protocol.h) — includes ESP32<->Teensy link-supervision fields (esp32_link_ok,
+    │  esp32_status_age_ms, uart_rx_drops, uart_seq_gaps)
+    │  splits into TELEM_A (118 bytes, offset 0) + TELEM_B (124 bytes, offset 118)
     │  sends both framed packets via CommLink at 50 Hz
     ▼
-ESP32 on_teensy_packet()
+ESP32 on_teensy_packet()  (core 1, inside g_teensy.update()'s parse loop)
     │  version-checks TELEM_VERSION (mismatch → logged, packet dropped)
     │  copies fields into volatile g_telem_* globals
-    │  forwards raw frame over USB serial (CP2102) and WiFi UDP
+    │  enqueues the raw frame for uplink_task — never sends inline here (a blocking
+    │  USB/TCP/UDP send in this parse loop was the root cause of intermittent
+    │  NO TEENSY under WiFi load; see git log for "ESP32 Phase 1")
     ▼
+ESP32 uplink_task  (core 0 — the only writer to Serial/TCP/UDP)
+    forwards over USB serial (CP2102) and WiFi UDP/TCP as appropriate
+
+Independently, the ESP32 sends its own COMM_TYPE_ESP32_STATUS heartbeat to the
+Teensy at 5 Hz (ESP32<->Teensy link supervision, telemetry-only), and its own
+WIFI_DIAG (WifiDiagPayload V2, 38 bytes) to the GUI at 5 Hz — both keep flowing
+even if the other side of the link goes quiet, so the GUI can tell "ESP32
+alive, Teensy silent" apart from "everything down".
+
 Python GUI  flash_monitor.py  PacketDecoder._parse()
     │  decodes with _FMT_TELEM_A / _FMT_TELEM_B (struct.calcsize asserted at import)
     │  emits dict via TelemetryBus.instance().packet signal
@@ -208,6 +220,9 @@ Params (GUI → Teensy):
     GUI sends CMD_ID_PARAM_SET frames → CommLink → param_registry.cpp
     Teensy replies with PARAM_REPORT packets (min/max/flags/name per param)
     GUI renders controls from PARAM_REPORT — no hardcoded layout needed
+    Mode/param/reboot commands are retried by the GUI (ReliableCommand,
+    tabs/comm_commands.py) against an observed telemetry effect — no protocol
+    change, no firmware-side ACK.
 ```
 
 **Propagation checklist** when adding/removing telemetry fields: see the `PROPAGATION CHECKLIST` comment in `shared/comm_protocol.h`.
