@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 
-from .comm_commands import send_param_get_all, send_param_reset_defaults, send_param_set
+from .comm_commands import send_param_get_all, send_param_reset_defaults, send_param_set, send_reliable
 from .telemetry_bus import TelemetryBus
 from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
 
@@ -434,7 +434,15 @@ class _ParamRow(QWidget):
             val = float(self._edit.text())
         except ValueError:
             return
-        send_param_set(self._id, val)
+        pid = self._id
+        # Confirmed by a PARAM_REPORT echo for this id — any value, since the
+        # firmware clamps out-of-range writes rather than rejecting them
+        # (UARTplat.md Phase 5).
+        send_reliable(
+            lambda: send_param_set(pid, val),
+            confirm_predicate=lambda info: info.get("ptype") == 0x06 and info.get("param_id") == pid,
+            label=f"PARAM_SET {self._name}",
+        )
         self._flash_timer.stop()
         self._edit.setStyleSheet(_EDIT_STYLE_PENDING)
         self._flash_timer.start(2500)

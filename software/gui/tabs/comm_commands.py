@@ -5,6 +5,8 @@ Teensy serial port. Used by any tab that needs to send commands (mode
 changes, hip motor commands, ...).
 """
 
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+
 from .port_manager import SerialPortManager
 from .telem_format import crc8
 
@@ -22,6 +24,7 @@ CMD_ID_PING      = 0x02
 CMD_ID_HIP       = 0x05
 CMD_ID_REBOOT    = 0x06
 CMD_ID_WHEEL     = 0x07
+CMD_ID_SET_TELEM_TRANSPORT = 0x08
 CMD_ID_PARAM_SET = 0x10
 CMD_ID_PARAM_GET = 0x11
 CMD_ID_LOG       = 0x12
@@ -46,10 +49,11 @@ WHEEL_MODE_POSITION = 2
 WHEEL_MODE_TORQUE   = 3
 
 # Robot state IDs (robot_state.h RobotStateEnum)
-STATE_STARTUP = 0
-STATE_STANDBY = 2
-STATE_ESTOP   = 4
-STATE_MANUAL  = 5
+STATE_STARTUP    = 0
+STATE_STANDBY    = 2
+STATE_ESTOP      = 4
+STATE_MANUAL     = 5
+STATE_CMD_REJECT = 6
 
 _seq = [0]  # rolling Tx sequence counter
 
@@ -102,12 +106,6 @@ def send_ping():
     MANUAL and idles the wheels. Sent at 10 Hz by MainWindow."""
     import struct
     send_frame(build_frame(struct.pack("<B", CMD_ID_PING)))
-
-
-def send_soft_clear():
-    """Send soft-clear: ESTOP → STANDBY directly for SOFT severity faults.
-    Firmware ignores this if the current fault is not SOFT severity."""
-    send_set_mode(STATE_STANDBY)
 
 
 def send_reboot():
@@ -183,7 +181,138 @@ def send_log_get(file_index: int, start_chunk: int = 0):
     send_frame(build_frame(struct.pack("<BBHI", CMD_ID_LOG, LOG_SUB_GET, file_index, start_chunk)))
 
 
+def send_set_telem_transport(suppress: bool):
+    """Send CMD_ID_SET_TELEM_TRANSPORT — tells the ESP32 which link the GUI is
+    reading, so it can suppress WiFi UDP telemetry sends while USB is active
+    (only takes effect when the ESP32 is built with WIFI_TRANSPORT_GATING=1).
+    No-op when the active source is "teensy" or unset — the ESP32 isn't part
+    of that path anyway."""
+    import struct
+    send_frame(build_frame(struct.pack("<BB", CMD_ID_SET_TELEM_TRANSPORT, 1 if suppress else 0)))
+
+
 def send_log_delete(file_index: int):
     """Send CMD_ID_LOG / LOG_SUB_DELETE — erases one .wlog file."""
     import struct
     send_frame(build_frame(struct.pack("<BBH", CMD_ID_LOG, LOG_SUB_DELETE, file_index)))
+
+
+# ── Command reliability (effect-confirmed retry, UARTplat.md Phase 5) ────────
+#
+# Design choice: effect-confirmed retry at the GUI layer, no wire-protocol
+# change. A transport-level ACK was considered and rejected: the ESP32
+# re-stamps `seq` when forwarding commands to the Teensy (forward_to_teensy,
+# esp32/src/main.cpp), so GUI seq numbers don't survive the hop, and every
+# discrete command already has an observable confirmation in telemetry. This
+# keeps all three ends untouched at the protocol level.
+#
+# Excluded on purpose (never wrapped in send_reliable): CMD_ID_PING and
+# streamed setpoints (HIP_SUB_MIT, WHEEL_SUB_SEND) — superseded by the next
+# frame by design, so "confirming" one is meaningless.
+
+
+class CommandAlertBus(QObject):
+    """Singleton: ReliableCommand emits here on final failure/rejection.
+    MainWindow connects this once to the status-bar link-alert banner (the
+    same one LinkHealthWidget uses) so every caller gets a visible failure
+    with no per-tab wiring required."""
+
+    alert = pyqtSignal(str)   # one-line message
+
+    _instance: "CommandAlertBus | None" = None
+
+    @classmethod
+    def instance(cls) -> "CommandAlertBus":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+
+class ReliableCommand(QObject):
+    """Sends immediately, then retries on a timeout until confirm_predicate
+    matches an incoming TelemetryBus packet or `retries` is exhausted. If
+    reject_predicate matches first, stops immediately (no more retries) —
+    the firmware told us "no", resending won't change that.
+
+    Fire-and-forget: callers normally don't keep the returned instance, so
+    it holds itself in `_in_flight` from construction until it finishes —
+    a PyQt signal connection alone does *not* keep a plain QObject alive
+    (verified: without this, the instance was garbage-collected before its
+    own retry timer ever fired, silently disabling retries entirely). Only
+    `_finish()` removes it, making it eligible for GC.
+    """
+
+    _in_flight: set["ReliableCommand"] = set()
+
+    def __init__(self, send_fn, confirm_predicate, retries: int = 3, timeout_ms: int = 250,
+                 on_fail=None, reject_predicate=None, label: str = "Command"):
+        super().__init__()
+        self._send_fn      = send_fn
+        self._confirm       = confirm_predicate
+        self._reject        = reject_predicate
+        self._retries_left  = retries
+        self._timeout_ms    = timeout_ms
+        self._on_fail       = on_fail
+        self._label         = label
+        self._done          = False
+
+        ReliableCommand._in_flight.add(self)
+
+        from .telemetry_bus import TelemetryBus
+        self._bus = TelemetryBus.instance()
+        self._bus.packet.connect(self._on_packet)
+
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._on_timeout)
+
+        self._send_fn()
+        self._timer.start(self._timeout_ms)
+
+    def cancel(self):
+        """Stop retrying/listening without reporting a failure."""
+        self._finish()
+
+    def _finish(self):
+        if self._done:
+            return
+        self._done = True
+        self._timer.stop()
+        self._bus.packet.disconnect(self._on_packet)
+        ReliableCommand._in_flight.discard(self)
+
+    def _fail(self, message: str):
+        self._finish()
+        if self._on_fail is not None:
+            self._on_fail(message)
+        else:
+            CommandAlertBus.instance().alert.emit(message)
+
+    def _on_packet(self, info: dict):
+        if self._done:
+            return
+        if self._reject is not None and self._reject(info):
+            self._fail(f"{self._label} rejected by firmware")
+            return
+        if self._confirm(info):
+            self._finish()
+
+    def _on_timeout(self):
+        if self._done:
+            return
+        if self._retries_left > 0:
+            self._retries_left -= 1
+            self._send_fn()
+            self._timer.start(self._timeout_ms)
+        else:
+            self._fail(f"{self._label} not confirmed after 3 retries — link degraded?")
+
+
+def send_reliable(send_fn, confirm_predicate, retries: int = 3, timeout_ms: int = 250,
+                   on_fail=None, reject_predicate=None, label: str = "Command") -> ReliableCommand:
+    """Fire send_fn now; retry up to `retries` times, `timeout_ms` apart,
+    until confirm_predicate(packet) matches a TelemetryBus packet. See
+    ReliableCommand for the full contract. Returns the tracker instance —
+    only needed if the caller wants to `.cancel()` it early."""
+    return ReliableCommand(send_fn, confirm_predicate, retries=retries, timeout_ms=timeout_ms,
+                            on_fail=on_fail, reject_predicate=reject_predicate, label=label)

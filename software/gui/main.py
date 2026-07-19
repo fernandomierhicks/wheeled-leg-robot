@@ -37,7 +37,10 @@ from tabs.log_playback import LogsTab, LogPlaybackController
 from tabs.log_transfer import LogTransferManager
 from tabs.telemetry_bus import TelemetryBus
 from tabs.source_manager import SourceManager, TRANSPORT_LABEL
-from tabs.comm_commands import send_set_mode, send_reboot, send_soft_clear, STATE_STARTUP, STATE_STANDBY, STATE_ESTOP
+from tabs.comm_commands import (
+    send_set_mode, send_reboot, send_reliable, CommandAlertBus,
+    STATE_STARTUP, STATE_STANDBY, STATE_ESTOP, STATE_CMD_REJECT,
+)
 
 _BG = "#0b0b18"
 
@@ -452,6 +455,18 @@ class DashboardTab(QWidget):
         outer.addLayout(top)
         outer.addStretch(1)
 
+def _send_set_mode_reliable(target: int, label: str):
+    """SET_MODE via ReliableCommand: confirmed once telemetry's robot_state
+    reaches `target`, or reported (not retried) if the state machine bounces
+    it to STATE_CMD_REJECT instead. See UARTplat.md Phase 5."""
+    send_reliable(
+        lambda: send_set_mode(target),
+        confirm_predicate=lambda info: info.get("robot_state") == target,
+        reject_predicate=lambda info: info.get("robot_state") == STATE_CMD_REJECT,
+        label=label,
+    )
+
+
 # ── Fault severity (mirrors comm_protocol.h fault_severity()) ─────────────────
 _FAULT_SEVERITY = {
     0x06: "SOFT",        # HUMAN_ESTOP
@@ -768,7 +783,7 @@ class StatusBar:
             f"QPushButton:hover{{background:#ff6e60}}"
             f"QPushButton:pressed{{background:#b2362a}}"
         )
-        self._btn_estop.clicked.connect(lambda: send_set_mode(STATE_ESTOP))
+        self._btn_estop.clicked.connect(lambda: _send_set_mode_reliable(STATE_ESTOP, "ESTOP"))
 
         self._btn_reset = QPushButton("Reset")
         self._btn_reset.setEnabled(False)
@@ -838,7 +853,7 @@ class StatusBar:
             return
         severity = _FAULT_SEVERITY.get(self._current_fault_code, "REBOOT")
         if severity == "SOFT":
-            send_soft_clear()
+            _send_set_mode_reliable(STATE_STANDBY, "Clear ESTOP")
         elif severity in ("REPOSITION", "RECALIBRATE"):
             extra = ("\n\nYou will need to re-trigger calibration (CH5 or GUI) after reset."
                      if severity == "RECALIBRATE" else "")
@@ -849,7 +864,7 @@ class StatusBar:
                 QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
-                send_set_mode(STATE_STARTUP)
+                _send_set_mode_reliable(STATE_STARTUP, "Reset")
         elif severity == "GUI_FIX":
             reply = QMessageBox.question(
                 None, "Fix Parameter First",
@@ -859,7 +874,7 @@ class StatusBar:
                 QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
-                send_set_mode(STATE_STARTUP)
+                _send_set_mode_reliable(STATE_STARTUP, "Reset")
         # REBOOT: button is disabled; should not be reached
 
     def _on_reboot_clicked(self):
@@ -871,7 +886,13 @@ class StatusBar:
             QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            send_reboot()
+            # Confirmed by loop_count resetting after a fresh boot (UARTplat.md
+            # Phase 5) — a real reset always restarts it near 0.
+            send_reliable(
+                send_reboot,
+                confirm_predicate=lambda info: info.get("loop_count", 10**9) < 500,
+                label="Reboot",
+            )
 
     def _on_source_clicked(self):
         from tabs.source_manager import SourceManager, PRIORITY
@@ -1156,6 +1177,7 @@ class MainWindow(QMainWindow):
 
         dashboard_tab = DashboardTab()
         dashboard_tab.link_health.alert.connect(self.status.set_link_alert)
+        CommandAlertBus.instance().alert.connect(self.status.set_link_alert)
 
         tab_defs = [
             ("Visualizer",      RobotVisualizerTab()),
