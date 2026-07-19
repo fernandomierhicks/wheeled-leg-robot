@@ -38,7 +38,7 @@ _GROUP_NAMES = {
     0x04: "Control",
     0x05: "Command",
     0x06: "RC Receiver (iBus)",
-    0x07: "Safety / Watchdogs",
+    0x07: "Safety / Watchdog / Bypass",
 }
 _GROUP_COLORS = {
     0x00: "#888888",
@@ -51,14 +51,16 @@ _GROUP_COLORS = {
     0x07: RED,
 }
 
-# Watchdog params live natively in System/Wheel/Control (param_ids.h) but are
-# pulled into their own top-level "Safety / Watchdogs" group here since they're
-# reviewed together regardless of which subsystem they guard.
+# Watchdog/bypass params live natively in System/Wheel/Control/Calibration
+# (param_ids.h) but are pulled into their own top-level "Safety / Watchdog /
+# Bypass" group here since they're reviewed together regardless of which
+# subsystem they guard.
 _GROUP_SAFETY = 0x07
 _WATCHDOG_PARAM_IDS = frozenset({
     0x0009,  # PARAM_WATCHDOG_ENABLE (hardware WDOG1)
     0x0300,  # PARAM_WM_ENC_TIMEOUT_MS (wheel encoder feedback watchdog)
     0x0423,  # PARAM_PITCH_WATCHDOG_ENABLE
+    0x0113,  # PARAM_CALIB_BYPASS_EN (skip hardstop-calibration requirement for RUNNING)
 })
 
 
@@ -73,6 +75,8 @@ def _effective_group(param_id: int) -> int:
 # (0x0401) is interleaved inside the LQR Core id block (param_ids.h), so both
 # use explicit id sets instead of a range.
 _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
+    (frozenset({0x010A}), 0x01, "Left"),   # calib_l_seek_dir
+    (frozenset({0x010B}), 0x01, "Right"),  # calib_r_seek_dir
     (frozenset({0x0400, 0x0402, 0x0403}), 0x04, "LQR Core"),
     (range(0x0424, 0x0429), 0x04, "LQR Gains"),
     (range(0x0404, 0x040C), 0x04, "Velocity PI"),
@@ -85,6 +89,8 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
 ]
 
 _SUBGROUP_COLORS: dict[str, str] = {
+    "Left":           "#66aaff",
+    "Right":          "#3377cc",
     "LQR Core":       "#dd99ff",
     "LQR Gains":      "#ee88ff",
     "Velocity PI":    "#bb77ee",
@@ -189,6 +195,8 @@ _PARAM_DEFS: dict[int, tuple[str, str]] = {
     0x0112: ("calib_rampdown_s", "Seconds to ramp kp/kd from hold values down to zero before "
              "calibration_done() fires, so exiting CALIBRATION never yanks torque to zero in "
              "one tick. 0 = no ramp."),
+    0x0113: ("calib_bypass_en", "1 = allow RUNNING mode without a completed hardstop calibration "
+             "(hip position limits unenforced — bench-test only). Persisted; default 0."),
 
     # GROUP_WHEEL
     0x0300: ("wm_enc_timeout_ms", "Wheel encoder feedback watchdog timeout [ms]; increase if CAN "
