@@ -11,6 +11,7 @@ Command path:   When a UDP packet arrives the sender IP is recorded.
 
 import socket
 import threading
+import time
 
 from PyQt6.QtCore import QThread
 
@@ -34,6 +35,12 @@ class WifiTransport(QThread):
         self._tcp_sock:   socket.socket | None = None
         self._tcp_lock    = threading.Lock()
         self._connected   = False
+        # Reconnect backoff (Phase 4, UARTplat.md): a dead ESP32 used to get a
+        # fresh connect() attempt on every send() call (up to 10 Hz from the GUI
+        # ping), each blocking up to the 1 s socket timeout. Skip attempts until
+        # _next_connect_time; reset on a successful send or a fresh ESP32 contact.
+        self._fail_count      = 0
+        self._next_connect_time = 0.0
 
         # PacketDecoder is created lazily in run() so it lives on the right thread
         self._decoder = None
@@ -47,12 +54,19 @@ class WifiTransport(QThread):
         with self._tcp_lock:
             try:
                 if self._tcp_sock is None:
+                    if time.monotonic() < self._next_connect_time:
+                        return  # backing off after a recent failed connect
                     self._tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     self._tcp_sock.settimeout(1.0)
+                    self._tcp_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    self._tcp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
                     self._tcp_sock.connect((self._esp_ip, TCP_PORT))
                 self._tcp_sock.sendall(frame)
+                self._fail_count = 0
             except Exception:
                 self._close_tcp()
+                self._next_connect_time = time.monotonic() + min(5.0, 0.5 * 2 ** self._fail_count)
+                self._fail_count += 1
 
     # ── Background thread ─────────────────────────────────────────────────────
 
@@ -65,6 +79,7 @@ class WifiTransport(QThread):
 
         udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        udp.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)  # ~1 MB: survive GUI stalls/bursts
         udp.settimeout(TIMEOUT_S)
         try:
             udp.bind(("", UDP_PORT))
@@ -93,6 +108,8 @@ class WifiTransport(QThread):
                 self._esp_ip = src_ip
                 with self._tcp_lock:
                     self._close_tcp()   # reset TCP so it reconnects to new IP
+                    self._fail_count        = 0
+                    self._next_connect_time = 0.0
                 if not self._connected:
                     self._connected = True
                     sm._on_opened("wifi")

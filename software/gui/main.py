@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 import psutil
 from collections import deque
 
@@ -16,9 +17,9 @@ def _kill_other_instances():
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QSplitter, QWidget,
-    QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame, QMessageBox, QMenu,
+    QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QMessageBox, QMenu,
 )
-from PyQt6.QtCore import Qt, QTimer, QSettings
+from PyQt6.QtCore import Qt, QTimer, QSettings, pyqtSignal
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QAction, QIcon
 
 from tabs.theme import APP_STYLE, BORDER, TEXT, DIM, GREEN, ORANGE, RED, BLUE, YELLOW, WHITE
@@ -196,6 +197,228 @@ class TofMiniWidget(QWidget):
                 )
 
 
+# ── Link health mini widget (UARTplat.md Phase 4, §5.2) ───────────────────────
+# Thresholds kept in one place so they're easy to retune without hunting
+# through the widget body.
+_LINK_WINDOW_S           = 10.0  # "any increase" / count-based checks look back this far
+_LINK_GAP_RATE_WINDOW_S  = 5.0   # GUI-side seq-gap RATE check window
+_LINK_ESP32_HB_MAX_MS    = 1000
+_LINK_UDP_FAIL_MAX       = 5     # max allowed growth over _LINK_WINDOW_S
+_LINK_SEND_MAX_US        = 20000
+_LINK_RSSI_MIN_DBM       = -75
+_LINK_GAP_RATE_MAX       = 5.0   # gaps/s, over _LINK_GAP_RATE_WINDOW_S
+
+
+class _WindowedCounter:
+    """Tracks a monotonically-increasing counter over a trailing window and
+    reports how much it grew (delta) and its average per-second rate — the
+    two shapes every threshold in the table below needs."""
+
+    def __init__(self, window_s: float):
+        self._window_s = window_s
+        self._samples: deque[tuple[float, int]] = deque()
+
+    def update(self, value: int) -> tuple[int, float]:
+        now = time.monotonic()
+        self._samples.append((now, value))
+        while len(self._samples) > 1 and now - self._samples[0][0] > self._window_s:
+            self._samples.popleft()
+        t0, v0 = self._samples[0]
+        elapsed = now - t0
+        delta = value - v0
+        rate = delta / elapsed if elapsed > 0 else 0.0
+        return delta, rate
+
+
+class LinkHealthWidget(QWidget):
+    """Dashboard "Link" panel: UART/WiFi link health at a glance, with
+    degradation alerts surfaced via the `alert` signal (one line, "" to clear).
+    Fed by both TELEM (v9) and WIFI_DIAG (v2) packets on TelemetryBus;
+    display refreshes at 1 Hz. See UARTplat.md Phase 4, §5.2."""
+
+    alert = pyqtSignal(str)
+
+    _ROWS = [
+        ("uart_te",     "UART T→E"),
+        ("uart_et",     "UART E→T"),
+        ("esp32_hb",    "ESP32 hb age"),
+        ("teensy_link", "Teensy link"),
+        ("uplink_q",    "Uplink drops"),
+        ("udp_fail",    "UDP fails"),
+        ("send_max",    "Send max"),
+        ("gui_link",    "GUI link"),
+        ("rssi",        "RSSI"),
+    ]
+
+    def __init__(self):
+        super().__init__()
+        self.setMaximumWidth(260)
+
+        self._t_uart_te_crc = _WindowedCounter(_LINK_WINDOW_S)
+        self._t_uart_te_gap = _WindowedCounter(_LINK_WINDOW_S)
+        self._t_uart_et_rx  = _WindowedCounter(_LINK_WINDOW_S)
+        self._t_uart_et_seq = _WindowedCounter(_LINK_WINDOW_S)
+        self._t_uplink_q    = _WindowedCounter(_LINK_WINDOW_S)
+        self._t_udp_fail    = _WindowedCounter(_LINK_WINDOW_S)
+        self._t_gui_crc     = _WindowedCounter(_LINK_WINDOW_S)
+        self._t_gui_gap     = _WindowedCounter(_LINK_GAP_RATE_WINDOW_S)
+
+        self._latest: dict = {}
+        self._last_alert_message = ""
+
+        lbl_title = QLabel("Link Health")
+        lbl_title.setStyleSheet(f"color: {DIM}; font-size: 11px; font-weight: bold;")
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(3)
+        self._value_lbls: dict[str, QLabel] = {}
+        for row, (key, name) in enumerate(self._ROWS):
+            k = QLabel(name)
+            k.setStyleSheet(f"color: {DIM}; font-size: 10px;")
+            v = QLabel("—")
+            v.setStyleSheet(f"color: {TEXT}; font-size: 10px; font-family: Consolas;")
+            v.setAlignment(Qt.AlignmentFlag.AlignRight)
+            grid.addWidget(k, row, 0)
+            grid.addWidget(v, row, 1)
+            self._value_lbls[key] = v
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 4)
+        lay.setSpacing(4)
+        lay.addWidget(lbl_title)
+        lay.addLayout(grid)
+        lay.addStretch(1)
+
+        TelemetryBus.instance().packet.connect(self._on_packet)
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setInterval(1000)
+        self._refresh_timer.timeout.connect(self._refresh)
+        self._refresh_timer.start()
+
+    def _on_packet(self, info: dict):
+        # Merge every packet's fields into the latest-known state — TELEM and
+        # WIFI_DIAG carry disjoint keys, so later packets never clobber the
+        # other type's fields with missing/None.
+        self._latest.update({k: v for k, v in info.items() if v is not None})
+
+    def _set(self, key: str, text: str, bad: bool):
+        lbl = self._value_lbls[key]
+        lbl.setText(text)
+        weight = "font-weight: bold;" if bad else ""
+        lbl.setStyleSheet(
+            f"color: {RED if bad else TEXT}; font-size: 10px; font-family: Consolas; {weight}"
+        )
+
+    def _refresh(self):
+        f = self._latest
+        problems: list[str] = []
+
+        crc = f.get("wifi_uart_crc_drops")
+        gap = f.get("wifi_uart_seq_gaps")
+        if crc is not None and gap is not None:
+            d_crc, _ = self._t_uart_te_crc.update(crc)
+            d_gap, _ = self._t_uart_te_gap.update(gap)
+            bad = d_crc > 0 or d_gap > 0
+            self._set("uart_te", f"crc {crc}  gap {gap}", bad)
+            if bad:
+                problems.append("UART T→E drops")
+        else:
+            self._set("uart_te", "—", False)
+
+        rx  = f.get("uart_rx_drops")
+        seq = f.get("uart_seq_gaps")
+        if rx is not None and seq is not None:
+            d_rx, _  = self._t_uart_et_rx.update(rx)
+            d_seq, _ = self._t_uart_et_seq.update(seq)
+            bad = d_rx > 0 or d_seq > 0
+            self._set("uart_et", f"crc {rx}  gap {seq}", bad)
+            if bad:
+                problems.append("UART E→T drops")
+        else:
+            self._set("uart_et", "—", False)
+
+        age = f.get("esp32_status_age_ms")
+        if age is not None:
+            bad = age > _LINK_ESP32_HB_MAX_MS
+            self._set("esp32_hb", f"{age} ms", bad)
+            if bad:
+                problems.append("ESP32 heartbeat stale")
+        else:
+            self._set("esp32_hb", "—", False)
+
+        up    = f.get("wifi_teensy_link_up")
+        since = f.get("wifi_ms_since_teensy")
+        if up is not None:
+            bad = not up
+            txt = "UP" if up else "DOWN"
+            if since is not None:
+                txt += f" ({since} ms)"
+            self._set("teensy_link", txt, bad)
+            if bad:
+                problems.append("Teensy link down (ESP32 view)")
+        else:
+            self._set("teensy_link", "—", False)
+
+        uq = f.get("wifi_uplink_queue_drops")
+        if uq is not None:
+            d_uq, _ = self._t_uplink_q.update(uq)
+            bad = d_uq > 0
+            self._set("uplink_q", str(uq), bad)
+            if bad:
+                problems.append("Uplink queue drops")
+        else:
+            self._set("uplink_q", "—", False)
+
+        uf = f.get("wifi_udp_send_fail_count")
+        if uf is not None:
+            d_uf, _ = self._t_udp_fail.update(uf)
+            bad = d_uf > _LINK_UDP_FAIL_MAX
+            self._set("udp_fail", str(uf), bad)
+            if bad:
+                problems.append("UDP send failures rising")
+        else:
+            self._set("udp_fail", "—", False)
+
+        tcp_us = f.get("wifi_tcp_send_max_us")
+        udp_us = f.get("wifi_udp_send_max_us")
+        if tcp_us is not None or udp_us is not None:
+            worst = max(tcp_us or 0, udp_us or 0)
+            bad = worst > _LINK_SEND_MAX_US
+            self._set("send_max", f"{worst} us", bad)
+            if bad:
+                problems.append("TCP/UDP send blocking")
+        else:
+            self._set("send_max", "—", False)
+
+        gcrc  = f.get("link_crc_drops")
+        ggap  = f.get("link_seq_gaps")
+        gpair = f.get("link_pair_drops")
+        if gcrc is not None:
+            d_crc, _    = self._t_gui_crc.update(gcrc)
+            _, gap_rate = self._t_gui_gap.update(ggap or 0)
+            bad = d_crc > 0 or gap_rate > _LINK_GAP_RATE_MAX
+            self._set("gui_link", f"crc {gcrc}  gap {ggap}  pair {gpair}", bad)
+            if bad:
+                problems.append("GUI-side decode errors")
+        else:
+            self._set("gui_link", "—", False)
+
+        rssi = f.get("wifi_rssi_dbm")
+        if rssi is not None:
+            bad = rssi < _LINK_RSSI_MIN_DBM
+            self._set("rssi", f"{rssi} dBm", bad)
+            if bad:
+                problems.append("Weak WiFi signal")
+        else:
+            self._set("rssi", "—", False)
+
+        message = f"LINK DEGRADED: {', '.join(problems)}" if problems else ""
+        if message != self._last_alert_message:
+            self._last_alert_message = message
+            self.alert.emit(message)
+
+
 # ── Placeholder tabs ──────────────────────────────────────────────────────────
 
 class _PlaceholderTab(QWidget):
@@ -213,6 +436,7 @@ class DashboardTab(QWidget):
         imu      = ImuMiniWidget()
         test_val = TestValMiniWidget()
         tof      = TofMiniWidget()
+        self.link_health = LinkHealthWidget()
 
         top = QHBoxLayout()
         top.setContentsMargins(8, 8, 0, 0)
@@ -220,6 +444,7 @@ class DashboardTab(QWidget):
         top.addWidget(imu)
         top.addWidget(test_val)
         top.addWidget(tof)
+        top.addWidget(self.link_health)
         top.addStretch(7)
 
         outer = QVBoxLayout(self)
@@ -584,9 +809,20 @@ class StatusBar:
         )
         self._mismatch_lbl.setVisible(False)
 
+        # Link-degradation banner (UARTplat.md Phase 4, §5.2) — same visual
+        # pattern as the firmware-mismatch banner above, driven by
+        # LinkHealthWidget.alert instead of a version check.
+        self._link_alert_lbl = QLabel("")
+        self._link_alert_lbl.setStyleSheet(
+            f"color: white; background: {ORANGE}; font-weight: bold;"
+            f" padding: 2px 10px; border-radius: 3px;"
+        )
+        self._link_alert_lbl.setVisible(False)
+
         self._log_controls = LogMiniControls()
 
         sb.addPermanentWidget(self._mismatch_lbl)
+        sb.addPermanentWidget(self._link_alert_lbl)
         sb.addPermanentWidget(_vsep())
         sb.addPermanentWidget(self._log_controls)
         sb.addPermanentWidget(_vsep())
@@ -755,16 +991,32 @@ class StatusBar:
         self._profile.setStyleSheet(f"color: {color}; font-family: Consolas; font-weight: bold;")
         self._profile.setText(label)
 
-    def set_connected(self, connected: bool):
-        if connected:
+    def set_link_state(self, state: str, tooltip: str = ""):
+        """state: 'connected' | 'esp32_only' | 'disconnected' (UARTplat.md Phase 4, §5.1)."""
+        if state == "connected":
             self._conn.setStyleSheet(f"color: {GREEN};")
             self._conn.setText("● Connected")
+            self._conn.setToolTip("")
+        elif state == "esp32_only":
+            self._conn.setStyleSheet(f"color: {ORANGE}; font-weight: bold;")
+            self._conn.setText("● ESP32 ONLY — NO TEENSY")
+            self._conn.setToolTip(tooltip)
+            self._batt.set_connected(False)
+            self._radio.set_connected(False)
         else:
             self._conn.setStyleSheet(f"color: {RED};")
             self._conn.setText("● Disconnected")
+            self._conn.setToolTip("")
             self._mismatch_lbl.setVisible(False)
             self._batt.set_connected(False)
             self._radio.set_connected(False)
+
+    def set_link_alert(self, message: str):
+        if message:
+            self._link_alert_lbl.setText(message)
+            self._link_alert_lbl.setVisible(True)
+        else:
+            self._link_alert_lbl.setVisible(False)
 
     def set_version_mismatch(self, got: int, expected: int):
         self._mismatch_lbl.setText(
@@ -831,6 +1083,10 @@ class FloatingTabWindow(QMainWindow):
 # ── Main window ───────────────────────────────────────────────────────────────
 
 class MainWindow(QMainWindow):
+    # Tri-state header thresholds (UARTplat.md Phase 4, §5.1).
+    _TELEM_FRESH_MS     = 3000  # "Connected" — unchanged from the old disconnect timer
+    _WIFI_DIAG_FRESH_MS = 1500  # "ESP32 ONLY" — matches firmware TEENSY_LINK_TIMEOUT_MS
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Wheeled-Leg Robot")
@@ -842,10 +1098,21 @@ class MainWindow(QMainWindow):
         self.status = StatusBar(self.statusBar())
 
         self._last_ts_ms: float | None = None
-        self._disconnect_timer = QTimer(self)
-        self._disconnect_timer.setSingleShot(True)
-        self._disconnect_timer.setInterval(3000)
-        self._disconnect_timer.timeout.connect(lambda: self.status.set_connected(False))
+
+        # Tri-state connection header (UARTplat.md Phase 4, §5.1): telemetry
+        # and WIFI_DIAG go stale independently (WIFI_DIAG now flows from the
+        # ESP32 at 5 Hz whether or not the Teensy is talking to it — see
+        # Phase 1/3), so a single "any packet restarts a 3 s timer" clock
+        # can't tell "Teensy silent" apart from "fully disconnected". Instead,
+        # _on_packet() timestamps the two packet families separately and this
+        # timer re-evaluates the tri-state on a fixed cadence.
+        self._last_telem_ms:     float | None = None
+        self._last_wifi_diag_ms: float | None = None
+        self._last_wifi_diag_info: dict = {}
+        self._link_timer = QTimer(self)
+        self._link_timer.setInterval(250)
+        self._link_timer.timeout.connect(self._update_link_state)
+        self._link_timer.start()
 
         TelemetryBus.instance().packet.connect(self._on_packet)
 
@@ -887,9 +1154,12 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         self._central = central
 
+        dashboard_tab = DashboardTab()
+        dashboard_tab.link_health.alert.connect(self.status.set_link_alert)
+
         tab_defs = [
             ("Visualizer",      RobotVisualizerTab()),
-            ("Dashboard",       DashboardTab()),
+            ("Dashboard",       dashboard_tab),
             ("IMU",             ImuTab()),
             ("Raw Data",        RawDataTab()),
             ("Hip Motors",      HipMotorsTab()),
@@ -1085,19 +1355,42 @@ class MainWindow(QMainWindow):
             self._reorder_pane_tabs(self._right_pane, _as_list(settings.value("layout/right_tabs")))
 
     def _on_source_changed(self, device: str):
+        # A source change means we're now looking at a different device's
+        # stream — any freshness state from the previous one is irrelevant,
+        # so the tri-state header shouldn't coast on it (UARTplat.md Phase 4).
+        self._last_telem_ms     = None
+        self._last_wifi_diag_ms = None
         if device:
             self.status.set_source(device.upper())
             self.status.set_transport(TRANSPORT_LABEL.get(device, "Unknown"))
         else:
-            self.status.set_connected(False)
+            self.status.set_link_state("disconnected")
             self.status.set_source("—")
             self.status.set_transport("—")
             self.status.set_mode("—")
             self._last_ts_ms = None
 
+        # Tell the ESP32 which link the GUI is now reading so it can suppress
+        # WiFi UDP telemetry sends when USB is active (§2b transport gating;
+        # a no-op unless the ESP32 is built with WIFI_TRANSPORT_GATING=1).
+        # "teensy" bypasses the ESP32 entirely, so there's nothing useful to tell it.
+        from tabs.comm_commands import send_set_telem_transport
+        if device == "esp32":
+            send_set_telem_transport(True)
+        elif device == "wifi":
+            send_set_telem_transport(False)
+
     def _on_packet(self, info: dict):
-        self.status.set_connected(True)
-        self._disconnect_timer.start()
+        now = time.monotonic() * 1000.0
+        if info.get("ptype") == 0x14:
+            # WIFI_DIAG: independent heartbeat from the ESP32, carries none of
+            # the telemetry fields below — just record freshness for the
+            # tri-state header/link-health widget and stop.
+            self._last_wifi_diag_ms   = now
+            self._last_wifi_diag_info = info
+            return
+        self._last_telem_ms = now
+
         if info.get("version_mismatch"):
             self.status.set_version_mismatch(
                 info.get("got_version", "?"), info.get("expected_version", "?")
@@ -1117,6 +1410,27 @@ class MainWindow(QMainWindow):
         profile = info.get("active_profile")
         if profile is not None:
             self.status.set_profile(profile)
+
+    def _update_link_state(self):
+        """Re-evaluate the tri-state connection header. Runs on a fixed
+        cadence rather than being restarted per-packet, since the whole point
+        is noticing when packets *stop* arriving (see the comment in
+        __init__). UARTplat.md Phase 4, §5.1."""
+        now = time.monotonic() * 1000.0
+        telem_age = (now - self._last_telem_ms) if self._last_telem_ms is not None else float("inf")
+        diag_age  = (now - self._last_wifi_diag_ms) if self._last_wifi_diag_ms is not None else float("inf")
+        if telem_age < self._TELEM_FRESH_MS:
+            self.status.set_link_state("connected")
+        elif diag_age < self._WIFI_DIAG_FRESH_MS:
+            d = self._last_wifi_diag_info
+            up    = d.get("wifi_teensy_link_up")
+            since = d.get("wifi_ms_since_teensy")
+            tooltip = f"Teensy link: {'UP' if up else 'DOWN'}"
+            if since is not None:
+                tooltip += f"  ({since} ms since last Teensy packet)"
+            self.status.set_link_state("esp32_only", tooltip)
+        else:
+            self.status.set_link_state("disconnected")
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
 
