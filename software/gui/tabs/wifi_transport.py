@@ -45,7 +45,22 @@ class WifiTransport(QThread):
         # PacketDecoder is created lazily in run() so it lives on the right thread
         self._decoder = None
 
+        # Set by stop() so run()'s loop can exit before Qt starts tearing down
+        # objects during app.quit() — without this, a background emit into an
+        # already-deleted TelemetryBus/PacketDecoder raises "wrapped C/C++
+        # object ... has been deleted" (or segfaults outright). A human closing
+        # the GUI window never raced this; AutomationRunner's programmatic
+        # app.quit() does, every time.
+        self._stop_requested = threading.Event()
+
     # ── Public API ────────────────────────────────────────────────────────────
+
+    def stop(self, wait_ms: int = 3500):
+        """Ask run()'s loop to exit and block until it does (or wait_ms elapses).
+        Call before app.quit() in any programmatic-shutdown path — see
+        _stop_requested for why this matters."""
+        self._stop_requested.set()
+        self.wait(wait_ms)
 
     def send(self, frame: bytes):
         """Write a CommLink frame to the ESP32 via TCP (no-op if not connected)."""
@@ -99,7 +114,7 @@ class WifiTransport(QThread):
 
         sm = SourceManager.instance()
 
-        while True:
+        while not self._stop_requested.is_set():
             try:
                 data, (src_ip, _) = udp.recvfrom(4096)
             except socket.timeout:

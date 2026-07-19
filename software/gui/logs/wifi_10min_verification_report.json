@@ -1,0 +1,361 @@
+{
+  "name": "wifi_10min_verification",
+  "duration_s": 600.0,
+  "actual_elapsed_s": 600.08,
+  "pass": false,
+  "fail_reasons": [
+    "UART CRC drops (Teensy->ESP32 direction)",
+    "UART seq gaps (Teensy->ESP32 direction)"
+  ],
+  "reboot_count": 0,
+  "reboot_events": [],
+  "wifi_never_connected": false,
+  "tcp_churn_count": 0,
+  "telemetry": {
+    "received_count": 30013,
+    "expected_count_from_loop_count": 1,
+    "expected_count_from_duration_at_50hz": 30004,
+    "actual_hz": 50.01,
+    "missed_ticks": 0,
+    "missed_ticks_pct": 0.0,
+    "inter_arrival_jitter": {
+      "n": 30012,
+      "p50_ms": 8.761800010688603,
+      "p95_ms": 64.34442002209832,
+      "p99_ms": 71.20172401890159,
+      "max_ms": 141.6373000247404,
+      "mean_ms": 19.993179371586084,
+      "stdev_ms": 21.80597422102192
+    }
+  },
+  "uart_esp32_to_teensy": {
+    "rx_drops": {
+      "start": 0,
+      "end": 0,
+      "delta": 0
+    },
+    "seq_gaps": {
+      "start": 3468,
+      "end": 3468,
+      "delta": 0
+    }
+  },
+  "uart_teensy_to_esp32": {
+    "crc_drops": {
+      "start": 2,
+      "end": 3,
+      "delta": 1
+    },
+    "seq_gaps": {
+      "start": 131,
+      "end": 148,
+      "delta": 17
+    }
+  },
+  "link_down_events": [],
+  "wifi_link_quality": {
+    "rssi_dbm_min": -61,
+    "rssi_dbm_max": -56,
+    "rssi_dbm_mean": -58.0,
+    "free_heap": {
+      "start": 74896,
+      "end": 71428,
+      "delta": -3468
+    },
+    "wifi_reconnect_count": {
+      "start": 0,
+      "end": 0,
+      "delta": 0
+    },
+    "udp_send_fail_count": {
+      "start": 16,
+      "end": 16,
+      "delta": 0
+    },
+    "uplink_queue_drops": {
+      "start": 54,
+      "end": 102,
+      "delta": 48
+    }
+  },
+  "gui_decode_counters_reference_only": {
+    "note": "link_crc_drops/link_seq_gaps mix TELEM's and WIFI_DIAG's independent seq counters on one decoder (see module docstring) \u2014 not used for pass/fail, shown for reference only.",
+    "link_crc_drops": {
+      "start": 0,
+      "end": 0,
+      "delta": 0
+    },
+    "link_seq_gaps": {
+      "start": 1477,
+      "end": 761175,
+      "delta": 759698
+    },
+    "link_pair_drops": {
+      "start": 0,
+      "end": 0,
+      "delta": 0
+    }
+  },
+  "snapshots": [
+    {
+      "t_s": 30.0,
+      "telem_count": 1511,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -57,
+      "free_heap": 70816,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 60.1,
+      "telem_count": 3017,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 74040,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 90.1,
+      "telem_count": 4517,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 65184,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 120.1,
+      "telem_count": 6015,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 70136,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 150.1,
+      "telem_count": 7515,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 69848,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 180.1,
+      "telem_count": 9016,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 70012,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 210.1,
+      "telem_count": 10516,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 71176,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 240.1,
+      "telem_count": 12015,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 70424,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 270.0,
+      "telem_count": 13513,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 70012,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 300.1,
+      "telem_count": 15013,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -57,
+      "free_heap": 69440,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 330.0,
+      "telem_count": 16511,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 70280,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 360.1,
+      "telem_count": 18013,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 69716,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 390.1,
+      "telem_count": 19514,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 70524,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 420.1,
+      "telem_count": 21015,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 73728,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 450.1,
+      "telem_count": 22513,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 73748,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 480.1,
+      "telem_count": 24013,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 72576,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 510.0,
+      "telem_count": 25512,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 72584,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 540.1,
+      "telem_count": 27014,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 69632,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 570.0,
+      "telem_count": 28510,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -57,
+      "free_heap": 69884,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    },
+    {
+      "t_s": 600.1,
+      "telem_count": 30013,
+      "missed_ticks_cum": 0,
+      "uart_rx_drops": 0,
+      "uart_seq_gaps": 3468,
+      "wifi_uart_crc_drops": 3,
+      "wifi_uart_seq_gaps": 148,
+      "rssi_dbm": -58,
+      "free_heap": 71428,
+      "esp32_link_ok": true,
+      "wifi_teensy_link_up": true
+    }
+  ]
+}
