@@ -1,7 +1,7 @@
 from collections import deque
 
 import pyqtgraph as pg
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QProgressBar, QSplitter, QVBoxLayout, QWidget,
 )
@@ -35,6 +35,7 @@ class RadioTab(QWidget):
         super().__init__()
 
         self._bufs = [deque([CH_MID] * _BUF, maxlen=_BUF) for _ in range(NUM_CH)]
+        self._x = list(range(_BUF))
 
         # ── Rolling chart ──────────────────────────────────────────────────────
         self._plot = pg.PlotWidget()
@@ -141,6 +142,15 @@ class RadioTab(QWidget):
 
         TelemetryBus.instance().packet.connect(self._on_packet)
 
+        # Redrawing 14 pyqtgraph curves (300 pts each) is expensive — decouple
+        # it from raw packet rate (up to 50 Hz) onto a fixed-interval timer,
+        # same pattern as controllers_tab.py's chart timer. Buffer updates and
+        # bar/label text stay in _on_packet since those are cheap.
+        self._chart_timer = QTimer(self)
+        self._chart_timer.setInterval(50)  # 20 Hz chart refresh
+        self._chart_timer.timeout.connect(self._refresh_charts)
+        self._chart_timer.start()
+
     # ── Telemetry handler ──────────────────────────────────────────────────────
 
     def _on_packet(self, info: dict):
@@ -163,6 +173,6 @@ class RadioTab(QWidget):
             self._bars[i].setValue(val)
             self._val_lbls[i].setText(str(val))
 
-        x = list(range(_BUF))
+    def _refresh_charts(self) -> None:
         for i in range(NUM_CH):
-            self._curves[i].setData(x, list(self._bufs[i]))
+            self._curves[i].setData(self._x, list(self._bufs[i]))

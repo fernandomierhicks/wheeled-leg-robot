@@ -182,9 +182,9 @@ _COMM_MAX_PAYLOAD = 512  # mirrors firmware CommLink.h COMM_MAX_PAYLOAD — a co
                           # arrive, swallowing subsequent legitimate datagrams into the search
                           # (Fix 2 equivalent; found via WiFi corruption-injection testing,
                           # Phase 9, UARTplat.md)
-_TELEM_VERSION = 9   # must match TELEM_VERSION in shared/comm_protocol.h
+_TELEM_VERSION = 10  # must match TELEM_VERSION in shared/comm_protocol.h
 _TELEM_A_LEN   = 118
-_TELEM_B_LEN   = 124
+_TELEM_B_LEN   = 128
 
 _TYPE_NAMES  = {
     0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG",
@@ -376,7 +376,7 @@ class PacketDecoder(QObject):
                             "wifi_uplink_queue_drops": uplink_queue_drops,
                             "wifi_tcp_send_max_us":    tcp_send_max_us,
                         })
-                elif ptype == 0x15 and length == 242:
+                elif ptype == 0x15 and length == 246:
                     # TELEM_FULL_WIFI — WIFI_TELEM_COMBINED variant: the full
                     # TelemetryPayload as one datagram. Remap to look like a normal
                     # TELEM packet (transparent to every existing tab).

@@ -306,7 +306,7 @@ class ReliableCommand(QObject):
     _in_flight: set["ReliableCommand"] = set()
 
     def __init__(self, send_fn, confirm_predicate, retries: int = 3, timeout_ms: int = 250,
-                 on_fail=None, reject_predicate=None, label: str = "Command"):
+                 on_fail=None, on_success=None, reject_predicate=None, label: str = "Command"):
         super().__init__()
         self._send_fn      = send_fn
         self._confirm       = confirm_predicate
@@ -314,6 +314,7 @@ class ReliableCommand(QObject):
         self._retries_left  = retries
         self._timeout_ms    = timeout_ms
         self._on_fail       = on_fail
+        self._on_success    = on_success
         self._label         = label
         self._done          = False
 
@@ -357,6 +358,8 @@ class ReliableCommand(QObject):
             return
         if self._confirm(info):
             self._finish()
+            if self._on_success is not None:
+                self._on_success(info)
 
     def _on_timeout(self):
         if self._done:
@@ -370,10 +373,11 @@ class ReliableCommand(QObject):
 
 
 def send_reliable(send_fn, confirm_predicate, retries: int = 3, timeout_ms: int = 250,
-                   on_fail=None, reject_predicate=None, label: str = "Command") -> ReliableCommand:
+                   on_fail=None, on_success=None, reject_predicate=None, label: str = "Command") -> ReliableCommand:
     """Fire send_fn now; retry up to `retries` times, `timeout_ms` apart,
     until confirm_predicate(packet) matches a TelemetryBus packet. See
     ReliableCommand for the full contract. Returns the tracker instance —
     only needed if the caller wants to `.cancel()` it early."""
     return ReliableCommand(send_fn, confirm_predicate, retries=retries, timeout_ms=timeout_ms,
-                            on_fail=on_fail, reject_predicate=reject_predicate, label=label)
+                            on_fail=on_fail, on_success=on_success,
+                            reject_predicate=reject_predicate, label=label)

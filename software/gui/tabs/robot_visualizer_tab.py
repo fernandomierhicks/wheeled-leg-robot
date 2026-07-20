@@ -658,13 +658,27 @@ class DeviationBarWidget(QWidget):
 # Tab
 # ─────────────────────────────────────────────────────────────────────────────
 
+class _FpsGLViewWidget(gl.GLViewWidget):
+    """GLViewWidget that counts actual paintGL() calls — reflects true render
+    rate (data-driven redraws *and* mouse-drag repaints), not just the data
+    timer's nominal rate."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.frame_count = 0
+
+    def paintGL(self):
+        self.frame_count += 1
+        super().paintGL()
+
+
 class RobotVisualizerTab(QWidget):
 
     def __init__(self):
         super().__init__()
 
         # ── GL view ──────────────────────────────────────────────────────────
-        self._gl = gl.GLViewWidget()
+        self._gl = _FpsGLViewWidget()
         self._gl.opts["distance"]  = 1.5
         self._gl.opts["elevation"] = 18
         self._gl.opts["azimuth"]   = -55
@@ -759,6 +773,27 @@ class RobotVisualizerTab(QWidget):
             self._gl.addItem(beam)
             self._tof_beams.append(beam)
         self._update_tof_items(np.eye(3))
+
+        # ── FPS overlay (bottom of GL view) ────────────────────────────────────
+        self._fps_label = QLabel("— fps")
+        self._fps_label.setStyleSheet(
+            f"color: {DIM}; font-size: 10px; font-family: Consolas;"
+            f" background: rgba(0, 0, 0, 110); padding: 1px 6px; border-radius: 3px;"
+        )
+        fps_overlay = QVBoxLayout(self._gl)
+        fps_overlay.setContentsMargins(0, 0, 0, 4)
+        fps_overlay.addStretch(1)
+        fps_row = QHBoxLayout()
+        fps_row.addStretch(1)
+        fps_row.addWidget(self._fps_label)
+        fps_row.addStretch(1)
+        fps_overlay.addLayout(fps_row)
+
+        self._fps_last_count = 0
+        self._fps_timer = QTimer(self)
+        self._fps_timer.setInterval(1000)
+        self._fps_timer.timeout.connect(self._update_fps)
+        self._fps_timer.start()
 
         # ── 3-column cockpit layout ───────────────────────────────────────────
         self._enable_leds: dict[int, LedIndicator] = {}
@@ -1153,6 +1188,12 @@ class RobotVisualizerTab(QWidget):
     def _redraw_latest(self) -> None:
         if self._latest_pose is not None:
             self._redraw(*self._latest_pose)
+
+    def _update_fps(self) -> None:
+        count = self._gl.frame_count
+        fps = count - self._fps_last_count
+        self._fps_last_count = count
+        self._fps_label.setText(f"{fps} fps")
 
     def _redraw(self, q_l: float, q_r: float,
                 pitch: float, roll: float, yaw: float,

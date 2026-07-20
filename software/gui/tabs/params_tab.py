@@ -65,6 +65,8 @@ _WATCHDOG_PARAM_IDS = frozenset({
     0x0300,  # PARAM_WM_ENC_TIMEOUT_MS (wheel encoder feedback watchdog)
     0x0423,  # PARAM_PITCH_WATCHDOG_ENABLE
     0x0113,  # PARAM_CALIB_BYPASS_EN (skip hardstop-calibration requirement for RUNNING)
+    0x0429,  # PARAM_RUNNING_WHEEL_BYPASS_EN (skip wheel-enable requirement for RUNNING)
+    0x042A,  # PARAM_ALPHA_FORCE_RETRACTED_EN (force gain-sched alpha=0, bypass calib-valid check)
 })
 
 
@@ -88,8 +90,12 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     (range(0x0412, 0x0415), 0x04, "Feedforward"),
     (range(0x0415, 0x0420), 0x04, "Jump"),
     (frozenset({0x0401, 0x0420, 0x0421, 0x0422}), 0x04, "Sim Injection"),
-    (range(0x0500, 0x0504), 0x05, "Radio Scale"),    # radio_hip_cmd, radio_vel_max, radio_yaw_max, radio_pitch_trim
-    (range(0x0510, 0x051A), 0x05, "Speed Profiles"), # profile 1/2/3 params + active_profile
+    (range(0x0500, 0x0504), 0x05, "Radio Scale"),  # radio_hip_cmd, radio_vel_max, radio_yaw_max, radio_pitch_trim
+    (range(0x0510, 0x0513), 0x05, "Profile 1"),    # profile1_vel_max/yaw_max/torque_lim
+    (range(0x0513, 0x0516), 0x05, "Profile 2"),    # profile2_vel_max/yaw_max/torque_lim
+    (range(0x0516, 0x0519), 0x05, "Profile 3"),    # profile3_vel_max/yaw_max/torque_lim
+    # active_profile (0x0519) intentionally left without a subgroup — it's the
+    # CH9-selected index, not a per-profile value.
 ]
 
 _SUBGROUP_COLORS: dict[str, str] = {
@@ -104,7 +110,9 @@ _SUBGROUP_COLORS: dict[str, str] = {
     "Sim Injection":  "#88ddcc",
     "Safety":         "#ff5555",
     "Radio Scale":    "#ff88cc",
-    "Speed Profiles": "#ffcc66",
+    "Profile 1":      "#ffdd88",
+    "Profile 2":      "#ffcc66",
+    "Profile 3":      "#ffaa33",
 }
 
 
@@ -262,6 +270,17 @@ _PARAM_DEFS: dict[int, tuple[str, str]] = {
     0x0426: ("lqr_k_pitch_ext", "LQR pitch gain, fully extended leg. Default -7.92908352."),
     0x0427: ("lqr_k_rate_ext", "LQR pitch-rate gain, fully extended leg. Default -1.69084204."),
     0x0428: ("lqr_k_vel", "LQR velocity-error gain, invariant across leg height. Default -7.13051190e-03."),
+    0x0429: ("run_wheel_bypass_en", "1 = allow RUNNING mode to arm with wheel_l/r_enable off "
+             "(bench-test only, e.g. a software-triggered smoke test with hips also disabled, "
+             "no real torque anywhere). Independent of calib_bypass_en, which only covers the "
+             "hip check. Not persisted — always boots to 0 (bypass off)."),
+    0x042A: ("alpha_force_ret_en", "1 = force the hip gain-schedule blend to alpha=0.0 "
+             "(fully-retracted LQR gains), bypassing the hm_limits valid-calibration check "
+             "entirely. For hardware tuning with hips zip-tied retracted and disabled, where "
+             "real calibration can never complete. Not persisted — always boots to 0."),
+    0x042B: ("gui_motion_ctrl_en", "1 = v_cmd_ms/omega_cmd_rds are driven by GUI/CLI param_set "
+             "instead of CH2/CH4; radio arming (CH10) is unaffected. Auto-clears (reverting to "
+             "radio control) if no GUI command arrives for 300 ms. Not persisted — always boots to 0."),
 
     # GROUP_COMMAND
     0x0500: ("radio_hip_cmd", "Hip extension command from CH3 [0=retracted, 1=extended]; "

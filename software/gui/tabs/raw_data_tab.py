@@ -167,7 +167,7 @@ class RawDataTab(QWidget):
         r = self._section(g, r, "Yaw PI")
         r = self._add_row(g, r, ("omega_cmd_rds",        "—"),  ("tau_yaw",             "—"))
         r = self._section(g, r, "LQR balance")
-        r = self._add_row(g, r, ("tau_sym",              "—"),  ("",                    ""))
+        r = self._add_row(g, r, ("tau_sym",              "—"),  ("gain_sched_alpha",    "—"))
         r = self._section(g, r, "Feedforward")
         r = self._add_row(g, r, ("ff1_out",              "—"),  ("ff2_out",             "—"))
         r = self._section(g, r, "Misc")
@@ -230,12 +230,16 @@ class RawDataTab(QWidget):
         if lbl is None:
             return
         lbl.setText(text)
-        lbl.setStyleSheet(
-            f"color: {color}; font-size: 13px; font-weight: bold;"
-            f" font-family: Consolas; background: {SURFACE};"
-            f" border: 1px solid {BORDER}; border-radius: 3px;"
-            f" padding: 2px 8px;"
-        )
+        # setStyleSheet() forces a CSS re-parse; skip it on the ~90 fields/packet
+        # that redraw at up to 50 Hz whenever the color hasn't actually changed.
+        if lbl.property("_color") != color:
+            lbl.setProperty("_color", color)
+            lbl.setStyleSheet(
+                f"color: {color}; font-size: 13px; font-weight: bold;"
+                f" font-family: Consolas; background: {SURFACE};"
+                f" border: 1px solid {BORDER}; border-radius: 3px;"
+                f" padding: 2px 8px;"
+            )
 
     def _on_packet(self, info: dict):
         self._pkt_count += 1
@@ -362,6 +366,7 @@ class RawDataTab(QWidget):
         self._set("omega_cmd_rds",       f"{f.get('omega_cmd_rds', 0.0):+.6f}")
         self._set("tau_yaw",             f"{f.get('tau_yaw', 0.0):+.4f}")
         self._set("tau_sym",             f"{f.get('tau_sym', 0.0):+.4f}")
+        self._set("gain_sched_alpha",    f"{f.get('gain_sched_alpha', 0.0):.4f}")
         self._set("ff1_out",             f"{f.get('ff1_out', 0.0):+.4f}")
         self._set("ff2_out",             f"{f.get('ff2_out', 0.0):+.4f}")
         self._set("test_val",            f"{f.get('test_val', 0.0):+.4f}")
@@ -427,6 +432,8 @@ def _set_stat(widget: QWidget, text: str, color: str = TEXT):
     lbl = widget.findChild(QLabel, "val")
     if lbl:
         lbl.setText(text)
-        lbl.setStyleSheet(
-            f"color: {color}; font-size: 13px; font-weight: bold; font-family: Consolas;"
-        )
+        if lbl.property("_color") != color:
+            lbl.setProperty("_color", color)
+            lbl.setStyleSheet(
+                f"color: {color}; font-size: 13px; font-weight: bold; font-family: Consolas;"
+            )

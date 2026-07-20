@@ -35,6 +35,7 @@ from tabs.wheel_motors import WheelMotorsTab
 from tabs.controllers_tab import ControllersTab
 from tabs.log_playback import LogsTab, LogPlaybackController
 from tabs.log_transfer import LogTransferManager
+from tabs.log_analyzer_tab import LogAnalyzerTab
 from tabs.wifi_diag_tab import WifiDiagTab
 from tabs.telemetry_bus import TelemetryBus
 from tabs.source_manager import SourceManager, TRANSPORT_LABEL
@@ -456,15 +457,21 @@ class DashboardTab(QWidget):
         outer.addLayout(top)
         outer.addStretch(1)
 
-def _send_set_mode_reliable(target: int, label: str):
+def _send_set_mode_reliable(target: int, label: str, on_success=None, on_fail=None):
     """SET_MODE via ReliableCommand: confirmed once telemetry's robot_state
     reaches `target`, or reported (not retried) if the state machine bounces
-    it to STATE_CMD_REJECT instead. See UARTplat.md Phase 5."""
+    it to STATE_CMD_REJECT instead. See UARTplat.md Phase 5.
+    on_success/on_fail let a caller (e.g. tabs/remote_control.py) bridge this
+    fire-and-forget confirmation into a synchronous wait; existing call sites
+    omit both and keep today's behavior (CommandAlertBus on failure, silent
+    on success)."""
     send_reliable(
         lambda: send_set_mode(target),
         confirm_predicate=lambda info: info.get("robot_state") == target,
         reject_predicate=lambda info: info.get("robot_state") == STATE_CMD_REJECT,
         label=label,
+        on_success=on_success,
+        on_fail=on_fail,
     )
 
 
@@ -1192,6 +1199,7 @@ class MainWindow(QMainWindow):
             ("Radio",           RadioTab()),
             ("WiFi",            WifiDiagTab()),
             ("Logs",            LogsTab()),
+            ("Log Analyzer",    LogAnalyzerTab()),
             ("Flash & Monitor", FlashMonitorTab()),
         ]
         for title, widget in tab_defs:
@@ -1480,6 +1488,9 @@ def main():
     win = MainWindow()
     win.setWindowIcon(QIcon(_ICON_PATH))
     win.show()
+
+    from tabs.remote_control import RemoteControlServer
+    win._remote_control = RemoteControlServer(win)
 
     if args.automation:
         from tabs.automation_runner import AutomationRunner
