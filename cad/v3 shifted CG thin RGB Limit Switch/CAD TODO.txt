@@ -1,0 +1,19 @@
+CAD TODO
+
+
+Disasemble RX receiver, put it somewhere that doesn't occupy space?
+
+Laser mount
+Measure battery strap
+
+
+
+-------------------------------------------------------
+NOTES
+Cant tighten ball bearings because bearings are not flush with each other, put a M4 spacer in between?
+
+*-------------------------------------------------
+Features already implemented:
+Holes to hang robot from rope
+Holes for laser and ankle wiring
+Holes for zip tie to route leg wires
