@@ -641,6 +641,8 @@ static void fill_telemetry(TelemetryPayload& t) {
     t.esp32_status_age_ms = (uint16_t)(esp32_status_age > 65535 ? 65535 : esp32_status_age);
     t.uart_rx_drops       = (uint16_t)(uart_rx_drops   > 65535 ? 65535 : uart_rx_drops);
     t.uart_seq_gaps       = (uint16_t)(uart_seq_gaps   > 65535 ? 65535 : uart_seq_gaps);
+    // V10 — leg gain-schedule blend factor (§1a, tuning.md)
+    t.gain_sched_alpha    = g_state.gain_sched_alpha;
 }
 
 static void send_telemetry(bool prof) {
@@ -811,8 +813,28 @@ static void radio_update() {
     }
     s_was_alive = alive;
 
+    // Debounce CH10: the raw armed level must hold for ARM_DEBOUNCE_TICKS
+    // consecutive ticks before an arm is requested. Filters a single bad
+    // tick of ch10/alive right at the RUNNING-entry race (radio_update()
+    // reads g_state.state one tick stale vs. when on_running() actually
+    // sets it — see README/radio arm gotcha). Disarm reacts faster
+    // (DISARM_DEBOUNCE_TICKS) since dropping the switch should cut power
+    // promptly; both are still well under human reaction time at 500 Hz.
+    static constexpr uint8_t ARM_DEBOUNCE_TICKS    = 3;  // ~6 ms @ 500 Hz
+    static constexpr uint8_t DISARM_DEBOUNCE_TICKS = 2;  // ~4 ms @ 500 Hz
+    static uint8_t s_armed_ticks   = 0;
+    static uint8_t s_unarmed_ticks = 0;
+    bool armed_raw = alive && (ch10 > 1990);
+    if (armed_raw) {
+        if (s_armed_ticks < ARM_DEBOUNCE_TICKS) s_armed_ticks++;
+        s_unarmed_ticks = 0;
+    } else {
+        if (s_unarmed_ticks < DISARM_DEBOUNCE_TICKS) s_unarmed_ticks++;
+        s_armed_ticks = 0;
+    }
+    bool armed = s_armed_ticks >= ARM_DEBOUNCE_TICKS;
+
     static bool s_was_armed = false;
-    bool armed = alive && (ch10 > 1990);
     if (armed && !s_was_armed) {
         if (g_state.state == STATE_ESTOP &&
             fault_severity(g_state.fault_code) == FAULT_SEVERITY_SOFT) {
@@ -836,7 +858,7 @@ static void radio_update() {
     // Disarm is level-based, not edge-based: a CH10 drop during JUMPING would
     // consume the edge with no effect (disarm only latches from RUNNING); this
     // catches it the tick the jump completes and RUNNING is re-entered.
-    if (!armed && g_state.state == STATE_RUNNING) {
+    if (s_unarmed_ticks >= DISARM_DEBOUNCE_TICKS && g_state.state == STATE_RUNNING) {
         comm_log(LOG_LEVEL_INFO, "Radio: disarmed -> STANDBY");
         stateMachine_disarm_running();
     }
@@ -869,15 +891,34 @@ static void radio_update() {
         prev = on;
     }
 
+    // §1d (tuning.md): while PARAM_GUI_MOTION_CTRL_EN is set, the two radio-driven
+    // writes to v_cmd_ms/omega_cmd_rds below are skipped so a GUI/CLI param_set()
+    // on those two params stands instead. Never gates arming (CH10 stays
+    // unconditional below) and never suppresses the !alive branch's zeroing —
+    // a radio dropout always wins. Auto-reverts to radio control if no GUI
+    // command packet arrives for GUI_MOTION_CTRL_TIMEOUT_MS, mirroring
+    // state_machine.cpp's MANUAL_GUI_TIMEOUT_MS watchdog pattern.
+    static constexpr uint32_t GUI_MOTION_CTRL_TIMEOUT_MS = 300;
+    bool gui_motion_ctrl = param_get(PARAM_GUI_MOTION_CTRL_EN) >= 0.5f;
+    if (gui_motion_ctrl && stateMachine_ms_since_gui_packet() >= GUI_MOTION_CTRL_TIMEOUT_MS) {
+        comm_log(LOG_LEVEL_WARN, "GUI motion ctrl: watchdog timeout -> reverting to radio");
+        param_force_set(PARAM_V_CMD_MS, 0.0f);
+        param_force_set(PARAM_OMEGA_CMD_RDS, 0.0f);
+        param_force_set(PARAM_GUI_MOTION_CTRL_EN, 0.0f);
+        gui_motion_ctrl = false;
+    }
+
     if (alive) {
         float t = constrain((g_ibus.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);  // CH3 (1-indexed)
         param_force_set(PARAM_RADIO_HIP_CMD, t);
 
-        float vel_norm = constrain((g_ibus.channel(2) - 1500.0f) / 500.0f, -1.0f, 1.0f);
-        param_force_set(PARAM_V_CMD_MS, vel_norm * param_get(PARAM_RADIO_VEL_MAX));
+        if (!gui_motion_ctrl) {
+            float vel_norm = constrain((g_ibus.channel(2) - 1500.0f) / 500.0f, -1.0f, 1.0f);
+            param_force_set(PARAM_V_CMD_MS, vel_norm * param_get(PARAM_RADIO_VEL_MAX));
 
-        float yaw_norm = constrain((g_ibus.channel(4) - 1500.0f) / 500.0f, -1.0f, 1.0f);
-        param_force_set(PARAM_OMEGA_CMD_RDS, yaw_norm * param_get(PARAM_RADIO_YAW_MAX));
+            float yaw_norm = -constrain((g_ibus.channel(4) - 1500.0f) / 500.0f, -1.0f, 1.0f);  // inverted: stick left -> robot yaws left
+            param_force_set(PARAM_OMEGA_CMD_RDS, yaw_norm * param_get(PARAM_RADIO_YAW_MAX));
+        }
 
         // CH9: speed profile selector (3-position switch → profile 0/1/2)
         static const uint16_t PROFILE_VEL[]    = {PARAM_PROFILE_1_VEL_MAX,    PARAM_PROFILE_2_VEL_MAX,    PARAM_PROFILE_3_VEL_MAX};
@@ -936,6 +977,11 @@ static void radio_update() {
         param_force_set(PARAM_V_CMD_MS, 0.0f);
         param_force_set(PARAM_OMEGA_CMD_RDS, 0.0f);
     }
+
+    // Mirrors v_cmd_ms live regardless of FSM state (like w_cmd/omega_cmd_rds
+    // above) so it's visible for troubleshooting before arming, not just
+    // while controlLoop_run() is active in RUNNING/JUMPING.
+    g_state.v_ref = (param_get(PARAM_VEL_PI_EN) >= 0.5f) ? param_get(PARAM_V_CMD_MS) : 0.0f;
 }
 
 static void run_control_loop() {

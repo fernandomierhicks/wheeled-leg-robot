@@ -159,6 +159,35 @@
 // Not persisted — always boots to 0 (bypass off) so it can't be left on
 // silently across a power cycle.
 #define PARAM_RUNNING_WHEEL_BYPASS_EN 0x0429
+
+// Force the hip gain-schedule blend to alpha=0.0 (fully-retracted gains),
+// bypassing the hm_limits_L/R.valid check entirely — no encoder read, no
+// calibration dependency. For hardware tuning campaigns where the hips are
+// zip-tied retracted and disabled, so real calibration can never complete
+// (it requires cycling the hips through their full range) and alpha would
+// otherwise silently freeze at the uncalibrated 0.5 midpoint instead of the
+// intended retracted anchor. When clear, behavior is unchanged from today
+// (0.5 without calibration, real computed value with it).
+// Not persisted — deliberately requires an explicit set every session, same
+// reasoning as PARAM_CALIB_RETRACT_ENABLE-adjacent bypass flags: a silent,
+// persisted "hips are zip-tied" flag is exactly the kind of thing that gets
+// forgotten once the zip ties come off. See tuning.md §1c.
+#define PARAM_ALPHA_FORCE_RETRACTED_EN 0x042A
+
+// Gates the *source* of v_cmd_ms/omega_cmd_rds: when set, radio_update()'s
+// CH2/CH4-driven writes to PARAM_V_CMD_MS/PARAM_OMEGA_CMD_RDS are skipped so
+// a GUI/CLI param_set() on those two params stands instead — lets Claude
+// drive precise, repeatable velocity/yaw setpoints for vel-PI/yaw-PI tuning
+// without a human on the sticks. Never gates arming — CH10 disarm stays
+// unconditional, and a radio dropout still force-zeros both params exactly
+// as before regardless of this flag. Auto-clears (and zeros both params) if
+// no GUI command packet arrives for GUI_MOTION_CTRL_TIMEOUT_MS, mirroring
+// state_machine.cpp's MANUAL_GUI_TIMEOUT_MS watchdog pattern — a stalled
+// Claude process reverts to radio control on its own. Not persisted, same
+// "must be explicitly re-armed every session" reasoning as the flag above.
+// See tuning.md §1d.
+#define PARAM_GUI_MOTION_CTRL_EN 0x042B
+
 // Velocity PI (Phase 3)
 #define PARAM_VEL_PI_EN               0x0404  // 1 = velocity PI active; 0 = theta_ref fixed at 0
 #define PARAM_VEL_PI_KP               0x0405  // proportional gain [rad/(m/s)]

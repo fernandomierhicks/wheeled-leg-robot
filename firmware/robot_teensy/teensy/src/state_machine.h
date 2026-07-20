@@ -48,3 +48,8 @@ bool stateMachine_is_estop_hip_ramping();
 // watchdog: if no call for >MANUAL_GUI_TIMEOUT_MS (state_machine.cpp,
 // currently 500 ms) while in MANUAL, the state machine auto-exits to STANDBY.
 void stateMachine_ping_gui_watchdog();
+
+// Milliseconds since the last GUI command packet (whatever the ping above
+// last stamped). Reused by main.cpp radio_update()'s GUI-motion-control
+// watchdog (tuning.md §1d) at a tighter timeout than MANUAL_GUI_TIMEOUT_MS.
+uint32_t stateMachine_ms_since_gui_packet();

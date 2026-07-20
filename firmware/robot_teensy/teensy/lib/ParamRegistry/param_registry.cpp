@@ -37,159 +37,176 @@ static const uint32_t FLUSH_QUIET_MS   = 1000;
 //                the comment on this param's #define in param_ids.h.
 // clang-format off
 static Param g_params[] = {
-    // id                        group          name                     value     min       max     flags                   on_change
-    // GROUP_SYSTEM — peripheral enable flags (bench-test without full hardware)
-    {PARAM_IMU_ENABLE,    GROUP_SYSTEM, "imu_enable",    1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_BUZZER_ENABLE, GROUP_SYSTEM, "buzzer_enable", 1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_LED_ENABLE,    GROUP_SYSTEM, "led_enable",    1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    // Designated initializers (.id = ..., .value = ...) on purpose: a dropped
+    // comma in a plain positional {a, b, c, ...} list doesn't fail to parse,
+    // it silently shifts every later value into the wrong field (bit us once —
+    // see git history). Naming each field makes that a hard compile error instead.
+    //
+    // Rows are grouped/ordered to mirror software/gui/tabs/params_tab.py's
+    // _PARAM_DEFS — keep both in sync when adding/moving a param.
 
+    // GROUP_SYSTEM — peripheral enable flags (bench-test without full hardware)
+    {.id = PARAM_IMU_ENABLE,              .group_id = GROUP_SYSTEM,  .name = "imu_enable",          .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_BUZZER_ENABLE,           .group_id = GROUP_SYSTEM,  .name = "buzzer_enable",       .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_LED_ENABLE,              .group_id = GROUP_SYSTEM,  .name = "led_enable",          .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
     // Per-motor presence flags — set to 0 to bench-test with that motor physically
     // disconnected. See param_ids.h for details.
-    {PARAM_HIP_L_ENABLE,   GROUP_SYSTEM, "hip_l_enable",   0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_HIP_R_ENABLE,   GROUP_SYSTEM, "hip_r_enable",   0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_WHEEL_L_ENABLE, GROUP_SYSTEM, "wheel_l_enable", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_WHEEL_R_ENABLE, GROUP_SYSTEM, "wheel_r_enable", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-
-    {PARAM_WATCHDOG_ENABLE, GROUP_SYSTEM, "watchdog_enable", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-
+    {.id = PARAM_HIP_L_ENABLE,            .group_id = GROUP_SYSTEM,  .name = "hip_l_enable",        .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_HIP_R_ENABLE,            .group_id = GROUP_SYSTEM,  .name = "hip_r_enable",        .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_WHEEL_L_ENABLE,          .group_id = GROUP_SYSTEM,  .name = "wheel_l_enable",      .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_WHEEL_R_ENABLE,          .group_id = GROUP_SYSTEM,  .name = "wheel_r_enable",      .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_WATCHDOG_ENABLE,         .group_id = GROUP_SYSTEM,  .name = "watchdog_enable",     .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
     // Debug: 1 = log a per-second breakdown of loop() section timing (see
     // param_ids.h). Not persisted — always starts off.
-    {PARAM_LOOP_PROFILE_ENABLE, GROUP_SYSTEM, "loop_profile_enable", 0.0f, 0.0f, 1.0f, 0, nullptr},
+    {.id = PARAM_LOOP_PROFILE_ENABLE,     .group_id = GROUP_SYSTEM,  .name = "loop_profile_enable", .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
 
-    {PARAM_ESTOP_HIP_DISABLE, GROUP_HIP,   "estop_hip_disable",  1.0f,      0.0f,     1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    // GROUP_HIP — hip motor RUNNING-mode gains
     // C5: previously hardcoded RUNNING_KP/KD/TFF constants in control_loop.cpp — soft, initial testing values kept as defaults
-    {PARAM_HIP_RUNNING_KP,    GROUP_HIP,   "hip_running_kp",     5.0f,      0.0f,   100.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_HIP_RUNNING_KD,    GROUP_HIP,   "hip_running_kd",     0.5f,      0.0f,     5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_HIP_RUNNING_TFF,   GROUP_HIP,   "hip_running_tff",    0.0f,     -5.0f,     5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_HIP_RUNNING_RAMP_TIME_S, GROUP_HIP, "hip_running_ramp_s", 2.0f,  0.0f,     10.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_SEEK_SPEED,  GROUP_CALIB, "calib_seek_speed",  0.17453f,  0.01f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_KP_BOTTOM,   GROUP_CALIB, "calib_kp_bottom",   16.0f,     0.0f,   500.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_KD,          GROUP_CALIB, "calib_kd",           0.05f,    0.0f,     5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_HOLD_KP,     GROUP_CALIB, "calib_hold_kp",      1.0f,     0.0f,   500.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_HOLD_KD,     GROUP_CALIB, "calib_hold_kd",      0.05f,    0.0f,     5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_STALL_CUR_BOTTOM, GROUP_CALIB, "calib_stall_cur_btm", 0.75f, 0.1f,  10.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    // Direction-dependent seek tuning: retract (SEEK_BOTTOM, weight-assisted) uses
-    // calib_kp/calib_stall_cur above; extend (SEEK_TOP, fights weight) uses these —
-    // more strength, less sensitive threshold. Starting guesses — tune on hardware.
-    {PARAM_CALIB_KP_TOP,        GROUP_CALIB, "calib_kp_top",        32.0f, 0.0f,  500.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_STALL_CUR_TOP, GROUP_CALIB, "calib_stall_cur_top",  1.5f, 0.1f,   10.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    // Retract and extend both enabled. READONLY, edit + reflash to change.
-    {PARAM_CALIB_RETRACT_ENABLE, GROUP_CALIB, "calib_retract_en", 0.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_EXTEND_ENABLE,  GROUP_CALIB, "calib_extend_en",  1.0f, 0.0f, 1.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_RAMPDOWN_TIME_S, GROUP_CALIB, "calib_rampdown_s", 2.0f, 0.0f, 10.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_BYPASS_EN,   GROUP_CALIB, "calib_bypass_en",  1.0f, 0.0f, 1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_STALL_DEADBAND, GROUP_CALIB, "calib_stall_db",  0.015f,   0.001f,  0.5f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_STALL_TICKS, GROUP_CALIB, "calib_stall_ticks",  60.0f,    5.0f,  500.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_CALIB_MARGIN,      GROUP_CALIB, "calib_margin",       0.17453f, 0.0f,    1.5708f, PARAM_FLAG_PERSISTENT, nullptr},
+    {.id = PARAM_HIP_RUNNING_KP,          .group_id = GROUP_HIP,     .name = "hip_running_kp",      .value = 5.0f,     .min_val = 0.0f,     .max_val = 100.0f,   .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_HIP_RUNNING_KD,          .group_id = GROUP_HIP,     .name = "hip_running_kd",      .value = 0.5f,     .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_HIP_RUNNING_TFF,         .group_id = GROUP_HIP,     .name = "hip_running_tff",     .value = 0.0f,     .min_val = -5.0f,    .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_HIP_RUNNING_RAMP_TIME_S, .group_id = GROUP_HIP,     .name = "hip_running_ramp_s",  .value = 2.0f,     .min_val = 0.0f,     .max_val = 10.0f,    .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_ESTOP_HIP_DISABLE,       .group_id = GROUP_HIP,     .name = "estop_hip_disable",   .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+
+    // GROUP_CALIB — hip hardstop calibration/homing sequence
+    {.id = PARAM_CALIB_SEEK_SPEED,        .group_id = GROUP_CALIB,   .name = "calib_seek_speed",    .value = 0.17453f, .min_val = 0.01f,    .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_KP_BOTTOM,         .group_id = GROUP_CALIB,   .name = "calib_kp_bottom",     .value = 16.0f,    .min_val = 0.0f,     .max_val = 500.0f,   .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_KD,                .group_id = GROUP_CALIB,   .name = "calib_kd",            .value = 0.05f,    .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_HOLD_KP,           .group_id = GROUP_CALIB,   .name = "calib_hold_kp",       .value = 1.0f,     .min_val = 0.0f,     .max_val = 500.0f,   .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_HOLD_KD,           .group_id = GROUP_CALIB,   .name = "calib_hold_kd",       .value = 0.05f,    .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_STALL_CUR_BOTTOM,  .group_id = GROUP_CALIB,   .name = "calib_stall_cur_btm", .value = 0.75f,    .min_val = 0.1f,     .max_val = 10.0f,    .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_STALL_DEADBAND,    .group_id = GROUP_CALIB,   .name = "calib_stall_db",      .value = 0.015f,   .min_val = 0.001f,   .max_val = 0.5f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_STALL_TICKS,       .group_id = GROUP_CALIB,   .name = "calib_stall_ticks",   .value = 60.0f,    .min_val = 5.0f,     .max_val = 500.0f,   .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_MARGIN,            .group_id = GROUP_CALIB,   .name = "calib_margin",        .value = 0.17453f, .min_val = 0.0f,     .max_val = 1.5708f,  .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
     // Joint mechanical range is ~90 deg; start position within it is unknown, so
     // SEEK_BOTTOM budgets a full 90 deg (worst case) and SEEK_TOP budgets 180 deg
     // (2x range) from the just-zeroed hardstop for margin. Geometry-derived —
     // READONLY, edit + reflash to change.
-    {PARAM_CALIB_SAFETY_BOUND,GROUP_CALIB, "calib_safety_bound", 1.5708f,  0.5f,   6.28319f, PARAM_FLAG_READONLY, nullptr},
+    {.id = PARAM_CALIB_SAFETY_BOUND,      .group_id = GROUP_CALIB,   .name = "calib_safety_bound",  .value = 1.5708f,  .min_val = 0.5f,     .max_val = 6.28319f, .flags = PARAM_FLAG_READONLY,                    .on_change = nullptr},
     // Wiring-direction constants, not live tuning knobs — READONLY (no PERSISTENT)
     // so a stale flash-saved value can never shadow the compiled default; the only
     // way to change these is to edit this file and reflash.
-    {PARAM_CALIB_L_SEEK_DIR,  GROUP_CALIB, "calib_l_seek_dir",   1.0f,    -1.0f,    1.0f,  PARAM_FLAG_READONLY, nullptr},
+    {.id = PARAM_CALIB_L_SEEK_DIR,        .group_id = GROUP_CALIB,   .name = "calib_l_seek_dir",    .value = 1.0f,     .min_val = -1.0f,    .max_val = 1.0f,     .flags = PARAM_FLAG_READONLY,                    .on_change = nullptr},
     // Flipped from -1.0: on hardware, SEEK_BOTTOM at -1.0 moved the right leg
     // toward extend instead of retract — confirmed backwards on the bench.
-    {PARAM_CALIB_R_SEEK_DIR,  GROUP_CALIB, "calib_r_seek_dir",   1.0f,    -1.0f,    1.0f,  PARAM_FLAG_READONLY, nullptr},
-    {PARAM_CALIB_DONE,        GROUP_CALIB, "calib_done",         0.0f,     0.0f,    1.0f,  PARAM_FLAG_READONLY, nullptr},
-    {PARAM_CALIB_SAFETY_BOUND_TOP, GROUP_CALIB, "calib_bound_top", 3.14159f, 0.5f, 6.28319f, PARAM_FLAG_READONLY, nullptr},
+    {.id = PARAM_CALIB_R_SEEK_DIR,        .group_id = GROUP_CALIB,   .name = "calib_r_seek_dir",    .value = 1.0f,     .min_val = -1.0f,    .max_val = 1.0f,     .flags = PARAM_FLAG_READONLY,                    .on_change = nullptr},
+    {.id = PARAM_CALIB_DONE,              .group_id = GROUP_CALIB,   .name = "calib_done",          .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_READONLY,                    .on_change = nullptr},
+    {.id = PARAM_CALIB_SAFETY_BOUND_TOP,  .group_id = GROUP_CALIB,   .name = "calib_bound_top",     .value = 3.14159f, .min_val = 0.5f,     .max_val = 6.28319f, .flags = PARAM_FLAG_READONLY,                    .on_change = nullptr},
+    // Direction-dependent seek tuning: retract (SEEK_BOTTOM, weight-assisted) uses
+    // calib_kp/calib_stall_cur above; extend (SEEK_TOP, fights weight) uses these —
+    // more strength, less sensitive threshold. Starting guesses — tune on hardware.
+    {.id = PARAM_CALIB_KP_TOP,            .group_id = GROUP_CALIB,   .name = "calib_kp_top",        .value = 32.0f,    .min_val = 0.0f,     .max_val = 500.0f,   .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_STALL_CUR_TOP,     .group_id = GROUP_CALIB,   .name = "calib_stall_cur_top", .value = 1.5f,     .min_val = 0.1f,     .max_val = 10.0f,    .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    // Retract and extend both enabled. READONLY, edit + reflash to change.
+    {.id = PARAM_CALIB_RETRACT_ENABLE,    .group_id = GROUP_CALIB,   .name = "calib_retract_en",    .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_EXTEND_ENABLE,     .group_id = GROUP_CALIB,   .name = "calib_extend_en",     .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_RAMPDOWN_TIME_S,   .group_id = GROUP_CALIB,   .name = "calib_rampdown_s",    .value = 2.0f,     .min_val = 0.0f,     .max_val = 10.0f,    .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_CALIB_BYPASS_EN,         .group_id = GROUP_CALIB,   .name = "calib_bypass_en",     .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
 
-    // GROUP_CONTROL — LQR controller settings
-    {PARAM_LQR_ENABLE,              GROUP_CONTROL, "lqr_enable",          1.0f,    0.0f,    1.0f,  0,                     nullptr},
-    {PARAM_SIM_PITCH_RAD,           GROUP_CONTROL, "sim_pitch_rad",       0.0f,   -1.5708f, 1.5708f, 0,                  nullptr},
-    {PARAM_ENABLE_SIM_PITCH_RAD,    GROUP_CONTROL, "enable_sim_pitch",    0.0f,    0.0f,    1.0f,  0,                     nullptr},
-    {PARAM_SIM_PITCH_RATE_RAD_S,    GROUP_CONTROL, "sim_pitch_rate",      0.0f,  -10.0f,   10.0f, 0,                     nullptr},
-    {PARAM_ENABLE_SIM_PITCH_RATE,   GROUP_CONTROL, "enable_sim_prate",    0.0f,    0.0f,    1.0f,  0,                     nullptr},
-    {PARAM_PITCH_WATCHDOG_ENABLE,   GROUP_CONTROL, "pitch_watchdog_en",    1.0f,    0.0f,    1.0f,  0,                     nullptr},
+    // GROUP_WHEEL — wheel motor settings
+    {.id = PARAM_WM_ENC_TIMEOUT_MS,       .group_id = GROUP_WHEEL,   .name = "wm_enc_timeout_ms",   .value = 20.0f,    .min_val = 5.0f,     .max_val = 500.0f,   .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+
+    // GROUP_CONTROL — LQR core / limits
+    {.id = PARAM_LQR_ENABLE,              .group_id = GROUP_CONTROL, .name = "lqr_enable",          .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_SIM_PITCH_RAD,           .group_id = GROUP_CONTROL, .name = "sim_pitch_rad",       .value = 0.0f,     .min_val = -1.5708f, .max_val = 1.5708f,  .flags = 0,                                      .on_change = nullptr},
     // Firmware-slewed from the active CH9 profile's torque_lim (main.cpp radio_update());
     // not independently persisted — READONLY|COMMAND matches other profile/radio-derived params.
-    {PARAM_LQR_TORQUE_LIMIT,        GROUP_CONTROL, "lqr_torque_limit",    0.1f,    0.0f,    7.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_WHEEL_VEL_LIMIT_TURNS_S, GROUP_CONTROL, "wm_vel_limit",        3.0f,    1.0f,   20.0f,  PARAM_FLAG_PERSISTENT, nullptr},
+    {.id = PARAM_LQR_TORQUE_LIMIT,        .group_id = GROUP_CONTROL, .name = "lqr_torque_limit",    .value = 0.1f,     .min_val = 0.0f,     .max_val = 7.0f,     .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_WHEEL_VEL_LIMIT_TURNS_S, .group_id = GROUP_CONTROL, .name = "wm_vel_limit",        .value = 3.0f,     .min_val = 1.0f,     .max_val = 20.0f,    .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+
+    // Velocity PI 
+    {.id = PARAM_VEL_PI_EN,               .group_id = GROUP_CONTROL, .name = "vel_pi_en",           .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_VEL_PI_KP,               .group_id = GROUP_CONTROL, .name = "vel_pi_kp",           .value = 0.2f,     .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_VEL_PI_KI,               .group_id = GROUP_CONTROL, .name = "vel_pi_ki",           .value = 0.1f,     .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_VEL_PI_KFF,              .group_id = GROUP_CONTROL, .name = "vel_pi_kff",          .value = 0.1049f,  .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_VEL_PI_THETA_MAX,        .group_id = GROUP_CONTROL, .name = "vel_pi_theta_max",    .value = 0.698f,   .min_val = 0.1f,     .max_val = 0.698f,   .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_VEL_PI_RATE_LIM,         .group_id = GROUP_CONTROL, .name = "vel_pi_rate_lim",     .value = 1.745f,   .min_val = 0.1f,     .max_val = 10.0f,    .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_VEL_PI_INT_MAX,          .group_id = GROUP_CONTROL, .name = "vel_pi_int_max",      .value = 1.0f,     .min_val = 0.1f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_V_CMD_MS,                .group_id = GROUP_CONTROL, .name = "v_cmd_ms",            .value = 0.0f,     .min_val = -2.0f,    .max_val = 2.0f,     .flags = 0,                                      .on_change = nullptr},
+
+    // Yaw PI 
+    {.id = PARAM_YAW_PI_EN,               .group_id = GROUP_CONTROL, .name = "yaw_pi_en",           .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_YAW_PI_KP,               .group_id = GROUP_CONTROL, .name = "yaw_pi_kp",           .value = 0.2f,     .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_YAW_PI_KI,               .group_id = GROUP_CONTROL, .name = "yaw_pi_ki",           .value = 0.1f,     .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_YAW_PI_TORQUE_MAX,       .group_id = GROUP_CONTROL, .name = "yaw_pi_torque_max",   .value = 0.2f,     .min_val = 0.0f,     .max_val = 3.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_YAW_PI_INT_MAX,          .group_id = GROUP_CONTROL, .name = "yaw_pi_int_max",      .value = 0.5f,     .min_val = 0.0f,     .max_val = 3.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_OMEGA_CMD_RDS,           .group_id = GROUP_CONTROL, .name = "omega_cmd_rds",       .value = 0.0f,     .min_val = -4.0f,    .max_val = 4.0f,     .flags = 0,                                      .on_change = nullptr},
+
+    // Feedforward 
+    {.id = PARAM_FF1_ALPHA,               .group_id = GROUP_CONTROL, .name = "ff1_alpha",           .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
+    {.id = PARAM_FF2_ALPHA,               .group_id = GROUP_CONTROL, .name = "ff2_alpha",           .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
+    // AK45-10 motor torque constant [N·m/A] — hardware characteristic, not a
+    // live tuning knob. READONLY, edit + reflash to change.
+    {.id = PARAM_FF1_KT_HIP,              .group_id = GROUP_CONTROL, .name = "ff1_kt_hip",          .value = 1.2732f,  .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_READONLY,                    .on_change = nullptr},
+
+    // Jump controller (Phase 7)
+    {.id = PARAM_JUMP_ENABLE,             .group_id = GROUP_CONTROL, .name = "jump_enable",         .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_TORQUE_MAX,         .group_id = GROUP_CONTROL, .name = "jump_torque_max",     .value = 0.0f,     .min_val = 0.0f,     .max_val = 18.0f,    .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_CROUCH_TIME_S,      .group_id = GROUP_CONTROL, .name = "jump_crouch_time",    .value = 0.30f,    .min_val = 0.05f,    .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_RAMP_UP_S,          .group_id = GROUP_CONTROL, .name = "jump_ramp_up",        .value = 0.05f,    .min_val = 0.005f,   .max_val = 0.5f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_RAMP_DOWN_RAD,      .group_id = GROUP_CONTROL, .name = "jump_ramp_down",      .value = 0.08f,    .min_val = 0.01f,    .max_val = 0.5f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_OMEGA_MAX,          .group_id = GROUP_CONTROL, .name = "jump_omega_max",      .value = 40.0f,    .min_val = 5.0f,     .max_val = 200.0f,   .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_HARDSTOP_MARGIN,    .group_id = GROUP_CONTROL, .name = "jump_hs_margin",      .value = 0.06f,    .min_val = 0.01f,    .max_val = 0.5f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_KP,                 .group_id = GROUP_CONTROL, .name = "jump_kp",             .value = 80.0f,    .min_val = 0.0f,     .max_val = 500.0f,   .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_KD,                 .group_id = GROUP_CONTROL, .name = "jump_kd",             .value = 1.0f,     .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_EXTEND_KD,          .group_id = GROUP_CONTROL, .name = "jump_ext_kd",         .value = 0.1f,     .min_val = 0.0f,     .max_val = 5.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_JUMP_EXTEND_TIMEOUT_S,   .group_id = GROUP_CONTROL, .name = "jump_ext_timeout",    .value = 0.15f,    .min_val = 0.05f,    .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+
+    // Sim injection
+    {.id = PARAM_ENABLE_SIM_PITCH_RAD,    .group_id = GROUP_CONTROL, .name = "enable_sim_pitch",    .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
+    {.id = PARAM_SIM_PITCH_RATE_RAD_S,    .group_id = GROUP_CONTROL, .name = "sim_pitch_rate",      .value = 0.0f,     .min_val = -10.0f,   .max_val = 10.0f,    .flags = 0,                                      .on_change = nullptr},
+    {.id = PARAM_ENABLE_SIM_PITCH_RATE,   .group_id = GROUP_CONTROL, .name = "enable_sim_prate",    .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
+    {.id = PARAM_PITCH_WATCHDOG_ENABLE,   .group_id = GROUP_CONTROL, .name = "pitch_watchdog_en",   .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
     // LQR gain table (Phase 5) — see param_ids.h. Range floor keeps sign fixed
     // (magnitude only) so bring-up ramps from near-zero toward the computed
     // default rather than risking a sign flip into positive feedback.
-    {PARAM_LQR_K_PITCH_RET, GROUP_CONTROL, "lqr_k_pitch_ret", -13.0495742f, -20.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_LQR_K_RATE_RET,  GROUP_CONTROL, "lqr_k_rate_ret",   -2.18083692f, -5.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_LQR_K_PITCH_EXT, GROUP_CONTROL, "lqr_k_pitch_ext",  -7.92908352f,-15.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_LQR_K_RATE_EXT,  GROUP_CONTROL, "lqr_k_rate_ext",   -1.69084204f, -5.0f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_LQR_K_VEL,       GROUP_CONTROL, "lqr_k_vel",        -7.13051190e-03f, -0.05f, 0.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {.id = PARAM_LQR_K_PITCH_RET,         .group_id = GROUP_CONTROL, .name = "lqr_k_pitch_ret",     .value = -0.3,     .min_val = -20.0f,   .max_val = 0.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_LQR_K_RATE_RET,          .group_id = GROUP_CONTROL, .name = "lqr_k_rate_ret",      .value = -0.1,    .min_val = -5.0f,    .max_val = 0.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_LQR_K_PITCH_EXT,         .group_id = GROUP_CONTROL, .name = "lqr_k_pitch_ext",     .value = -0.3,     .min_val = -15.0f,   .max_val = 0.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_LQR_K_RATE_EXT,          .group_id = GROUP_CONTROL, .name = "lqr_k_rate_ext",      .value = -0.1,    .min_val = -5.0f,    .max_val = 0.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_LQR_K_VEL,               .group_id = GROUP_CONTROL, .name = "lqr_k_vel",           .value = -0.007f,  .min_val = -0.05f,   .max_val = 0.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
     // Not persisted (see param_ids.h) — always boots to 0 (bypass off).
-    {PARAM_RUNNING_WHEEL_BYPASS_EN, GROUP_CONTROL, "run_wheel_bypass_en", 0.0f, 0.0f, 1.0f, 0, nullptr},
-    // Velocity PI (Phase 3)
-    {PARAM_VEL_PI_EN,               GROUP_CONTROL, "vel_pi_en",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
-    {PARAM_VEL_PI_KP,               GROUP_CONTROL, "vel_pi_kp",           0.2f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_VEL_PI_KI,               GROUP_CONTROL, "vel_pi_ki",           0.1f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_VEL_PI_KFF,              GROUP_CONTROL, "vel_pi_kff",          0.1049f, 0.0f,    1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_VEL_PI_THETA_MAX,        GROUP_CONTROL, "vel_pi_theta_max",    0.698f,  0.1f,    0.698f,PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_VEL_PI_RATE_LIM,         GROUP_CONTROL, "vel_pi_rate_lim",     1.745f,  0.1f,   10.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_VEL_PI_INT_MAX,          GROUP_CONTROL, "vel_pi_int_max",      1.0f,    0.1f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_V_CMD_MS,                GROUP_CONTROL, "v_cmd_ms",            0.0f,   -2.0f,    2.0f,  0,                     nullptr},
-    // Yaw PI (Phase 4)
-    {PARAM_YAW_PI_EN,               GROUP_CONTROL, "yaw_pi_en",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
-    {PARAM_YAW_PI_KP,               GROUP_CONTROL, "yaw_pi_kp",           0.1f,    -1.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_YAW_PI_KI,               GROUP_CONTROL, "yaw_pi_ki",           0.2f,    -1.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_YAW_PI_TORQUE_MAX,       GROUP_CONTROL, "yaw_pi_torque_max",   0.5f,    0.0f,    3.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_YAW_PI_INT_MAX,          GROUP_CONTROL, "yaw_pi_int_max",      0.5f,    0.0f,    3.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_OMEGA_CMD_RDS,           GROUP_CONTROL, "omega_cmd_rds",       0.0f,   -4.0f,    4.0f,  0,                     nullptr},
-    // Feedforward (Phase 6)
-    {PARAM_FF1_ALPHA,               GROUP_CONTROL, "ff1_alpha",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
-    {PARAM_FF2_ALPHA,               GROUP_CONTROL, "ff2_alpha",           0.0f,    0.0f,    1.0f,  0,                     nullptr},
-    // AK45-10 motor torque constant [N·m/A] — hardware characteristic, not a
-    // live tuning knob. READONLY, edit + reflash to change.
-    {PARAM_FF1_KT_HIP,              GROUP_CONTROL, "ff1_kt_hip",          1.2732f, 0.0f,    5.0f,  PARAM_FLAG_READONLY, nullptr},
-    // Jump controller (Phase 7)
-    {PARAM_JUMP_ENABLE,             GROUP_CONTROL, "jump_enable",         0.0f,    0.0f,    1.0f,  0,                     nullptr},
-    {PARAM_JUMP_TORQUE_MAX,         GROUP_CONTROL, "jump_torque_max",     0.0f,    0.0f,   18.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_JUMP_CROUCH_TIME_S,      GROUP_CONTROL, "jump_crouch_time",    0.30f,   0.05f,   1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_JUMP_RAMP_UP_S,          GROUP_CONTROL, "jump_ramp_up",        0.05f,   0.005f,  0.5f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_JUMP_RAMP_DOWN_RAD,      GROUP_CONTROL, "jump_ramp_down",      0.08f,   0.01f,   0.5f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_JUMP_OMEGA_MAX,          GROUP_CONTROL, "jump_omega_max",     40.0f,    5.0f,  200.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_JUMP_HARDSTOP_MARGIN,    GROUP_CONTROL, "jump_hs_margin",      0.06f,   0.01f,   0.5f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_JUMP_KP,                 GROUP_CONTROL, "jump_kp",            80.0f,    0.0f,  500.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_JUMP_KD,                 GROUP_CONTROL, "jump_kd",             1.0f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_JUMP_EXTEND_KD,          GROUP_CONTROL, "jump_ext_kd",         0.1f,    0.0f,    5.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_JUMP_EXTEND_TIMEOUT_S,   GROUP_CONTROL, "jump_ext_timeout",    0.15f,   0.05f,   1.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-
-    // GROUP_WHEEL — wheel motor settings
-    {PARAM_WM_ENC_TIMEOUT_MS, GROUP_WHEEL, "wm_enc_timeout_ms", 20.0f,  5.0f, 500.0f, PARAM_FLAG_PERSISTENT, nullptr},
+    {.id = PARAM_RUNNING_WHEEL_BYPASS_EN, .group_id = GROUP_CONTROL, .name = "run_wheel_bypass_en", .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
+    // Not persisted (see param_ids.h) — always boots to 0 (real/uncalibrated alpha behavior).
+    {.id = PARAM_ALPHA_FORCE_RETRACTED_EN,.group_id = GROUP_CONTROL, .name = "alpha_force_ret_en",  .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
+    // Not persisted (see param_ids.h) — always boots to 0 (radio-sourced motion).
+    {.id = PARAM_GUI_MOTION_CTRL_EN,      .group_id = GROUP_CONTROL, .name = "gui_motion_ctrl_en",  .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
 
     // GROUP_COMMAND — radio-derived setpoints (firmware-written, never persisted)
-    {PARAM_RADIO_HIP_CMD,        GROUP_COMMAND, "radio_hip_cmd",        0.0f,  0.0f,    1.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
+    {.id = PARAM_RADIO_HIP_CMD,           .group_id = GROUP_COMMAND, .name = "radio_hip_cmd",       .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
     // Firmware-copied from the active CH9 profile's vel_max/yaw_max (main.cpp radio_update());
     // not independently persisted — READONLY|COMMAND matches other profile/radio-derived params.
-    {PARAM_RADIO_VEL_MAX,        GROUP_COMMAND, "radio_vel_max",        0.5f,  0.0f,    2.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_RADIO_YAW_MAX,        GROUP_COMMAND, "radio_yaw_max",        1.0f,  0.0f,    4.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_RADIO_PITCH_TRIM,     GROUP_COMMAND, "radio_pitch_trim",     0.0f, -0.0873f, 0.0873f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
+    {.id = PARAM_RADIO_VEL_MAX,           .group_id = GROUP_COMMAND, .name = "radio_vel_max",       .value = 0.5f,     .min_val = 0.0f,     .max_val = 2.0f,     .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_RADIO_YAW_MAX,           .group_id = GROUP_COMMAND, .name = "radio_yaw_max",       .value = 1.0f,     .min_val = 0.0f,     .max_val = 4.0f,     .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_RADIO_PITCH_TRIM,        .group_id = GROUP_COMMAND, .name = "radio_pitch_trim",    .value = 0.0f,     .min_val = -0.0873f, .max_val = 0.0873f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
     // Speed profiles — each set of three is copied into the active params when CH9 switches
-    {PARAM_PROFILE_1_VEL_MAX,    GROUP_COMMAND, "profile1_vel_max",     0.2f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_1_YAW_MAX,    GROUP_COMMAND, "profile1_yaw_max",     0.5f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_1_TORQUE_LIM, GROUP_COMMAND, "profile1_torque_lim",  0.01f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_2_VEL_MAX,    GROUP_COMMAND, "profile2_vel_max",     0.5f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_2_YAW_MAX,    GROUP_COMMAND, "profile2_yaw_max",     1.0f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_2_TORQUE_LIM, GROUP_COMMAND, "profile2_torque_lim",  0.05f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_3_VEL_MAX,    GROUP_COMMAND, "profile3_vel_max",     1.0f,  0.0f,    2.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_3_YAW_MAX,    GROUP_COMMAND, "profile3_yaw_max",     2.0f,  0.0f,    4.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_PROFILE_3_TORQUE_LIM, GROUP_COMMAND, "profile3_torque_lim",  0.1f,  0.0f,    7.0f,  PARAM_FLAG_PERSISTENT, nullptr},
-    {PARAM_ACTIVE_PROFILE,       GROUP_COMMAND, "active_profile",       0.0f,  0.0f,    2.0f,  PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
+    {.id = PARAM_PROFILE_1_VEL_MAX,       .group_id = GROUP_COMMAND, .name = "profile1_vel_max",    .value = 0.2f,     .min_val = 0.0f,     .max_val = 2.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_PROFILE_1_YAW_MAX,       .group_id = GROUP_COMMAND, .name = "profile1_yaw_max",    .value = 0.5f,     .min_val = 0.0f,     .max_val = 4.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_PROFILE_1_TORQUE_LIM,    .group_id = GROUP_COMMAND, .name = "profile1_torque_lim", .value = 0.1f,     .min_val = 0.0f,     .max_val = 7.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_PROFILE_2_VEL_MAX,       .group_id = GROUP_COMMAND, .name = "profile2_vel_max",    .value = 0.5f,     .min_val = 0.0f,     .max_val = 2.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_PROFILE_2_YAW_MAX,       .group_id = GROUP_COMMAND, .name = "profile2_yaw_max",    .value = 1.0f,     .min_val = 0.0f,     .max_val = 4.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_PROFILE_2_TORQUE_LIM,    .group_id = GROUP_COMMAND, .name = "profile2_torque_lim", .value = 0.2f,     .min_val = 0.0f,     .max_val = 7.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_PROFILE_3_VEL_MAX,       .group_id = GROUP_COMMAND, .name = "profile3_vel_max",    .value = 1.0f,     .min_val = 0.0f,     .max_val = 2.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_PROFILE_3_YAW_MAX,       .group_id = GROUP_COMMAND, .name = "profile3_yaw_max",    .value = 2.0f,     .min_val = 0.0f,     .max_val = 4.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_PROFILE_3_TORQUE_LIM,    .group_id = GROUP_COMMAND, .name = "profile3_torque_lim", .value = 0.3f,     .min_val = 0.0f,     .max_val = 7.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_ACTIVE_PROFILE,          .group_id = GROUP_COMMAND, .name = "active_profile",      .value = 0.0f,     .min_val = 0.0f,     .max_val = 2.0f,     .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
 
     // GROUP_IBUS — RC receiver live channel readings (firmware-written via param_force_set)
-    {PARAM_IBUS_CH0,   GROUP_IBUS, "ibus_ch0",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH1,   GROUP_IBUS, "ibus_ch1",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH2,   GROUP_IBUS, "ibus_ch2",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH3,   GROUP_IBUS, "ibus_ch3",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH4,   GROUP_IBUS, "ibus_ch4",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH5,   GROUP_IBUS, "ibus_ch5",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH6,   GROUP_IBUS, "ibus_ch6",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH7,   GROUP_IBUS, "ibus_ch7",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH8,   GROUP_IBUS, "ibus_ch8",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH9,   GROUP_IBUS, "ibus_ch9",   1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH10,  GROUP_IBUS, "ibus_ch10",  1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH11,  GROUP_IBUS, "ibus_ch11",  1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH12,  GROUP_IBUS, "ibus_ch12",  1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_CH13,  GROUP_IBUS, "ibus_ch13",  1500.0f, 1000.0f, 2000.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
-    {PARAM_IBUS_ALIVE, GROUP_IBUS, "ibus_alive",    0.0f,    0.0f,    1.0f, PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, nullptr},
+    {.id = PARAM_IBUS_CH0,                .group_id = GROUP_IBUS,    .name = "ibus_ch0",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH1,                .group_id = GROUP_IBUS,    .name = "ibus_ch1",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH2,                .group_id = GROUP_IBUS,    .name = "ibus_ch2",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH3,                .group_id = GROUP_IBUS,    .name = "ibus_ch3",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH4,                .group_id = GROUP_IBUS,    .name = "ibus_ch4",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH5,                .group_id = GROUP_IBUS,    .name = "ibus_ch5",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH6,                .group_id = GROUP_IBUS,    .name = "ibus_ch6",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH7,                .group_id = GROUP_IBUS,    .name = "ibus_ch7",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH8,                .group_id = GROUP_IBUS,    .name = "ibus_ch8",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH9,                .group_id = GROUP_IBUS,    .name = "ibus_ch9",            .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH10,               .group_id = GROUP_IBUS,    .name = "ibus_ch10",           .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH11,               .group_id = GROUP_IBUS,    .name = "ibus_ch11",           .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH12,               .group_id = GROUP_IBUS,    .name = "ibus_ch12",           .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_CH13,               .group_id = GROUP_IBUS,    .name = "ibus_ch13",           .value = 1500.0f,  .min_val = 1000.0f,  .max_val = 2000.0f,  .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+    {.id = PARAM_IBUS_ALIVE,              .group_id = GROUP_IBUS,    .name = "ibus_alive",          .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
 };
 // clang-format on
 

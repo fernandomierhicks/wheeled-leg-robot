@@ -680,4 +680,5 @@ void stateMachine_request_jump() {
     if (g_state.state == STATE_RUNNING) s_req_jump = true;
 }
 void stateMachine_ping_gui_watchdog()   { s_last_gui_packet_ms = millis(); }
+uint32_t stateMachine_ms_since_gui_packet() { return millis() - s_last_gui_packet_ms; }
 bool stateMachine_is_estop_hip_ramping() { return s_estop_hip_ramping; }

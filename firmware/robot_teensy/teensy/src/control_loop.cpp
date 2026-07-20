@@ -206,7 +206,12 @@ void controlLoop_run() {
     // alpha ∈ [0,1]: 0 = fully retracted (high gains), 1 = fully extended (low gains).
     // Uses the calibrated position range so it is coordinate-system agnostic.
     float alpha = 0.5f;  // default to midpoint if calibration not done
-    if (hm_limits_L.valid && hm_limits_R.valid) {
+    // §1c (tuning.md): hips zip-tied retracted and disabled, so real calibration
+    // can never complete — force the retracted anchor directly, no encoder read,
+    // no calibration dependency. Skips the block below entirely.
+    if (param_get(PARAM_ALPHA_FORCE_RETRACTED_EN) >= 0.5f) {
+        alpha = 0.0f;
+    } else if (hm_limits_L.valid && hm_limits_R.valid) {
         float span_L = hm_limits_L.max_rad - hm_limits_L.min_rad;
         float span_R = hm_limits_R.max_rad - hm_limits_R.min_rad;
         float dir_L  = param_get(PARAM_CALIB_L_SEEK_DIR);
@@ -271,7 +276,9 @@ void controlLoop_run() {
     s_prev_v_desired = v_desired;
 
     g_state.theta_ref        = theta_ref;
-    g_state.v_ref            = (param_get(PARAM_VEL_PI_EN) >= 0.5f) ? v_desired : 0.0f;
+    // g_state.v_ref is set every tick in main.cpp's radio_update(), not here —
+    // it needs to stay live in STANDBY too (controlLoop_run() only runs in
+    // RUNNING/JUMPING), same as v_cmd_ms/omega_cmd_rds.
 
     // ── Phase 4: Yaw PI ───────────────────────────────────────────────────────
     float tau_yaw = 0.0f;

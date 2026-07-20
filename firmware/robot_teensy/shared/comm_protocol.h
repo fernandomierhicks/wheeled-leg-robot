@@ -208,9 +208,10 @@ static_assert(sizeof(Esp32StatusPayload) == 14, "Esp32StatusPayload must be 14 b
 //   [236]  uint16   esp32_status_age_ms
 //   [238]  uint16   uart_rx_drops
 //   [240]  uint16   uart_seq_gaps
-//   [242]  ← end, sizeof = 242 bytes
+//   [242]  float    gain_sched_alpha                                          ← V10 start
+//   [246]  ← end, sizeof = 246 bytes
 //
-#define TELEM_VERSION  9  // bump when adding/removing struct fields; triggers mismatch errors
+#define TELEM_VERSION  10  // bump when adding/removing struct fields; triggers mismatch errors
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -244,7 +245,8 @@ typedef struct __attribute__((packed)) {
     uint8_t  wm_mode;            // current WheelMode (0=IDLE,1=VEL,2=POS,3=TRQ)
     // V4 additions — ToF obstacle sensor data relayed from ESP32 (10 bytes, total 128)
     uint16_t tof_dist_mm[4];     // raw distances from sensors 0-3 [mm], 0xFFFF = no data
-    // V6: tof_age_ms removed (8 bytes saved with gain_sched_alpha; GUI timestamps arrival)
+    // V6: tof_age_ms removed — GUI timestamps arrival instead (gain_sched_alpha added
+    // back separately, as a V10 field at the end of the struct — see below)
     // V5 additions — IMU rates + accel (20 bytes)
     float    roll_rate_rads;     // roll  angular rate [rad/s] (gyro X)
     float    yaw_rate_rads;      // yaw   angular rate [rad/s] (gyro Z) — needed for Yaw PI
@@ -287,18 +289,21 @@ typedef struct __attribute__((packed)) {
     uint16_t esp32_status_age_ms; // ms since last ESP32_STATUS (clamped 65535)
     uint16_t uart_rx_drops;       // Teensy g_comm.rx_drops()    (ESP32→Teensy dir, clamped)
     uint16_t uart_seq_gaps;       // Teensy g_comm.rx_seq_gaps() (ESP32→Teensy dir, clamped)
-} TelemetryPayload;  // 242 bytes — TELEM_VERSION 9
+    // V10 addition — leg gain-schedule blend factor (4 bytes)
+    float    gain_sched_alpha;    // control_loop.cpp hip gain interpolation [0=retracted,1=extended];
+                                   // mirrors g_state.gain_sched_alpha (Phase 5); 0.5 until calibrated
+} TelemetryPayload;  // 246 bytes — TELEM_VERSION 10
 
 // Split offsets for two-packet telemetry (TELEM_A + TELEM_B)
 // Each frame ≤130 bytes — both drain safely with UART FIFO threshold=32
 #define TELEM_A_LEN  118u  // bytes   0-117: IMU, hip pos, RC, wheel motors
-#define TELEM_B_LEN  124u  // bytes 118-241: ToF, rates, accel, hip cmd, control internals, profile,
-                           //                pitch trim, ESP32 link supervision
+#define TELEM_B_LEN  128u  // bytes 118-245: ToF, rates, accel, hip cmd, control internals, profile,
+                           //                pitch trim, ESP32 link supervision, gain-schedule alpha
 
 #ifdef __cplusplus
-static_assert(sizeof(TelemetryPayload) == 242,
+static_assert(sizeof(TelemetryPayload) == 246,
     "TelemetryPayload size changed — bump TELEM_VERSION, update COMM_MAX_PAYLOAD, and see PROPAGATION CHECKLIST");
-static_assert(TELEM_A_LEN + TELEM_B_LEN == 242, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
+static_assert(TELEM_A_LEN + TELEM_B_LEN == 246, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
 #endif
 
 // ── High-datarate SD log (.wlog) ──────────────────────────────────────────────
@@ -306,7 +311,7 @@ static_assert(TELEM_A_LEN + TELEM_B_LEN == 242, "TELEM_A_LEN + TELEM_B_LEN must 
 // The Teensy logs one LogRecord per 500 Hz control tick to a preallocated .wlog
 // file on the built-in microSD. A LogRecord WRAPS the unchanged TelemetryPayload
 // (so the live 50 Hz wire format is untouched) and prepends a micros() timestamp.
-// The PC reads t_micros, then decodes the embedded 235-byte telem blob with the
+// The PC reads t_micros, then decodes the embedded 246-byte telem blob with the
 // SAME split-telemetry decoder used for live data. See software/gui/log_playback.py.
 //
 #define WLOG_FORMAT_V1  1
@@ -325,8 +330,8 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
     uint32_t         t_micros; // micros() at capture — sub-ms inter-tick timing
-    TelemetryPayload telem;    // the exact 242-byte struct, TELEM_VERSION 9
-} LogRecord;                   // 246 bytes — one per control tick
+    TelemetryPayload telem;    // the exact 246-byte struct, TELEM_VERSION 10
+} LogRecord;                   // 250 bytes — one per control tick
 
 // ── Payload: COMM_TYPE_LOG_INFO (Teensy→PC) ──────────────────────────────────
 #define LOG_INFO_PAYLOAD_V1  1
@@ -356,7 +361,7 @@ typedef struct __attribute__((packed)) {
 
 #ifdef __cplusplus
 static_assert(sizeof(WlogHeader) == 32, "WlogHeader must be 32 bytes");
-static_assert(sizeof(LogRecord) == 246, "LogRecord must be sizeof(uint32)+sizeof(TelemetryPayload)");
+static_assert(sizeof(LogRecord) == 250, "LogRecord must be sizeof(uint32)+sizeof(TelemetryPayload)");
 static_assert(sizeof(LogInfoPayload) == 16, "LogInfoPayload must be 16 bytes");
 static_assert(sizeof(LogDataHeader) == 8, "LogDataHeader must be 8 bytes");
 // LOG_CHUNK_DATA + sizeof(LogDataHeader) <= COMM_MAX_PAYLOAD is checked in CommLink.h,
