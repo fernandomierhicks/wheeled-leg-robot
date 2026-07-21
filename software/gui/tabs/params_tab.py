@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 
 from .comm_commands import send_param_get_all, send_param_reset_defaults, send_param_set, send_reliable
 from .telemetry_bus import TelemetryBus
-from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
+from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, YELLOW
 
 # ── Param flag bits (param_registry.h) ────────────────────────────────────────
 _FLAG_PERSISTENT      = 1 << 0
@@ -43,6 +43,8 @@ _GROUP_NAMES = {
     0x05: "Command",
     0x06: "RC Receiver (iBus)",
     0x07: "Safety / Watchdog / Bypass",
+    0x08: "Standing Up",
+    0x09: "Diagnostics",
 }
 _GROUP_COLORS = {
     0x00: "#888888",
@@ -53,6 +55,8 @@ _GROUP_COLORS = {
     0x05: "#ff88cc",
     0x06: "#88ddff",
     0x07: RED,
+    0x08: "#ff6644",
+    0x09: YELLOW,
 }
 
 # Watchdog/bypass params live natively in System/Wheel/Control/Calibration
@@ -69,10 +73,38 @@ _WATCHDOG_PARAM_IDS = frozenset({
     0x042A,  # PARAM_ALPHA_FORCE_RETRACTED_EN (force gain-sched alpha=0, bypass calib-valid check)
 })
 
+# Standing-Up params live natively in GROUP_CONTROL (param_ids.h) but are
+# pulled into their own top-level group here — a full recovery subsystem,
+# reviewed/tuned as a unit at the same level as Calibration rather than
+# buried as a Control subsection.
+_GROUP_STANDUP = 0x08
+_STANDUP_PARAM_IDS = frozenset(range(0x042C, 0x043C))
+
+# gui_motion_ctrl_en lives natively in GROUP_CONTROL (param_ids.h) but is a
+# System-level "who's driving" toggle, not a control-tuning value — pulled
+# into System here.
+_GROUP_SYSTEM = 0x00
+_SYSTEM_OVERRIDE_PARAM_IDS = frozenset({
+    0x042B,  # PARAM_GUI_MOTION_CTRL_EN
+})
+
+# Dev/debug params pulled out of their native group into their own top-level
+# Diagnostics section.
+_GROUP_DIAGNOSTICS = 0x09
+_DIAGNOSTICS_PARAM_IDS = frozenset({
+    0x000A,  # PARAM_LOOP_PROFILE_ENABLE
+})
+
 
 def _effective_group(param_id: int) -> int:
     if param_id in _WATCHDOG_PARAM_IDS:
         return _GROUP_SAFETY
+    if param_id in _STANDUP_PARAM_IDS:
+        return _GROUP_STANDUP
+    if param_id in _DIAGNOSTICS_PARAM_IDS:
+        return _GROUP_DIAGNOSTICS
+    if param_id in _SYSTEM_OVERRIDE_PARAM_IDS:
+        return _GROUP_SYSTEM
     return (param_id >> 8) & 0xFF
 
 # ── Sub-group definitions (Control group split into logical sections) ──────────
@@ -141,7 +173,8 @@ _PARAM_DEFS: dict[int, tuple[str, str]] = {
     0x0000: ("imu_enable", "BNO086 IMU present (SPI). 0 = skip init/poll and stop gating "
              "STARTUP/CALIBRATION/RUNNING on it; also blocks RUNNING since real pitch "
              "feedback is required. Persisted; takes effect at boot (needs reboot)."),
-    0x0003: ("buzzer_enable", "Buzzer present. 0 = skip init/poll. Persisted; takes effect at boot."),
+    0x0003: ("buzzer_volume", "Buzzer master volume. 0.0 = silent, 1.0 = max, scales linearly "
+             "in between. Persisted; takes effect at boot."),
     0x0004: ("led_enable", "Status RGB LED present. 0 = skip init/poll. Persisted; takes effect at boot."),
     0x0005: ("hip_l_enable", "Left AK45 hip motor present. 0 = skip CAN traffic and stop gating "
              "STARTUP/CALIBRATION on it. RUNNING/JUMPING blocked unless all 4 motor-enable "
@@ -281,6 +314,34 @@ _PARAM_DEFS: dict[int, tuple[str, str]] = {
     0x042B: ("gui_motion_ctrl_en", "1 = v_cmd_ms/omega_cmd_rds are driven by GUI/CLI param_set "
              "instead of CH2/CH4; radio arming (CH10) is unaffected. Auto-clears (reverting to "
              "radio control) if no GUI command arrives for 300 ms. Not persisted — always boots to 0."),
+
+    # Standing Up
+    0x042C: ("standup_enable", "Master gate: 0 = arm goes STANDBY->RUNNING directly (today's "
+             "behavior). 1 = arm routes through STANDING_UP recovery first. Default 0."),
+    0x042D: ("standup_pitch_fwd", "Arm-time gate: max forward pitch [rad] considered recoverable. "
+             "Default 0.6 (~34°)."),
+    0x042E: ("standup_pitch_bwd", "Arm-time gate: max backward pitch [rad] considered recoverable. "
+             "Default 0.6 (~34°)."),
+    0x042F: ("standup_crouch_kp", "Hip MIT position gain during the CROUCH ramp, held through "
+             "RECOVER/PAUSE. Mirrors jump_kp."),
+    0x0430: ("standup_crouch_kd", "Hip MIT damping gain, same phases. Mirrors jump_kd."),
+    0x0431: ("standup_crouch_time", "CROUCH phase (leg retraction) duration [s]. Default 0.30."),
+    0x0432: ("standup_k_pitch", "Recovery P gain on pitch [N·m/rad], same positive-sign convention "
+             "as the LQR/FF2 terms. Starts at 0 — tune up on the bench."),
+    0x0433: ("standup_k_rate", "Recovery D gain on pitch rate. Starts at 0 — tune up on the bench."),
+    0x0434: ("standup_torque_lim", "|tau_recover| clamp [N·m], applied before the hard MOTOR_TRQ_MAX "
+             "clamp. Starts at 0 — tune up on the bench; max = MOTOR_TRQ_MAX (7.0)."),
+    0x0435: ("standup_vel_limit", "Dedicated runaway-backup baseline [turns/s], trips at 2x — "
+             "independent of wm_vel_limit so tuning one doesn't loosen the other's margin."),
+    0x0436: ("standup_cap_pitch", "|pitch| below this [rad] (+ rate below standup_cap_rate) for "
+             "the hold time => captured (handoff to RUNNING)."),
+    0x0437: ("standup_cap_rate", "|pitch_rate| capture threshold [rad/s]."),
+    0x0438: ("standup_cap_hold", "Continuous in-band duration [s] required before handoff."),
+    0x0439: ("standup_timeout", "Max time [s] in one RECOVER attempt before declaring it "
+             "failed-to-converge (not diverged)."),
+    0x043A: ("standup_max_retries", "Retry attempts after the first (total attempts = this + 1); "
+             "int-as-float, mirrors calib_stall_ticks convention."),
+    0x043B: ("standup_retry_pause", "Wheels-off settle time [s] between retry attempts."),
 
     # GROUP_COMMAND
     0x0500: ("radio_hip_cmd", "Hip extension command from CH3 [0=retracted, 1=extended]; "

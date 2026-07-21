@@ -5,6 +5,10 @@
 #define TEENSY_UART_RX    16
 #define TEENSY_UART_TX    17
 #define UPLINK_QUEUE_LEN        24      // uplink_task queue depth — ~200 ms absorb at 100 frames/s
+#define LOG_UPLINK_QUEUE_LEN    32      // dedicated SD-log-transfer (LOG_DATA/LOG_INFO) queue, drained
+                                         // by its own task (log_uplink_task) so it's never competing
+                                         // with telemetry for either a queue slot or the CPU time to
+                                         // drain one — see on_teensy_packet(), esp32/src/main.cpp.
 #define TEENSY_LINK_TIMEOUT_MS  1500    // single truth for "Teensy link up": TFT active-state,
                                          // Neopixel linked-state, and face-mode connected-state
 
@@ -16,7 +20,12 @@
 #define TFT_BLK  15   // backlight; tie to 3.3 V if GPIO control not needed
 
 // --- WiFi telemetry ---
-#define WIFI_ENABLED      1     // set to 0 to disable UDP broadcast + TCP server
+#ifndef WIFI_ENABLED
+#define WIFI_ENABLED      1     // set to 0 to disable UDP broadcast + TCP server. Unlike the other
+                                 // WiFi campaign toggles below, this wasn't previously overridable via
+                                 // PLATFORMIO_BUILD_FLAGS — added the guard so a WiFi-free diagnostic
+                                 // build (e.g. -D WIFI_ENABLED=0) is possible without editing this file.
+#endif
 #define TELEM_UDP_PORT    5005
 #define CMD_TCP_PORT      5006
 

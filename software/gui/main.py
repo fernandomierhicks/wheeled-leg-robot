@@ -975,7 +975,7 @@ class StatusBar:
             self._btn_reset.setEnabled(False)
             self._btn_reboot.setEnabled(False)
             return
-        color = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE, "STANDBY": YELLOW, "STARTUP": WHITE}.get(state, DIM)
+        color = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE, "STANDBY": YELLOW, "STARTUP": WHITE, "STANDING_UP": "#ff3c00"}.get(state, DIM)
         self._mode.setStyleSheet(f"color: {color}; font-weight: bold;")
         is_fault = state == "ESTOP" and fault and fault != "NONE"
         label = f"{state}  [{fault}]" if is_fault else state

@@ -1,5 +1,7 @@
 #pragma once
 
+constexpr float MOTOR_TRQ_MAX = 7.0f;  // [N·m] hard per-wheel clamp
+
 void controlLoop_init();   // called once in setup()
 void controlLoop_run();    // called every tick from on_running() — 500 Hz
 void controlLoop_reset();  // called on RUNNING entry — clears integrators/rate-limit state so each arm starts clean

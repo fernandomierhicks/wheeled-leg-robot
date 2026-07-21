@@ -26,7 +26,7 @@
 // changing at runtime requires CMD_ID_REBOOT to re-run setup().
 #define PARAM_IMU_ENABLE     0x0000  // BNO086 IMU (SPI). 0 also blocks RUNNING (arming) —
                                       // real pitch feedback is required to balance.
-#define PARAM_BUZZER_ENABLE  0x0003  // buzzer
+#define PARAM_BUZZER_VOLUME  0x0003  // buzzer master volume: 0.0 = silent, 1.0 = max
 #define PARAM_LED_ENABLE     0x0004  // status RGB LED
 
 // Per-motor presence flags — 0 = that motor physically disconnected/not
@@ -187,6 +187,24 @@
 // "must be explicitly re-armed every session" reasoning as the flag above.
 // See tuning.md §1d.
 #define PARAM_GUI_MOTION_CTRL_EN 0x042B
+
+// Standing-up recovery controller — see standing_up.md
+#define PARAM_STANDUP_ENABLE                0x042C  // master gate: 0 = arm goes STANDBY->RUNNING directly (today's behavior); default 0
+#define PARAM_STANDUP_MAX_PITCH_FWD_RAD      0x042D  // arm-time gate: max forward pitch considered recoverable [rad]; default 0.6
+#define PARAM_STANDUP_MAX_PITCH_BWD_RAD      0x042E  // arm-time gate: max backward pitch considered recoverable [rad]; default 0.6
+#define PARAM_STANDUP_CROUCH_KP              0x042F  // hip MIT position gain during CROUCH ramp, held through RECOVER/PAUSE; default 80.0
+#define PARAM_STANDUP_CROUCH_KD              0x0430  // hip MIT damping, same phases; default 1.0
+#define PARAM_STANDUP_CROUCH_TIME_S          0x0431  // [s] fixed-time CROUCH ramp duration; default 0.30
+#define PARAM_STANDUP_K_PITCH                0x0432  // recovery P gain on pitch [N·m/rad]; default 0.0, tune up on bench
+#define PARAM_STANDUP_K_RATE                 0x0433  // recovery D gain on pitch rate; default 0.0, tune up on bench
+#define PARAM_STANDUP_TORQUE_LIMIT           0x0434  // |tau_recover| clamp before the hard MOTOR_TRQ_MAX clamp; default 0.0, max = MOTOR_TRQ_MAX
+#define PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S 0x0435 // dedicated runaway-backup baseline, trips at x2.0 (independent of PARAM_WHEEL_VEL_LIMIT_TURNS_S); default 3.0
+#define PARAM_STANDUP_CAPTURE_PITCH_RAD      0x0436  // |pitch| below this (+ rate below next) for the hold time => captured; default 0.12
+#define PARAM_STANDUP_CAPTURE_RATE_RADS      0x0437  // |pitch_rate| capture threshold [rad/s]; default 1.0
+#define PARAM_STANDUP_CAPTURE_HOLD_S         0x0438  // [s] continuous in-band duration required before handoff; default 0.15
+#define PARAM_STANDUP_ATTEMPT_TIMEOUT_S      0x0439  // [s] max time in one RECOVER attempt before declaring it failed-to-converge; default 1.5
+#define PARAM_STANDUP_MAX_RETRIES            0x043A  // retry attempts after the first (total attempts = this + 1); int-as-float; default 2
+#define PARAM_STANDUP_RETRY_PAUSE_S          0x043B  // [s] wheels-off settle time between retry attempts; default 0.3
 
 // Velocity PI (Phase 3)
 #define PARAM_VEL_PI_EN               0x0404  // 1 = velocity PI active; 0 = theta_ref fixed at 0

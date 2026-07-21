@@ -182,9 +182,9 @@ _COMM_MAX_PAYLOAD = 512  # mirrors firmware CommLink.h COMM_MAX_PAYLOAD — a co
                           # arrive, swallowing subsequent legitimate datagrams into the search
                           # (Fix 2 equivalent; found via WiFi corruption-injection testing,
                           # Phase 9, UARTplat.md)
-_TELEM_VERSION = 10  # must match TELEM_VERSION in shared/comm_protocol.h
+_TELEM_VERSION = 11  # must match TELEM_VERSION in shared/comm_protocol.h
 _TELEM_A_LEN   = 118
-_TELEM_B_LEN   = 128
+_TELEM_B_LEN   = 129
 
 _TYPE_NAMES  = {
     0x01: "TELEM", 0x02: "CMD", 0x03: "ACK", 0x04: "LOG",
@@ -295,15 +295,20 @@ class PacketDecoder(QObject):
                         "calib_pos_rad": pos, "calib_min_rad": mn, "calib_max_rad": mx,
                     })
                 elif ptype == 0x10 and length == _TELEM_A_LEN:
-                    # TELEM_A — store and wait for TELEM_B before emitting
                     if version != _TELEM_VERSION:
+                        # Version mismatch — fall through to the normal emit path below
+                        # so this reaches TelemetryBus and main.py's status-bar banner
+                        # (set_version_mismatch) actually fires. Previously this branch
+                        # always `continue`d before the emit, so a mismatch produced no
+                        # telemetry AND no visible error — just silence.
                         info["version_mismatch"] = True
                         info["got_version"]       = version
                         info["expected_version"]  = _TELEM_VERSION
                     else:
+                        # TELEM_A — store and wait for TELEM_B before emitting
                         self._telem_a_buf = {**info, **_decode_telem_a(payload)}
-                    self._buf = self._buf[total:]
-                    continue  # don't emit yet
+                        self._buf = self._buf[total:]
+                        continue  # don't emit yet
                 elif ptype == 0x11 and length == _TELEM_B_LEN and self._telem_a_buf is not None:
                     # TELEM_B — complete the packet and emit as a unified telemetry
                     # dict. Pairing requires B.seq == A.seq + 1 (audit W4): over UDP,
@@ -376,7 +381,7 @@ class PacketDecoder(QObject):
                             "wifi_uplink_queue_drops": uplink_queue_drops,
                             "wifi_tcp_send_max_us":    tcp_send_max_us,
                         })
-                elif ptype == 0x15 and length == 246:
+                elif ptype == 0x15 and length == 247:
                     # TELEM_FULL_WIFI — WIFI_TELEM_COMBINED variant: the full
                     # TelemetryPayload as one datagram. Remap to look like a normal
                     # TELEM packet (transparent to every existing tab).

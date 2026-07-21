@@ -11,9 +11,11 @@ void Buzzer::begin() {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-void Buzzer::set_enabled(bool en) {
-    _enabled = en;
-    if (!_enabled) {
+void Buzzer::set_volume(float scale) {
+    if (scale < 0.0f) scale = 0.0f;
+    if (scale > 1.0f) scale = 1.0f;
+    _volume_scale = scale;
+    if (_volume_scale <= 0.0f) {
         _silence();
         _notes = nullptr;
         _done  = true;
@@ -21,7 +23,7 @@ void Buzzer::set_enabled(bool en) {
 }
 
 void Buzzer::tone(uint16_t freq_hz, uint8_t volume, uint32_t duration_ms) {
-    if (!_enabled) return;
+    if (_volume_scale <= 0.0f) return;
     _notes          = nullptr;
     _tone_start     = millis();
     _tone_duration  = duration_ms;
@@ -35,7 +37,7 @@ void Buzzer::midi(uint8_t note, uint8_t volume, uint32_t duration_ms) {
 }
 
 void Buzzer::play(const BuzzerNote* notes, uint8_t count, uint8_t volume, bool loop) {
-    if (!_enabled) return;
+    if (_volume_scale <= 0.0f) return;
     if (!notes || count == 0) return;
     _notes       = notes;
     _count       = count;
@@ -99,13 +101,14 @@ float Buzzer::midi_to_hz(uint8_t note) {
 // ── Private helpers ───────────────────────────────────────────────────────────
 
 void Buzzer::_set_pwm(uint16_t freq_hz, uint8_t volume) {
-    if (freq_hz == 0 || volume == 0) {
+    uint8_t scaled = (uint8_t)((float)volume * _volume_scale);
+    if (freq_hz == 0 || scaled == 0) {
         _silence();
         return;
     }
     // Map volume 0-255 → duty 0-127 (0-50%).
     // 50% duty maximises power to a passive buzzer; above 50% it falls again.
-    uint8_t duty = (uint8_t)(((uint16_t)volume * 127u) / 255u);
+    uint8_t duty = (uint8_t)(((uint16_t)scaled * 127u) / 255u);
     analogWriteFrequency(_pin, freq_hz);
     analogWrite(_pin, duty);
 }

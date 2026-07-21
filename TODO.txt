@@ -5,9 +5,9 @@
 
 ---Fernandos note dont change below
 
-Standing up mode
+
 live run with gain optimizer. tuning.md
-buzzer volume
+
 CAD up leg protectors ont he back and on the front below the screen. foam?
 Thin RGB strip
 

@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-// MIRROR: software/gui/flash_monitor.py  _STATE_NAMES dict (add STATE_JUMPING=7) and
+// MIRROR: software/gui/flash_monitor.py  _STATE_NAMES dict (add STATE_JUMPING=7, STATE_STANDING_UP=8) and
 //         software/gui/hip_motors.py  _STATE_LABELS + _STATE_STANDBY/_STATE_MANUAL must stay in sync
 typedef enum : uint8_t {
     STATE_STARTUP      = 0,
@@ -12,6 +12,7 @@ typedef enum : uint8_t {
     STATE_MANUAL       = 5,
     STATE_CMD_REJECT   = 6,  // ~1 s transient: plays REJECT_MELODY, red blink, then returns to originating state
     STATE_JUMPING      = 7,  // ~3 s transient from RUNNING: plays jump melody, then returns to RUNNING
+    STATE_STANDING_UP  = 8,  // transient from STANDBY on arm: retract legs, energetic wheel recovery, then RUNNING
 } RobotStateEnum;
 
 typedef struct {
@@ -38,6 +39,7 @@ typedef struct {
     float          ff1_out;           // hip reaction FF torque [N·m]      — Phase 6; 0 until then
     float          ff2_out;           // gravity compensation FF [N·m]     — Phase 6; 0 until then
     uint8_t        jump_state;        // Jump FSM phase                    — Phase 7; 0 until then
+    uint8_t        standup_state;     // Standup FSM phase                 — 0 until then
 } RobotState;
 
 // Pending hip command queued by the comm handler; consumed by on_manual().

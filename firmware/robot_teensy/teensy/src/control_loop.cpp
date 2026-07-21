@@ -34,7 +34,7 @@ static constexpr float L_EFF_EXT    = 0.295390f;  // [m] fully extended
 static constexpr float M_BODY       = 1.6380f;    // [kg] body (excl. wheels)
 static constexpr float GRAVITY      = 9.81f;      // [m/s²]
 static constexpr float WHEEL_R      = 0.075f;     // [m] wheel radius (150 mm OD)
-static constexpr float MOTOR_TRQ_MAX = 7.0f;      // [N·m] hard per-wheel clamp
+// MOTOR_TRQ_MAX now lives in control_loop.h — shared with state_machine.cpp's standup recovery law
 
 // ── Controller state ──────────────────────────────────────────────────────────
 // Phase 3 — Velocity PI

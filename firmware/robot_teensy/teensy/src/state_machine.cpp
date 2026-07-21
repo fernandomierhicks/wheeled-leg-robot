@@ -63,6 +63,7 @@ static State* S_RUNNING;
 static State* S_ESTOP;
 static State* S_CMD_REJECT;
 static State* S_JUMPING;
+static State* S_STANDING_UP;
 
 // ── ESTOP hip-disable tracking ────────────────────────────────────────────────
 static bool s_estop_hip_disabled = false;  // set when MIT was killed on ESTOP entry
@@ -109,6 +110,16 @@ static float     s_jp_ret_L        = 0.0f;    // calibrated retracted pos (CROUC
 static float     s_jp_ret_R        = 0.0f;
 static float     s_jp_from_L       = 0.0f;    // hip pos when RETRACT began
 static float     s_jp_from_R       = 0.0f;
+
+// ── Standing-up FSM state ─────────────────────────────────────────────────────
+typedef enum : uint8_t { SU_CROUCH = 0, SU_RECOVER = 1, SU_PAUSE = 2 } StandupPhase;
+static StandupPhase s_su_phase             = SU_CROUCH;
+static uint32_t     s_su_phase_ms          = 0;
+static float        s_su_nom_L, s_su_nom_R;       // hip pos snapshot at entry
+static float        s_su_ret_L, s_su_ret_R;       // calibrated retracted target
+static uint8_t      s_su_attempt           = 0;   // 1-based RECOVER attempt counter
+static uint32_t     s_su_capture_since_ms  = 0;   // 0 = not currently in-band
+static bool         s_su_captured          = false;
 
 // ── MANUAL GUI watchdog ───────────────────────────────────────────────────────
 // Fed by any COMM_TYPE_COMMAND packet; the GUI sends CMD_ID_PING at 10 Hz so a
@@ -226,18 +237,19 @@ static void on_calibration() {
     calibration_update();
 }
 static void on_running() {
-    bool entering     = (g_state.state != STATE_RUNNING);
-    bool from_jumping = (g_state.state == STATE_JUMPING);
+    bool entering         = (g_state.state != STATE_RUNNING);
+    bool from_jumping     = (g_state.state == STATE_JUMPING);
+    bool from_standing_up = (g_state.state == STATE_STANDING_UP);
     g_state.state = STATE_RUNNING;
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> RUNNING (armed)");
         g_buzzer.play(ARMED_MELODY, sizeof(ARMED_MELODY) / sizeof(ARMED_MELODY[0]), 200);
         wheel_motors_set_mode(WheelMode::TORQUE);
         controlLoop_reset();  // C1: clear integrators/rate-limit state so each arm starts clean
-        // Skip on a jump landing — the hips are already stiffly holding the
-        // post-jump position (on_jumping's JP_DONE); re-ramping kp from 0
-        // here would loosen them right when they need to hold.
-        if (!from_jumping) controlLoop_reset_hip_ramp();
+        // Skip on a jump landing or a successful standup catch — the hips are
+        // already stiffly holding the post-jump/post-catch position; re-ramping
+        // kp from 0 here would loosen them right when they need to hold.
+        if (!from_jumping && !from_standing_up) controlLoop_reset_hip_ramp();
     }
     controlLoop_run();
 }
@@ -374,6 +386,118 @@ static void on_jumping() {
         hip_motors_set_setpoint_R(s_jp_nom_R, 0.0f, kp, kd, 0.0f);
     }
 }
+// Self-contained recovery sequence for arming while fallen — see standing_up.md.
+// Never calls controlLoop_run(): pitch is large/outside the LQR's linearization
+// region during the energetic phase, so this codes its own minimal wheel-torque
+// law inline, the same way on_jumping() codes its own hip logic inline.
+static void on_standing_up() {
+    bool entering = (g_state.state != STATE_STANDING_UP);
+    g_state.state = STATE_STANDING_UP;
+
+    if (entering) {
+        comm_log(LOG_LEVEL_INFO, "-> STANDING_UP");
+        s_su_phase            = SU_CROUCH;
+        s_su_phase_ms         = millis();
+        s_su_attempt          = 0;
+        s_su_captured         = false;
+        s_su_capture_since_ms = 0;
+        s_su_nom_L = hm_L.pos_rad;
+        s_su_nom_R = hm_R.pos_rad;
+        hip_cmd_to_setpoints(0.0f, &s_su_ret_L, &s_su_ret_R);  // t=0 → retracted
+        wheel_motors_set_mode(WheelMode::TORQUE);
+    }
+
+    g_state.standup_state = (uint8_t)s_su_phase;
+
+    float kp      = param_get(PARAM_STANDUP_CROUCH_KP);
+    float kd      = param_get(PARAM_STANDUP_CROUCH_KD);
+    float elapsed = (millis() - s_su_phase_ms) / 1000.0f;
+
+    if (s_su_phase == SU_CROUCH) {
+        float crouch_t = param_get(PARAM_STANDUP_CROUCH_TIME_S);
+        float alpha    = elapsed / crouch_t;
+        if (alpha > 1.0f) alpha = 1.0f;
+        float dq_L = (s_su_ret_L - s_su_nom_L) / crouch_t;
+        float dq_R = (s_su_ret_R - s_su_nom_R) / crouch_t;
+        hip_motors_set_setpoint_L(s_su_nom_L + alpha * (s_su_ret_L - s_su_nom_L), dq_L, kp, kd, 0.0f);
+        hip_motors_set_setpoint_R(s_su_nom_R + alpha * (s_su_ret_R - s_su_nom_R), dq_R, kp, kd, 0.0f);
+        wheel_motors_send(0.0f, 0.0f);  // no wheel motion until legs are known-good
+        if (elapsed >= crouch_t) {
+            s_su_phase    = SU_RECOVER;
+            s_su_phase_ms = millis();
+            s_su_attempt  = 1;
+        }
+        return;
+    }
+
+    // SU_RECOVER / SU_PAUSE: hold hips at the retracted target throughout
+    hip_motors_set_setpoint_L(s_su_ret_L, 0.0f, kp, kd, 0.0f);
+    hip_motors_set_setpoint_R(s_su_ret_R, 0.0f, kp, kd, 0.0f);
+
+    float pitch      = g_state.pitch_rad;
+    float pitch_rate = g_state.pitch_rate_rads;
+
+    // Divergence check (no retry): pitch grew past the recoverable range
+    // mid-attempt — a wrong-direction/unstable response, not just a slow one.
+    if (pitch > param_get(PARAM_STANDUP_MAX_PITCH_FWD_RAD) ||
+        pitch < -param_get(PARAM_STANDUP_MAX_PITCH_BWD_RAD)) {
+        g_state.fault_code = FAULT_STANDUP_FAILED;
+        stateMachine_request_estop();
+        return;
+    }
+
+    if (s_su_phase == SU_RECOVER) {
+        // Dedicated runaway hard-backup, independent of PARAM_WHEEL_VEL_LIMIT_TURNS_S
+        // so tuning one doesn't loosen the other's safety margin.
+        float hard_limit = param_get(PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S) * 2.0f;
+        if (fabsf(wm_L.vel_turns_s) > hard_limit || fabsf(wm_R.vel_turns_s) > hard_limit) {
+            g_state.fault_code = FAULT_WHEEL_RUNAWAY;
+            stateMachine_request_estop();
+            return;
+        }
+
+        float tau = param_get(PARAM_STANDUP_K_PITCH) * pitch + param_get(PARAM_STANDUP_K_RATE) * pitch_rate;
+        float trq_limit = param_get(PARAM_STANDUP_TORQUE_LIMIT);
+        if (tau >  trq_limit) tau =  trq_limit;
+        if (tau < -trq_limit) tau = -trq_limit;
+        if (tau >  MOTOR_TRQ_MAX) tau =  MOTOR_TRQ_MAX;
+        if (tau < -MOTOR_TRQ_MAX) tau = -MOTOR_TRQ_MAX;
+        wheel_motors_send(tau, tau);  // symmetric, no yaw/differential — straight push only
+        g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = tau;
+
+        // Capture check: in-band continuously for the hold time => good enough for LQR
+        bool in_band = fabsf(pitch)      < param_get(PARAM_STANDUP_CAPTURE_PITCH_RAD) &&
+                        fabsf(pitch_rate) < param_get(PARAM_STANDUP_CAPTURE_RATE_RADS);
+        if (in_band) {
+            if (s_su_capture_since_ms == 0) s_su_capture_since_ms = millis();
+            if (millis() - s_su_capture_since_ms >= (uint32_t)(param_get(PARAM_STANDUP_CAPTURE_HOLD_S) * 1000.0f)) {
+                s_su_captured = true;
+            }
+        } else {
+            s_su_capture_since_ms = 0;
+        }
+
+        // Attempt timeout: stayed within range but didn't converge in time
+        if (elapsed >= param_get(PARAM_STANDUP_ATTEMPT_TIMEOUT_S) && !s_su_captured) {
+            if (s_su_attempt >= (uint8_t)param_get(PARAM_STANDUP_MAX_RETRIES) + 1) {
+                g_state.fault_code = FAULT_STANDUP_FAILED;
+                stateMachine_request_estop();
+                return;
+            }
+            s_su_phase    = SU_PAUSE;
+            s_su_phase_ms = millis();
+        }
+    }
+    else {  // SU_PAUSE
+        wheel_motors_send(0.0f, 0.0f);
+        if (elapsed >= param_get(PARAM_STANDUP_RETRY_PAUSE_S)) {
+            s_su_attempt++;
+            s_su_phase    = SU_RECOVER;
+            s_su_phase_ms = millis();
+        }
+    }
+}
+static bool standup_captured() { return s_su_captured; }
 // Immediate hip cutoff — the pre-ramp behavior, now also used to finalize the
 // gentle ramp once it completes.
 static void estop_cut_hip() {
@@ -500,9 +624,7 @@ static bool manual_gui_timeout() {
     comm_log(LOG_LEVEL_WARN, "MANUAL: GUI timeout -> STANDBY");
     return true;
 }
-static bool req_running() {
-    if (!s_req_running) return false;
-    s_req_running = false;
+static bool req_running_checks_common() {
     if (param_get(PARAM_IMU_ENABLE) < 0.5f) {
         comm_log(LOG_LEVEL_WARN, "Running mode denied: IMU disabled (imu_enable=0)");
         stateMachine_request_cmd_reject();
@@ -527,6 +649,29 @@ static bool req_running() {
         return false;
     }
     return true;
+}
+// Arm while STANDUP_ENABLE=1: gate on recoverable pitch range, then route
+// through STANDING_UP instead of straight to RUNNING.
+static bool req_running_to_standing_up() {
+    if (!s_req_running) return false;
+    if (param_get(PARAM_STANDUP_ENABLE) < 0.5f) return false;  // let _direct handle it
+    s_req_running = false;
+    if (!req_running_checks_common()) return false;
+    float pitch = g_state.pitch_rad;
+    if (pitch > param_get(PARAM_STANDUP_MAX_PITCH_FWD_RAD) ||
+        pitch < -param_get(PARAM_STANDUP_MAX_PITCH_BWD_RAD)) {
+        comm_log(LOG_LEVEL_WARN, "Standing-up denied: pitch %.3f rad outside recoverable range", pitch);
+        stateMachine_request_cmd_reject();
+        return false;
+    }
+    return true;
+}
+// Today's exact behavior, byte-identical, when STANDUP_ENABLE=0 (the default).
+static bool req_running_direct() {
+    if (!s_req_running) return false;
+    if (param_get(PARAM_STANDUP_ENABLE) >= 0.5f) return false;  // handled above
+    s_req_running = false;
+    return req_running_checks_common();
 }
 static bool req_disarm_running() { bool v = s_req_disarm_running; s_req_disarm_running = false; return v; }
 static bool req_jump()           { bool v = s_req_jump;           s_req_jump           = false; return v; }
@@ -568,6 +713,7 @@ void stateMachine_init() {
     S_ESTOP       = sm.addState(on_estop);
     S_CMD_REJECT  = sm.addState(on_cmd_reject);
     S_JUMPING     = sm.addState(on_jumping);
+    S_STANDING_UP = sm.addState(on_standing_up);
 
     S_STARTUP->addTransition(req_estop,    S_ESTOP);
     S_STARTUP->addTransition(startup_ok,   S_STANDBY);
@@ -577,7 +723,8 @@ void stateMachine_init() {
     S_STANDBY->addTransition(motor_feedback_fault, S_ESTOP);
     S_STANDBY->addTransition(req_manual,           S_MANUAL);
     S_STANDBY->addTransition(req_calibration,      S_CALIBRATION);
-    S_STANDBY->addTransition(req_running,          S_RUNNING);
+    S_STANDBY->addTransition(req_running_to_standing_up, S_STANDING_UP);
+    S_STANDBY->addTransition(req_running_direct,   S_RUNNING);
     S_STANDBY->addTransition(req_cmd_reject,       S_CMD_REJECT);
 
     S_MANUAL ->addTransition(req_estop,            S_ESTOP);
@@ -601,6 +748,11 @@ void stateMachine_init() {
     S_JUMPING->addTransition(motor_feedback_fault, S_ESTOP);
     S_JUMPING->addTransition(running_imu_fault,    S_ESTOP);
     S_JUMPING->addTransition(jump_done,            S_RUNNING);
+
+    S_STANDING_UP->addTransition(req_estop,            S_ESTOP);
+    S_STANDING_UP->addTransition(motor_feedback_fault, S_ESTOP);
+    S_STANDING_UP->addTransition(running_imu_fault,    S_ESTOP);
+    S_STANDING_UP->addTransition(standup_captured,     S_RUNNING);
 
     S_ESTOP  ->addTransition(req_soft_clear,     S_STANDBY);
     S_ESTOP  ->addTransition(req_reset,          S_STARTUP);

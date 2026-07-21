@@ -21,9 +21,10 @@ public:
     void begin();
     void update();  // must be called every loop
 
-    // Disabling silences immediately and no-ops tone()/midi()/play() until
-    // re-enabled — for bench-testing without the buzzer wired up.
-    void set_enabled(bool en);
+    // 0.0-1.0 master volume scale applied on top of each call's own volume.
+    // Setting 0.0 silences immediately and no-ops tone()/midi()/play() until
+    // raised again — for bench-testing without the buzzer wired up.
+    void set_volume(float scale);
 
     // Single tone: hold until off() or a new command.  duration_ms=0 → hold forever.
     void tone(uint16_t freq_hz, uint8_t volume = 255, uint32_t duration_ms = 0);
@@ -45,7 +46,7 @@ public:
 
 private:
     uint8_t _pin;
-    bool    _enabled = true;
+    float   _volume_scale = 1.0f;
 
     // Single-tone state
     uint32_t _tone_start    = 0;

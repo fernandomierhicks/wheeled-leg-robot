@@ -36,6 +36,7 @@ enum : uint8_t {
     RS_MANUAL      = 5,
     RS_CMD_REJECT  = 6,
     RS_JUMPING     = 7,
+    RS_STANDING_UP = 8,
 };
 
 // ── Strip geometry ────────────────────────────────────────────────────────────
@@ -118,6 +119,53 @@ static volatile uint32_t g_uart_crc_drops  = 0;  // lifetime CommLink CRC/frame 
 static volatile uint32_t g_uart_seq_gaps   = 0;  // lifetime frames lost (CommLink seq gaps; mirror of g_teensy.rx_seq_gaps())
 static volatile uint8_t  g_uart_crc_rate   = 0;  // CRC drops in last 2 s window
 static volatile uint8_t  g_uart_gap_rate   = 0;  // seq gaps  in last 2 s window
+
+// ── SD-log GET transfer state (written on_teensy_packet, read neo_task/display_task) ──
+// The Teensy pauses its normal 50 Hz telemetry while a GET is streaming (see
+// teensy/src/main.cpp loop()), so g_last_teensy_ms/"linked" goes stale during
+// every download unless something else tells the neo/display tasks "this is
+// an expected quiet spell, not a dead link" — that's what these track, derived
+// straight from the LOG_INFO/LOG_DATA frames passing through regardless.
+static volatile bool     g_log_xfer_active      = false;
+static volatile uint32_t g_last_log_activity_ms = 0;
+static volatile uint32_t g_log_total_chunks     = 0;
+static volatile uint32_t g_log_chunks_done      = 0;
+// Set once when leaving the download banner so drawModeBanner's own
+// value-based redraw cache (which has no idea the screen was just showing
+// something else) is forced to repaint instead of concluding "unchanged".
+static volatile bool     g_banner_force_redraw  = false;
+
+// Set from LOG_SUB_START/STOP commands seen passing through forward_to_teensy()
+// — direct, immediate signal (no round-trip ack needed), independent of
+// telemetry. A duration-bound recording (the common case — see tuning.md's
+// Test Protocol) auto-stops firmware-side with no explicit STOP command ever
+// sent (mirrors sd_logger.cpp's own g_stop_deadline_ms), so g_recording_active
+// alone would get stuck true forever after the first timed trial — use
+// recording_is_active() below, which also honors g_recording_deadline_ms.
+static volatile bool     g_recording_active      = false;
+static volatile uint32_t g_recording_deadline_ms = 0;  // 0 = no deadline (indefinite, STOP-gated)
+
+// True while a recording is genuinely still running — honors the deadline
+// so a duration-bound recording's indicator clears itself on schedule even
+// though no explicit STOP command ever arrives for those.
+static bool recording_is_active() {
+    if (!g_recording_active) return false;
+    if (g_recording_deadline_ms != 0 && (int32_t)(millis() - g_recording_deadline_ms) >= 0) return false;
+    return true;
+}
+
+// True while a GET is actively streaming; bounded by a staleness fallback
+// (3 s with no log traffic at all) in case an XFER_END is ever lost.
+static bool log_xfer_is_downloading() {
+    return g_log_xfer_active && (millis() - g_last_log_activity_ms < 3000);
+}
+static uint8_t log_xfer_percent() {
+    uint32_t total = g_log_total_chunks;
+    if (total == 0) return 0;
+    uint32_t done = g_log_chunks_done;
+    if (done > total) done = total;
+    return (uint8_t)((uint64_t)done * 100u / total);
+}
 
 // ── WiFi diagnostics (loop.cpp, core 1) ───────────────────────────────────────
 static volatile uint16_t g_loop_max_us            = 0;  // max loop() duration since last diag tick
@@ -289,11 +337,51 @@ static void anim_rainbow_jump(CRGB* buf, uint32_t tick) {
     }
 }
 
+// DOWNLOADING SD LOG — blue progress ring (fills as chunks arrive) + a
+// pulsing leading edge, on a dim blue base so the strip clearly reads "busy,
+// not dead" even at 0%. Takes over from every other animation, including the
+// "not linked" ghost-comet — see log_xfer_is_downloading()'s use in neo_task().
+static void anim_download(CRGB* buf, uint32_t tick, uint8_t pct) {
+    fill_solid(buf, NUM_LEDS, CRGB(0, 4, 16));
+    int lit = (int)((uint32_t)pct * NUM_LEDS / 100u);
+    for (int i = 0; i < lit; i++)
+        buf[i] = CRGB(0, 120, 255);
+    if (lit < NUM_LEDS) {
+        uint8_t pulse = map(sin8((uint8_t)(tick * 12u)), 0, 255, 60, 255);
+        buf[lit] = CRGB(0, pulse, pulse);
+    }
+}
+
+// RECORDING overlay — periodic additive blue flash blended onto whatever the
+// base animation currently is (state animation, ghost-comet, etc.) so "SD
+// card is actively writing" stays visible without hiding it. Unlike
+// anim_reject_strobe (a brief, fully-overriding one-shot event), a recording
+// runs for the whole trial, so a full takeover would hide the state
+// animation for a large fraction of every session — additive blue instead
+// leaves R/G untouched, reading as "the usual pattern, tinted blue".
+static void anim_recording_strobe(CRGB* buf, uint32_t tick) {
+    if ((tick % 25u) >= 5u) return;  // ~200 ms flash, repeating every 500 ms
+    for (int i = 0; i < NUM_LEDS; i++)
+        buf[i].b = qadd8(buf[i].b, 220);
+}
+
 // ── NeoPixel task ─────────────────────────────────────────────────────────────
 
 static void neo_task(void*) {
     FastLED.addLeds<WS2812B, PIN_NEO, GRB>(leds, NUM_LEDS);
     FastLED.setBrightness(BRIGHTNESS);
+
+    // One-shot boot rainbow (~1.5 s) so a physical reboot/reflash is
+    // unmistakable on the bench — distinct from every state animation and
+    // from anim_ghost_comet's dim red "not linked yet" indicator, which is
+    // easy to miss if you're not staring at the strip at that exact moment.
+    for (uint32_t t = 0; t < 75; t++) {  // 75 * 20 ms = 1.5 s
+        uint8_t base_hue = (uint8_t)(t * 10u);
+        for (int i = 0; i < NUM_LEDS; i++)
+            leds[i] = CHSV(base_hue + (uint8_t)((uint32_t)i * 256u / NUM_LEDS), 255, 255);
+        FastLED.show();
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
 
     static CRGB neo_buf[NUM_LEDS];
     static CRGB neo_snap[NUM_LEDS];
@@ -318,7 +406,9 @@ static void neo_task(void*) {
         }
 
         fill_solid(neo_buf, NUM_LEDS, CRGB::Black);
-        if (!linked) {
+        if (log_xfer_is_downloading()) {
+            anim_download(neo_buf, tick, log_xfer_percent());
+        } else if (!linked) {
             anim_ghost_comet(neo_buf, tick);
         } else {
             switch (state) {
@@ -337,6 +427,9 @@ static void neo_task(void*) {
                 default:             fill_solid(neo_buf, NUM_LEDS, CRGB::White);  break;
             }
         }
+
+        if (recording_is_active() && !log_xfer_is_downloading())
+            anim_recording_strobe(neo_buf, tick);
 
         if (millis() < g_reject_end_ms)
             anim_reject_strobe(neo_buf, tick);
@@ -469,6 +562,19 @@ typedef struct {
 
 static QueueHandle_t      g_uplink_q        = nullptr;
 static uint32_t           g_uplink_drops    = 0;   // frames dropped because queue was full
+
+// SD-log transfer frames (LOG_DATA/LOG_INFO) get their own queue AND their own
+// dedicated draining task (log_uplink_task, below) — two earlier attempts each
+// fixed half the problem: sharing g_uplink_q let telemetry drop-oldest-evict
+// pending chunks (downloads stalled); sending them direct/synchronous from
+// on_teensy_packet() fixed that but could briefly block core 1's UART parse
+// path per chunk (the "freezes for ~1s" symptom). A dedicated task is truly,
+// preemptively concurrent with uplink_task — not just called with priority
+// from inside the same loop body — so neither problem applies: it never
+// shares a queue slot with telemetry, and on_teensy_packet() only ever does a
+// non-blocking memcpy into this queue, same as enqueue_uplink().
+static QueueHandle_t      g_log_uplink_q      = nullptr;
+static uint32_t           g_log_uplink_drops  = 0;  // log frames dropped because queue was full
 static uint32_t           g_tcp_send_skipped = 0;  // TCP sends skipped because the socket
                                                     // wasn't write-ready — see the select()
                                                     // pre-check in uplink_task: WiFiClient::write()
@@ -488,6 +594,16 @@ static volatile uint16_t  g_tcp_send_max_us = 0;   // like g_udp_send_max_us; co
 // write (uplink_task) on the same socket from different cores corrupts lwIP's
 // pbuf chain (assert "pbuf_free: p->ref > 0" -> reboot). Phase 7, UARTplat.md.
 static SemaphoreHandle_t g_tcp_mutex = nullptr;
+
+// Guards every write to Serial (UART0/USB-CDC to the GUI): g_usb.send(),
+// g_usb_diag.send(), and the one-shot debug Serial.printf lines below.
+// Arduino's Serial.write() isn't thread-safe against concurrent callers —
+// with log_uplink_task now writing frames on its own schedule alongside
+// uplink_task, an unguarded interleaved write corrupts the CommLink framing
+// on the wire (bytes from two frames mixed together), which the receiver
+// can only see as a checksum failure / dropped frame. Same reasoning as
+// g_tcp_mutex, just for the USB link instead of the TCP one.
+static SemaphoreHandle_t g_usb_mutex = nullptr;
 
 // Pending one-shot debug lines set by loop()/on_teensy_packet (core 1) and
 // printed by uplink_task (core 0). After this phase uplink_task is the only
@@ -513,6 +629,22 @@ static void enqueue_uplink(uint8_t type, uint8_t version, const void* payload, u
         xQueueReceive(g_uplink_q, &scratch, 0);
         xQueueSend(g_uplink_q, &f, 0);
         ++g_uplink_drops;
+    }
+}
+
+// Same never-blocks/drop-oldest policy, onto the dedicated log-transfer queue
+// (see its declaration above for why this is separate from g_uplink_q).
+static void enqueue_uplink_log(uint8_t type, uint8_t version, const void* payload, uint16_t len) {
+    UplinkFrame f;
+    f.type    = type;
+    f.version = version;
+    f.len     = len;
+    memcpy(f.payload, payload, len);
+    if (xQueueSend(g_log_uplink_q, &f, 0) != pdTRUE) {
+        static UplinkFrame scratch;
+        xQueueReceive(g_log_uplink_q, &scratch, 0);
+        xQueueSend(g_log_uplink_q, &f, 0);
+        ++g_log_uplink_drops;
     }
 }
 
@@ -607,6 +739,22 @@ static void forward_to_teensy(uint8_t type, uint8_t version, uint8_t /*source*/,
             g_test_corrupt_wifi_mode = (len >= 4) ? payload[3] : 1;
             return;
         }
+        // Peek (don't intercept — still forwarded below) at LOG_SUB_START/STOP
+        // for g_recording_active: direct signal off the command itself, no
+        // round-trip ack needed. See its declaration for what reads it.
+        if (len >= 2 && payload[0] == CMD_ID_LOG) {
+            if (payload[1] == LOG_SUB_START) {
+                g_recording_active = true;
+                uint32_t dur = 0;
+                if (len >= 6) memcpy(&dur, payload + 2, sizeof(dur));
+                // +500 ms matches the GUI's own auto-stop-fire margin
+                // (log_transfer.py: duration_ms + 500) — covers command
+                // transit time so this deadline doesn't fire early.
+                g_recording_deadline_ms = (dur != 0) ? (millis() + dur + 500) : 0;
+            } else if (payload[1] == LOG_SUB_STOP) {
+                g_recording_active = false;
+            }
+        }
         g_teensy.send(type, version, payload, len);
         log_command(payload, len);
     }
@@ -623,9 +771,43 @@ static bool             s_telem_fresh  = false;  // complete A+B pair ready in s
 
 static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
                               const uint8_t* payload, uint16_t len) {
-    // Forward every packet upstream regardless of type — but only enqueue here;
-    // uplink_task (core 0) performs the actual sends so this parse path never blocks.
-    enqueue_uplink(type, version, payload, len);
+    // Bulk SD-log transfer frames (LOG_DATA/LOG_INFO) go on their own queue,
+    // drained by their own dedicated task (log_uplink_task) — never sharing
+    // g_uplink_q with telemetry (that eviction is what broke downloads after
+    // Phase 1 added the shared queue) and never blocking this parse path
+    // directly (a direct/synchronous send here fixed downloads but caused a
+    // different regression: on_teensy_packet briefly stalling core 1, felt as
+    // ~1 s freezes on log commands). Either way, only ever a non-blocking
+    // memcpy into a queue here — see log_uplink_task below for the actual send.
+    if (type == COMM_TYPE_LOG_DATA || type == COMM_TYPE_LOG_INFO) {
+        enqueue_uplink_log(type, version, payload, len);
+    } else {
+        // Forward every other packet upstream regardless of type — but only
+        // enqueue here; uplink_task (core 0) performs the actual sends so
+        // this parse path never blocks. See Phase 1, UARTplat.md.
+        enqueue_uplink(type, version, payload, len);
+    }
+
+    // Track SD-log GET progress independent of telemetry (which the Teensy
+    // pauses for the duration of a transfer — see teensy/src/main.cpp loop()).
+    if (type == COMM_TYPE_LOG_INFO && len >= 1) {
+        g_last_log_activity_ms = millis();
+        uint8_t info_type = payload[0];
+        if (info_type == LOG_INFO_XFER_BEGIN && len >= sizeof(LogInfoPayload)) {
+            uint32_t total;
+            memcpy(&total, payload + 7, sizeof(total));  // LogInfoPayload::total_chunks offset
+            g_log_total_chunks = total;
+            g_log_chunks_done  = 0;
+            g_log_xfer_active  = true;
+        } else if (info_type == LOG_INFO_XFER_END) {
+            g_log_xfer_active = false;
+        }
+    } else if (type == COMM_TYPE_LOG_DATA && len >= sizeof(LogDataHeader)) {
+        g_last_log_activity_ms = millis();
+        uint32_t chunk_index;
+        memcpy(&chunk_index, payload + 2, sizeof(chunk_index));  // LogDataHeader::chunk_index offset
+        if (chunk_index + 1 > g_log_chunks_done) g_log_chunks_done = chunk_index + 1;
+    }
 
     // Version mismatch: flag on either half so display updates immediately
     if ((type == COMM_TYPE_TELEM_A || type == COMM_TYPE_TELEM_B) && version != TELEM_VERSION) {
@@ -664,13 +846,105 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
     g_teensy_ever_heard = true;
 }
 
+// Sends one frame dequeued by uplink_task or log_uplink_task to whichever
+// link(s) match its type — shared by both so they don't duplicate this logic.
+static void send_uplink_frame(uint8_t type, uint8_t version, const uint8_t* payload, uint16_t len) {
+    if (type == COMM_TYPE_WIFI_DIAG) {
+        if (xSemaphoreTake(g_usb_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+            g_usb_diag.send(type, version, payload, len);
+            xSemaphoreGive(g_usb_mutex);
+        }
+#if WIFI_ENABLED
+        if (g_wifi_inited)
+            g_wifi_diag.send(type, version, payload, len);
+#endif
+    } else if (type == COMM_TYPE_TELEM_FULL_WIFI) {
+#if WIFI_ENABLED
+        if (g_wifi_inited) {
+            uint32_t t0 = micros();
+            g_telem_udp.send(type, version, payload, len);
+            uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
+            if (dt > g_udp_send_max_us) g_udp_send_max_us = dt;
+        }
+#endif
+    } else {
+        if (xSemaphoreTake(g_usb_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+            g_usb.send(type, version, payload, len);
+            xSemaphoreGive(g_usb_mutex);
+        }
+#if WIFI_ENABLED
+        // Bounded, NOT portMAX_DELAY: two tasks (uplink_task, log_uplink_task)
+        // can now contend for this mutex, and each hold is normally sub-ms (a
+        // 1 ms writable-check + a quick send below) — but if it's ever held
+        // longer than expected for any reason, an unbounded wait here would
+        // stall whichever task is waiting past its own watchdog deadline
+        // (root-caused live: log_uplink_task tripped the 5 s panic-reboot
+        // watchdog waiting right here). Same "skip and count" philosophy as
+        // the writable-check just below, applied to the mutex itself.
+        if (xSemaphoreTake(g_tcp_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+            if (g_comm_tcp && g_tcp_client.connected()) {
+                // WiFiClient::write() (framework source) retries up to 10x
+                // with a 1 s select() each — up to 10 s blocking — if the
+                // peer stops draining the socket. That happens while
+                // holding g_tcp_mutex, which then also stalls loop()'s
+                // g_comm_tcp->update()/accept path on core 1, and since
+                // uplink_task is the sole drain point for the WiFi UDP/USB
+                // queue too, EVERYTHING (not just TCP) went dark until the
+                // 10 s retry gave up — root-caused via esp_task_wdt, which
+                // caught uplink_task stuck mid-send() every time (Phase 7,
+                // UARTplat.md). Fix: our own quick (1 ms) write-readiness
+                // check first, skip (drop and count) instead of risking it.
+                int fd = g_tcp_client.fd();
+                bool writable = false;
+                if (fd >= 0) {
+                    fd_set wset;
+                    struct timeval tv = {0, 1000};  // 1 ms
+                    FD_ZERO(&wset);
+                    FD_SET(fd, &wset);
+                    writable = select(fd + 1, nullptr, &wset, nullptr, &tv) > 0
+                               && FD_ISSET(fd, &wset);
+                }
+                if (writable) {
+                    uint32_t t0 = micros();
+                    g_comm_tcp->send(type, version, payload, len);
+                    uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
+                    if (dt > g_tcp_send_max_us) g_tcp_send_max_us = dt;
+                } else {
+                    ++g_tcp_send_skipped;
+                }
+            }
+            xSemaphoreGive(g_tcp_mutex);
+        }
+#if !WIFI_TELEM_COMBINED
+        if ((type == COMM_TYPE_TELEM_A || type == COMM_TYPE_TELEM_B) && g_wifi_inited
+#if WIFI_TRANSPORT_GATING
+            && g_active_telem_transport != WIFI_DIAG_TRANSPORT_USB_ONLY
+#endif
+        ) {
+            // TEST ONLY (Phase 9, UARTplat.md): corrupt just the A half so the
+            // GUI's parser has exactly one bad datagram per armed count.
+            bool corrupt_wifi_now = (type == COMM_TYPE_TELEM_A) && g_test_corrupt_wifi_remaining > 0;
+            uint8_t corrupt_wifi_mode = corrupt_wifi_now ? g_test_corrupt_wifi_mode : 0;
+            if (corrupt_wifi_now) g_test_corrupt_wifi_remaining--;
+            uint32_t t0 = micros();
+            g_telem_udp.send(type, version, payload, len, corrupt_wifi_mode);
+            uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
+            if (dt > g_udp_send_max_us) g_udp_send_max_us = dt;
+        }
+#endif
+#endif
+    }
+}
+
 // ── Uplink task (core 0) ──────────────────────────────────────────────────────
-// The only writer to Serial (UART0), the TCP client, and the telemetry/diag UDP
-// sockets (see Phase 1, UARTplat.md). Drains frames enqueued by on_teensy_packet()
-// and send_wifi_diag() (both core 1) and performs the sends that used to run
-// inline in the UART parse path. Uses a bounded wait (not portMAX_DELAY) so the
-// pending debug-print flags below still get serviced promptly even if the
-// Teensy link itself is down (e.g. WiFi/TCP connect events with no Teensy present).
+// Writes the TCP client and telemetry/diag UDP sockets (see Phase 1,
+// UARTplat.md); shares Serial (UART0/USB-CDC) with log_uplink_task, guarded by
+// g_usb_mutex (see its declaration). Drains frames enqueued by
+// on_teensy_packet() and send_wifi_diag() (both core 1) and performs the
+// sends that used to run inline in the UART parse path. Uses a bounded wait
+// (not portMAX_DELAY) so the pending debug-print flags below still get
+// serviced promptly even if the Teensy link itself is down (e.g. WiFi/TCP
+// connect events with no Teensy present).
 static void uplink_task(void*) {
     UplinkFrame f;
     for (;;) {
@@ -680,94 +954,54 @@ static void uplink_task(void*) {
         // dark forever. This isn't just theoretical — it's exactly how the
         // g_comm_tcp->send() hang below was root-caused (Phase 7, UARTplat.md).
         esp_task_wdt_reset();
+
         if (xQueueReceive(g_uplink_q, &f, pdMS_TO_TICKS(100)) == pdTRUE) {
-            if (f.type == COMM_TYPE_WIFI_DIAG) {
-                g_usb_diag.send(f.type, f.version, f.payload, f.len);
-#if WIFI_ENABLED
-                if (g_wifi_inited)
-                    g_wifi_diag.send(f.type, f.version, f.payload, f.len);
-#endif
-            } else if (f.type == COMM_TYPE_TELEM_FULL_WIFI) {
-#if WIFI_ENABLED
-                if (g_wifi_inited) {
-                    uint32_t t0 = micros();
-                    g_telem_udp.send(f.type, f.version, f.payload, f.len);
-                    uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
-                    if (dt > g_udp_send_max_us) g_udp_send_max_us = dt;
-                }
-#endif
-            } else {
-                g_usb.send(f.type, f.version, f.payload, f.len);
-#if WIFI_ENABLED
-                if (xSemaphoreTake(g_tcp_mutex, portMAX_DELAY) == pdTRUE) {
-                    if (g_comm_tcp && g_tcp_client.connected()) {
-                        // WiFiClient::write() (framework source) retries up to 10x
-                        // with a 1 s select() each — up to 10 s blocking — if the
-                        // peer stops draining the socket. That happens while
-                        // holding g_tcp_mutex, which then also stalls loop()'s
-                        // g_comm_tcp->update()/accept path on core 1, and since
-                        // uplink_task is the sole drain point for the WiFi UDP/USB
-                        // queue too, EVERYTHING (not just TCP) went dark until the
-                        // 10 s retry gave up — root-caused via esp_task_wdt, which
-                        // caught uplink_task stuck mid-send() every time (Phase 7,
-                        // UARTplat.md). Fix: our own quick (1 ms) write-readiness
-                        // check first, skip (drop and count) instead of risking it.
-                        int fd = g_tcp_client.fd();
-                        bool writable = false;
-                        if (fd >= 0) {
-                            fd_set wset;
-                            struct timeval tv = {0, 1000};  // 1 ms
-                            FD_ZERO(&wset);
-                            FD_SET(fd, &wset);
-                            writable = select(fd + 1, nullptr, &wset, nullptr, &tv) > 0
-                                       && FD_ISSET(fd, &wset);
-                        }
-                        if (writable) {
-                            uint32_t t0 = micros();
-                            g_comm_tcp->send(f.type, f.version, f.payload, f.len);
-                            uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
-                            if (dt > g_tcp_send_max_us) g_tcp_send_max_us = dt;
-                        } else {
-                            ++g_tcp_send_skipped;
-                        }
-                    }
-                    xSemaphoreGive(g_tcp_mutex);
-                }
-#if !WIFI_TELEM_COMBINED
-                if ((f.type == COMM_TYPE_TELEM_A || f.type == COMM_TYPE_TELEM_B) && g_wifi_inited
-#if WIFI_TRANSPORT_GATING
-                    && g_active_telem_transport != WIFI_DIAG_TRANSPORT_USB_ONLY
-#endif
-                ) {
-                    // TEST ONLY (Phase 9, UARTplat.md): corrupt just the A half so the
-                    // GUI's parser has exactly one bad datagram per armed count.
-                    bool corrupt_wifi_now = (f.type == COMM_TYPE_TELEM_A) && g_test_corrupt_wifi_remaining > 0;
-                    uint8_t corrupt_wifi_mode = corrupt_wifi_now ? g_test_corrupt_wifi_mode : 0;
-                    if (corrupt_wifi_now) g_test_corrupt_wifi_remaining--;
-                    uint32_t t0 = micros();
-                    g_telem_udp.send(f.type, f.version, f.payload, f.len, corrupt_wifi_mode);
-                    uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
-                    if (dt > g_udp_send_max_us) g_udp_send_max_us = dt;
-                }
-#endif
-#endif
-            }
+            send_uplink_frame(f.type, f.version, f.payload, f.len);
         }
 
-        if (g_dbg_version_mismatch_pending) {
-            g_dbg_version_mismatch_pending = false;
-            Serial.printf("[VERSION MISMATCH] Teensy telem v%u, expected v%u — reflash both boards\n",
-                          g_dbg_mismatch_version, TELEM_VERSION);
+        if ((g_dbg_version_mismatch_pending || g_dbg_wifi_ip_pending || g_dbg_tcp_client_pending)
+            && xSemaphoreTake(g_usb_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+            if (g_dbg_version_mismatch_pending) {
+                g_dbg_version_mismatch_pending = false;
+                Serial.printf("[VERSION MISMATCH] Teensy telem v%u, expected v%u — reflash both boards\n",
+                              g_dbg_mismatch_version, TELEM_VERSION);
+            }
+            if (g_dbg_wifi_ip_pending) {
+                g_dbg_wifi_ip_pending = false;
+                Serial.print("[WiFi] IP: ");
+                Serial.println(g_dbg_wifi_ip);
+            }
+            if (g_dbg_tcp_client_pending) {
+                g_dbg_tcp_client_pending = false;
+                Serial.print("[TCP] client: ");
+                Serial.println(g_dbg_tcp_client_ip);
+            }
+            xSemaphoreGive(g_usb_mutex);
         }
-        if (g_dbg_wifi_ip_pending) {
-            g_dbg_wifi_ip_pending = false;
-            Serial.print("[WiFi] IP: ");
-            Serial.println(g_dbg_wifi_ip);
-        }
-        if (g_dbg_tcp_client_pending) {
-            g_dbg_tcp_client_pending = false;
-            Serial.print("[TCP] client: ");
-            Serial.println(g_dbg_tcp_client_ip);
+    }
+}
+
+// ── Log uplink task (core 0) ──────────────────────────────────────────────────
+// Dedicated drain for g_log_uplink_q (LOG_DATA/LOG_INFO only) — deliberately a
+// separate task from uplink_task, not just a priority branch inside its loop:
+// an earlier attempt drained both queues from within uplink_task's own body,
+// which meant a slow/blocked telemetry send in that same iteration still
+// delayed the next round of log-queue draining despite nominal "priority".
+// A real second task is preemptively scheduled by FreeRTOS independent of
+// whatever uplink_task happens to be doing, so a stalled telemetry send can
+// never hold up log chunks (or vice versa).
+static void log_uplink_task(void*) {
+    UplinkFrame f;
+    for (;;) {
+        // Bounded wait, NOT portMAX_DELAY: this queue sits empty almost all
+        // the time (only fills during an actual GET), so a truly infinite
+        // wait would mean esp_task_wdt_reset() below never runs when idle —
+        // subscribed tasks that never check back in trip the 5 s panic-reboot
+        // watchdog (esp_task_wdt_init(5, true)) permanently, not just during
+        // downloads. Mirrors uplink_task's own bounded wait for the same reason.
+        esp_task_wdt_reset();
+        if (xQueueReceive(g_log_uplink_q, &f, pdMS_TO_TICKS(100)) == pdTRUE) {
+            send_uplink_frame(f.type, f.version, f.payload, f.len);
         }
     }
 }
@@ -898,6 +1132,7 @@ static uint16_t mode_color(uint8_t state) {
         case RS_MANUAL:      return TFT_CYAN;
         case RS_CMD_REJECT:  return tft.color565(255, 100, 0);
         case RS_JUMPING:     return tft.color565(200, 0, 255);  // magenta
+        case RS_STANDING_UP: return tft.color565(255, 60, 0);   // red-orange
         default:             return TFT_WHITE;
     }
 }
@@ -912,6 +1147,7 @@ static const char* mode_name(uint8_t state) {
         case RS_MANUAL:      return "MANUAL";
         case RS_CMD_REJECT:  return "REJECTED";
         case RS_JUMPING:     return "JUMP!";
+        case RS_STANDING_UP: return "STANDUP";
         default:             return "UNKNOWN";
     }
 }
@@ -932,6 +1168,7 @@ static const char* fault_description(uint8_t code) {
         case FAULT_IMU_LOST:           return "IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)";
         case FAULT_WHEEL_FEEDBACK_LOST:return "Wheel encoder timeout or ODrive error during operation";
         case FAULT_WHEEL_INIT_TIMEOUT: return "No CAN reply from wheel motors within 2 s of boot";
+        case FAULT_STANDUP_FAILED:     return "Standup denied or failed - pitch out of recoverable range";
         default:                       return "Unknown fault";
     }
 }
@@ -1037,6 +1274,35 @@ static void drawControllerButton(TFT_eSPI* spr, int x, int y,
 
 // ── Mode Banner ───────────────────────────────────────────────────────────────
 
+// Banner override while an SD-log GET is streaming — telemetry is paused for
+// the whole transfer (see teensy/src/main.cpp loop()), so the normal banner
+// would just sit on frozen values; this makes the intentional quiet spell
+// obvious instead, with a live percent readout. See log_xfer_is_downloading().
+static void drawDownloadBanner(uint8_t pct) {
+    static uint8_t prev_pct = 0xFF;
+    if (pct == prev_pct) return;
+    prev_pct = pct;
+
+    banner_sprite.fillSprite(tft.color565(4, 10, 24));
+
+    const int BAR_X = 20, BAR_Y = BANNER_H - 14, BAR_W = 280, BAR_H = 8;
+    banner_sprite.drawRect(BAR_X, BAR_Y, BAR_W, BAR_H, TFT_WHITE);
+    int fill_w = (int)((uint32_t)(BAR_W - 2) * pct / 100u);
+    banner_sprite.fillRect(BAR_X + 1, BAR_Y + 1, fill_w, BAR_H - 2, tft.color565(0, 150, 255));
+
+    char label[24];
+    snprintf(label, sizeof(label), "DOWNLOADING %u%%", (unsigned)pct);
+    int tsize    = 2;
+    int label_px = (int)strlen(label) * 6 * tsize;
+    int cx       = max(4, (320 - label_px) / 2);
+    banner_sprite.setTextColor(TFT_WHITE);
+    banner_sprite.setTextSize(tsize);
+    banner_sprite.setCursor(cx, 4);
+    banner_sprite.print(label);
+
+    banner_sprite.pushSprite(0, 0);
+}
+
 static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool mismatch, float vbus, uint8_t profile) {
     static uint8_t  prev_state      = 0xFF;
     static bool     prev_active     = false;
@@ -1046,6 +1312,9 @@ static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool misma
     static bool     prev_blink_on   = true;
     static uint8_t  prev_profile    = 0xFF;
     static uint32_t prev_mq_tick    = 0xFFFFFFFF;
+    static bool     prev_rec_on     = false;
+
+    bool rec_on = recording_is_active() && ((millis() / 400) % 2 == 0);
 
     // 6S LiPo: 4.2V/cell × 6 = 25.2V full, 3.5V/cell × 6 = 21.0V empty
     const float BATT_VMAX = 25.2f, BATT_VMIN = 21.0f;
@@ -1070,13 +1339,15 @@ static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool misma
     }
     uint32_t mq_tick = millis() / anim_interval;
 
-    if (state == prev_state && active == prev_active && fault == prev_fault
+    if (!g_banner_force_redraw &&
+        state == prev_state && active == prev_active && fault == prev_fault
             && mismatch == prev_mismatch && batt_bars == prev_batt_bars
             && blink_on == prev_blink_on && profile == prev_profile
-            && mq_tick == prev_mq_tick) return;
+            && mq_tick == prev_mq_tick && rec_on == prev_rec_on) return;
+    g_banner_force_redraw = false;
     prev_state = state; prev_active = active; prev_fault = fault;
     prev_mismatch = mismatch; prev_batt_bars = batt_bars; prev_blink_on = blink_on;
-    prev_profile = profile; prev_mq_tick = mq_tick;
+    prev_profile = profile; prev_mq_tick = mq_tick; prev_rec_on = rec_on;
 
     uint32_t now_ms = millis();
 
@@ -1277,6 +1548,15 @@ static void drawModeBanner(uint8_t state, bool active, uint8_t fault, bool misma
             banner_sprite.setCursor(fdesc_cx, BANNER_H - 10);
             banner_sprite.print(fdesc);
         }
+    }
+
+    // ── Recording icon — small blinking dot, left of the battery icon. Sits in
+    // the gap between the mode label and battery (uncrowded at every label
+    // width tuning.md's states use). Blink phase (rec_on) is already folded
+    // into the dirty-check above, so this repaints on every on/off transition.
+    if (rec_on) {
+        banner_sprite.fillCircle(254, BANNER_H / 2, 6, tft.color565(0, 120, 255));
+        banner_sprite.drawCircle(254, BANNER_H / 2, 6, TFT_WHITE);
     }
 
     // ── Battery icon ──────────────────────────────────────────────────────────
@@ -1961,6 +2241,15 @@ static void update_display() {
         return;
     }
 
+    static bool was_downloading = false;
+    bool downloading = log_xfer_is_downloading();
+    if (was_downloading && !downloading) g_banner_force_redraw = true;  // leaving: force the real banner back
+    was_downloading = downloading;
+    if (downloading) {
+        drawDownloadBanner(log_xfer_percent());
+        return;  // other panels reflect frozen (paused) telemetry — nothing new to redraw
+    }
+
     uint8_t  state     = g_robot_state;
     uint8_t  fault     = g_fault_code;
     bool     active    = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < TEENSY_LINK_TIMEOUT_MS);
@@ -2028,6 +2317,23 @@ static void display_task(void*) {
     digitalWrite(TFT_BLK, HIGH);
     tft.init();
     tft.setRotation(3);
+
+    // One-shot boot splash (~1 s) so a physical reboot/reflash is unmistakable
+    // on the bench — the normal engineering/face display only appears once
+    // initDisplay() below completes, easy to miss if you're not staring at
+    // the screen at that exact instant. See neo_task's boot rainbow, same idea.
+    {
+        const char* label = "BOOTED";
+        int tsize    = 4;
+        int label_px = (int)strlen(label) * 6 * tsize;
+        tft.fillScreen(TFT_BLACK);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.setTextSize(tsize);
+        tft.setCursor(max(0, (tft.width() - label_px) / 2), (tft.height() - 8 * tsize) / 2);
+        tft.print(label);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
     initDisplay();
 
     uint32_t last_disp_ms   = 0;
@@ -2106,7 +2412,11 @@ static void send_wifi_diag() {
     // V2 — Teensy-link status, so the GUI can tell "ESP32 alive, Teensy silent"
     // apart from "whole link down" even when WIFI_DIAG is the only thing arriving.
     uint32_t since_teensy = millis() - g_last_teensy_ms;
-    d.teensy_link_up     = (g_teensy_ever_heard && since_teensy < TEENSY_LINK_TIMEOUT_MS) ? 1 : 0;
+    // Telemetry (and so since_teensy) intentionally goes stale for the whole
+    // duration of an SD-log GET (see teensy/src/main.cpp loop()) — don't let
+    // the GUI's link-health panel read that expected quiet spell as down.
+    d.teensy_link_up     = (log_xfer_is_downloading() ||
+                             (g_teensy_ever_heard && since_teensy < TEENSY_LINK_TIMEOUT_MS)) ? 1 : 0;
     d.reserved2          = 0;
     d.ms_since_teensy    = (uint16_t)min((uint32_t)0xFFFF, since_teensy);
     d.uart_crc_drops     = (uint16_t)min((uint32_t)0xFFFF, g_teensy.rx_drops());
@@ -2180,16 +2490,22 @@ void setup() {
     g_teensy.onPacket(on_teensy_packet);
     g_usb.onPacket(forward_to_teensy);
 
-    g_uplink_q  = xQueueCreate(UPLINK_QUEUE_LEN, sizeof(UplinkFrame));
+    g_uplink_q     = xQueueCreate(UPLINK_QUEUE_LEN, sizeof(UplinkFrame));
+    g_log_uplink_q = xQueueCreate(LOG_UPLINK_QUEUE_LEN, sizeof(UplinkFrame));
     g_tcp_mutex = xSemaphoreCreateMutex();
+    g_usb_mutex = xSemaphoreCreateMutex();
     TaskHandle_t uplink_task_handle = nullptr;
-    xTaskCreatePinnedToCore(uplink_task, "uplink", 4096, nullptr, 2, &uplink_task_handle, 0);
+    TaskHandle_t log_uplink_task_handle = nullptr;
+    xTaskCreatePinnedToCore(uplink_task,     "uplink",     4096, nullptr, 2, &uplink_task_handle,     0);
+    xTaskCreatePinnedToCore(log_uplink_task, "log_uplink", 4096, nullptr, 2, &log_uplink_task_handle, 0);
     // Root-caused a WiFiClient::write() hang here (Phase 7, UARTplat.md) via
     // this exact watchdog — keeping it as permanent defense-in-depth: if
     // uplink_task ever blocks for any other reason, a 5 s panic-reboot beats
-    // the whole USB+WiFi uplink pipeline going silent forever.
+    // the whole USB+WiFi uplink pipeline going silent forever. log_uplink_task
+    // shares the same send path (send_uplink_frame) and so the same risk.
     esp_task_wdt_init(5, true);
     esp_task_wdt_add(uplink_task_handle);
+    esp_task_wdt_add(log_uplink_task_handle);
 
 #if WIFI_ENABLED
     WiFi.setSleep(false);
@@ -2210,6 +2526,20 @@ void setup() {
 #endif
 
     Serial.println("[ESP32] ready");
+
+    // One-shot "ESP32 booted" line in the GUI's robot log — Teensy already
+    // announces itself there via comm_log(); this is the ESP32-originated
+    // equivalent so a reboot/reflash shows up there too, not just as a
+    // version-mismatch or link-state blip elsewhere in the GUI.
+    {
+        char msg[48];
+        int n = snprintf(msg, sizeof(msg), "[ESP32] Booted (reset: %s)", reset_reason_name(rr));
+        if (n > (int)sizeof(msg) - 1) n = (int)sizeof(msg) - 1;
+        uint8_t buf[1 + sizeof(msg)];
+        buf[0] = LOG_LEVEL_INFO;
+        memcpy(buf + 1, msg, n);
+        enqueue_uplink(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
+    }
 }
 
 void loop() {

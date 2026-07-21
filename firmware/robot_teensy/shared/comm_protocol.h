@@ -78,7 +78,7 @@ typedef struct __attribute__((packed)) {
 
 // ── Fault codes (robot_state == STATE_ESTOP → fault_code says why) ────────────
 // IMPORTANT: when adding/changing a fault code below, also update:
-//   - software/gui/flash_monitor.py   _FAULT_NAMES and _FAULT_DESCRIPTIONS dicts
+//   - software/gui/tabs/telem_format.py   _FAULT_NAMES and _FAULT_DESCRIPTIONS dicts
 //   - esp32/src/main.cpp               fault_description()
 //   - firmware/robot_teensy/README.md  fault code table
 #define FAULT_NONE               0x00
@@ -94,6 +94,7 @@ typedef struct __attribute__((packed)) {
 #define FAULT_IMU_LOST           0x0A  // IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)
 #define FAULT_WHEEL_FEEDBACK_LOST 0x0B // wheel encoder timeout or ODrive error during operation
 #define FAULT_WHEEL_INIT_TIMEOUT 0x0C  // no CAN reply from wheel motors within 2 s of boot
+#define FAULT_STANDUP_FAILED     0x0D  // standup denied (pitch out of recoverable range) or exhausted retries/diverged
 
 // ── Fault severity tiers (used by state machine + GUI recovery panel) ────────
 // IMPORTANT: when adding fault codes, update fault_severity() below too.
@@ -110,7 +111,8 @@ inline fault_severity_t fault_severity(uint8_t code) {
         case FAULT_HUMAN_ESTOP:
         case FAULT_WHEEL_RUNAWAY:         return FAULT_SEVERITY_SOFT;
         case FAULT_PITCH_WATCHDOG:
-        case FAULT_CALIBRATION_TIMEOUT:   return FAULT_SEVERITY_REPOSITION;
+        case FAULT_CALIBRATION_TIMEOUT:
+        case FAULT_STANDUP_FAILED:        return FAULT_SEVERITY_REPOSITION;
         case FAULT_HIP_LARGE_POS_CMD:     return FAULT_SEVERITY_GUI_FIX;
         default:                          return FAULT_SEVERITY_REBOOT;
     }
@@ -209,9 +211,10 @@ static_assert(sizeof(Esp32StatusPayload) == 14, "Esp32StatusPayload must be 14 b
 //   [238]  uint16   uart_rx_drops
 //   [240]  uint16   uart_seq_gaps
 //   [242]  float    gain_sched_alpha                                          ← V10 start
-//   [246]  ← end, sizeof = 246 bytes
+//   [246]  uint8    standup_state                                             ← V11 start
+//   [247]  ← end, sizeof = 247 bytes
 //
-#define TELEM_VERSION  10  // bump when adding/removing struct fields; triggers mismatch errors
+#define TELEM_VERSION  11  // bump when adding/removing struct fields; triggers mismatch errors
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -292,18 +295,21 @@ typedef struct __attribute__((packed)) {
     // V10 addition — leg gain-schedule blend factor (4 bytes)
     float    gain_sched_alpha;    // control_loop.cpp hip gain interpolation [0=retracted,1=extended];
                                    // mirrors g_state.gain_sched_alpha (Phase 5); 0.5 until calibrated
-} TelemetryPayload;  // 246 bytes — TELEM_VERSION 10
+    // V11 addition — standing-up recovery FSM phase (1 byte)
+    uint8_t  standup_state;       // Standup FSM phase (0=CROUCH/inactive) — mirrors g_state.standup_state
+} TelemetryPayload;  // 247 bytes — TELEM_VERSION 11
 
 // Split offsets for two-packet telemetry (TELEM_A + TELEM_B)
 // Each frame ≤130 bytes — both drain safely with UART FIFO threshold=32
 #define TELEM_A_LEN  118u  // bytes   0-117: IMU, hip pos, RC, wheel motors
-#define TELEM_B_LEN  128u  // bytes 118-245: ToF, rates, accel, hip cmd, control internals, profile,
-                           //                pitch trim, ESP32 link supervision, gain-schedule alpha
+#define TELEM_B_LEN  129u  // bytes 118-246: ToF, rates, accel, hip cmd, control internals, profile,
+                           //                pitch trim, ESP32 link supervision, gain-schedule alpha,
+                           //                standup state
 
 #ifdef __cplusplus
-static_assert(sizeof(TelemetryPayload) == 246,
+static_assert(sizeof(TelemetryPayload) == 247,
     "TelemetryPayload size changed — bump TELEM_VERSION, update COMM_MAX_PAYLOAD, and see PROPAGATION CHECKLIST");
-static_assert(TELEM_A_LEN + TELEM_B_LEN == 246, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
+static_assert(TELEM_A_LEN + TELEM_B_LEN == 247, "TELEM_A_LEN + TELEM_B_LEN must equal sizeof(TelemetryPayload)");
 #endif
 
 // ── High-datarate SD log (.wlog) ──────────────────────────────────────────────
@@ -311,7 +317,7 @@ static_assert(TELEM_A_LEN + TELEM_B_LEN == 246, "TELEM_A_LEN + TELEM_B_LEN must 
 // The Teensy logs one LogRecord per 500 Hz control tick to a preallocated .wlog
 // file on the built-in microSD. A LogRecord WRAPS the unchanged TelemetryPayload
 // (so the live 50 Hz wire format is untouched) and prepends a micros() timestamp.
-// The PC reads t_micros, then decodes the embedded 246-byte telem blob with the
+// The PC reads t_micros, then decodes the embedded 247-byte telem blob with the
 // SAME split-telemetry decoder used for live data. See software/gui/log_playback.py.
 //
 #define WLOG_FORMAT_V1  1
@@ -330,8 +336,8 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
     uint32_t         t_micros; // micros() at capture — sub-ms inter-tick timing
-    TelemetryPayload telem;    // the exact 246-byte struct, TELEM_VERSION 10
-} LogRecord;                   // 250 bytes — one per control tick
+    TelemetryPayload telem;    // the exact 247-byte struct, TELEM_VERSION 11
+} LogRecord;                   // 251 bytes — one per control tick
 
 // ── Payload: COMM_TYPE_LOG_INFO (Teensy→PC) ──────────────────────────────────
 #define LOG_INFO_PAYLOAD_V1  1
@@ -361,7 +367,7 @@ typedef struct __attribute__((packed)) {
 
 #ifdef __cplusplus
 static_assert(sizeof(WlogHeader) == 32, "WlogHeader must be 32 bytes");
-static_assert(sizeof(LogRecord) == 250, "LogRecord must be sizeof(uint32)+sizeof(TelemetryPayload)");
+static_assert(sizeof(LogRecord) == 251, "LogRecord must be sizeof(uint32)+sizeof(TelemetryPayload)");
 static_assert(sizeof(LogInfoPayload) == 16, "LogInfoPayload must be 16 bytes");
 static_assert(sizeof(LogDataHeader) == 8, "LogDataHeader must be 8 bytes");
 // LOG_CHUNK_DATA + sizeof(LogDataHeader) <= COMM_MAX_PAYLOAD is checked in CommLink.h,

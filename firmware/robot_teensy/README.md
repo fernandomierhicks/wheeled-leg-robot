@@ -144,6 +144,9 @@ Full FSM diagram: `teensy/state_machine.md`.
 | 5 | `STATE_MANUAL` | GUI direct control (MIT frames); watchdog 500 ms |
 | 6 | `STATE_CMD_REJECT` | ~1 s transient: buzzer + red blink, auto-returns to prior state |
 | 7 | `STATE_JUMPING` | ~3 s jump sequence from RUNNING; auto-returns to RUNNING |
+| 8 | `STATE_STANDING_UP` | Arm-time recovery from a fallen pose — retract legs, energetic wheel push, then RUNNING |
+
+**Standing-up mode (`STATE_STANDING_UP`)**: entered on arm only when `standup_enable=1` and pitch is within the recoverable range; with `standup_enable=0` (default) arming goes straight to `RUNNING`, byte-identical to before this state existed. Two phases: **CROUCH** ramps the hips to the retracted pose and holds them there rigidly for the rest of the sequence — hips move once, to a fixed pose, and never actively right the robot. **RECOVER** does the actual catch entirely with wheel torque: a saturated P/D law on pitch and pitch-rate (`tau = K_pitch*pitch + K_rate*pitch_rate`, same sign convention as the small-angle LQR) pushes the wheelbase back under the CG until pitch settles in-band, then hands off to `RUNNING` for the tuned LQR to take over. Full spec: `standing_up.md`.
 
 ### Canonical state colour table
 
@@ -159,6 +162,7 @@ One source of truth for `state → RGB`; used by Teensy LED, ESP32 Neopixel base
 | `STATE_MANUAL` | 0 | 200 | 255 | cyan |
 | `STATE_CMD_REJECT` | 255 | 120 | 0 | orange |
 | `STATE_JUMPING` | 200 | 0 | 255 | magenta |
+| `STATE_STANDING_UP` | 255 | 60 | 0 | red-orange, fast strobe |
 
 ## Fault codes (`shared/comm_protocol.h`)
 
@@ -179,10 +183,11 @@ Set in `g_state.fault_code` before entering `STATE_ESTOP`. Non-zero only while i
 | `0x0A` | `FAULT_IMU_LOST` | IMU left NOMINAL while RUNNING/JUMPING (silence or heavy packet loss) | REBOOT |
 | `0x0B` | `FAULT_WHEEL_FEEDBACK_LOST` | Wheel encoder timeout or ODrive error during operation | REBOOT |
 | `0x0C` | `FAULT_WHEEL_INIT_TIMEOUT` | No CAN reply from wheel motors within 2 s of boot | REBOOT |
+| `0x0D` | `FAULT_STANDUP_FAILED` | Standup denied (pitch out of recoverable range) or exhausted retries/diverged | REPOSITION |
 
 **Severity tiers:** SOFT → ESTOP→STANDBY directly; REPOSITION → reposition robot then reset; GUI_FIX → fix param in GUI then reset; REBOOT → power-cycle required.
 
-Mirror `_FAULT_NAMES` / `_FAULT_DESCRIPTIONS` in `software/gui/flash_monitor.py` and `fault_description()` in `esp32/src/main.cpp` when adding/changing codes.
+Mirror `_FAULT_NAMES` / `_FAULT_DESCRIPTIONS` in `software/gui/tabs/telem_format.py` and `fault_description()` in `esp32/src/main.cpp` when adding/changing codes.
 
 ## Telemetry and param pipeline
 

@@ -47,7 +47,7 @@ static Param g_params[] = {
 
     // GROUP_SYSTEM — peripheral enable flags (bench-test without full hardware)
     {.id = PARAM_IMU_ENABLE,              .group_id = GROUP_SYSTEM,  .name = "imu_enable",          .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
-    {.id = PARAM_BUZZER_ENABLE,           .group_id = GROUP_SYSTEM,  .name = "buzzer_enable",       .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
+    {.id = PARAM_BUZZER_VOLUME,           .group_id = GROUP_SYSTEM,  .name = "buzzer_volume",       .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
     {.id = PARAM_LED_ENABLE,              .group_id = GROUP_SYSTEM,  .name = "led_enable",          .value = 1.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_PERSISTENT,                  .on_change = nullptr},
     // Per-motor presence flags — set to 0 to bench-test with that motor physically
     // disconnected. See param_ids.h for details.
@@ -171,6 +171,26 @@ static Param g_params[] = {
     {.id = PARAM_ALPHA_FORCE_RETRACTED_EN,.group_id = GROUP_CONTROL, .name = "alpha_force_ret_en",  .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
     // Not persisted (see param_ids.h) — always boots to 0 (radio-sourced motion).
     {.id = PARAM_GUI_MOTION_CTRL_EN,      .group_id = GROUP_CONTROL, .name = "gui_motion_ctrl_en",  .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = 0,                                      .on_change = nullptr},
+
+    // Standing-up recovery controller — see standing_up.md. Physical-torque-output
+    // gains start at 0 (must be tuned up on the bench), matching the PARAM_JUMP_*
+    // "off/inert until tested" convention.
+    {.id = PARAM_STANDUP_ENABLE,               .group_id = GROUP_CONTROL, .name = "standup_enable",     .value = 0.0f,    .min_val = 0.0f,   .max_val = 1.0f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_MAX_PITCH_FWD_RAD,    .group_id = GROUP_CONTROL, .name = "standup_pitch_fwd",  .value = 0.6f,    .min_val = 0.0f,   .max_val = 1.4f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_MAX_PITCH_BWD_RAD,    .group_id = GROUP_CONTROL, .name = "standup_pitch_bwd",  .value = 0.6f,    .min_val = 0.0f,   .max_val = 1.4f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_CROUCH_KP,            .group_id = GROUP_CONTROL, .name = "standup_crouch_kp",  .value = 80.0f,   .min_val = 0.0f,   .max_val = 500.0f, .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_CROUCH_KD,            .group_id = GROUP_CONTROL, .name = "standup_crouch_kd",  .value = 1.0f,    .min_val = 0.0f,   .max_val = 5.0f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_CROUCH_TIME_S,        .group_id = GROUP_CONTROL, .name = "standup_crouch_time",.value = 0.30f,   .min_val = 0.05f,  .max_val = 2.0f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_K_PITCH,              .group_id = GROUP_CONTROL, .name = "standup_k_pitch",    .value = 0.0f,    .min_val = 0.0f,   .max_val = 60.0f,  .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_K_RATE,               .group_id = GROUP_CONTROL, .name = "standup_k_rate",     .value = 0.0f,    .min_val = 0.0f,   .max_val = 15.0f,  .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_TORQUE_LIMIT,         .group_id = GROUP_CONTROL, .name = "standup_torque_lim", .value = 0.0f,    .min_val = 0.0f,   .max_val = 7.0f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S, .group_id = GROUP_CONTROL, .name = "standup_vel_limit", .value = 3.0f,  .min_val = 1.0f,   .max_val = 20.0f,  .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_CAPTURE_PITCH_RAD,    .group_id = GROUP_CONTROL, .name = "standup_cap_pitch",  .value = 0.12f,   .min_val = 0.02f,  .max_val = 0.4f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_CAPTURE_RATE_RADS,    .group_id = GROUP_CONTROL, .name = "standup_cap_rate",   .value = 1.0f,    .min_val = 0.1f,   .max_val = 5.0f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_CAPTURE_HOLD_S,       .group_id = GROUP_CONTROL, .name = "standup_cap_hold",   .value = 0.15f,   .min_val = 0.02f,  .max_val = 1.0f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_ATTEMPT_TIMEOUT_S,    .group_id = GROUP_CONTROL, .name = "standup_timeout",    .value = 1.5f,    .min_val = 0.2f,   .max_val = 5.0f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_MAX_RETRIES,          .group_id = GROUP_CONTROL, .name = "standup_max_retries",.value = 2.0f,    .min_val = 0.0f,   .max_val = 10.0f,  .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
+    {.id = PARAM_STANDUP_RETRY_PAUSE_S,        .group_id = GROUP_CONTROL, .name = "standup_retry_pause",.value = 0.3f,    .min_val = 0.0f,   .max_val = 3.0f,   .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
 
     // GROUP_COMMAND — radio-derived setpoints (firmware-written, never persisted)
     {.id = PARAM_RADIO_HIP_CMD,           .group_id = GROUP_COMMAND, .name = "radio_hip_cmd",       .value = 0.0f,     .min_val = 0.0f,     .max_val = 1.0f,     .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},

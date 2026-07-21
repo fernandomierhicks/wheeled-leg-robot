@@ -25,7 +25,7 @@ import sys
 
 HOST = "127.0.0.1"
 PORT = 8765
-TIMEOUT_S = 35.0  # covers remote_control.py's log_download wait (~30s)
+TIMEOUT_S = 95.0  # covers remote_control.py's log_download wait (~90s)
 
 
 def _build(argv: list[str]) -> dict:

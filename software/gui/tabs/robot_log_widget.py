@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (
     QApplication, QHBoxLayout, QLabel, QMenu, QPlainTextEdit,
@@ -59,16 +59,6 @@ class RobotLogWidget(QWidget):
 
         self._autoscroll = True
 
-        self._btn_copy = QPushButton("Copy")
-        self._btn_copy.setFixedHeight(20)
-        self._btn_copy.setStyleSheet(
-            f"QPushButton{{background:{SURFACE};color:{DIM};font-size:10px;font-weight:bold;"
-            f"border:1px solid {BORDER};border-radius:3px;padding:0px 8px}}"
-            f"QPushButton:hover{{background:{BORDER};color:{TEXT}}}"
-        )
-        self._btn_copy.setToolTip("Copy the visible log to the clipboard")
-        self._btn_copy.clicked.connect(self._copy_log)
-
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(0, 0, 0, 0)
         toolbar.setSpacing(6)
@@ -77,7 +67,6 @@ class RobotLogWidget(QWidget):
         toolbar.addWidget(self._btn_info)
         toolbar.addWidget(self._btn_warn)
         toolbar.addWidget(self._btn_error)
-        toolbar.addWidget(self._btn_copy)
 
         # ── Text area ─────────────────────────────────────────────────────────
         self._log = QPlainTextEdit()
@@ -105,8 +94,6 @@ class RobotLogWidget(QWidget):
 
     def _copy_log(self):
         QApplication.clipboard().setText(self._log.toPlainText())
-        self._btn_copy.setText("Copied!")
-        QTimer.singleShot(1000, lambda: self._btn_copy.setText("Copy"))
 
     def _show_context_menu(self, pos):
         menu = QMenu(self._log)
@@ -116,6 +103,8 @@ class RobotLogWidget(QWidget):
             f"QMenu::item{{padding:4px 20px}}"
             f"QMenu::item:selected{{background:{BORDER}}}"
         )
+        copy_action = menu.addAction("Copy")
+        menu.addSeparator()
         autoscroll_action = menu.addAction("Auto-scroll")
         autoscroll_action.setCheckable(True)
         autoscroll_action.setChecked(self._autoscroll)
@@ -123,7 +112,9 @@ class RobotLogWidget(QWidget):
         clear_action = menu.addAction("Clear")
 
         chosen = menu.exec(self._log.mapToGlobal(pos))
-        if chosen == autoscroll_action:
+        if chosen == copy_action:
+            self._copy_log()
+        elif chosen == autoscroll_action:
             self._autoscroll = not self._autoscroll
         elif chosen == clear_action:
             self._log.clear()

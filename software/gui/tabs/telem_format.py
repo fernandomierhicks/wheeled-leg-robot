@@ -1,6 +1,6 @@
 """telem_format.py — TelemetryPayload struct format + decoders (shared/comm_protocol.h).
 
-Single source of truth for the TELEM_VERSION 10 wire layout, shared between
+Single source of truth for the TELEM_VERSION 11 wire layout, shared between
 flash_monitor.py (live GUI decode, Qt) and wlog_to_csv.py / log_playback.py
 (offline .wlog decode, no Qt). Keep in sync with the PROPAGATION CHECKLIST
 in shared/comm_protocol.h whenever TelemetryPayload changes.
@@ -8,7 +8,7 @@ in shared/comm_protocol.h whenever TelemetryPayload changes.
 
 import struct
 
-TELEM_VERSION = 10  # must match TELEM_VERSION in shared/comm_protocol.h
+TELEM_VERSION = 11  # must match TELEM_VERSION in shared/comm_protocol.h
 
 # ── Frame checksum — CRC-8 (poly 0x07, init 0x00, MSB-first — CRC-8/SMBus) ────
 # MIRROR: crc8_table()/crc8_step() in shared/CommLink/CommLink.cpp. Replaced the
@@ -28,7 +28,7 @@ def crc8(data: bytes) -> int:
         crc = _CRC8_TABLE[crc ^ b]
     return crc
 
-_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING"}
+_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING", 8: "STANDING_UP"}
 _FAULT_NAMES = {
     0x00: "NONE",
     0x01: "IMU_ERROR",
@@ -43,6 +43,7 @@ _FAULT_NAMES = {
     0x0A: "IMU_LOST",
     0x0B: "WHEEL_FEEDBACK_LOST",
     0x0C: "WHEEL_INIT_TIMEOUT",
+    0x0D: "STANDUP_FAILED",
 }
 # MIRROR: fault_description() in firmware/robot_teensy/esp32/src/main.cpp — keep wording
 # in sync whenever a fault is added/changed (that copy must stay ASCII-only, no UTF-8).
@@ -59,30 +60,32 @@ _FAULT_DESCRIPTIONS = {
     0x0A: "IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)",
     0x0B: "Wheel encoder timeout or ODrive error during operation",
     0x0C: "No CAN reply from wheel motors within 2 s of boot",
+    0x0D: "Standup denied or failed — pitch out of recoverable range",
 }
 
-# Struct formats for split telemetry (V10, packed, little-endian)
+# Struct formats for split telemetry (V11, packed, little-endian)
 # TELEM_A: bytes 0-117 of TelemetryPayload
 FMT_TELEM_A = "<I9fBB3f14HB6f2I3B"
-# TELEM_B: bytes 118-245 of TelemetryPayload
+# TELEM_B: bytes 118-246 of TelemetryPayload
 # 4H tof_dist, 2f rates, 3f accel, 2f hip_vel, 10f hip_cmd, 5f ctrl, 2f ff, H health, BB diag, I loop, B profile,
 # f pitch_trim, B esp32_link_ok, 3H esp32_status_age/uart_rx_drops/uart_seq_gaps,  ← V9
-# f gain_sched_alpha  ← V10
-FMT_TELEM_B = "<4H2f3f2f10f5f2fHBBIBfBHHHf"
+# f gain_sched_alpha,  ← V10
+# B standup_state  ← V11
+FMT_TELEM_B = "<4H2f3f2f10f5f2fHBBIBfBHHHfB"
 assert struct.calcsize(FMT_TELEM_A) == 118, (
     f"FMT_TELEM_A size mismatch: got {struct.calcsize(FMT_TELEM_A)}, expected 118 — "
     "sync with TelemetryPayload in shared/comm_protocol.h"
 )
-assert struct.calcsize(FMT_TELEM_B) == 128, (
-    f"FMT_TELEM_B size mismatch: got {struct.calcsize(FMT_TELEM_B)}, expected 128 — "
+assert struct.calcsize(FMT_TELEM_B) == 129, (
+    f"FMT_TELEM_B size mismatch: got {struct.calcsize(FMT_TELEM_B)}, expected 129 — "
     "sync with TelemetryPayload in shared/comm_protocol.h"
 )
 
-# Full 246-byte TelemetryPayload in one shot (used for .wlog playback, where
+# Full 247-byte TelemetryPayload in one shot (used for .wlog playback, where
 # each LogRecord embeds the whole struct rather than the split A/B frames).
 FMT_TELEM_FULL = "<" + FMT_TELEM_A[1:] + FMT_TELEM_B[1:]
-assert struct.calcsize(FMT_TELEM_FULL) == 246, (
-    f"FMT_TELEM_FULL size mismatch: got {struct.calcsize(FMT_TELEM_FULL)}, expected 246 — "
+assert struct.calcsize(FMT_TELEM_FULL) == 247, (
+    f"FMT_TELEM_FULL size mismatch: got {struct.calcsize(FMT_TELEM_FULL)}, expected 247 — "
     "sync with TelemetryPayload in shared/comm_protocol.h"
 )
 
@@ -146,7 +149,7 @@ def decode_telem_b(payload: bytes) -> dict:
      health_flags, imu_loss_pct, jump_state, loop_count,
      active_profile, pitch_trim_rad,
      esp32_link_ok, esp32_status_age_ms, uart_rx_drops, uart_seq_gaps,
-     gain_sched_alpha) = struct.unpack(FMT_TELEM_B, payload)
+     gain_sched_alpha, standup_state) = struct.unpack(FMT_TELEM_B, payload)
     _NO_DATA = 0xFFFF
     tof_front = min((d for d in [tof0, tof1] if d != _NO_DATA), default=_NO_DATA)
     tof_rear  = min((d for d in [tof2, tof3] if d != _NO_DATA), default=_NO_DATA)
@@ -189,12 +192,13 @@ def decode_telem_b(payload: bytes) -> dict:
         "uart_rx_drops":       uart_rx_drops,
         "uart_seq_gaps":       uart_seq_gaps,
         "gain_sched_alpha":    gain_sched_alpha,
+        "standup_state":       standup_state,
     }
 
 
 def decode_telem_full(payload: bytes) -> dict:
-    """Decode one full 246-byte TelemetryPayload blob (as embedded in a LogRecord)."""
+    """Decode one full 247-byte TelemetryPayload blob (as embedded in a LogRecord)."""
     return {
         **decode_telem_a(payload[:118]),
-        **decode_telem_b(payload[118:246]),
+        **decode_telem_b(payload[118:247]),
     }

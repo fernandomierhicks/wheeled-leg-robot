@@ -696,6 +696,7 @@ class HipMotorsTab(QWidget):
         4: ("ESTOP",       "#ff4444"),
         5: ("MANUAL",      "#00ccff"),
         6: ("CMD_REJECT",  "#ff8800"),
+        8: ("STANDING_UP", "#ff3c00"),
     }
 
     def _on_packet(self, info: dict):

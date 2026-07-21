@@ -285,7 +285,7 @@ class RemoteControlServer(QObject):
         idx = int(cmd.get("file_index"))
         mgr = LogTransferManager.instance()
         mgr.download(idx)
-        args = self._wait_for_signal(mgr.transfer_complete, 30000)
+        args = self._wait_for_signal(mgr.transfer_complete, 90000)
         if args is None:
             return {"ok": False, "error": "timeout waiting for download"}
         file_index, local_path, crc_ok = args

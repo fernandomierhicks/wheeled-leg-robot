@@ -140,6 +140,14 @@ static bool cmd_allowed(uint8_t cmd_id, RobotStateEnum s) {
 // (main.cpp's radio_update()) so the two aren't confused on the bench.
 static const BuzzerNote PARAM_SET_CHIRP[] = {{84, 30, 0}};  // C6, 30 ms
 
+// Very short chirps for SD-log lifecycle events (bench audibility while
+// running tuning.md's Test Protocol without watching the screen) — distinct
+// pitches from each other and from PARAM_SET_CHIRP/RADIO_ACQ_MELODY so all
+// are tellable apart by ear alone.
+static const BuzzerNote LOG_START_CHIRP[] = {{79, 40, 0}};               // G5 — recording started
+static const BuzzerNote LOG_GET_CHIRP[]   = {{74, 40, 0}};               // D5 — download started
+static const BuzzerNote LOG_DONE_CHIRP[]  = {{79, 40, 15}, {86, 60, 0}}; // G5→D6 — download complete
+
 // ── Command handler ───────────────────────────────────────────────────────────
 
 static void on_command(uint8_t type, uint8_t version, uint8_t source,
@@ -300,7 +308,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         if (sub == LOG_SUB_START) {
             uint32_t dur = 0; if (len >= 6) memcpy(&dur, payload + 2, 4);
             comm_log(LOG_LEVEL_INFO, "CMD log start dur_ms=%lu", (unsigned long)dur);
-            sd_logger_start(dur);
+            if (sd_logger_start(dur)) g_buzzer.play(LOG_START_CHIRP, 1, 150);
         } else if (sub == LOG_SUB_STOP) {
             comm_log(LOG_LEVEL_INFO, "CMD log stop");
             sd_logger_stop();
@@ -328,6 +336,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             if (s_log_get_via_usb) sd_logger_set_get_pacing(0, 2);  // unthrottled (as before)
             else                   sd_logger_set_get_pacing(8, 1);  // ~61 kB/s + telemetry headroom
             sd_logger_begin_get(idx, start);
+            if (sd_logger_transfer_active()) g_buzzer.play(LOG_GET_CHIRP, 1, 150);
         } else if (sub == LOG_SUB_DELETE && len >= 4) {
             uint16_t idx; memcpy(&idx, payload + 2, 2);
             comm_log(LOG_LEVEL_INFO, "CMD log delete idx=%u", idx);
@@ -384,8 +393,17 @@ void setup() {
     g_comm.onPacket(on_command);
     g_comm_usb.onPacket(on_command);
 
+    // param_init() (and thus the persisted PARAM_BUZZER_VOLUME) must be loaded
+    // before the boot chime below plays, or that chime always plays at the
+    // compiled-in 1.0 default regardless of what the user saved — silently
+    // bypassing volume=0. Safe to run this early: everything param_init()/
+    // comm_log() need (Serial, Serial5, comm packet handlers) is already up.
+    comm_log(LOG_LEVEL_INFO, "Firmware starting");
+    param_init();
+
     g_led.begin();
     g_buzzer.begin();
+    g_buzzer.set_volume(param_get(PARAM_BUZZER_VOLUME));
 
     // Boot indicator: quick rainbow flash + low-volume chime, ~1.3 s total.
     static const uint8_t BOOT_RAINBOW[][3] = {
@@ -418,9 +436,6 @@ void setup() {
 
     g_led.pulse(255, 255, 255, 2000);  // STARTUP: white breathe
 
-    comm_log(LOG_LEVEL_INFO, "Firmware starting");
-    param_init();
-
     // Peripheral enable flags — bench-test without full hardware connected.
     // See PARAM_*_ENABLE in param_ids.h. Takes effect at boot; toggling live
     // requires CMD_ID_REBOOT to re-run setup(). The hip/wheel CAN subsystems
@@ -432,8 +447,7 @@ void setup() {
     bool wheel_r_en = param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f;
     bool hip_en     = hip_l_en   || hip_r_en;
     bool wheel_en   = wheel_l_en || wheel_r_en;
-    g_buzzer.set_enabled(param_get(PARAM_BUZZER_ENABLE) >= 0.5f);
-    g_led.set_enabled(param_get(PARAM_LED_ENABLE)       >= 0.5f);
+    g_led.set_enabled(param_get(PARAM_LED_ENABLE) >= 0.5f);
 
     // Hardware watchdog: gated on PARAM_WATCHDOG_ENABLE (default off). Enabled
     // here (after param_init(), rather than at the very top of setup()) so a
@@ -643,6 +657,8 @@ static void fill_telemetry(TelemetryPayload& t) {
     t.uart_seq_gaps       = (uint16_t)(uart_seq_gaps   > 65535 ? 65535 : uart_seq_gaps);
     // V10 — leg gain-schedule blend factor (§1a, tuning.md)
     t.gain_sched_alpha    = g_state.gain_sched_alpha;
+    // V11 — standing-up recovery FSM phase
+    t.standup_state       = g_state.standup_state;
 }
 
 static void send_telemetry(bool prof) {
@@ -724,6 +740,7 @@ static void update_led() {
             case STATE_STANDBY:     g_led.pulse(255, 200,   0, 2000);      break;
             case STATE_RUNNING:     g_led.blink(0,   255,   0,  167, 167); break;
             case STATE_JUMPING:     g_led.blink(255, 100,   0,   80,  80); break;  // fast orange: "launching"
+            case STATE_STANDING_UP: g_led.blink(255,  60,   0,   60,  60); break;  // fast red-orange strobe: "recovering"
             case STATE_MANUAL:      g_led.pulse(0,   200, 255, 2000);      break;
             case STATE_ESTOP:       g_led.blink(255,   0,   0,  100, 100); break;
             case STATE_CMD_REJECT:  g_led.blink(255,   0,   0,  300, 300); break;
@@ -858,9 +875,22 @@ static void radio_update() {
     // Disarm is level-based, not edge-based: a CH10 drop during JUMPING would
     // consume the edge with no effect (disarm only latches from RUNNING); this
     // catches it the tick the jump completes and RUNNING is re-entered.
-    if (s_unarmed_ticks >= DISARM_DEBOUNCE_TICKS && g_state.state == STATE_RUNNING) {
+    //
+    // s_disarm_req_sent latches the request to a single send per RUNNING
+    // session. Without it, this level check double-fires: g_state.state is
+    // only updated when on_standby() actually runs, one tick after the
+    // StateMachine library (see State::execute()) has already evaluated the
+    // RUNNING->STANDBY transition, so this code still reads state==RUNNING
+    // on the following tick and re-requests. That second request lands after
+    // the FSM has already moved on to STANDBY, so it's never consumed there —
+    // it sits stale until the next arm, where it fires instantly and kicks
+    // RUNNING straight back to STANDBY (the "have to arm twice" symptom).
+    static bool s_disarm_req_sent = false;
+    if (g_state.state != STATE_RUNNING) s_disarm_req_sent = false;
+    if (s_unarmed_ticks >= DISARM_DEBOUNCE_TICKS && g_state.state == STATE_RUNNING && !s_disarm_req_sent) {
         comm_log(LOG_LEVEL_INFO, "Radio: disarmed -> STANDBY");
         stateMachine_disarm_running();
+        s_disarm_req_sent = true;
     }
 
     static bool s_was_calib = false;
@@ -1036,6 +1066,16 @@ void loop() {
     }
     sd_logger_service();            // 1 sector/tick + auto-stop
     sd_logger_service_transfer();   // paced chunk streaming during a GET
+    // Download-complete chirp: sd_logger_service_transfer() emits XFER_END
+    // and clears its own active flag internally (sd_logger.cpp) with no
+    // callback out to here, so detect the same thing via the falling edge
+    // of sd_logger_transfer_active() instead of touching that file.
+    {
+        static bool s_xfer_was_active = false;
+        bool xfer_active = sd_logger_transfer_active();
+        if (s_xfer_was_active && !xfer_active) g_buzzer.play(LOG_DONE_CHIRP, 2, 150);
+        s_xfer_was_active = xfer_active;
+    }
     if (prof) prof_mark(s_prof_max.sd, t0);
 
     // Deferred param flash flush — a LittleFS rewrite stalls the loop for
@@ -1044,13 +1084,20 @@ void loop() {
     param_flush_service(g_state.state != STATE_RUNNING && g_state.state != STATE_JUMPING);
     if (prof) prof_mark(s_prof_max.flash, t0);
 
-    // Send telemetry at 50 Hz (every 10th tick of the 500 Hz loop)
+    // Send telemetry at 50 Hz (every 10th tick of the 500 Hz loop) — skipped
+    // while a log GET is streaming (sd_logger_transfer_active()) so 100% of
+    // the paced Teensy->ESP32 link bandwidth goes to the log chunks instead
+    // of competing with telemetry; the ESP32/GUI have their own "downloading"
+    // indicator that doesn't depend on telemetry for this window (see
+    // esp32/src/main.cpp g_log_xfer_active).
     t0 = micros();
     static uint8_t telem_div = 0;
     if (++telem_div >= 10) {
         telem_div = 0;
-        if (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f || param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) wheel_motors_request_vbus();
-        send_telemetry(prof);
+        if (!sd_logger_transfer_active()) {
+            if (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f || param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) wheel_motors_request_vbus();
+            send_telemetry(prof);
+        }
     }
     if (prof) prof_mark(s_prof_max.telem, t0);
 
