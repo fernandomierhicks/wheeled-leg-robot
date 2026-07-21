@@ -35,6 +35,16 @@ static uint32_t g_crc_state = 0;
 static uint32_t g_xfer_interval_ms = 0;
 static uint8_t  g_xfer_burst = 2;
 static uint32_t g_xfer_last_ms = 0;
+// The ESP32 relay is a rate-changing bridge. Without end-to-end flow control,
+// a paused USB/TCP output lets Teensy overrun the ESP32 UART RX buffer. In ACK
+// mode exactly one data chunk is outstanding; its encoded payload is retained
+// so a lost ACK can be recovered without rereading or double-feeding CRC32.
+static bool     g_xfer_ack_required = false;
+static bool     g_xfer_waiting_ack = false;
+static uint16_t g_xfer_pending_len = 0;
+static uint32_t g_xfer_pending_sent_ms = 0;
+static uint8_t  g_xfer_pending[sizeof(LogDataHeader) + LOG_CHUNK_DATA];
+static constexpr uint32_t XFER_ACK_RETRY_MS = 100;
 
 static sd_logger_sender_t g_sender = nullptr;
 
@@ -235,8 +245,13 @@ void sd_logger_list() {
 
 void sd_logger_begin_get(uint16_t idx, uint32_t start_chunk) {
     if (g_xfer_active) {
-        emit_status(idx, 1);  // only one transfer at a time
-        return;
+        // GET is an idempotent restart command. If the GUI stopped receiving
+        // because XFER_END or several chunks were lost in the ESP32 relay, its
+        // timeout repair may arrive while the previous stream is still active.
+        // Abort that read cleanly and honor the newer requested offset instead
+        // of rejecting it and leaving the GUI waiting forever.
+        g_rd_file.close();
+        g_xfer_active = false;
     }
 
     char name[16];
@@ -255,7 +270,12 @@ void sd_logger_begin_get(uint16_t idx, uint32_t start_chunk) {
 
     g_xfer_index = idx;
     g_xfer_chunk = start_chunk;
+    g_xfer_waiting_ack = false;
+    g_xfer_pending_len = 0;
     crc32_begin();  // NOTE: covers only the bytes streamed from start_chunk onward
+    // Make the first repaired chunk eligible immediately even when this GET
+    // replaces another transfer which updated g_xfer_last_ms very recently.
+    g_xfer_last_ms = millis() - g_xfer_interval_ms;
     g_xfer_active = true;
 
     if (g_sender) {
@@ -273,8 +293,32 @@ void sd_logger_set_get_pacing(uint32_t interval_ms, uint8_t burst) {
     g_xfer_burst = (burst == 0) ? 1 : burst;
 }
 
+void sd_logger_set_get_ack_required(bool required) {
+    g_xfer_ack_required = required;
+    g_xfer_waiting_ack = false;
+    g_xfer_pending_len = 0;
+}
+
+void sd_logger_ack_chunk(uint16_t idx, uint32_t chunk_index) {
+    if (!g_xfer_active || !g_xfer_ack_required || !g_xfer_waiting_ack) return;
+    if (idx != g_xfer_index || chunk_index != g_xfer_chunk) return;
+    g_xfer_waiting_ack = false;
+    g_xfer_pending_len = 0;
+    g_xfer_chunk++;
+}
+
 void sd_logger_service_transfer() {
     if (!g_xfer_active || !g_sender) return;
+
+    if (g_xfer_ack_required && g_xfer_waiting_ack) {
+        uint32_t now = millis();
+        if (now - g_xfer_pending_sent_ms >= XFER_ACK_RETRY_MS) {
+            g_xfer_pending_sent_ms = now;
+            g_sender(COMM_TYPE_LOG_DATA, LOG_DATA_PAYLOAD_V1,
+                     g_xfer_pending, g_xfer_pending_len);
+        }
+        return;
+    }
 
     // Pace to the requesting transport's wire rate — unthrottled streaming
     // (2 chunks/tick ≈ 490 kB/s) overruns the ESP32 CP2102 path (~92 kB/s).
@@ -308,7 +352,18 @@ void sd_logger_service_transfer() {
         hdr.data_len = (uint16_t)n;
         memcpy(frame, &hdr, sizeof(hdr));
 
-        g_sender(COMM_TYPE_LOG_DATA, LOG_DATA_PAYLOAD_V1, frame, sizeof(hdr) + (size_t)n);
+        uint16_t frame_len = (uint16_t)(sizeof(hdr) + (size_t)n);
+        if (g_xfer_ack_required) {
+            memcpy(g_xfer_pending, frame, frame_len);
+            g_xfer_pending_len = frame_len;
+            g_xfer_pending_sent_ms = millis();
+            g_xfer_waiting_ack = true;
+            g_sender(COMM_TYPE_LOG_DATA, LOG_DATA_PAYLOAD_V1,
+                     g_xfer_pending, g_xfer_pending_len);
+            return;
+        }
+
+        g_sender(COMM_TYPE_LOG_DATA, LOG_DATA_PAYLOAD_V1, frame, frame_len);
         g_xfer_chunk++;
     }
 }

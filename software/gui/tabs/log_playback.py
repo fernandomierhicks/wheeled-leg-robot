@@ -346,7 +346,9 @@ class LogsTab(QWidget):
         if crc_ok:
             self._lbl_status.setText(f"LOG{idx:04d}.WLOG downloaded OK -> {path}")
         else:
-            self._lbl_status.setText(f"LOG{idx:04d}.WLOG download FAILED (CRC mismatch after retries)")
+            self._lbl_status.setText(
+                f"LOG{idx:04d}.WLOG download FAILED ({self._xfer.failure_reason()})"
+            )
         self._xfer.refresh()
         self._refresh_local_files()
 

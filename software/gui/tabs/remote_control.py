@@ -63,6 +63,13 @@ class RemoteControlServer(QObject):
                   f"({self._server.errorString()}) — command server disabled "
                   "(another GUI instance already running?)")
 
+    def close(self):
+        """Close the listener and any client sockets during GUI shutdown."""
+        self._server.close()
+        for sock in list(self._buffers):
+            sock.abort()
+        self._buffers.clear()
+
     # ── TelemetryBus feed ───────────────────────────────────────────────────
 
     def _on_packet(self, info: dict):

@@ -81,6 +81,17 @@ def _detect_lan_ip() -> str | None:
 
 # ── Serial reader thread ──────────────────────────────────────────────────────
 
+def _decode_printable_serial_line(raw: bytes) -> str | None:
+    """Decode direct serial diagnostics without treating framed binary as text."""
+    raw = raw.rstrip(b"\r")
+    if not raw or len(raw) > 512:
+        return None
+    if any(byte != 0x09 and not 0x20 <= byte <= 0x7E for byte in raw):
+        return None
+    text = raw.decode("ascii")
+    return text if text.strip() else None
+
+
 class SerialReader(QThread):
     line_received = pyqtSignal(str)
     raw_data      = pyqtSignal(bytes)
@@ -90,8 +101,11 @@ class SerialReader(QThread):
         super().__init__()
         self._ser     = ser
         self._running = True
-        self._log     = open(log_path, "a", buffering=1, encoding="utf-8", errors="replace")
+        # Keep diagnostics buffered. Framed CommLink traffic is binary and can
+        # contain incidental newlines, so it must never be line-flushed here.
+        self._log     = open(log_path, "a", buffering=64 * 1024, encoding="utf-8")
         self._log.write(f"\n── session {datetime.now().isoformat(timespec='seconds')} ──\n")
+        self._log.flush()  # make session boundaries visible while the GUI is running
 
     def run(self):
         buf = b""
@@ -104,9 +118,14 @@ class SerialReader(QThread):
                     buf += chunk
                     while b"\n" in buf:
                         raw, buf = buf.split(b"\n", 1)
-                        text = raw.decode("utf-8", errors="replace").rstrip("\r")
-                        self.line_received.emit(text)
-                        self._log.write(text + "\n")
+                        text = _decode_printable_serial_line(raw)
+                        if text is not None:
+                            self.line_received.emit(text)
+                            self._log.write(text + "\n")
+                    # Binary frames need not contain a newline. Bound the text
+                    # candidate buffer while raw_data continues uninterrupted.
+                    if len(buf) > 4096:
+                        buf = buf[-512:]
                 else:
                     self.msleep(5)
             except Exception:
@@ -152,6 +171,7 @@ class PioRunner(QObject):
     def kill(self):
         if self._proc and self._proc.state() != QProcess.ProcessState.NotRunning:
             self._proc.kill()
+            self._proc.waitForFinished(2000)
 
     @property
     def running(self) -> bool:
@@ -739,6 +759,14 @@ class DevicePanel(QWidget):
         self._conn_btn.setChecked(False)
         self._conn_btn.setText("Connect")
 
+    def shutdown(self):
+        """Stop background work synchronously before QApplication exits."""
+        self._scan_timer.stop()
+        self._flashing = True
+        if self._pio.running:
+            self._pio.kill()
+        self._close_port("Closed", external=False)
+
     def _set_status(self, connected: bool, label: str):
         color = GREEN if connected else RED
         self._status_lbl.setStyleSheet(f"color: {color};")
@@ -841,8 +869,9 @@ class FlashMonitorTab(QWidget):
     def __init__(self):
         super().__init__()
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(DevicePanel("teensy"))
-        splitter.addWidget(DevicePanel("esp32"))
+        self._panels = [DevicePanel("teensy"), DevicePanel("esp32")]
+        for panel in self._panels:
+            splitter.addWidget(panel)
         splitter.setSizes([1, 1])
         splitter.setHandleWidth(6)
         splitter.setStyleSheet(f"QSplitter::handle {{ background: {BORDER}; }}")
@@ -850,3 +879,7 @@ class FlashMonitorTab(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(splitter)
+
+    def shutdown(self):
+        for panel in self._panels:
+            panel.shutdown()

@@ -305,7 +305,15 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
     // ── SD log control: start/stop/list/get/delete ─────────────────────────────
     if (cmd_id == CMD_ID_LOG && len >= 2) {
         uint8_t sub = payload[1];
-        if (sub == LOG_SUB_START) {
+        if (sub == LOG_SUB_CHUNK_ACK && len >= 8) {
+            // Internal ESP32 relay acknowledgement. Do not log this high-rate
+            // control message or echo any response back onto either transport.
+            uint16_t idx;
+            uint32_t chunk;
+            memcpy(&idx, payload + 2, 2);
+            memcpy(&chunk, payload + 4, 4);
+            sd_logger_ack_chunk(idx, chunk);
+        } else if (sub == LOG_SUB_START) {
             uint32_t dur = 0; if (len >= 6) memcpy(&dur, payload + 2, 4);
             comm_log(LOG_LEVEL_INFO, "CMD log start dur_ms=%lu", (unsigned long)dur);
             if (sd_logger_start(dur)) g_buzzer.play(LOG_START_CHIRP, 1, 150);
@@ -331,10 +339,11 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             }
             comm_log(LOG_LEVEL_INFO, "CMD log get idx=%u start_chunk=%lu", idx, (unsigned long)start);
             // Pace to the requesting transport: direct Teensy USB is high-speed;
-            // the ESP32-relayed path is capped by the CP2102 at ~92 kB/s.
+            // the ESP32-relayed path is flow-controlled one chunk at a time.
             s_log_get_via_usb = (source == COMM_SRC_PC);
-            if (s_log_get_via_usb) sd_logger_set_get_pacing(0, 2);  // unthrottled (as before)
-            else                   sd_logger_set_get_pacing(8, 1);  // ~61 kB/s + telemetry headroom
+            sd_logger_set_get_ack_required(!s_log_get_via_usb);
+            if (s_log_get_via_usb) sd_logger_set_get_pacing(0, 2);  // unthrottled direct USB
+            else                   sd_logger_set_get_pacing(0, 1);  // ACK provides relay backpressure
             sd_logger_begin_get(idx, start);
             if (sd_logger_transfer_active()) g_buzzer.play(LOG_GET_CHIRP, 1, 150);
         } else if (sub == LOG_SUB_DELETE && len >= 4) {

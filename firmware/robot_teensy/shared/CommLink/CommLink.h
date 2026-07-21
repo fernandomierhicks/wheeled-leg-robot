@@ -46,7 +46,8 @@ public:
     CommLink(Stream& stream, uint8_t source_id);
 
     // Assemble and transmit one framed packet. Full frame is written in a
-    // single write() call so UDPStream can wrap it in one datagram.
+    // single write() call so UDPStream can wrap it in one datagram. Returns
+    // false if the payload is oversized or the Stream accepts a partial write.
     // corrupt_mode_for_test: TEST ONLY (Phase 9, UARTplat.md) — deliberately
     // damages one already-checksummed field before sending, to verify a
     // receiver's parser defenses actually catch it. 0 (default) = no
@@ -56,7 +57,7 @@ public:
     //   3 = overwrite the on-wire length field with COMM_MAX_PAYLOAD+50 after
     //       the checksum was computed over the true length (receiver's Fix 2
     //       length guard should reject it immediately, before touching payload)
-    void send(uint8_t type, uint8_t version, const void* payload, uint16_t len,
+    bool send(uint8_t type, uint8_t version, const void* payload, uint16_t len,
               uint8_t corrupt_mode_for_test = 0);
 
     // Drive the receive parser — call every main-loop iteration.

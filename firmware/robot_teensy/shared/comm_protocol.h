@@ -491,6 +491,7 @@ typedef struct __attribute__((packed)) {
 #define LOG_SUB_LIST      0x03  // no args — reply: one LOG_INFO ENTRY per file, then LIST_END
 #define LOG_SUB_GET       0x04  // + uint16_t file_index, uint32_t start_chunk — stream LOG_DATA
 #define LOG_SUB_DELETE    0x05  // + uint16_t file_index — erase one .wlog file
+#define LOG_SUB_CHUNK_ACK 0x06  // ESP32→Teensy internal: + uint16_t file_index, uint32_t chunk_index
 
 // ── Payload: param report (COMM_TYPE_PARAM_REPORT) ───────────────────────────
 #define PARAM_REPORT_PAYLOAD_V1  1

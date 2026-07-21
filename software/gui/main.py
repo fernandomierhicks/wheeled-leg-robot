@@ -1,18 +1,7 @@
 import sys
 import os
 import time
-import psutil
 from collections import deque
-
-def _kill_other_instances():
-    current_pid = os.getpid()
-    current_script = os.path.abspath(__file__)
-    for proc in psutil.process_iter(['pid', 'cmdline']):
-        if proc.info['pid'] == current_pid:
-            continue
-        cmdline = proc.info.get('cmdline') or []
-        if any(os.path.abspath(arg) == current_script for arg in cmdline if arg):
-            proc.kill()
 
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
@@ -39,6 +28,7 @@ from tabs.log_analyzer_tab import LogAnalyzerTab
 from tabs.wifi_diag_tab import WifiDiagTab
 from tabs.telemetry_bus import TelemetryBus
 from tabs.source_manager import SourceManager, TRANSPORT_LABEL
+from single_instance import SingleInstanceGuard
 from tabs.comm_commands import (
     send_set_mode, send_reboot, send_reliable, CommandAlertBus,
     STATE_STARTUP, STATE_STANDBY, STATE_ESTOP, STATE_CMD_REJECT,
@@ -1326,7 +1316,31 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._save_layout()
+        self.shutdown()
         super().closeEvent(event)
+
+    def shutdown(self):
+        """Synchronously stop resources which can keep Python alive."""
+        if not getattr(self, "_shutdown_done", False):
+            self._shutdown_done = True
+            self._ping_timer.stop()
+
+            # Floating tabs are independent top-level windows. Mark them as
+            # returned before closing so their closeEvent does not re-dock
+            # widgets into a main window which is itself shutting down.
+            for floating in list(self._floating.values()):
+                floating._returned = True
+                floating.close()
+
+            flash_tab = self._tab_widgets.get("Flash & Monitor")
+            if flash_tab is not None:
+                flash_tab.shutdown()
+
+            from tabs.wifi_transport import WifiTransport
+            WifiTransport.instance().stop()
+
+            if hasattr(self, "_remote_control"):
+                self._remote_control.close()
 
     def _reorder_pane_tabs(self, pane: QTabWidget, order: list[str]):
         for target_idx, title in enumerate(order):
@@ -1474,7 +1488,17 @@ def main():
                           "— runs the scenario unattended against the real GUI and exits.")
     args, _ = ap.parse_known_args()
 
-    _kill_other_instances()
+    instance_guard = SingleInstanceGuard("WheeledLegRobot.GUI.SingleInstance.v1")
+    if not instance_guard.acquired:
+        app = QApplication(sys.argv)
+        app.setWindowIcon(QIcon(_ICON_PATH))
+        QMessageBox.information(
+            None,
+            "Wheeled-Leg Robot GUI",
+            "The robot GUI is already running.\n\n"
+            "If its window was just closed, wait a moment for that process to finish shutting down.",
+        )
+        return
 
     if sys.platform == "win32":
         # Without an explicit AppUserModelID, Windows groups this process under
@@ -1488,6 +1512,7 @@ def main():
     win = MainWindow()
     win.setWindowIcon(QIcon(_ICON_PATH))
     win.show()
+    app.aboutToQuit.connect(win.shutdown)
 
     from tabs.remote_control import RemoteControlServer
     win._remote_control = RemoteControlServer(win)
@@ -1499,7 +1524,11 @@ def main():
         # ReliableCommand's _in_flight set, UARTplat.md Phase 5).
         win._automation_runner = AutomationRunner(args.automation, app)
 
-    sys.exit(app.exec())
+    try:
+        exit_code = app.exec()
+    finally:
+        instance_guard.close()
+    sys.exit(exit_code)
 
 if __name__ == "__main__":
     main()

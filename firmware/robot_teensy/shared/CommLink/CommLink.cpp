@@ -40,9 +40,9 @@ void CommLink::onPacket(CommPacketCb cb) {
     _cb = cb;
 }
 
-void CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t len,
-                     uint8_t corrupt_mode_for_test) {
-    if (len > COMM_MAX_PAYLOAD) return;  // overflow guard — caller passed oversized payload
+bool CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t len,
+                    uint8_t corrupt_mode_for_test) {
+    if (len > COMM_MAX_PAYLOAD) return false;  // overflow guard — caller passed oversized payload
     uint8_t frame[10 + COMM_MAX_PAYLOAD];
 
     uint8_t seq    = _seq_tx++;
@@ -81,7 +81,8 @@ void CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t
         frame[7] = (uint8_t)(bogus_len >> 8);
     }
 
-    _s.write(frame, 10 + len);
+    size_t frame_len = 10u + len;
+    return _s.write(frame, frame_len) == frame_len;
 }
 
 void CommLink::update() {

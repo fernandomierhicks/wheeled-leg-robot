@@ -5,10 +5,7 @@
 #define TEENSY_UART_RX    16
 #define TEENSY_UART_TX    17
 #define UPLINK_QUEUE_LEN        24      // uplink_task queue depth — ~200 ms absorb at 100 frames/s
-#define LOG_UPLINK_QUEUE_LEN    32      // dedicated SD-log-transfer (LOG_DATA/LOG_INFO) queue, drained
-                                         // by its own task (log_uplink_task) so it's never competing
-                                         // with telemetry for either a queue slot or the CPU time to
-                                         // drain one — see on_teensy_packet(), esp32/src/main.cpp.
+#define LOG_UPLINK_QUEUE_LEN     4      // ACK flow control keeps at most one data chunk in flight
 #define TEENSY_LINK_TIMEOUT_MS  1500    // single truth for "Teensy link up": TFT active-state,
                                          // Neopixel linked-state, and face-mode connected-state
 
