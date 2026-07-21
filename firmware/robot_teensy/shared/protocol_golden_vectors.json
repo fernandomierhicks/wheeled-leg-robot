@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "description": "Frozen CommLink v1 byte vectors. Frame CRC covers type through payload; magic and END are excluded.",
+  "framing": {
+    "magic_hex": "aa55",
+    "end_hex": "ef",
+    "crc": "CRC-8/SMBus poly=0x07 init=0x00 refin=false refout=false xorout=0x00"
+  },
+  "vectors": [
+    {
+      "name": "empty_ack",
+      "type": 3,
+      "version": 1,
+      "source": 2,
+      "sequence": 0,
+      "payload_hex": "",
+      "frame_hex": "aa5503010200000035ef"
+    },
+    {
+      "name": "set_mode_running",
+      "type": 2,
+      "version": 1,
+      "source": 3,
+      "sequence": 42,
+      "payload_hex": "0103",
+      "frame_hex": "aa550201032a020001030bef"
+    },
+    {
+      "name": "param_get_gui_motion",
+      "type": 2,
+      "version": 1,
+      "source": 3,
+      "sequence": 255,
+      "payload_hex": "112b04",
+      "frame_hex": "aa55020103ff0300112b0462ef"
+    },
+    {
+      "name": "magic_in_payload",
+      "type": 2,
+      "version": 1,
+      "source": 3,
+      "sequence": 126,
+      "payload_hex": "00aa55efff",
+      "frame_hex": "aa550201037e050000aa55effff4ef"
+    }
+  ]
+}

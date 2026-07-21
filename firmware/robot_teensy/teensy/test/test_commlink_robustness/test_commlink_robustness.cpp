@@ -13,6 +13,10 @@
 #include "CommLink.h"
 #include "comm_protocol.h"
 
+// This desktop-only test environment excludes the Teensy application sources,
+// so compile the shared implementation directly into the test translation unit.
+#include "../../../shared/CommLink/CommLink.cpp"
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -30,6 +34,19 @@ public:
     int read() override { return (_head < _buf.size()) ? _buf[_head++] : -1; }
     void write_raw(std::initializer_list<uint8_t> bytes) { _buf.insert(_buf.end(), bytes); }
     void write_raw(const uint8_t* bytes, size_t n) { _buf.insert(_buf.end(), bytes, bytes + n); }
+};
+
+class ShortWriteStream : public Stream {
+public:
+    size_t accepted = 0;
+    size_t calls = 0;
+    explicit ShortWriteStream(size_t accepted_bytes) : accepted(accepted_bytes) {}
+    size_t write(const uint8_t* /*buf*/, size_t len) override {
+        ++calls;
+        return accepted < len ? accepted : len;
+    }
+    int available() override { return 0; }
+    int read() override { return -1; }
 };
 
 static bool     s_got;
@@ -206,6 +223,102 @@ void test_truncated_frame_then_valid_frames_recover(void) {
         "parser must resync onto a clean frame within a few frame-widths after truncation");
 }
 
+void test_send_matches_frozen_empty_ack_vector(void) {
+    LoopbackStream ls;
+    CommLink sender(ls, COMM_SRC_ESP32);
+    CommLink receiver(ls, COMM_SRC_PC);
+    receiver.onPacket(on_packet);
+
+    // protocol_golden_vectors.json: empty_ack
+    const uint8_t expected[] = {0xAA, 0x55, 0x03, 0x01, 0x02, 0x00,
+                                0x00, 0x00, 0x35, 0xEF};
+    const uint8_t empty = 0;
+    TEST_ASSERT_TRUE(sender.send(COMM_TYPE_ACK, 1, &empty, 0));
+    s_got = false;
+    receiver.update();
+    TEST_ASSERT_TRUE(s_got);
+    TEST_ASSERT_EQUAL_UINT8(COMM_TYPE_ACK, s_type);
+    TEST_ASSERT_EQUAL_UINT16(0, s_len);
+
+    auto explicit_frame = make_frame(COMM_TYPE_ACK, 1, COMM_SRC_ESP32, 0, &empty, 0);
+    TEST_ASSERT_EQUAL_UINT32(sizeof(expected), explicit_frame.size());
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, explicit_frame.data(), sizeof(expected));
+}
+
+void test_send_rejects_short_write_and_oversize(void) {
+    uint8_t payload[4] = {1, 2, 3, 4};
+    ShortWriteStream short_stream(5);
+    CommLink short_sender(short_stream, COMM_SRC_PC);
+    TEST_ASSERT_FALSE(short_sender.send(COMM_TYPE_COMMAND, 1, payload, sizeof(payload)));
+    TEST_ASSERT_EQUAL_UINT32(1, short_stream.calls);
+
+    ShortWriteStream oversize_stream(1024);
+    CommLink oversize_sender(oversize_stream, COMM_SRC_PC);
+    std::vector<uint8_t> oversized(COMM_MAX_PAYLOAD + 1, 0x5A);
+    TEST_ASSERT_FALSE(oversize_sender.send(COMM_TYPE_COMMAND, 1, oversized.data(), oversized.size()));
+    TEST_ASSERT_EQUAL_UINT32(0, oversize_stream.calls);
+}
+
+void test_max_payload_roundtrip(void) {
+    LoopbackStream ls;
+    CommLink sender(ls, COMM_SRC_PC);
+    CommLink receiver(ls, COMM_SRC_TEENSY);
+    receiver.onPacket(on_packet);
+    std::vector<uint8_t> payload(COMM_MAX_PAYLOAD);
+    for (size_t i = 0; i < payload.size(); ++i) payload[i] = (uint8_t)i;
+
+    TEST_ASSERT_TRUE(sender.send(COMM_TYPE_COMMAND, 1, payload.data(), payload.size()));
+    s_got = false;
+    receiver.update();
+    TEST_ASSERT_TRUE(s_got);
+    TEST_ASSERT_EQUAL_UINT16(COMM_MAX_PAYLOAD, s_len);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(payload.data(), s_buf, payload.size());
+}
+
+void test_corruption_modes_drop_and_next_frame_recovers(void) {
+    LoopbackStream ls;
+    CommLink sender(ls, COMM_SRC_PC);
+    CommLink receiver(ls, COMM_SRC_TEENSY);
+    receiver.onPacket(on_packet);
+    uint8_t payload[4] = {0x00, COMM_START_A, COMM_START_B, COMM_END};
+
+    // CRC and END corruption preserve the true frame boundary. A corrupted
+    // length has its own recovery test above because its trailing bytes are,
+    // by definition, an unframed byte stream.
+    for (uint8_t mode = 1; mode <= 2; ++mode) {
+        s_got = false;
+        TEST_ASSERT_TRUE(sender.send(COMM_TYPE_COMMAND, 1, payload, sizeof(payload), mode));
+        receiver.update();
+        TEST_ASSERT_FALSE_MESSAGE(s_got, "corrupted frame must not be delivered");
+    }
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(2, receiver.rx_drops());
+
+    TEST_ASSERT_TRUE(sender.send(COMM_TYPE_COMMAND, 1, payload, sizeof(payload)));
+    s_got = false;
+    receiver.update();
+    TEST_ASSERT_TRUE_MESSAGE(s_got, "valid frame after all corruption modes must decode");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, s_buf, sizeof(payload));
+}
+
+void test_overlapping_magic_and_sequence_wrap(void) {
+    LoopbackStream ls;
+    CommLink receiver(ls, COMM_SRC_TEENSY);
+    receiver.onPacket(on_packet);
+    uint8_t payload[1] = {0x42};
+
+    // An extra first magic byte must not hide the immediately following frame.
+    ls.write_raw({COMM_START_A});
+    auto first = make_frame(COMM_TYPE_COMMAND, 1, COMM_SRC_PC, 254, payload, sizeof(payload));
+    expect_frame(receiver, ls, first, COMM_TYPE_COMMAND, sizeof(payload),
+                 "overlapping magic must resynchronize");
+
+    auto second = make_frame(COMM_TYPE_COMMAND, 1, COMM_SRC_PC, 255, payload, sizeof(payload));
+    auto third  = make_frame(COMM_TYPE_COMMAND, 1, COMM_SRC_PC,   0, payload, sizeof(payload));
+    expect_frame(receiver, ls, second, COMM_TYPE_COMMAND, sizeof(payload), "sequence 255");
+    expect_frame(receiver, ls, third,  COMM_TYPE_COMMAND, sizeof(payload), "sequence wrap to 0");
+    TEST_ASSERT_EQUAL_UINT32(0, receiver.rx_seq_gaps());
+}
+
 // ── Entry (native — no Arduino runtime, see [env:native] in platformio.ini) ──
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
@@ -215,5 +328,10 @@ int main(int argc, char** argv) {
     RUN_TEST(test_length_out_of_range_dropped_then_recovers);
     RUN_TEST(test_back_to_back_valid_frames_with_garbage_between);
     RUN_TEST(test_truncated_frame_then_valid_frames_recover);
+    RUN_TEST(test_send_matches_frozen_empty_ack_vector);
+    RUN_TEST(test_send_rejects_short_write_and_oversize);
+    RUN_TEST(test_max_payload_roundtrip);
+    RUN_TEST(test_corruption_modes_drop_and_next_frame_recovers);
+    RUN_TEST(test_overlapping_magic_and_sequence_wrap);
     return UNITY_END();
 }
