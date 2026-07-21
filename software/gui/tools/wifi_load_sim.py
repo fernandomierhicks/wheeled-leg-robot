@@ -24,6 +24,7 @@ Usage:
 """
 
 import argparse
+import secrets
 import socket
 import struct
 import sys
@@ -32,6 +33,7 @@ import time
 
 UDP_PORT = 5005
 TCP_PORT = 5006
+DISCOVERY_PORT = 5007
 
 # ── CommLink frame constants + CRC-8 (shared/comm_protocol.h, shared/CommLink/
 # CommLink.cpp) — copied (not imported) so this tool has no dependency on the
@@ -41,7 +43,7 @@ _COMM_START_B  = 0x55
 _COMM_END      = 0xEF
 _COMM_SRC_PC   = 0x03
 _COMM_TYPE_CMD = 0x02
-_CMD_PAYLOAD_V = 1
+_CMD_PAYLOAD_V = 2
 
 CMD_ID_PING      = 0x02
 CMD_ID_REBOOT    = 0x06
@@ -63,11 +65,15 @@ def _crc8(data: bytes) -> int:
 
 
 _seq = [0]  # rolling Tx sequence counter, mirrors comm_commands.py's build_frame()
+_request_id = [1]
 
 
 def _build_frame(payload: bytes) -> bytes:
     """Wrap payload in a CommLink COMMAND frame (CRC-8 checksum) — copied
     from comm_commands.py's build_frame()."""
+    request_id = _request_id[0]
+    _request_id[0] = (_request_id[0] + 1) & 0xFFFFFFFF or 1
+    payload = struct.pack("<I", request_id) + payload
     seq = _seq[0] & 0xFF
     _seq[0] += 1
     plen = len(payload)
@@ -102,6 +108,62 @@ def _detect_esp32_ip(timeout_s: float = 30.0) -> str:
         return src_ip
     finally:
         sock.close()
+
+
+class TelemetryLease:
+    """Own and renew the same explicit UDP telemetry lease as the GUI."""
+
+    def __init__(self, esp32_ip: str | None):
+        self.esp32_ip = esp32_ip
+        self._token = f"{secrets.randbits(32) or 1:08X}"
+        self._stop = threading.Event()
+        self._ready = threading.Event()
+        self._error: Exception | None = None
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self, timeout_s: float = 8.0) -> str:
+        self._thread.start()
+        if not self._ready.wait(timeout_s):
+            self.stop()
+            raise TimeoutError("ESP32 did not acknowledge a telemetry lease")
+        if self._error:
+            raise self._error
+        return self.esp32_ip
+
+    def stop(self):
+        self._stop.set()
+        if self._thread.is_alive():
+            self._thread.join(timeout=2)
+
+    def _run(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.bind(("", UDP_PORT))
+        sock.settimeout(0.2)
+        claim = f"WLR_CLAIM_V1 {self._token}".encode("ascii")
+        next_claim = 0.0
+        try:
+            while not self._stop.is_set():
+                now = time.monotonic()
+                if now >= next_claim:
+                    sock.sendto(claim, ("255.255.255.255", DISCOVERY_PORT))
+                    if self.esp32_ip:
+                        sock.sendto(claim, (self.esp32_ip, DISCOVERY_PORT))
+                    next_claim = now + 0.8
+                try:
+                    data, peer = sock.recvfrom(4096)
+                except socket.timeout:
+                    continue
+                if data.startswith(f"WLR_ACK_V1 {self._token} ".encode("ascii")):
+                    self.esp32_ip = peer[0]
+                    self._ready.set()
+                elif data.startswith(b"WLR_BUSY_V1 ") and not self._ready.is_set():
+                    self._error = RuntimeError("ESP32 WiFi session is owned by another client")
+                    self._ready.set()
+                    return
+        finally:
+            sock.close()
 
 
 class TcpCommandLink:
@@ -179,10 +241,8 @@ class TcpCommandLink:
 
 def run(duration_s: float, ping_hz: float, dump_period_s: float,
         reboot_teensy_at: float | None, esp32_ip: str | None):
-    if esp32_ip is None:
-        print(f"[wifi_load_sim] waiting for ESP32 UDP telemetry on :{UDP_PORT} "
-              f"to learn its IP...", file=sys.stderr)
-        esp32_ip = _detect_esp32_ip()
+    lease = TelemetryLease(esp32_ip)
+    esp32_ip = lease.start()
     print(f"[wifi_load_sim] ESP32 IP: {esp32_ip} — connecting TCP :{TCP_PORT}", file=sys.stderr)
 
     link = TcpCommandLink(esp32_ip)
@@ -218,6 +278,7 @@ def run(duration_s: float, ping_hz: float, dump_period_s: float,
         print("[wifi_load_sim] interrupted", file=sys.stderr)
     finally:
         link.stop()
+        lease.stop()
 
     print(f"[wifi_load_sim] done: {pings_sent} pings, {dumps_sent} param dumps, "
           f"{link.rx_bytes} RX bytes drained", file=sys.stderr)

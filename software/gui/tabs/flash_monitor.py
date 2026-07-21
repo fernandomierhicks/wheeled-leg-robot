@@ -455,13 +455,18 @@ class PacketDecoder(QObject):
                     from .telemetry_bus import TelemetryBus
                     bus = TelemetryBus.instance()
                     if not bus.playback_active and SourceManager.instance().is_active(self._device):
-                        bus.packet.emit(info)
+                        bus.publish(info)
             self._buf = self._buf[total:]
 
 
 class PacketInspector(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._pending_info: dict | None = None
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setInterval(100)
+        self._refresh_timer.timeout.connect(self._flush_pending)
+        self._refresh_timer.start()
 
         frame = QFrame(self)
         frame.setFrameShape(QFrame.Shape.StyledPanel)
@@ -517,6 +522,13 @@ class PacketInspector(QWidget):
         lbl.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: bold; border: none;")
 
     def update_packet(self, info: dict):
+        self._pending_info = info
+
+    def _flush_pending(self):
+        info = self._pending_info
+        self._pending_info = None
+        if info is None:
+            return
         self._set("Type", info.get("type_name", "—"))
         self._set("Src",  info.get("src_name",  "—"))
         self._set("Seq",  str(info.get("seq", "—")))

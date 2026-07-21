@@ -20,6 +20,7 @@ Command path:   When a UDP packet arrives the sender IP is recorded.
 """
 
 import select
+import secrets
 import socket
 import threading
 import time
@@ -28,7 +29,10 @@ from PyQt6.QtCore import QThread
 
 UDP_PORT     = 5005
 TCP_PORT     = 5006
-TIMEOUT_S    = 3.0   # declare WiFi dead if no UDP packet in this many seconds
+DISCOVERY_PORT = 5007
+TELEMETRY_TIMEOUT_S = 1.5
+SESSION_RENEW_S = 0.8
+SELECT_POLL_S = 0.2
 
 
 class WifiTransport(QThread):
@@ -46,6 +50,10 @@ class WifiTransport(QThread):
         self._tcp_sock:   socket.socket | None = None
         self._tcp_lock    = threading.Lock()
         self._connected   = False
+        self._session_token = secrets.randbits(32) or 1
+        self._last_claim_time = 0.0
+        self._last_lease_ack_time = 0.0
+        self._last_udp_time = 0.0
         # Reconnect backoff (Phase 4, UARTplat.md): a dead ESP32 used to get a
         # fresh connect() attempt on every send() call (up to 10 Hz from the GUI
         # ping), each blocking up to the 1 s socket timeout. Skip attempts until
@@ -71,6 +79,18 @@ class WifiTransport(QThread):
         """ESP32's current IP, learned from the source address of the last UDP
         telemetry datagram. None until the first packet arrives."""
         return self._esp_ip
+
+    @property
+    def telemetry_age_ms(self) -> int | None:
+        if not self._last_udp_time:
+            return None
+        return int((time.monotonic() - self._last_udp_time) * 1000)
+
+    @property
+    def lease_age_ms(self) -> int | None:
+        if not self._last_lease_ack_time:
+            return None
+        return int((time.monotonic() - self._last_lease_ack_time) * 1000)
 
     def stop(self, wait_ms: int = 3500):
         """Ask run()'s loop to exit and block until it does (or wait_ms elapses).
@@ -134,6 +154,7 @@ class WifiTransport(QThread):
 
         udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        udp.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         udp.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)  # ~1 MB: survive GUI stalls/bursts
         try:
             udp.bind(("", UDP_PORT))
@@ -144,6 +165,17 @@ class WifiTransport(QThread):
         sm = SourceManager.instance()
 
         while not self._stop_requested.is_set():
+            now = time.monotonic()
+            if now - self._last_claim_time >= SESSION_RENEW_S:
+                claim = f"WLR_CLAIM_V1 {self._session_token:08X}".encode("ascii")
+                try:
+                    udp.sendto(claim, ("255.255.255.255", DISCOVERY_PORT))
+                    if self._esp_ip:
+                        udp.sendto(claim, (self._esp_ip, DISCOVERY_PORT))
+                except OSError:
+                    pass
+                self._last_claim_time = now
+
             with self._tcp_lock:
                 tcp_sock = self._tcp_sock
             read_fds = [udp]
@@ -151,7 +183,7 @@ class WifiTransport(QThread):
                 read_fds.append(tcp_sock)
 
             try:
-                ready, _, errored = select.select(read_fds, [], read_fds, TIMEOUT_S)
+                ready, _, errored = select.select(read_fds, [], read_fds, SELECT_POLL_S)
             except Exception as e:
                 # Most likely tcp_sock was closed by send() between the snapshot
                 # above and this call (rare, self-heals next iteration).
@@ -166,15 +198,30 @@ class WifiTransport(QThread):
                     print(f"[WifiTransport] UDP error: {e}")
                     break
 
-                if not self._connected or src_ip != self._esp_ip:
+                if data.startswith(b"WLR_ACK_V1 "):
+                    parts = data.decode("ascii", errors="ignore").split()
+                    if len(parts) >= 2 and parts[1].upper() == f"{self._session_token:08X}":
+                        self._last_lease_ack_time = time.monotonic()
+                        if src_ip != self._esp_ip:
+                            self._esp_ip = src_ip
+                            with self._tcp_lock:
+                                self._close_tcp()
+                                self._fail_count = 0
+                                self._next_connect_time = 0.0
+                    continue
+                if data.startswith(b"WLR_BUSY_V1 "):
+                    continue
+
+                self._last_udp_time = time.monotonic()
+                if src_ip != self._esp_ip:
                     self._esp_ip = src_ip
                     with self._tcp_lock:
                         self._close_tcp()   # reset TCP so it reconnects to new IP
                         self._fail_count        = 0
                         self._next_connect_time = 0.0
-                    if not self._connected:
-                        self._connected = True
-                        sm._on_opened("wifi")
+                if not self._connected:
+                    self._connected = True
+                    sm._on_opened("wifi")
 
                 self._decoder.feed(data)
 
@@ -192,19 +239,17 @@ class WifiTransport(QThread):
                 else:
                     self._tcp_decoder.feed(data)
 
-            if not ready and not errored:
-                # Nothing ready within TIMEOUT_S — same "link looks dead" signal
-                # the old bare UDP socket.timeout used to provide. Driven by UDP
-                # silence only (matches prior behavior): TCP being quiet is
-                # normal whenever no commands are in flight, not a disconnect.
-                if self._connected:
-                    self._connected = False
-                    self._esp_ip = None
-                    with self._tcp_lock:
-                        self._close_tcp()
-                    sm._on_released("wifi")
+            # UDP telemetry and TCP command liveness are independent. A busy or
+            # healthy TCP stream must never mask missing telemetry, and UDP loss
+            # must not tear down a still-usable command connection.
+            if (self._connected and self._last_udp_time and
+                    time.monotonic() - self._last_udp_time > TELEMETRY_TIMEOUT_S):
+                self._connected = False
+                sm._on_released("wifi")
 
         udp.close()
+        with self._tcp_lock:
+            self._close_tcp()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

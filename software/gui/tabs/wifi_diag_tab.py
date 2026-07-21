@@ -144,6 +144,8 @@ class WifiDiagTab(QWidget):
     # ── Telemetry handling ───────────────────────────────────────────────────
 
     def _on_packet(self, info: dict):
+        if info.get("ptype") == 0x01 and not self.isVisible():
+            return
         self._latest.update({k: v for k, v in info.items() if v is not None})
 
         uptime = info.get("wifi_esp_uptime_ms")

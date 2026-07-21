@@ -25,6 +25,7 @@ Usage:
 import argparse
 import json
 import os
+import secrets
 import socket
 import struct
 import subprocess
@@ -48,6 +49,8 @@ _GUI_DIR = Path(__file__).resolve().parent.parent
 _DEFAULT_LOG_DIR = _GUI_DIR / "logs"
 
 UDP_PORT = 5005
+DISCOVERY_PORT = 5007
+CLAIM_PERIOD_S = 0.8
 
 _COMM_MAGIC = bytes([0xAA, 0x55])
 _COMM_END   = 0xEF
@@ -233,9 +236,13 @@ def run_capture(duration_s: float, out_path: Path, esp32_ip: str | None):
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)
     sock.settimeout(1.0)
     sock.bind(("", UDP_PORT))
+    token = f"{secrets.randbits(32) or 1:08X}"
+    claim = f"WLR_CLAIM_V1 {token}".encode("ascii")
+    next_claim = 0.0
 
     probes = ProbeSet(esp32_ip, out_path)
     probes.start()
@@ -254,6 +261,13 @@ def run_capture(duration_s: float, out_path: Path, esp32_ip: str | None):
             now = time.time()
             if now - t_start >= duration_s:
                 break
+            if now >= next_claim:
+                # Broadcast discovers an unknown ESP32; directed renewals keep an
+                # already-discovered lease alive on networks that filter broadcast.
+                sock.sendto(claim, ("255.255.255.255", DISCOVERY_PORT))
+                if esp32_ip:
+                    sock.sendto(claim, (esp32_ip, DISCOVERY_PORT))
+                next_claim = now + CLAIM_PERIOD_S
             try:
                 data, (src_ip, _src_port) = sock.recvfrom(4096)
             except socket.timeout:
@@ -262,6 +276,14 @@ def run_capture(duration_s: float, out_path: Path, esp32_ip: str | None):
                 print(f"[wifi_capture] recv error: {e}", file=sys.stderr)
                 break
             recv_ts = time.time()
+
+            if data.startswith(b"WLR_ACK_V1 "):
+                esp32_ip = src_ip
+                continue
+            if data.startswith(b"WLR_BUSY_V1 "):
+                print("[wifi_capture] ESP32 telemetry lease is owned by another client",
+                      file=sys.stderr)
+                continue
 
             frame = _parse_frame(data)
             event: dict = {"recv_ts": recv_ts, "src_ip": src_ip, "raw_len": len(data)}
@@ -305,7 +327,7 @@ def run_capture(duration_s: float, out_path: Path, esp32_ip: str | None):
                         event["pair_ok"] = False
                         counts["pair_drops"] += 1
                     pending_a = None
-                elif ptype == 0x15 and frame["length"] == 242:
+                elif ptype == 0x15 and frame["length"] == 247:
                     counts["TELEM_FULL_WIFI"] += 1
                     event.update(decode_telem_full(payload))
                 elif ptype == 0x14 and frame["length"] >= 26:

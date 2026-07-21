@@ -19,7 +19,13 @@ public:
     UDPStream() {}
 
     void beginSend(const char* host, uint16_t port) {
+        _host_valid = _host.fromString(host);
+        _port = port;
+    }
+
+    void beginSend(IPAddress host, uint16_t port) {
         _host = host;
+        _host_valid = true;
         _port = port;
     }
 
@@ -28,6 +34,10 @@ public:
     }
 
     size_t write(const uint8_t* buf, size_t len) override {
+        if (!_host_valid) {
+            _fail_count++;
+            return 0;
+        }
         _udp.beginPacket(_host, _port);
         size_t n = _udp.write(buf, len);
         if (!_udp.endPacket()) _fail_count++;
@@ -50,7 +60,8 @@ public:
 
 private:
     WiFiUDP     _udp;
-    const char* _host = nullptr;
+    IPAddress   _host;
+    bool        _host_valid = false;
     uint16_t    _port = 0;
     uint32_t    _fail_count = 0;
 };

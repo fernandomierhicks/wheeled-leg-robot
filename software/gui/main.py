@@ -78,6 +78,8 @@ class TestValMiniWidget(QWidget):
         TelemetryBus.instance().packet.connect(self._on_packet)
 
     def _on_packet(self, info: dict):
+        if not self.isVisible():
+            return
         val = info.get("test_val")
         if val is None:
             return
@@ -154,6 +156,8 @@ class TofMiniWidget(QWidget):
         TelemetryBus.instance().packet.connect(self._on_packet)
 
     def _on_packet(self, info: dict):
+        if not self.isVisible():
+            return
         dists = info.get("tof_dist_mm")
         if dists is None:
             return

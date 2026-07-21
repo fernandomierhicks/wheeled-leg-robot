@@ -856,6 +856,8 @@ class ParamsTab(QWidget):
         self._lbl_status.setStyleSheet(f"color: {TEXT}; font-size: 11px;")
 
     def _on_packet(self, info: dict):
+        if info.get("ptype") == 0x01 and not self.isVisible():
+            return
         ptype = info.get("ptype")
 
         if ptype == 0x01 and not self._requested:

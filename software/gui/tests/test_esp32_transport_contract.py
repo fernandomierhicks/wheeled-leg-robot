@@ -12,6 +12,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = ROOT / "firmware" / "robot_teensy" / "esp32" / "src" / "main.cpp"
 CONFIG = ROOT / "firmware" / "robot_teensy" / "esp32" / "src" / "config.h"
+WIFI = ROOT / "software" / "gui" / "tabs" / "wifi_transport.py"
 
 
 class Esp32TransportContractTests(unittest.TestCase):
@@ -19,6 +20,7 @@ class Esp32TransportContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.source = SOURCE.read_text(encoding="utf-8")
         cls.config = CONFIG.read_text(encoding="utf-8")
+        cls.wifi = WIFI.read_text(encoding="utf-8")
 
     def test_one_encoder_per_physical_uplink(self):
         self.assertNotIn("g_usb_diag", self.source)
@@ -46,6 +48,24 @@ class Esp32TransportContractTests(unittest.TestCase):
         telemetry = self.source.index("xQueueReceive(g_uplink_q", log)
         self.assertLess(control, log)
         self.assertLess(log, telemetry)
+
+    def test_wifi_uses_combined_leased_unicast(self):
+        self.assertRegex(self.config, r"#define WIFI_TELEM_COMBINED\s+1")
+        self.assertIn("WLR_CLAIM_V1", self.source)
+        self.assertIn("WLR_ACK_V1", self.source)
+        self.assertIn("WLR_BUSY_V1", self.source)
+        self.assertIn("WLR_CLAIM_V1", self.wifi)
+        self.assertIn("WLR_ACK_V1", self.wifi)
+
+    def test_tcp_does_not_duplicate_telemetry(self):
+        self.assertIn("type != COMM_TYPE_TELEM_A && type != COMM_TYPE_TELEM_B", self.source)
+        self.assertIn("TCP_NODELAY", self.wifi)
+
+    def test_udp_timeout_does_not_close_tcp(self):
+        marker = "time.monotonic() - self._last_udp_time > TELEMETRY_TIMEOUT_S"
+        timeout_start = self.wifi.index(marker)
+        timeout_block = self.wifi[timeout_start:self.wifi.index("udp.close()", timeout_start)]
+        self.assertNotIn("_close_tcp", timeout_block)
 
 
 if __name__ == "__main__":

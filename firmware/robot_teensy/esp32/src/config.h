@@ -28,6 +28,8 @@
 #endif
 #define TELEM_UDP_PORT    5005
 #define CMD_TCP_PORT      5006
+#define DISCOVERY_UDP_PORT 5007
+#define WIFI_SESSION_LEASE_MS 3500
 
 // --- ToF laser distance sensors (VL53L1X x4) ---
 #define LASERS_ENABLED    0     // set to 1 once VL53L1X sensors are wired up
@@ -51,7 +53,7 @@
                                  //   set explicitly via PLATFORMIO_BUILD_FLAGS if flashing outside the GUI
 #endif
 #ifndef WIFI_TELEM_COMBINED
-#define WIFI_TELEM_COMBINED  0   // 0=split A/B (current), 1=single combined datagram (0x15)
+#define WIFI_TELEM_COMBINED  1   // 1=single atomic TelemetryPayload datagram (production default)
 #endif
 #ifndef WIFI_TX_POWER_MAX
 #define WIFI_TX_POWER_MAX    0   // 0=default, 1=WiFi.setTxPower(max) in setup()

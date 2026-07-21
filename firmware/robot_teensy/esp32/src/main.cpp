@@ -572,7 +572,60 @@ static BoundedTcpStream g_tcp_stream;
 static CommLink*   g_comm_tcp   = nullptr;
 static UDPStream   g_udp_stream;
 static CommLink    g_telem_udp(g_udp_stream, COMM_SRC_ESP32);
+static WiFiUDP     g_discovery_udp;
 static bool        g_wifi_inited = false;
+static bool        g_discovery_started = false;
+static bool        g_telem_session_active = false;
+static IPAddress   g_telem_session_ip;
+static uint32_t    g_telem_session_token = 0;
+static uint32_t    g_telem_session_last_ms = 0;
+
+static bool wifi_telem_session_active() {
+    if (!g_telem_session_active || WiFi.status() != WL_CONNECTED) return false;
+    if ((uint32_t)(millis() - g_telem_session_last_ms) > WIFI_SESSION_LEASE_MS) {
+        g_telem_session_active = false;
+        return false;
+    }
+    return true;
+}
+
+static void send_discovery_reply(IPAddress ip, uint16_t port, const char* text) {
+    g_discovery_udp.beginPacket(ip, port);
+    g_discovery_udp.write((const uint8_t*)text, strlen(text));
+    g_discovery_udp.endPacket();
+}
+
+static void service_discovery() {
+    int packet_len = g_discovery_udp.parsePacket();
+    if (packet_len <= 0) return;
+    char request[64];
+    int n = g_discovery_udp.read((uint8_t*)request, sizeof(request) - 1);
+    if (n <= 0) return;
+    request[n] = '\0';
+
+    unsigned long parsed_token = 0;
+    if (sscanf(request, "WLR_CLAIM_V1 %lx", &parsed_token) != 1 || parsed_token == 0) return;
+    IPAddress remote_ip = g_discovery_udp.remoteIP();
+    uint16_t remote_port = g_discovery_udp.remotePort();
+    bool current = wifi_telem_session_active();
+    bool same_owner = current && remote_ip == g_telem_session_ip &&
+                      (uint32_t)parsed_token == g_telem_session_token;
+    if (!current || same_owner) {
+        g_telem_session_active = true;
+        g_telem_session_ip = remote_ip;
+        g_telem_session_token = (uint32_t)parsed_token;
+        g_telem_session_last_ms = millis();
+        g_udp_stream.beginSend(remote_ip, TELEM_UDP_PORT);
+        char response[64];
+        snprintf(response, sizeof(response), "WLR_ACK_V1 %08lX %u",
+                 parsed_token, (unsigned)WIFI_SESSION_LEASE_MS);
+        send_discovery_reply(remote_ip, remote_port, response);
+    } else {
+        char response[48];
+        snprintf(response, sizeof(response), "WLR_BUSY_V1 %08lX", parsed_token);
+        send_discovery_reply(remote_ip, remote_port, response);
+    }
+}
 
 // ── Uplink queue (decouples the UART parse path from network/USB sends) ──────
 // Normal telemetry and ACK-controlled bulk logs are sent by separate core-0
@@ -949,13 +1002,13 @@ static bool send_uplink_frame(uint8_t type, uint8_t version, const uint8_t* payl
     if (type == COMM_TYPE_WIFI_DIAG) {
         delivered = g_usb.send(type, version, payload, len);
 #if WIFI_ENABLED
-        if (g_wifi_inited) {
+        if (wifi_telem_session_active()) {
             delivered = g_telem_udp.send(type, version, payload, len) || delivered;
         }
 #endif
     } else if (type == COMM_TYPE_TELEM_FULL_WIFI) {
 #if WIFI_ENABLED
-        if (g_wifi_inited) {
+        if (wifi_telem_session_active()) {
             uint32_t t0 = micros();
             g_telem_udp.send(type, version, payload, len);
             delivered = true;
@@ -970,6 +1023,8 @@ static bool send_uplink_frame(uint8_t type, uint8_t version, const uint8_t* payl
         // Bounded mutex acquisition plus a non-blocking socket write: a stalled
         // TCP peer cannot hold up USB/UDP service or the UART parser.
         if ((destinations & UPLINK_DEST_TCP) &&
+            type != COMM_TYPE_TELEM_A && type != COMM_TYPE_TELEM_B &&
+            type != COMM_TYPE_TELEM_FULL_WIFI &&
             xSemaphoreTake(g_tcp_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
             bool tcp_connected = g_comm_tcp && g_tcp_client.connected();
             g_tcp_connected_cached = tcp_connected;
@@ -996,7 +1051,8 @@ static bool send_uplink_frame(uint8_t type, uint8_t version, const uint8_t* payl
             xSemaphoreGive(g_tcp_mutex);
         }
 #if !WIFI_TELEM_COMBINED
-        if ((type == COMM_TYPE_TELEM_A || type == COMM_TYPE_TELEM_B) && g_wifi_inited
+        if ((type == COMM_TYPE_TELEM_A || type == COMM_TYPE_TELEM_B) &&
+            wifi_telem_session_active()
 #if WIFI_TRANSPORT_GATING
             && g_active_telem_transport != WIFI_DIAG_TRANSPORT_USB_ONLY
 #endif
@@ -2674,7 +2730,7 @@ void loop() {
 #if WIFI_ENABLED && WIFI_TELEM_COMBINED
         // Reuses the already-reassembled TelemetryPayload — no new reassembly logic.
         // Enqueued (not sent directly) — uplink_task (core 0) owns g_telem_udp now.
-        if (g_wifi_inited
+        if (wifi_telem_session_active()
 #if WIFI_TRANSPORT_GATING
             && g_active_telem_transport != WIFI_DIAG_TRANSPORT_USB_ONLY
 #endif
@@ -2699,15 +2755,8 @@ void loop() {
 
     if (WiFi.status() == WL_CONNECTED && !g_wifi_inited) {
         g_tcp_server.begin();
-        // Unicast needs a real target IP; fall back to broadcast if it wasn't
-        // baked in at flash time (e.g. a raw `pio run -t upload` outside the
-        // GUI's Flash & Monitor tab, which auto-injects it) so telemetry never
-        // silently goes dark.
-        const char* telem_target = "255.255.255.255";
-#if WIFI_TELEM_MODE
-        if (WIFI_UNICAST_IP[0] != '\0') telem_target = WIFI_UNICAST_IP;
-#endif
-        g_udp_stream.beginSend(telem_target, TELEM_UDP_PORT);
+        g_discovery_udp.begin(DISCOVERY_UDP_PORT);
+        g_discovery_started = true;
         g_wifi_inited = true;
         char msg[64];
         snprintf(msg, sizeof(msg), "[WiFi] IP: %s", WiFi.localIP().toString().c_str());
@@ -2717,13 +2766,20 @@ void loop() {
     static uint32_t last_reconnect_ms = 0;
     if (WiFi.status() != WL_CONNECTED) {
         g_wifi_inited = false;
+        g_telem_session_active = false;
         g_tcp_connected_cached = false;
+        if (g_discovery_started) {
+            g_discovery_udp.stop();
+            g_discovery_started = false;
+        }
         if (millis() - last_reconnect_ms > 5000) {
             WiFi.begin(WIFI_SSID, WIFI_PASS);
             last_reconnect_ms = millis();
             g_wifi_reconnect_count++;
         }
     }
+
+    if (g_wifi_inited && g_discovery_started) service_discovery();
 #endif
 
     // WiFi diagnostics: over USB always, over WiFi UDP when connected (see send_wifi_diag()).
@@ -2761,18 +2817,23 @@ void loop() {
         // mutex. If the sender is busy, leave it pending for the next loop.
         WiFiClient c = g_tcp_server.available();
         if (c) {
-            g_tcp_client = c;
-            g_tcp_client.setNoDelay(true);
-            g_tcp_stream.bind(&g_tcp_client);
-            delete g_comm_tcp;
-            g_comm_tcp = new CommLink(g_tcp_stream, COMM_SRC_ESP32);
-            g_comm_tcp->onPacket(forward_tcp_to_teensy);
-            g_tcp_connected_cached = true;
-            g_tcp_stall_since_ms = 0;
-            char msg[64];
-            snprintf(msg, sizeof(msg), "[TCP] client: %s",
-                     g_tcp_client.remoteIP().toString().c_str());
-            enqueue_text_log(LOG_LEVEL_INFO, msg);
+            if (g_comm_tcp && g_tcp_client.connected()) {
+                c.stop();  // explicit single-client lease: never evict the owner
+                enqueue_text_log(LOG_LEVEL_WARN, "[TCP] second client rejected");
+            } else {
+                g_tcp_client = c;
+                g_tcp_client.setNoDelay(true);
+                g_tcp_stream.bind(&g_tcp_client);
+                delete g_comm_tcp;
+                g_comm_tcp = new CommLink(g_tcp_stream, COMM_SRC_ESP32);
+                g_comm_tcp->onPacket(forward_tcp_to_teensy);
+                g_tcp_connected_cached = true;
+                g_tcp_stall_since_ms = 0;
+                char msg[64];
+                snprintf(msg, sizeof(msg), "[TCP] client: %s",
+                         g_tcp_client.remoteIP().toString().c_str());
+                enqueue_text_log(LOG_LEVEL_INFO, msg);
+            }
         }
         xSemaphoreGive(g_tcp_mutex);
     }

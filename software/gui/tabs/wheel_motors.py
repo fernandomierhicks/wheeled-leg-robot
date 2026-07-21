@@ -712,6 +712,8 @@ class WheelMotorsTab(QWidget):
     # ── Telemetry ─────────────────────────────────────────────────────────────
 
     def _on_packet(self, info: dict):
+        if info.get("ptype") == 0x01 and not self.isVisible():
+            return
         if info.get("ptype") != 0x01:
             return
 

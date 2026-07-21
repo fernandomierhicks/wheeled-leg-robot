@@ -1,4 +1,6 @@
-from PyQt6.QtCore import QObject, pyqtSignal
+import threading
+
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 
 class TelemetryBus(QObject):
@@ -24,3 +26,31 @@ class TelemetryBus(QObject):
             return
         self.playback_active = active
         self.playback_state_changed.emit(active)
+
+    def __init__(self):
+        super().__init__()
+        self._latest_live: dict | None = None
+        self._latest_lock = threading.Lock()
+        self._live_timer = QTimer(self)
+        self._live_timer.setInterval(50)  # smooth 20 Hz UI without event-queue backlog
+        self._live_timer.timeout.connect(self._flush_live)
+        self._live_timer.start()
+
+    def publish(self, info: dict):
+        """Publish decoded data, coalescing only high-rate telemetry.
+
+        Parameter reports, diagnostics, logs, and command evidence remain
+        immediate; only ptype 0x01 is latest-sample wins.
+        """
+        if info.get("ptype") != 0x01:
+            self.packet.emit(info)
+            return
+        with self._latest_lock:
+            self._latest_live = info
+
+    def _flush_live(self):
+        with self._latest_lock:
+            info = self._latest_live
+            self._latest_live = None
+        if info is not None and not self.playback_active:
+            self.packet.emit(info)

@@ -131,6 +131,8 @@ class RobotLogWidget(QWidget):
             self._log.verticalScrollBar().setValue(self._log.verticalScrollBar().maximum())
 
     def _on_packet(self, info: dict):
+        if info.get("ptype") == 0x01 and not self.isVisible():
+            return
         ptype = info.get("ptype")
 
         if ptype == 0x04:

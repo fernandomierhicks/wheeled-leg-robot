@@ -22,8 +22,8 @@ Two-microcontroller architecture for a wheeled-leg balancing robot.
 ┌─────────────────────────────────────────────────────────────────┐
 │  ESP32  (display, telemetry bridge, obstacle sensing)           │
 │                                                                  │
-│  WiFi UDP broadcast  → Python GUI (software/gui/)               │
-│  WiFi TCP server     ← GUI commands                             │
+│  WiFi UDP leased unicast → Python GUI (software/gui/)            │
+│  WiFi TCP server        ← GUI commands/results                   │
 │  TFT display (SPI)   ← paginated flight/drive/comms pages       │
 │  Neopixel strip      ← state colour + animations                │
 │  VL53L1X ToF ×4      → obstacle distances forwarded to Teensy   │
@@ -36,13 +36,15 @@ Two-microcontroller architecture for a wheeled-leg balancing robot.
          software/gui/main.py
 ```
 
-**Network exposure (accepted risk — home lab only):** the ESP32 TCP command
-port (`:5006`) accepts a connection from **any device on the WLAN** and will
-forward mode changes, hip MIT commands, and reboots to the Teensy; telemetry
-is UDP-broadcast to `255.255.255.255:5005`. There is no authentication. Do
-not operate the robot on an untrusted network; if this ever matters, cheap
-hardening options are accept-first-client-only or a magic token as the first
-bytes of a TCP session.
+**Network exposure (accepted risk — home lab only):** a GUI first broadcasts
+`WLR_CLAIM_V1 <token>` on UDP `:5007`. The ESP32 grants one 3.5-second session
+lease and sends combined 247-byte telemetry datagrams by unicast to that
+client on UDP `:5005`; renewals arrive every 0.8 seconds. A competing token is
+reported busy and a second TCP `:5006` connection is closed without evicting
+the owner. TCP carries commands, results, parameters, and log transfers but
+does not duplicate telemetry. The token prevents accidental client collision,
+not hostile access or spoofing: there is no authentication or encryption, so
+do not operate the robot on an untrusted network.
 
 **Key buses on Teensy:**
 - CAN2 @ 1 Mbps → AK45-10 hip motors (MIT Cheetah protocol)
@@ -219,6 +221,13 @@ Each ESP32 parser pass is byte-budgeted (`UART_PARSE_BUDGET_BYTES` and
 `HOST_PARSE_BUDGET_BYTES`). Serial2 has one core-1 reader/writer, USB has one
 core-1 reader and the sole core-0 writer, and each network stream has one
 reader and one writer. No UART callback performs network or USB I/O.
+
+For WiFi, the ESP32 reassembles each adjacent `TELEM_A`/`TELEM_B` pair and
+sends one `COMM_TYPE_TELEM_FULL_WIFI` datagram at 50 Hz. UDP liveness and the
+TCP command connection are supervised independently: losing telemetry marks
+only the WiFi source stale, while a still-readable TCP connection remains
+available for recovery. The GUI renews discovery/session ownership separately
+and will rediscover an address after restart or DHCP change.
 
 Independently, the ESP32 sends its own COMM_TYPE_ESP32_STATUS heartbeat to the
 Teensy at 5 Hz (ESP32<->Teensy link supervision, telemetry-only), and its own

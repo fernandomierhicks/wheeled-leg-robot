@@ -809,7 +809,16 @@ class RobotVisualizerTab(QWidget):
         root.addWidget(self._gl,  1)
         root.addWidget(right,     0)
 
-        TelemetryBus.instance().packet.connect(self._on_packet)
+        TelemetryBus.instance().packet.connect(self._queue_packet)
+
+        # Updating every cockpit widget at the raw 50 Hz telemetry rate can
+        # starve command-result and parameter events in the Qt queue. Coalesce
+        # only telemetry (never params/results) to the latest sample at 20 Hz.
+        self._latest_panel_info: dict | None = None
+        self._panel_timer = QTimer(self)
+        self._panel_timer.setInterval(50)
+        self._panel_timer.timeout.connect(self._flush_latest_packet)
+        self._panel_timer.start()
 
         # 3-D scene redraw is expensive (rebuilds several mesh/IK computations
         # per call) — decouple it from raw packet arrival rate/jitter onto a
@@ -818,7 +827,7 @@ class RobotVisualizerTab(QWidget):
         # renders as smooth motion instead of visibly jerky motion.
         self._latest_pose: tuple | None = None
         self._scene_timer = QTimer(self)
-        self._scene_timer.setInterval(33)  # ~30 Hz
+        self._scene_timer.setInterval(50)  # at most 20 Hz; latest-sample wins
         self._scene_timer.timeout.connect(self._redraw_latest)
         self._scene_timer.start()
 
@@ -1186,8 +1195,10 @@ class RobotVisualizerTab(QWidget):
     # ── Core GL update (unchanged) ────────────────────────────────────────────
 
     def _redraw_latest(self) -> None:
-        if self._latest_pose is not None:
-            self._redraw(*self._latest_pose)
+        pose = self._latest_pose
+        self._latest_pose = None
+        if pose is not None and self.isVisible():
+            self._redraw(*pose)
 
     def _update_fps(self) -> None:
         count = self._gl.frame_count
@@ -1330,6 +1341,20 @@ class RobotVisualizerTab(QWidget):
             )
 
     # ── Telemetry handler ─────────────────────────────────────────────────────
+
+    def _queue_packet(self, info: dict) -> None:
+        if info.get("ptype") == 0x01:
+            if not self.isVisible():
+                return
+            self._latest_panel_info = info
+        else:
+            self._on_packet(info)
+
+    def _flush_latest_packet(self) -> None:
+        info = self._latest_panel_info
+        self._latest_panel_info = None
+        if info is not None and self.isVisible():
+            self._on_packet(info)
 
     def _on_packet(self, info: dict) -> None:
         ptype = info.get("ptype")

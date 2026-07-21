@@ -390,6 +390,8 @@ class RemoteControlServer(QObject):
             "wifi": {
                 "thread_running": wifi.isRunning(),
                 "telemetry_connected": wifi._connected,
+                "telemetry_age_ms": wifi.telemetry_age_ms,
+                "session_lease_age_ms": wifi.lease_age_ms,
                 "esp_ip": wifi.esp_ip,
                 "tcp_connected": wifi._tcp_sock is not None,
             },

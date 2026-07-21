@@ -240,6 +240,8 @@ class ImuTab(QWidget):
     # ── Telemetry handler ─────────────────────────────────────────────────────
 
     def _on_packet(self, info: dict):
+        if info.get("ptype") == 0x01 and not self.isVisible():
+            return
         if info.get("ptype") != 0x01:
             return
 
@@ -374,6 +376,8 @@ class ImuMiniWidget(QWidget):
         TelemetryBus.instance().packet.connect(self._on_packet)
 
     def _on_packet(self, info: dict):
+        if info.get("ptype") == 0x01 and not self.isVisible():
+            return
         if info.get("ptype") != 0x01:
             return
         pitch = info.get("pitch_rad",       0.0)
