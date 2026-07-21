@@ -4,6 +4,23 @@ Status: proposed work only; no implementation changes have been made as part of 
 
 Reviewed: 2026-07-20
 
+## Execution progress
+
+Branch: `codex/robot-reliability-phases`
+
+| Phase | Status | Evidence / notes |
+| --- | --- | --- |
+| 0 — software-operator replacement | **Complete; Wi-Fi transport retest deferred to Phase 4** | 29 semantic operations; deterministic inspection/control of 2,008 GUI widgets (461 actionable), 100% parity report, screenshots, GUI service lifecycle, USB discovery/source control, parameter/log/firmware operations, control lease and dead-man. GUI unit suite: 11/11 passed. Teensy COM12 and ESP32 COM14 both flashed successfully; post-flash telemetry advanced and parameter reads passed through both USB sources with zero GUI CRC/pair drops. Arm command was accepted under an authorized lease and the robot returned safely to STANDBY with all four motor-enable parameters confirmed `0`. Wi-Fi did not appear after the ESP32 flash: serial diagnostics show repeated UDP `endPacket` errors and `TASK_WDT` resets, so validation is explicitly carried into the transport phases. Phase commit/push pending. |
+| 1 — behavior baselines and metrics | **In progress** | Started after the Phase 0 hardware gate. |
+| 2 — command safety and state transitions | Pending | |
+| 3 — UART ownership and ESP32 scheduling | Pending | |
+| 4 — Wi-Fi session and traffic policy | Pending | |
+| 5 — generated protocol and durable configuration | Pending | |
+| 6 — staged peripheral startup and recovery | Pending | |
+| Final mock tuning workflow | Pending | |
+
+For every completed phase, record the tests run, Teensy and ESP32 flash results, GUI validation over Teensy USB, ESP32 USB, and Wi-Fi, commit hash, and pushed branch here.
+
 ## Scope
 
 This plan covers the Teensy control firmware, the ESP32 communications/display firmware, and the Python GUI, with emphasis on:
@@ -153,6 +170,33 @@ The existing localhost server in `software/gui/tabs/remote_control.py` and `tool
 | P1.31 | A forced source can be selected while disconnected, after which commands may be silently dropped. | Make source availability part of command admission. Reject commands with a clear reason if the selected source is unavailable; surface automatic versus forced selection and source age. |
 | P2.5 | The control server is coupled to a visible Qt process and accepts overlapping local clients/reentrant operations without a clear lease. | First serialize requests and enforce one control lease. Then extract transport/protocol/log ownership into a headless `RobotSession` service/library; make the GUI and agent CLI clients of the same stable localhost API. |
 | P2.6 | Logs can be listed/downloaded, but live diagnosis is not a structured, queryable stream. | Add structured log tail/subscribe with monotonic timestamp, source, level, event ID, request ID, state transition, and bounded history. Retain binary file download for full-rate logs. |
+| P1.32 | The proposed API does not yet guarantee access to every robot-related field and action exposed by the GUI. An agent could still encounter a GUI-only control or status value and require human transcription/clicking. | Maintain a machine-readable GUI parity manifest. Every robot-related field must map to a discoverable session property and every robot-related button/menu action must map to a typed API operation, or be explicitly classified as presentation-only. CI fails when a new relevant widget lacks a mapping. |
+| P1.33 | Connection selection, process lifecycle, firmware/build identity, configuration, and recovery workflows are still partly operator-driven. | Add autonomous port/network discovery, connect/disconnect/reconnect, process start/restart, source selection, firmware/build information, configuration import/export, and supported recovery actions. Return progress and final results as structured operations. |
+| P2.7 | Some visual-only behavior may not have a useful semantic representation, and future dialogs could temporarily precede API support. | Add a GUI automation fallback with stable accessibility names/test IDs, widget-tree inspection, screenshots, dialog discovery, and guarded action invocation. Use this only as a fallback; the semantic session API remains authoritative for robot state and commands. |
+| P2.8 | Full software-operator replacement needs goals and workflows, not only individual primitive commands. | Add an automation runner for declarative, cancellable sequences with preconditions, timeouts, retries, assertions, cleanup, dry-run/torque-disabled modes, and a complete execution transcript. Provide standard workflows for connect, preflight, arm/disarm, parameter verification, logging, diagnostics, and safe shutdown. |
+
+### Software-operator replacement requirement
+
+Phase 0 must provide full software-side operational parity. After the human powers, connects, positions, and physically supervises the robot, an authorized agent must be able to perform every remaining routine operation without asking the human to copy/paste information, click a GUI control, select a tab, or run a command.
+
+This requirement includes:
+
+- Discover and connect to USB and Wi-Fi endpoints; select, switch, and recover transports.
+- Start, stop, restart, and inspect the GUI/headless service and report process/connection failures.
+- Read every robot-related value visible anywhere in the GUI, including hidden tabs, dialogs, plots, indicators, derived values, configuration, and status bars.
+- Retrieve both the numeric data behind graphs and a rendered screenshot when visual layout or appearance matters.
+- Enumerate every available field/action with name, type, units, valid range/options, current value, source, timestamp, age, validity, permissions, and safety classification.
+- Invoke every robot-related button, menu action, keyboard operation, and workflow through a typed semantic operation with an acknowledged result.
+- Change parameters and configuration, compare active/pending/persisted values, save/load profiles, and determine whether a reboot is required.
+- Start, stop, list, tail, search, download, decode, and summarize logs without human file transfer.
+- Inspect build, firmware, protocol, reset-cause, peripheral-health, and compatibility information.
+- Run preflight checks, fault diagnostics, recovery procedures, calibration/manual-mode workflows, and safe shutdown sequences subject to the same interlocks as the GUI.
+- Capture screenshots and operate the GUI through stable accessibility/test hooks when a truly visual or GUI-local task has no semantic equivalent.
+- Produce an audit transcript containing observations, decisions, commands, acknowledgements, state transitions, timeouts, and cleanup actions.
+
+The GUI must become a client of the same `RobotSession` model used by agents. Widget scraping must not be the primary way to obtain robot state: a displayed value and its API value must originate from the same model object. A generated parity report should list each relevant GUI control, its model property or action, API endpoint, permission/safety class, and automated coverage.
+
+Operations that remain human responsibilities are deliberately limited to physical-world authority: supplying/removing power, plugging or repairing hardware when software cannot do so, positioning or restraining the robot, clearing the test area, supervising hazardous motion, granting control authorization, and using the physical ESTOP when communications are unavailable. These boundaries must not be used to hide a missing software capability.
 
 Safety policy for the agent interface:
 
@@ -167,20 +211,45 @@ Safety policy for the agent interface:
 Suggested minimal API surface:
 
 ```text
+service.status / service.start / service.stop / service.restart
+discovery.scan / connection.list / connection.connect / connection.disconnect
+connection.select_source / connection.reconnect
 health
+capabilities.describe
+ui.parity_report / ui.snapshot / ui.screenshot / ui.invoke_fallback
 telemetry.snapshot
 telemetry.subscribe
 state.capabilities
 state.arm / state.disarm / state.estop / state.reset_estop
-parameter.list / parameter.get / parameter.set
-log.start / log.stop / log.list / log.download / log.tail
+parameter.list / parameter.get / parameter.set / parameter.compare
+configuration.export / configuration.import / configuration.persist
+firmware.info / protocol.info / peripheral.health
+log.start / log.stop / log.list / log.download / log.tail / log.search
 motion.acquire_lease / motion.set / motion.release
 request.status / wait_for
+workflow.list / workflow.validate / workflow.run / workflow.cancel / workflow.report
 ```
 
 ## Implementation phases
 
-### Phase 0 — freeze behavior and add tests/metrics
+### Phase 0 — complete software-operator replacement
+
+1. Inventory every robot-related field, plot, indicator, dialog, button, menu action, keyboard operation, connection control, configuration operation, and diagnostic workflow in the GUI. Classify presentation-only controls explicitly.
+2. Create a checked GUI parity manifest that maps each relevant widget to its `RobotSession` property/action, API operation, permission/safety class, and automated test. Add a CI check that rejects unmapped additions.
+3. Fix races and success semantics in the existing localhost control server.
+4. Add typed health, capability discovery, transaction, transition, telemetry subscription, configuration, firmware identity, peripheral health, and structured log endpoints.
+5. Extract a headless `RobotSession` layer shared by GUI and CLI/agents. Refactor GUI widgets to consume this model so GUI and API values cannot diverge.
+6. Add autonomous USB/Wi-Fi discovery, connection/source management, reconnect/restart, compatibility checks, and structured recovery operations.
+7. Add declarative workflows with preconditions, assertions, timeouts, cancellation, retries restricted to safe/idempotent operations, cleanup, and durable transcripts.
+8. Add stable accessibility names/test IDs, widget-tree inspection, screenshots, and guarded GUI action invocation as a visual fallback for presentation-only or temporarily unmapped behavior.
+9. Add leases, TTL/dead-man behavior, audit records, read-only defaults, explicit control authorization, and physical-safety gates.
+10. Run parity and integration tests first against a simulator, then on a torque-disabled bench, then with normal hardware interlocks.
+
+Exit criterion: after a human supplies power, positions the robot, clears the test area, and grants control authority, an agent can autonomously discover/connect, inspect every software-visible field, obtain graph data and screenshots, invoke every robot-related GUI operation, run and verify multi-step workflows, diagnose/recover supported failures, retrieve/tail/search logs, and shut down safely. The parity manifest has 100% coverage, all results are acknowledged and auditable, and no copy/paste, manual GUI clicking, or human-run software command is required.
+
+Phase 0 must not wait for the later protocol rewrite. Build its first implementation on adapters around the current GUI, transports, and localhost server, with accessibility-driven GUI control as the fallback. Keep the `RobotSession` interface stable while later phases replace inferred results with authoritative request-ID ACK/NACK responses and improve transport internals.
+
+### Phase 1 — freeze behavior and add tests/metrics
 
 1. Capture current protocol golden frames from Teensy, ESP32, and GUI implementations.
 2. Add host-native tests for `CommLink` noise, truncation, bad length/end/CRC, short writes, sequence wrap, and mid-frame reboot.
@@ -190,7 +259,7 @@ request.status / wait_for
 
 Exit criterion: current behavior is reproducible and failures can be attributed to a specific layer rather than inferred from missing telemetry.
 
-### Phase 1 — command safety and state transitions
+### Phase 2 — command safety and state transitions
 
 1. Reject non-finite values and invalid lengths/enums/targets immediately.
 2. Add request IDs and ACK/NACK while preserving v1 telemetry during migration.
@@ -200,7 +269,7 @@ Exit criterion: current behavior is reproducible and failures can be attributed 
 
 Exit criterion: every command has one observable result, every unsafe payload is rejected without side effects, and every active state has a tested safe abort path.
 
-### Phase 2 — single-owner UART and ESP32 scheduling
+### Phase 3 — single-owner UART and ESP32 scheduling
 
 1. Establish one reader and one writer for each ESP32 serial/network stream.
 2. Move complete frames between bounded, prioritized queues; remove direct post-start serial writes.
@@ -210,7 +279,7 @@ Exit criterion: every command has one observable result, every unsafe payload is
 
 Exit criterion: UART remains loss-free under simultaneous telemetry, parameter dumps, display updates, Wi-Fi reconnects, and maximum-rate log transfer.
 
-### Phase 3 — Wi-Fi session, discovery, and traffic policy
+### Phase 4 — Wi-Fi session, discovery, and traffic policy
 
 1. Separate UDP telemetry liveness from TCP command liveness.
 2. Use combined telemetry datagrams and stop duplicating telemetry on TCP.
@@ -220,7 +289,7 @@ Exit criterion: UART remains loss-free under simultaneous telemetry, parameter d
 
 Exit criterion: Wi-Fi reconnect and latency/loss targets below are met without affecting Teensy UART or control-loop deadlines.
 
-### Phase 4 — generated protocol and durable configuration
+### Phase 5 — generated protocol and durable configuration
 
 1. Introduce the schema/generator and make current IDs a compatibility baseline.
 2. Generate C++, Python, docs, and cross-language test vectors.
@@ -230,7 +299,7 @@ Exit criterion: Wi-Fi reconnect and latency/loss targets below are met without a
 
 Exit criterion: CI proves generated files and documentation match the schema, and a power interruption cannot leave parameters silently corrupted.
 
-### Phase 5 — staged peripheral startup and recovery
+### Phase 6 — staged peripheral startup and recovery
 
 1. Replace blocking setup waits with explicit subsystem startup FSMs.
 2. Add confirmed motor-controller readiness, coherent CAN snapshots, send-failure handling, and runtime age checks.
@@ -239,16 +308,6 @@ Exit criterion: CI proves generated files and documentation match the schema, an
 5. Prove that each optional peripheral can be absent or fail without disabling communications or producing torque.
 
 Exit criterion: faults are deterministic and diagnosable for each missing, stuck, stale, or recovering peripheral.
-
-### Phase 6 — headless robot session and agent tooling
-
-1. Fix races and success semantics in the existing localhost control server.
-2. Add typed health, transaction, transition, telemetry subscription, and structured log endpoints.
-3. Extract a headless `RobotSession` layer shared by GUI and CLI/agents.
-4. Add leases, TTL/dead-man behavior, audit records, and read-only defaults.
-5. Run integration tests first against a simulator, then on a torque-disabled bench, then with normal hardware interlocks.
-
-Exit criterion: an agent can connect, determine health and legal actions, issue an acknowledged command, wait for a transition, retrieve/tail logs, and disconnect safely without a visible GUI or ambiguous success.
 
 ## Acceptance tests and target metrics
 
@@ -295,19 +354,27 @@ Targets should be adjusted after a baseline run, but they must be explicit befor
 - Verify disconnected/stale sources reject commands explicitly.
 - Verify lease expiry or client death releases motion within its TTL.
 - Verify every accepted/rejected command is correlated in live and stored logs by request ID.
+- Generate a parity report showing 100% mapping of robot-related GUI fields and actions to shared model properties and typed operations; fail CI for any unmapped relevant widget.
+- For every displayed field, compare the GUI value and metadata with the headless API value from the same model update.
+- Exercise every robot-related button/menu action through the semantic API and verify the same state change, acknowledgement, errors, and interlocks as direct GUI activation.
+- Verify that plot source data, displayed time ranges, markers, and screenshots can be retrieved without opening or reading the GUI manually.
+- Start from only “hardware powered and physically ready”; have an agent discover/connect, run preflight, collect status, start logging, execute an authorized torque-disabled workflow, diagnose an injected fault, recover, download logs, and disconnect with no human software interaction.
+- Repeat the operator-replacement test with USB loss, Wi-Fi loss, GUI/service restart, stale telemetry, an incompatible protocol version, and a peripheral degraded at startup.
+- Assert that no test step requires copied text, a human-run terminal command, a manual tab/dialog selection, or an unreported visual interpretation.
+- Verify visual fallback by enumerating the widget tree, opening each supported dialog, capturing screenshots, and safely invoking presentation-only controls through stable accessibility/test identifiers.
 
 ## Recommended first change set
 
-Keep the first implementation batch intentionally narrow and reviewable:
+Bootstrap Phase 0 first so subsequent development and hardware validation can be driven directly by an agent:
 
-1. Add exact command validation and finite-number checks.
-2. Add FSM regression tests for repeated ESTOP, startup-relative timing, IMU arming, and active-state disarm.
-3. Add a minimal request-ID ACK/NACK for mode and parameter commands.
-4. Consolidate ESP32 UART/USB writers behind one owner and remove direct serial prints after startup.
-5. Remove indefinite TCP-mutex waits from the UART servicing path.
-6. Add the counters needed for the UART/Wi-Fi soak harness.
+1. Generate the initial GUI field/action inventory and parity manifest.
+2. Give every relevant Qt widget a stable accessibility name/test ID and add widget-tree inspection, screenshots, and guarded invocation as an immediate full-GUI fallback.
+3. Extend the localhost server with capability discovery, health, complete telemetry/model snapshots, connection/source control, structured results, and access to existing log and command workflows.
+4. Provide one agent CLI/client that can launch or attach to the GUI, discover/connect to the robot, inspect fields, invoke actions, wait for results, retrieve logs, capture screenshots, and produce an audit transcript.
+5. Add the control lease, dead-man/TTL, read-only default, ESTOP exception, and explicit torque authorization before enabling motion operations.
+6. Prove the bootstrap on the simulator and torque-disabled bench with an end-to-end no-copy/paste and no-human-GUI-interaction test.
 
-Do not combine this first batch with the full schema generator, storage migration, or headless-service extraction. Those are valuable, but separating them makes the safety and transport fixes easier to validate and bisect.
+After this bootstrap is usable, continue Phase 0 by extracting the shared `RobotSession` model and eliminating GUI-only paths. Then begin the reliability work with protocol baselines/metrics followed by exact command validation, FSM safety tests, and request-ID ACK/NACK. Do not wait for the full protocol generator or storage migration before delivering operator access.
 
 ## Compatibility and rollout notes
 
