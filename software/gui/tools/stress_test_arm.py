@@ -38,6 +38,14 @@ from serial.tools import list_ports
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # software/gui/
 from tabs.telem_format import TELEM_VERSION, decode_telem_a  # noqa: E402
+from tabs.generated_protocol import (  # noqa: E402
+    CMD_ID_PARAM_GET, CMD_ID_PARAM_SET, CMD_ID_SET_MODE,
+    PARAM_CALIB_BYPASS_EN, PARAM_HIP_L_ENABLE, PARAM_HIP_R_ENABLE,
+    PARAM_IMU_ENABLE, PARAM_RUNNING_WHEEL_BYPASS_EN,
+    PARAM_WHEEL_L_ENABLE, PARAM_WHEEL_R_ENABLE,
+    STATE_CALIBRATION, STATE_CMD_REJECT, STATE_ESTOP, STATE_NAMES,
+    STATE_RUNNING, STATE_STANDBY, STATE_STARTUP,
+)
 
 TEENSY_VID_PID = (0x16C0, 0x0483)
 BAUD = 115200
@@ -46,23 +54,9 @@ BAUD = 115200
 START_A, START_B, END = 0xAA, 0x55, 0xEF
 SRC_PC = 0x03
 TYPE_COMMAND, TYPE_LOG, TYPE_PARAM_REPORT, TYPE_TELEM_A = 0x02, 0x04, 0x06, 0x10
-CMD_ID_SET_MODE, CMD_ID_PARAM_SET, CMD_ID_PARAM_GET = 0x01, 0x10, 0x11
 LOG_LEVEL_NAMES = {1: "INFO", 2: "WARN", 3: "ERROR"}
 
 # RobotStateEnum (robot_state.h)
-STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING",
-               4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING"}
-STATE_STARTUP, STATE_CALIBRATION, STATE_STANDBY, STATE_RUNNING, STATE_ESTOP = 0, 1, 2, 3, 4
-STATE_CMD_REJECT = 6
-
-# param_ids.h
-PARAM_IMU_ENABLE              = 0x0000
-PARAM_HIP_L_ENABLE            = 0x0005
-PARAM_HIP_R_ENABLE            = 0x0006
-PARAM_WHEEL_L_ENABLE          = 0x0007
-PARAM_WHEEL_R_ENABLE          = 0x0008
-PARAM_CALIB_BYPASS_EN         = 0x0113
-PARAM_RUNNING_WHEEL_BYPASS_EN = 0x0429
 
 # Deliberately curated (not full-range random): every value here is outside
 # the valid 0-7 RobotStateEnum range, so "expect no state change" is always

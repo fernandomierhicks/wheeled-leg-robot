@@ -81,6 +81,21 @@ firmware/robot_teensy/
     └── src/main.cpp      ← all ESP32 logic (display, WiFi, Neopixel, ToF)
 ```
 
+## Generated protocol and durable parameters
+
+The only human-edited source for shared state, fault, command, group, and
+parameter definitions is `protocol/schema.json`. Run
+`python protocol/generate_protocol.py` after editing it, and use `--check` in
+tests/CI to detect stale generated artifacts. The generator writes the C++
+IDs/tables, the pure-Python GUI module, documentation, and frozen vectors.
+Generated files are checked in so embedded builds do not require Python.
+
+Persistent Teensy parameters use two generation-numbered, CRC32-protected
+LittleFS slots. A save is verified before it becomes current, the previous
+valid slot remains available after interruption or corruption, and legacy
+`params.bin` data is migrated on first boot. Recovery and migration are
+reported in the robot log.
+
 ## Key constants (`teensy/src/config.h`)
 
 | Symbol | Value | Meaning |

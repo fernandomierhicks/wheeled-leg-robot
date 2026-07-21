@@ -1,0 +1,1819 @@
+{
+  "schema_version": 1,
+  "states": [
+    {
+      "symbol": "STATE_STARTUP",
+      "id": 0,
+      "name": "STARTUP"
+    },
+    {
+      "symbol": "STATE_CALIBRATION",
+      "id": 1,
+      "name": "CALIBRATION"
+    },
+    {
+      "symbol": "STATE_STANDBY",
+      "id": 2,
+      "name": "STANDBY"
+    },
+    {
+      "symbol": "STATE_RUNNING",
+      "id": 3,
+      "name": "RUNNING"
+    },
+    {
+      "symbol": "STATE_ESTOP",
+      "id": 4,
+      "name": "ESTOP"
+    },
+    {
+      "symbol": "STATE_MANUAL",
+      "id": 5,
+      "name": "MANUAL"
+    },
+    {
+      "symbol": "STATE_CMD_REJECT",
+      "id": 6,
+      "name": "CMD_REJECT"
+    },
+    {
+      "symbol": "STATE_JUMPING",
+      "id": 7,
+      "name": "JUMPING"
+    },
+    {
+      "symbol": "STATE_STANDING_UP",
+      "id": 8,
+      "name": "STANDING_UP"
+    },
+    {
+      "symbol": "STATE_DISARMING",
+      "id": 9,
+      "name": "DISARMING"
+    }
+  ],
+  "faults": [
+    {
+      "symbol": "FAULT_NONE",
+      "id": 0,
+      "description": ""
+    },
+    {
+      "symbol": "FAULT_IMU_ERROR",
+      "id": 1,
+      "description": "IMU reported ERROR during startup"
+    },
+    {
+      "symbol": "FAULT_HIP_INIT_TIMEOUT",
+      "id": 2,
+      "description": "no CAN reply from hip motors within 2 s of boot"
+    },
+    {
+      "symbol": "FAULT_HIP_FEEDBACK_LOST",
+      "id": 3,
+      "description": "hip CAN feedback timed out during operation"
+    },
+    {
+      "symbol": "FAULT_HIP_LARGE_POS_CMD",
+      "id": 4,
+      "description": "commanded position jump exceeded MAX_HIP_DELTA_RAD"
+    },
+    {
+      "symbol": "FAULT_CALIBRATION_TIMEOUT",
+      "id": 5,
+      "description": "hardstop not found within CALIB_SAFETY_BOUND_RAD"
+    },
+    {
+      "symbol": "FAULT_HUMAN_ESTOP",
+      "id": 6,
+      "description": "ESTOP requested by user via GUI button or radio"
+    },
+    {
+      "symbol": "FAULT_PITCH_WATCHDOG",
+      "id": 8,
+      "description": "|pitch| > 50° for > 200 ms"
+    },
+    {
+      "symbol": "FAULT_WHEEL_RUNAWAY",
+      "id": 9,
+      "description": "wheel velocity exceeded 2× soft governor limit"
+    },
+    {
+      "symbol": "FAULT_IMU_LOST",
+      "id": 10,
+      "description": "IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)"
+    },
+    {
+      "symbol": "FAULT_WHEEL_FEEDBACK_LOST",
+      "id": 11,
+      "description": "wheel encoder timeout or ODrive error during operation"
+    },
+    {
+      "symbol": "FAULT_WHEEL_INIT_TIMEOUT",
+      "id": 12,
+      "description": "no CAN reply from wheel motors within 2 s of boot"
+    },
+    {
+      "symbol": "FAULT_STANDUP_FAILED",
+      "id": 13,
+      "description": "standup denied (pitch out of recoverable range) or exhausted retries/diverged"
+    }
+  ],
+  "commands": [
+    {
+      "symbol": "CMD_ID_SET_MODE",
+      "id": 1,
+      "description": "payload: uint8_t target_state (RobotStateEnum)"
+    },
+    {
+      "symbol": "CMD_ID_PING",
+      "id": 2,
+      "description": "payload: none — GUI heartbeat; feeds the MANUAL GUI watchdog only"
+    },
+    {
+      "symbol": "CMD_ID_HIP",
+      "id": 5,
+      "description": "payload: uint8_t motor_id, uint8_t sub_cmd [, 5×float]"
+    },
+    {
+      "symbol": "CMD_ID_REBOOT",
+      "id": 6,
+      "description": "payload: none — triggers a full MCU reset (reruns setup())"
+    },
+    {
+      "symbol": "CMD_ID_WHEEL",
+      "id": 7,
+      "description": "payload: uint8_t sub_cmd [, data]"
+    },
+    {
+      "symbol": "CMD_ID_SET_TELEM_TRANSPORT",
+      "id": 8,
+      "description": "PC→ESP32 only (intercepted, never forwarded to Teensy):"
+    },
+    {
+      "symbol": "CMD_ID_PARAM_SET",
+      "id": 16,
+      "description": "payload: uint16_t param_id, float value  (6 bytes after cmd_id)"
+    },
+    {
+      "symbol": "CMD_ID_PARAM_GET",
+      "id": 17,
+      "description": "payload: uint16_t param_id  (0xFFFF = dump all)"
+    },
+    {
+      "symbol": "CMD_ID_LOG",
+      "id": 18,
+      "description": "payload: uint8_t sub_cmd [, args] — high-datarate SD logging"
+    },
+    {
+      "symbol": "CMD_ID_PARAM_RESET_DEFAULTS",
+      "id": 19,
+      "description": "payload: none — reverts all writable params to"
+    },
+    {
+      "symbol": "CMD_ID_TEST_INJECT_CORRUPT",
+      "id": 20,
+      "description": "TEST ONLY (Phase 9, UARTplat.md stress testing):"
+    }
+  ],
+  "groups": [
+    {
+      "symbol": "GROUP_SYSTEM",
+      "id": 0
+    },
+    {
+      "symbol": "GROUP_CALIB",
+      "id": 1
+    },
+    {
+      "symbol": "GROUP_HIP",
+      "id": 2
+    },
+    {
+      "symbol": "GROUP_WHEEL",
+      "id": 3
+    },
+    {
+      "symbol": "GROUP_CONTROL",
+      "id": 4
+    },
+    {
+      "symbol": "GROUP_COMMAND",
+      "id": 5
+    },
+    {
+      "symbol": "GROUP_IBUS",
+      "id": 6
+    }
+  ],
+  "parameters": [
+    {
+      "symbol": "PARAM_IMU_ENABLE",
+      "id": 0,
+      "group": "GROUP_SYSTEM",
+      "name": "imu_enable",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "BNO086 IMU present (SPI). 0 = skip init/poll and stop gating STARTUP/CALIBRATION/RUNNING on it; also blocks RUNNING since real pitch feedback is required. Persisted; takes effect at boot (needs reboot)."
+    },
+    {
+      "symbol": "PARAM_BUZZER_VOLUME",
+      "id": 3,
+      "group": "GROUP_SYSTEM",
+      "name": "buzzer_volume",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Buzzer master volume. 0.0 = silent, 1.0 = max, scales linearly in between. Persisted; takes effect at boot."
+    },
+    {
+      "symbol": "PARAM_LED_ENABLE",
+      "id": 4,
+      "group": "GROUP_SYSTEM",
+      "name": "led_enable",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Status RGB LED present. 0 = skip init/poll. Persisted; takes effect at boot."
+    },
+    {
+      "symbol": "PARAM_HIP_L_ENABLE",
+      "id": 5,
+      "group": "GROUP_SYSTEM",
+      "name": "hip_l_enable",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Left AK45 hip motor present. 0 = skip CAN traffic and stop gating STARTUP/CALIBRATION on it. RUNNING/JUMPING blocked unless all 4 motor-enable flags are set. Persisted; takes effect at boot."
+    },
+    {
+      "symbol": "PARAM_HIP_R_ENABLE",
+      "id": 6,
+      "group": "GROUP_SYSTEM",
+      "name": "hip_r_enable",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Right AK45 hip motor present. 0 = skip CAN traffic and stop gating STARTUP/CALIBRATION on it. RUNNING/JUMPING blocked unless all 4 motor-enable flags are set. Persisted; takes effect at boot."
+    },
+    {
+      "symbol": "PARAM_WHEEL_L_ENABLE",
+      "id": 7,
+      "group": "GROUP_SYSTEM",
+      "name": "wheel_l_enable",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Left ODrive wheel motor present. 0 = skip CAN traffic and stop gating STARTUP/CALIBRATION on it. RUNNING/JUMPING blocked unless all 4 motor-enable flags are set. Persisted; takes effect at boot."
+    },
+    {
+      "symbol": "PARAM_WHEEL_R_ENABLE",
+      "id": 8,
+      "group": "GROUP_SYSTEM",
+      "name": "wheel_r_enable",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Right ODrive wheel motor present. 0 = skip CAN traffic and stop gating STARTUP/CALIBRATION on it. RUNNING/JUMPING blocked unless all 4 motor-enable flags are set. Persisted; takes effect at boot."
+    },
+    {
+      "symbol": "PARAM_WATCHDOG_ENABLE",
+      "id": 9,
+      "group": "GROUP_SYSTEM",
+      "name": "watchdog_enable",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Enable hardware watchdog (WDOG1) — auto-reboots the MCU if the main loop stalls. Default off. Takes effect at boot; once armed cannot be disabled in software until the next reset."
+    },
+    {
+      "symbol": "PARAM_LOOP_PROFILE_ENABLE",
+      "id": 10,
+      "group": "GROUP_SYSTEM",
+      "name": "loop_profile_enable",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "Debug: log a rolling max of loop()-section timings once/sec. Not persisted."
+    },
+    {
+      "symbol": "PARAM_HIP_RUNNING_KP",
+      "id": 513,
+      "group": "GROUP_HIP",
+      "name": "hip_running_kp",
+      "default": 5.0,
+      "min": 0.0,
+      "max": 100.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "MIT position gain used for hip setpoints while RUNNING."
+    },
+    {
+      "symbol": "PARAM_HIP_RUNNING_KD",
+      "id": 514,
+      "group": "GROUP_HIP",
+      "name": "hip_running_kd",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "MIT damping gain used for hip setpoints while RUNNING."
+    },
+    {
+      "symbol": "PARAM_HIP_RUNNING_TFF",
+      "id": 515,
+      "group": "GROUP_HIP",
+      "name": "hip_running_tff",
+      "default": 0.0,
+      "min": -5.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "MIT feedforward torque used for hip setpoints while RUNNING."
+    },
+    {
+      "symbol": "PARAM_HIP_RUNNING_RAMP_TIME_S",
+      "id": 516,
+      "group": "GROUP_HIP",
+      "name": "hip_running_ramp_s",
+      "default": 2.0,
+      "min": 0.0,
+      "max": 10.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Seconds to ramp kp/tff from 0 to their running value after entering RUNNING, easing in instead of snapping. kd applies at full value throughout. 0 = no ramp."
+    },
+    {
+      "symbol": "PARAM_ESTOP_HIP_DISABLE",
+      "id": 512,
+      "group": "GROUP_HIP",
+      "name": "estop_hip_disable",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = exit MIT mode on ESTOP entry and re-enter on reset; 0 = leave MIT running through ESTOP."
+    },
+    {
+      "symbol": "PARAM_CALIB_SEEK_SPEED",
+      "id": 256,
+      "group": "GROUP_CALIB",
+      "name": "calib_seek_speed",
+      "default": 0.17453,
+      "min": 0.01,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Ramp speed toward hardstop while seeking [rad/s]."
+    },
+    {
+      "symbol": "PARAM_CALIB_KP_BOTTOM",
+      "id": 257,
+      "group": "GROUP_CALIB",
+      "name": "calib_kp_bottom",
+      "default": 16.0,
+      "min": 0.0,
+      "max": 500.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Position gain while seeking SEEK_BOTTOM (retract, weight-assisted); also reused by CAL_RETURN_HOME's traverse-back move."
+    },
+    {
+      "symbol": "PARAM_CALIB_KD",
+      "id": 258,
+      "group": "GROUP_CALIB",
+      "name": "calib_kd",
+      "default": 0.05,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Damping while seeking, both phases."
+    },
+    {
+      "symbol": "PARAM_CALIB_HOLD_KP",
+      "id": 259,
+      "group": "GROUP_CALIB",
+      "name": "calib_hold_kp",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 500.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Position gain while holding at home."
+    },
+    {
+      "symbol": "PARAM_CALIB_HOLD_KD",
+      "id": 260,
+      "group": "GROUP_CALIB",
+      "name": "calib_hold_kd",
+      "default": 0.05,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Damping while holding at home."
+    },
+    {
+      "symbol": "PARAM_CALIB_STALL_CUR_BOTTOM",
+      "id": 261,
+      "group": "GROUP_CALIB",
+      "name": "calib_stall_cur_btm",
+      "default": 0.75,
+      "min": 0.1,
+      "max": 10.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Current threshold to declare a hardstop while seeking SEEK_BOTTOM (retract) [A]."
+    },
+    {
+      "symbol": "PARAM_CALIB_STALL_DEADBAND",
+      "id": 262,
+      "group": "GROUP_CALIB",
+      "name": "calib_stall_db",
+      "default": 0.015,
+      "min": 0.001,
+      "max": 0.5,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Max position movement per tick to still count as stalled [rad]."
+    },
+    {
+      "symbol": "PARAM_CALIB_STALL_TICKS",
+      "id": 263,
+      "group": "GROUP_CALIB",
+      "name": "calib_stall_ticks",
+      "default": 60.0,
+      "min": 5.0,
+      "max": 500.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Consecutive stalled ticks before declaring a hardstop."
+    },
+    {
+      "symbol": "PARAM_CALIB_MARGIN",
+      "id": 264,
+      "group": "GROUP_CALIB",
+      "name": "calib_margin",
+      "default": 0.17453,
+      "min": 0.0,
+      "max": 1.5708,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Safety margin kept from each hardstop [rad]."
+    },
+    {
+      "symbol": "PARAM_CALIB_SAFETY_BOUND",
+      "id": 265,
+      "group": "GROUP_CALIB",
+      "name": "calib_safety_bound",
+      "default": 1.5708,
+      "min": 0.5,
+      "max": 6.28319,
+      "flags": [
+        "readonly"
+      ],
+      "description": "Max CAL_SEEK_BOTTOM travel before fault [rad] — worst case an unknown start position needs the full joint range to reach the first hardstop. Geometry-derived; READONLY, edit + reflash to change."
+    },
+    {
+      "symbol": "PARAM_CALIB_L_SEEK_DIR",
+      "id": 266,
+      "group": "GROUP_CALIB",
+      "name": "calib_l_seek_dir",
+      "default": 1.0,
+      "min": -1.0,
+      "max": 1.0,
+      "flags": [
+        "readonly"
+      ],
+      "description": "Sign (+1/-1) toward left hip bottom hardstop. Wiring-direction constant; READONLY, edit + reflash to change."
+    },
+    {
+      "symbol": "PARAM_CALIB_R_SEEK_DIR",
+      "id": 267,
+      "group": "GROUP_CALIB",
+      "name": "calib_r_seek_dir",
+      "default": 1.0,
+      "min": -1.0,
+      "max": 1.0,
+      "flags": [
+        "readonly"
+      ],
+      "description": "Sign (+1/-1) toward right hip bottom hardstop. Flipped from -1.0 — confirmed backwards on the hardware bench. Wiring-direction constant; READONLY, edit + reflash to change."
+    },
+    {
+      "symbol": "PARAM_CALIB_DONE",
+      "id": 268,
+      "group": "GROUP_CALIB",
+      "name": "calib_done",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent",
+        "readonly"
+      ],
+      "description": "1.0 = calibration has completed at least once (persisted across reboots)."
+    },
+    {
+      "symbol": "PARAM_CALIB_SAFETY_BOUND_TOP",
+      "id": 269,
+      "group": "GROUP_CALIB",
+      "name": "calib_bound_top",
+      "default": 3.14159,
+      "min": 0.5,
+      "max": 6.28319,
+      "flags": [
+        "readonly"
+      ],
+      "description": "Max CAL_SEEK_TOP travel before fault [rad], measured from the just-zeroed bottom hardstop. Geometry-derived; READONLY, edit + reflash to change."
+    },
+    {
+      "symbol": "PARAM_CALIB_KP_TOP",
+      "id": 270,
+      "group": "GROUP_CALIB",
+      "name": "calib_kp_top",
+      "default": 32.0,
+      "min": 0.0,
+      "max": 500.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Position gain while seeking SEEK_TOP (extend, fights robot weight)."
+    },
+    {
+      "symbol": "PARAM_CALIB_STALL_CUR_TOP",
+      "id": 271,
+      "group": "GROUP_CALIB",
+      "name": "calib_stall_cur_top",
+      "default": 1.5,
+      "min": 0.1,
+      "max": 10.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Current threshold to declare a hardstop while seeking SEEK_TOP (extend) [A]; higher than the retract threshold since fighting gravity raises baseline current."
+    },
+    {
+      "symbol": "PARAM_CALIB_RETRACT_ENABLE",
+      "id": 272,
+      "group": "GROUP_CALIB",
+      "name": "calib_retract_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = run SEEK_BOTTOM (retract), the prerequisite phase that establishes the zero reference. 0 skips the whole axis, like a disabled hip motor. READONLY, edit + reflash to change."
+    },
+    {
+      "symbol": "PARAM_CALIB_EXTEND_ENABLE",
+      "id": 273,
+      "group": "GROUP_CALIB",
+      "name": "calib_extend_en",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = run SEEK_TOP (extend) after retract. 0 holds at CAL_HOLD_RETRACT instead — no limits computed, calibration_done() never fires for that axis. READONLY, edit + reflash to change."
+    },
+    {
+      "symbol": "PARAM_CALIB_RAMPDOWN_TIME_S",
+      "id": 274,
+      "group": "GROUP_CALIB",
+      "name": "calib_rampdown_s",
+      "default": 2.0,
+      "min": 0.0,
+      "max": 10.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Seconds to ramp kp/kd from hold values down to zero before calibration_done() fires, so exiting CALIBRATION never yanks torque to zero in one tick. 0 = no ramp."
+    },
+    {
+      "symbol": "PARAM_CALIB_BYPASS_EN",
+      "id": 275,
+      "group": "GROUP_CALIB",
+      "name": "calib_bypass_en",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = allow RUNNING mode without a completed hardstop calibration (hip position limits unenforced — bench-test only). Persisted; default 0."
+    },
+    {
+      "symbol": "PARAM_WM_ENC_TIMEOUT_MS",
+      "id": 768,
+      "group": "GROUP_WHEEL",
+      "name": "wm_enc_timeout_ms",
+      "default": 20.0,
+      "min": 5.0,
+      "max": 500.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Wheel encoder feedback watchdog timeout [ms]; increase if CAN is flaky. ODrive PID gains aren't exposed here — tune via the ODrive USB GUI (CAN can't reach those properties on 0.5.x)."
+    },
+    {
+      "symbol": "PARAM_LQR_ENABLE",
+      "id": 1024,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_enable",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = wheel torque output active; 0 = LQR runs but outputs zero."
+    },
+    {
+      "symbol": "PARAM_SIM_PITCH_RAD",
+      "id": 1025,
+      "group": "GROUP_CONTROL",
+      "name": "sim_pitch_rad",
+      "default": 0.0,
+      "min": -1.5708,
+      "max": 1.5708,
+      "flags": [],
+      "description": "Pitch value injected in place of real IMU pitch when enable_sim_pitch=1."
+    },
+    {
+      "symbol": "PARAM_LQR_TORQUE_LIMIT",
+      "id": 1026,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_torque_limit",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 7.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "|tau_sym| clamp [N·m]; hard max 7.0. READONLY — slewed automatically from the active CH9 speed profile's torque_lim. Edit profile1/2/3_torque_lim instead."
+    },
+    {
+      "symbol": "PARAM_WHEEL_VEL_LIMIT_TURNS_S",
+      "id": 1027,
+      "group": "GROUP_CONTROL",
+      "name": "wm_vel_limit",
+      "default": 3.0,
+      "min": 1.0,
+      "max": 20.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Per-tick soft wheel velocity governor [turns/s]; ESTOP at 2x this."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_EN",
+      "id": 1028,
+      "group": "GROUP_CONTROL",
+      "name": "vel_pi_en",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = velocity PI active; 0 = theta_ref fixed at 0."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_KP",
+      "id": 1029,
+      "group": "GROUP_CONTROL",
+      "name": "vel_pi_kp",
+      "default": 0.2,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Velocity PI proportional gain [rad/(m/s)]."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_KI",
+      "id": 1030,
+      "group": "GROUP_CONTROL",
+      "name": "vel_pi_ki",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Velocity PI integral gain [rad/m]."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_KFF",
+      "id": 1031,
+      "group": "GROUP_CONTROL",
+      "name": "vel_pi_kff",
+      "default": 0.1049,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Velocity PI acceleration feedforward gain [s²·rad/m] (≈ 1/g)."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_THETA_MAX",
+      "id": 1032,
+      "group": "GROUP_CONTROL",
+      "name": "vel_pi_theta_max",
+      "default": 0.698,
+      "min": 0.1,
+      "max": 0.698,
+      "flags": [
+        "persistent"
+      ],
+      "description": "|theta_ref| hard clamp [rad]."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_RATE_LIM",
+      "id": 1033,
+      "group": "GROUP_CONTROL",
+      "name": "vel_pi_rate_lim",
+      "default": 1.745,
+      "min": 0.1,
+      "max": 10.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "theta_ref slew rate limit [rad/s]."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_INT_MAX",
+      "id": 1034,
+      "group": "GROUP_CONTROL",
+      "name": "vel_pi_int_max",
+      "default": 1.0,
+      "min": 0.1,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Velocity PI integrator anti-windup clamp [rad·s]."
+    },
+    {
+      "symbol": "PARAM_V_CMD_MS",
+      "id": 1035,
+      "group": "GROUP_CONTROL",
+      "name": "v_cmd_ms",
+      "default": 0.0,
+      "min": -2.0,
+      "max": 2.0,
+      "flags": [],
+      "description": "Desired forward velocity setpoint [m/s]; GUI/Phase3 testing."
+    },
+    {
+      "symbol": "PARAM_YAW_PI_EN",
+      "id": 1036,
+      "group": "GROUP_CONTROL",
+      "name": "yaw_pi_en",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = yaw PI active; 0 = tau_yaw fixed at 0."
+    },
+    {
+      "symbol": "PARAM_YAW_PI_KP",
+      "id": 1037,
+      "group": "GROUP_CONTROL",
+      "name": "yaw_pi_kp",
+      "default": 0.2,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Yaw PI proportional gain [N·m/(rad/s)]."
+    },
+    {
+      "symbol": "PARAM_YAW_PI_KI",
+      "id": 1038,
+      "group": "GROUP_CONTROL",
+      "name": "yaw_pi_ki",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Yaw PI integral gain [N·m/rad]."
+    },
+    {
+      "symbol": "PARAM_YAW_PI_TORQUE_MAX",
+      "id": 1039,
+      "group": "GROUP_CONTROL",
+      "name": "yaw_pi_torque_max",
+      "default": 0.2,
+      "min": 0.0,
+      "max": 3.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "|tau_yaw| clamp [N·m]."
+    },
+    {
+      "symbol": "PARAM_YAW_PI_INT_MAX",
+      "id": 1040,
+      "group": "GROUP_CONTROL",
+      "name": "yaw_pi_int_max",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 3.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Yaw PI integrator anti-windup [N·m·s]."
+    },
+    {
+      "symbol": "PARAM_OMEGA_CMD_RDS",
+      "id": 1041,
+      "group": "GROUP_CONTROL",
+      "name": "omega_cmd_rds",
+      "default": 0.0,
+      "min": -4.0,
+      "max": 4.0,
+      "flags": [],
+      "description": "Desired yaw rate [rad/s]; positive = CCW from above."
+    },
+    {
+      "symbol": "PARAM_FF1_ALPHA",
+      "id": 1042,
+      "group": "GROUP_CONTROL",
+      "name": "ff1_alpha",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "Hip reaction cancel feedforward gain [0–1]; start at 0, ramp up."
+    },
+    {
+      "symbol": "PARAM_FF2_ALPHA",
+      "id": 1043,
+      "group": "GROUP_CONTROL",
+      "name": "ff2_alpha",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "Gravity compensation feedforward gain [0–1]; start at 0, ramp up."
+    },
+    {
+      "symbol": "PARAM_FF1_KT_HIP",
+      "id": 1044,
+      "group": "GROUP_CONTROL",
+      "name": "ff1_kt_hip",
+      "default": 1.2732,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "readonly"
+      ],
+      "description": "AK45-10 hip motor output torque constant [N·m/A]; hardware characteristic, not a tuning knob. READONLY, edit + reflash to change."
+    },
+    {
+      "symbol": "PARAM_JUMP_ENABLE",
+      "id": 1045,
+      "group": "GROUP_CONTROL",
+      "name": "jump_enable",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Master gate for jump sequence: 0 = no-op, 1 = execute."
+    },
+    {
+      "symbol": "PARAM_JUMP_TORQUE_MAX",
+      "id": 1046,
+      "group": "GROUP_CONTROL",
+      "name": "jump_torque_max",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 18.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Max hip feedforward torque during EXTEND [N·m]; ramp up from 0."
+    },
+    {
+      "symbol": "PARAM_JUMP_CROUCH_TIME_S",
+      "id": 1047,
+      "group": "GROUP_CONTROL",
+      "name": "jump_crouch_time",
+      "default": 0.3,
+      "min": 0.05,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "CROUCH phase duration [s]."
+    },
+    {
+      "symbol": "PARAM_JUMP_RAMP_UP_S",
+      "id": 1048,
+      "group": "GROUP_CONTROL",
+      "name": "jump_ramp_up",
+      "default": 0.05,
+      "min": 0.005,
+      "max": 0.5,
+      "flags": [
+        "persistent"
+      ],
+      "description": "EXTEND torque softstart duration [s]."
+    },
+    {
+      "symbol": "PARAM_JUMP_RAMP_DOWN_RAD",
+      "id": 1049,
+      "group": "GROUP_CONTROL",
+      "name": "jump_ramp_down",
+      "default": 0.08,
+      "min": 0.01,
+      "max": 0.5,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Torque→zero zone near the extended limit [rad]."
+    },
+    {
+      "symbol": "PARAM_JUMP_OMEGA_MAX",
+      "id": 1050,
+      "group": "GROUP_CONTROL",
+      "name": "jump_omega_max",
+      "default": 40.0,
+      "min": 5.0,
+      "max": 200.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Hip velocity above which feedforward torque → 0 [rad/s]."
+    },
+    {
+      "symbol": "PARAM_JUMP_HARDSTOP_MARGIN",
+      "id": 1051,
+      "group": "GROUP_CONTROL",
+      "name": "jump_hs_margin",
+      "default": 0.06,
+      "min": 0.01,
+      "max": 0.5,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Hard cutoff margin from the calibrated hardstop [rad]."
+    },
+    {
+      "symbol": "PARAM_JUMP_KP",
+      "id": 1052,
+      "group": "GROUP_CONTROL",
+      "name": "jump_kp",
+      "default": 80.0,
+      "min": 0.0,
+      "max": 500.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Position gain for CROUCH/RETRACT phases."
+    },
+    {
+      "symbol": "PARAM_JUMP_KD",
+      "id": 1053,
+      "group": "GROUP_CONTROL",
+      "name": "jump_kd",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Damping for CROUCH/RETRACT phases."
+    },
+    {
+      "symbol": "PARAM_JUMP_EXTEND_KD",
+      "id": 1054,
+      "group": "GROUP_CONTROL",
+      "name": "jump_ext_kd",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Small damping during EXTEND (electrical damping only)."
+    },
+    {
+      "symbol": "PARAM_JUMP_EXTEND_TIMEOUT_S",
+      "id": 1055,
+      "group": "GROUP_CONTROL",
+      "name": "jump_ext_timeout",
+      "default": 0.15,
+      "min": 0.05,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Max time in EXTEND before forced RETRACT [s]."
+    },
+    {
+      "symbol": "PARAM_ENABLE_SIM_PITCH_RAD",
+      "id": 1056,
+      "group": "GROUP_CONTROL",
+      "name": "enable_sim_pitch",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "1 = use sim_pitch_rad instead of real IMU pitch."
+    },
+    {
+      "symbol": "PARAM_SIM_PITCH_RATE_RAD_S",
+      "id": 1057,
+      "group": "GROUP_CONTROL",
+      "name": "sim_pitch_rate",
+      "default": 0.0,
+      "min": -10.0,
+      "max": 10.0,
+      "flags": [],
+      "description": "Pitch rate injected in place of real IMU pitch rate when enable_sim_prate=1 [rad/s]."
+    },
+    {
+      "symbol": "PARAM_ENABLE_SIM_PITCH_RATE",
+      "id": 1058,
+      "group": "GROUP_CONTROL",
+      "name": "enable_sim_prate",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "1 = use sim_pitch_rate instead of real IMU pitch rate."
+    },
+    {
+      "symbol": "PARAM_PITCH_WATCHDOG_ENABLE",
+      "id": 1059,
+      "group": "GROUP_CONTROL",
+      "name": "pitch_watchdog_en",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "1 = ESTOP (FAULT_PITCH_WATCHDOG) if |pitch| > 50° for > 200 ms. Default on and NOT persisted — always starts back on after reboot so a bench-test disable can't silently survive into a real run."
+    },
+    {
+      "symbol": "PARAM_LQR_K_PITCH_RET",
+      "id": 1060,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_k_pitch_ret",
+      "default": -0.3,
+      "min": -20.0,
+      "max": 0.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "LQR pitch gain, fully retracted leg. Default -13.0495742."
+    },
+    {
+      "symbol": "PARAM_LQR_K_RATE_RET",
+      "id": 1061,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_k_rate_ret",
+      "default": -0.1,
+      "min": -5.0,
+      "max": 0.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "LQR pitch-rate gain, fully retracted leg. Default -2.18083692."
+    },
+    {
+      "symbol": "PARAM_LQR_K_PITCH_EXT",
+      "id": 1062,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_k_pitch_ext",
+      "default": -0.3,
+      "min": -15.0,
+      "max": 0.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "LQR pitch gain, fully extended leg. Default -7.92908352."
+    },
+    {
+      "symbol": "PARAM_LQR_K_RATE_EXT",
+      "id": 1063,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_k_rate_ext",
+      "default": -0.1,
+      "min": -5.0,
+      "max": 0.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "LQR pitch-rate gain, fully extended leg. Default -1.69084204."
+    },
+    {
+      "symbol": "PARAM_LQR_K_VEL",
+      "id": 1064,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_k_vel",
+      "default": -0.007,
+      "min": -0.05,
+      "max": 0.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "LQR velocity-error gain, invariant across leg height. Default -7.13051190e-03."
+    },
+    {
+      "symbol": "PARAM_RUNNING_WHEEL_BYPASS_EN",
+      "id": 1065,
+      "group": "GROUP_CONTROL",
+      "name": "run_wheel_bypass_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "1 = allow RUNNING mode to arm with wheel_l/r_enable off (bench-test only, e.g. a software-triggered smoke test with hips also disabled, no real torque anywhere). Independent of calib_bypass_en, which only covers the hip check. Not persisted — always boots to 0 (bypass off)."
+    },
+    {
+      "symbol": "PARAM_ALPHA_FORCE_RETRACTED_EN",
+      "id": 1066,
+      "group": "GROUP_CONTROL",
+      "name": "alpha_force_ret_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "1 = force the hip gain-schedule blend to alpha=0.0 (fully-retracted LQR gains), bypassing the hm_limits valid-calibration check entirely. For hardware tuning with hips zip-tied retracted and disabled, where real calibration can never complete. Not persisted — always boots to 0."
+    },
+    {
+      "symbol": "PARAM_GUI_MOTION_CTRL_EN",
+      "id": 1067,
+      "group": "GROUP_CONTROL",
+      "name": "gui_motion_ctrl_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "1 = v_cmd_ms/omega_cmd_rds are driven by GUI/CLI param_set instead of CH2/CH4; radio arming (CH10) is unaffected. Auto-clears (reverting to radio control) if no GUI command arrives for 300 ms. Not persisted — always boots to 0."
+    },
+    {
+      "symbol": "PARAM_STANDUP_ENABLE",
+      "id": 1068,
+      "group": "GROUP_CONTROL",
+      "name": "standup_enable",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Master gate: 0 = arm goes STANDBY->RUNNING directly (today's behavior). 1 = arm routes through STANDING_UP recovery first. Default 0."
+    },
+    {
+      "symbol": "PARAM_STANDUP_MAX_PITCH_FWD_RAD",
+      "id": 1069,
+      "group": "GROUP_CONTROL",
+      "name": "standup_pitch_fwd",
+      "default": 0.6,
+      "min": 0.0,
+      "max": 1.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Arm-time gate: max forward pitch [rad] considered recoverable. Default 0.6 (~34°)."
+    },
+    {
+      "symbol": "PARAM_STANDUP_MAX_PITCH_BWD_RAD",
+      "id": 1070,
+      "group": "GROUP_CONTROL",
+      "name": "standup_pitch_bwd",
+      "default": 0.6,
+      "min": 0.0,
+      "max": 1.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Arm-time gate: max backward pitch [rad] considered recoverable. Default 0.6 (~34°)."
+    },
+    {
+      "symbol": "PARAM_STANDUP_CROUCH_KP",
+      "id": 1071,
+      "group": "GROUP_CONTROL",
+      "name": "standup_crouch_kp",
+      "default": 80.0,
+      "min": 0.0,
+      "max": 500.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Hip MIT position gain during the CROUCH ramp, held through RECOVER/PAUSE. Mirrors jump_kp."
+    },
+    {
+      "symbol": "PARAM_STANDUP_CROUCH_KD",
+      "id": 1072,
+      "group": "GROUP_CONTROL",
+      "name": "standup_crouch_kd",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Hip MIT damping gain, same phases. Mirrors jump_kd."
+    },
+    {
+      "symbol": "PARAM_STANDUP_CROUCH_TIME_S",
+      "id": 1073,
+      "group": "GROUP_CONTROL",
+      "name": "standup_crouch_time",
+      "default": 0.3,
+      "min": 0.05,
+      "max": 2.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "CROUCH phase (leg retraction) duration [s]. Default 0.30."
+    },
+    {
+      "symbol": "PARAM_STANDUP_K_PITCH",
+      "id": 1074,
+      "group": "GROUP_CONTROL",
+      "name": "standup_k_pitch",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 60.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Recovery P gain on pitch [N·m/rad], same positive-sign convention as the LQR/FF2 terms. Starts at 0 — tune up on the bench."
+    },
+    {
+      "symbol": "PARAM_STANDUP_K_RATE",
+      "id": 1075,
+      "group": "GROUP_CONTROL",
+      "name": "standup_k_rate",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 15.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Recovery D gain on pitch rate. Starts at 0 — tune up on the bench."
+    },
+    {
+      "symbol": "PARAM_STANDUP_TORQUE_LIMIT",
+      "id": 1076,
+      "group": "GROUP_CONTROL",
+      "name": "standup_torque_lim",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 7.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "|tau_recover| clamp [N·m], applied before the hard MOTOR_TRQ_MAX clamp. Starts at 0 — tune up on the bench; max = MOTOR_TRQ_MAX (7.0)."
+    },
+    {
+      "symbol": "PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S",
+      "id": 1077,
+      "group": "GROUP_CONTROL",
+      "name": "standup_vel_limit",
+      "default": 3.0,
+      "min": 1.0,
+      "max": 20.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Dedicated runaway-backup baseline [turns/s], trips at 2x — independent of wm_vel_limit so tuning one doesn't loosen the other's margin."
+    },
+    {
+      "symbol": "PARAM_STANDUP_CAPTURE_PITCH_RAD",
+      "id": 1078,
+      "group": "GROUP_CONTROL",
+      "name": "standup_cap_pitch",
+      "default": 0.12,
+      "min": 0.02,
+      "max": 0.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "|pitch| below this [rad] (+ rate below standup_cap_rate) for the hold time => captured (handoff to RUNNING)."
+    },
+    {
+      "symbol": "PARAM_STANDUP_CAPTURE_RATE_RADS",
+      "id": 1079,
+      "group": "GROUP_CONTROL",
+      "name": "standup_cap_rate",
+      "default": 1.0,
+      "min": 0.1,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "|pitch_rate| capture threshold [rad/s]."
+    },
+    {
+      "symbol": "PARAM_STANDUP_CAPTURE_HOLD_S",
+      "id": 1080,
+      "group": "GROUP_CONTROL",
+      "name": "standup_cap_hold",
+      "default": 0.15,
+      "min": 0.02,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Continuous in-band duration [s] required before handoff."
+    },
+    {
+      "symbol": "PARAM_STANDUP_ATTEMPT_TIMEOUT_S",
+      "id": 1081,
+      "group": "GROUP_CONTROL",
+      "name": "standup_timeout",
+      "default": 1.5,
+      "min": 0.2,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Max time [s] in one RECOVER attempt before declaring it failed-to-converge (not diverged)."
+    },
+    {
+      "symbol": "PARAM_STANDUP_MAX_RETRIES",
+      "id": 1082,
+      "group": "GROUP_CONTROL",
+      "name": "standup_max_retries",
+      "default": 2.0,
+      "min": 0.0,
+      "max": 10.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Retry attempts after the first (total attempts = this + 1); int-as-float, mirrors calib_stall_ticks convention."
+    },
+    {
+      "symbol": "PARAM_STANDUP_RETRY_PAUSE_S",
+      "id": 1083,
+      "group": "GROUP_CONTROL",
+      "name": "standup_retry_pause",
+      "default": 0.3,
+      "min": 0.0,
+      "max": 3.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Wheels-off settle time [s] between retry attempts."
+    },
+    {
+      "symbol": "PARAM_RADIO_HIP_CMD",
+      "id": 1280,
+      "group": "GROUP_COMMAND",
+      "name": "radio_hip_cmd",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Hip extension command from CH3 [0=retracted, 1=extended]; firmware-written, stale when the radio link is dead."
+    },
+    {
+      "symbol": "PARAM_RADIO_VEL_MAX",
+      "id": 1281,
+      "group": "GROUP_COMMAND",
+      "name": "radio_vel_max",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Max forward speed mapped from full CH2 deflection [m/s]. READONLY — copied from the active CH9 profile's vel_max. Edit profile1/2/3_vel_max instead."
+    },
+    {
+      "symbol": "PARAM_RADIO_YAW_MAX",
+      "id": 1282,
+      "group": "GROUP_COMMAND",
+      "name": "radio_yaw_max",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 4.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Max yaw rate mapped from full CH4 deflection [rad/s]. READONLY — copied from the active CH9 profile's yaw_max. Edit profile1/2/3_yaw_max instead."
+    },
+    {
+      "symbol": "PARAM_RADIO_PITCH_TRIM",
+      "id": 1283,
+      "group": "GROUP_COMMAND",
+      "name": "radio_pitch_trim",
+      "default": 0.0,
+      "min": -0.0873,
+      "max": 0.0873,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Pitch equilibrium trim from CH7 [rad]; hook only, not yet applied to LQR."
+    },
+    {
+      "symbol": "PARAM_PROFILE_1_VEL_MAX",
+      "id": 1296,
+      "group": "GROUP_COMMAND",
+      "name": "profile1_vel_max",
+      "default": 0.2,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 1 (slow) max forward speed [m/s]; CH9 3-position switch selects the active profile."
+    },
+    {
+      "symbol": "PARAM_PROFILE_1_YAW_MAX",
+      "id": 1297,
+      "group": "GROUP_COMMAND",
+      "name": "profile1_yaw_max",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 4.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 1 (slow) max yaw rate [rad/s]."
+    },
+    {
+      "symbol": "PARAM_PROFILE_1_TORQUE_LIM",
+      "id": 1298,
+      "group": "GROUP_COMMAND",
+      "name": "profile1_torque_lim",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 7.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 1 (slow) LQR torque limit [N·m]."
+    },
+    {
+      "symbol": "PARAM_PROFILE_2_VEL_MAX",
+      "id": 1299,
+      "group": "GROUP_COMMAND",
+      "name": "profile2_vel_max",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 2 (normal) max forward speed [m/s]."
+    },
+    {
+      "symbol": "PARAM_PROFILE_2_YAW_MAX",
+      "id": 1300,
+      "group": "GROUP_COMMAND",
+      "name": "profile2_yaw_max",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 4.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 2 (normal) max yaw rate [rad/s]."
+    },
+    {
+      "symbol": "PARAM_PROFILE_2_TORQUE_LIM",
+      "id": 1301,
+      "group": "GROUP_COMMAND",
+      "name": "profile2_torque_lim",
+      "default": 0.2,
+      "min": 0.0,
+      "max": 7.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 2 (normal) LQR torque limit [N·m]."
+    },
+    {
+      "symbol": "PARAM_PROFILE_3_VEL_MAX",
+      "id": 1302,
+      "group": "GROUP_COMMAND",
+      "name": "profile3_vel_max",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 3 (fast) max forward speed [m/s]."
+    },
+    {
+      "symbol": "PARAM_PROFILE_3_YAW_MAX",
+      "id": 1303,
+      "group": "GROUP_COMMAND",
+      "name": "profile3_yaw_max",
+      "default": 2.0,
+      "min": 0.0,
+      "max": 4.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 3 (fast) max yaw rate [rad/s]."
+    },
+    {
+      "symbol": "PARAM_PROFILE_3_TORQUE_LIM",
+      "id": 1304,
+      "group": "GROUP_COMMAND",
+      "name": "profile3_torque_lim",
+      "default": 0.3,
+      "min": 0.0,
+      "max": 7.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 3 (fast) LQR torque limit [N·m]."
+    },
+    {
+      "symbol": "PARAM_ACTIVE_PROFILE",
+      "id": 1305,
+      "group": "GROUP_COMMAND",
+      "name": "active_profile",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Active speed profile index (0/1/2), selected by CH9; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH0",
+      "id": 1536,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch0",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 0 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH1",
+      "id": 1537,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch1",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 1 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH2",
+      "id": 1538,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch2",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 2 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH3",
+      "id": 1539,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch3",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 3 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH4",
+      "id": 1540,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch4",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 4 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH5",
+      "id": 1541,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch5",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 5 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH6",
+      "id": 1542,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch6",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 6 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH7",
+      "id": 1543,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch7",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 7 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH8",
+      "id": 1544,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch8",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 8 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH9",
+      "id": 1545,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch9",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 9 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH10",
+      "id": 1546,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch10",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 10 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH11",
+      "id": 1547,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch11",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 11 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH12",
+      "id": 1548,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch12",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 12 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_CH13",
+      "id": 1549,
+      "group": "GROUP_IBUS",
+      "name": "ibus_ch13",
+      "default": 1500.0,
+      "min": 1000.0,
+      "max": 2000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC receiver channel 13 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_IBUS_ALIVE",
+      "id": 1550,
+      "group": "GROUP_IBUS",
+      "name": "ibus_alive",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "RC link alive: 1.0 = packet received within 500 ms, 0.0 = link lost; firmware-written, READONLY."
+    }
+  ]
+}

@@ -9,6 +9,12 @@ from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from .port_manager import SerialPortManager
 from .telem_format import crc8
+from .generated_protocol import (
+    CMD_ID_SET_MODE, CMD_ID_PING, CMD_ID_HIP, CMD_ID_REBOOT, CMD_ID_WHEEL,
+    CMD_ID_SET_TELEM_TRANSPORT, CMD_ID_PARAM_SET, CMD_ID_PARAM_GET, CMD_ID_LOG,
+    CMD_ID_PARAM_RESET_DEFAULTS, CMD_ID_TEST_INJECT_CORRUPT,
+    STATE_STARTUP, STATE_STANDBY, STATE_ESTOP, STATE_MANUAL, STATE_CMD_REJECT,
+)
 
 # ── CommLink frame constants (shared/comm_protocol.h) ─────────────────────────
 COMM_START_A  = 0xAA
@@ -20,17 +26,6 @@ CMD_PAYLOAD_V1 = 1
 CMD_PAYLOAD_V2 = 2
 
 # Command IDs (comm_protocol.h CMD_ID_*)
-CMD_ID_SET_MODE  = 0x01
-CMD_ID_PING      = 0x02
-CMD_ID_HIP       = 0x05
-CMD_ID_REBOOT    = 0x06
-CMD_ID_WHEEL     = 0x07
-CMD_ID_SET_TELEM_TRANSPORT = 0x08
-CMD_ID_PARAM_SET = 0x10
-CMD_ID_PARAM_GET = 0x11
-CMD_ID_LOG       = 0x12
-CMD_ID_PARAM_RESET_DEFAULTS = 0x13
-CMD_ID_TEST_INJECT_CORRUPT  = 0x14
 
 # Log sub-commands (comm_protocol.h LOG_SUB_*)
 LOG_SUB_START  = 0x01
@@ -51,12 +46,6 @@ WHEEL_MODE_POSITION = 2
 WHEEL_MODE_TORQUE   = 3
 
 # Robot state IDs (robot_state.h RobotStateEnum)
-STATE_STARTUP    = 0
-STATE_STANDBY    = 2
-STATE_ESTOP      = 4
-STATE_MANUAL     = 5
-STATE_CMD_REJECT = 6
-
 _seq = [0]  # rolling Tx sequence counter
 _request_id = [1]
 _forced_request_id: list[int | None] = [None]  # scoped synchronously by ReliableCommand retries

@@ -34,6 +34,9 @@ from serial.tools import list_ports
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # software/gui/
 from tabs.telem_format import TELEM_VERSION, decode_telem_a  # noqa: E402
+from tabs.generated_protocol import (  # noqa: E402
+    CMD_ID_SET_MODE, STATE_CMD_REJECT, STATE_NAMES, STATE_RUNNING, STATE_STANDBY,
+)
 
 TEENSY_VID_PID = (0x16C0, 0x0483)
 BAUD = 115200
@@ -42,13 +45,9 @@ BAUD = 115200
 START_A, START_B, END = 0xAA, 0x55, 0xEF
 SRC_PC = 0x03
 TYPE_COMMAND, TYPE_LOG, TYPE_TELEM_A = 0x02, 0x04, 0x10
-CMD_ID_SET_MODE = 0x01
 LOG_LEVEL_NAMES = {1: "INFO", 2: "WARN", 3: "ERROR"}
 
 # RobotStateEnum (robot_state.h)
-STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING",
-               4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING"}
-STATE_STANDBY, STATE_RUNNING, STATE_CMD_REJECT = 2, 3, 6
 
 
 # CRC-8 poly 0x07, init 0x00 — MIRROR of crc8() in tabs/telem_format.py and

@@ -32,6 +32,7 @@ from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 from PyQt6.QtWidgets import QApplication
 
 from .comm_commands import CommandResultBus, send_param_get, send_param_get_all, send_param_set
+from .generated_protocol import PARAM_GUI_MOTION_CTRL_EN, PARAM_V_CMD_MS, PARAM_OMEGA_CMD_RDS
 from .log_transfer import LogTransferManager
 from .operator_bridge import GuiOperatorBridge
 from .port_manager import SerialPortManager
@@ -43,10 +44,6 @@ PORT = 8765
 
 # GROUP_CONTROL params referenced directly by motion_set/motion_release
 # (param_ids.h — tuning.md Sec1 d).
-PARAM_GUI_MOTION_CTRL_EN = 0x042B
-PARAM_V_CMD_MS           = 0x040B
-PARAM_OMEGA_CMD_RDS      = 0x0411
-
 _STATE_NAME_TO_ID = {name: pid for pid, name in _STATE_NAMES.items()}
 _ACTIVE_STATE_IDS = {
     _STATE_NAME_TO_ID[name]

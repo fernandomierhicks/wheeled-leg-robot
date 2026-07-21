@@ -3,18 +3,7 @@
 
 // MIRROR: software/gui/flash_monitor.py  _STATE_NAMES dict (add STATE_JUMPING=7, STATE_STANDING_UP=8) and
 //         software/gui/hip_motors.py  _STATE_LABELS + _STATE_STANDBY/_STATE_MANUAL must stay in sync
-typedef enum : uint8_t {
-    STATE_STARTUP      = 0,
-    STATE_CALIBRATION  = 1,
-    STATE_STANDBY      = 2,
-    STATE_RUNNING      = 3,
-    STATE_ESTOP        = 4,
-    STATE_MANUAL       = 5,
-    STATE_CMD_REJECT   = 6,  // ~1 s transient: plays REJECT_MELODY, red blink, then returns to originating state
-    STATE_JUMPING      = 7,  // ~3 s transient from RUNNING: plays jump melody, then returns to RUNNING
-    STATE_STANDING_UP  = 8,  // transient from STANDBY on arm: retract legs, energetic wheel recovery, then RUNNING
-    STATE_DISARMING    = 9,  // normal torque ramp-down; re-arm/manual/calibration blocked until safe
-} RobotStateEnum;
+#include "generated_robot_state.h"
 
 typedef struct {
     // ── Sensors ───────────────────────────────────────────────────────────────

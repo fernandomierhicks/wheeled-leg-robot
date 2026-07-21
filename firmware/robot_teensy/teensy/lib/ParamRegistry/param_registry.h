@@ -29,6 +29,21 @@ enum class ParamSetResult : uint8_t {
     NONFINITE   = 5,
 };
 
+enum class ParamPersistenceState : uint8_t {
+    DEFAULTS = 0,
+    LOADED_REDUNDANT = 1,
+    RECOVERED_SINGLE_SLOT = 2,
+    MIGRATED_LEGACY = 3,
+    SAVE_FAILED = 4,
+};
+
+struct ParamPersistenceStatus {
+    ParamPersistenceState state;
+    uint8_t valid_slot_mask;  // bit 0=A, bit 1=B
+    uint8_t active_slot;      // 0=A, 1=B, 0xFF=none
+    uint32_t generation;
+};
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 // Call once in setup() — mounts LittleFS and patches RAM table with stored values.
@@ -71,3 +86,6 @@ void param_reset_defaults();
 // Firmware-internal write: updates value even for PARAM_FLAG_READONLY params.
 // Do NOT call from command handlers — READONLY exists to block GUI writes.
 void param_force_set(uint16_t id, float val);
+
+// Last boot/save persistence decision for diagnostics and tests.
+ParamPersistenceStatus param_persistence_status();

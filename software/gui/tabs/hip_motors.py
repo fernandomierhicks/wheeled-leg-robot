@@ -32,6 +32,11 @@ from PyQt6.QtWidgets import (
 from .telemetry_bus import TelemetryBus
 from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
 from .comm_commands import build_frame, send_frame, send_set_mode, CMD_ID_HIP
+from .generated_protocol import (
+    STATE_CALIBRATION as _STATE_CALIBRATION,
+    STATE_STANDBY as _STATE_STANDBY,
+    STATE_MANUAL as _STATE_MANUAL,
+)
 
 _BUF = 750          # rolling chart samples (~15 s at 50 Hz telemetry)
 
@@ -50,10 +55,6 @@ _HIP_CMD_ZERO    = 0x02
 _HIP_CMD_MIT     = 0x03
 
 # Robot state IDs (robot_state.h RobotStateEnum)
-_STATE_CALIBRATION = 1
-_STATE_STANDBY     = 2
-_STATE_MANUAL      = 5
-
 # Keep old alias so nothing else breaks
 _CMD_HIP_MOTOR = _CMD_ID_HIP
 

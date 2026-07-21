@@ -28,40 +28,10 @@ def crc8(data: bytes) -> int:
         crc = _CRC8_TABLE[crc ^ b]
     return crc
 
-_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING", 8: "STANDING_UP", 9: "DISARMING"}
-_FAULT_NAMES = {
-    0x00: "NONE",
-    0x01: "IMU_ERROR",
-    0x02: "HIP_INIT_TIMEOUT",
-    0x03: "HIP_FEEDBACK_LOST",
-    0x04: "HIP_LARGE_POS_CMD",
-    0x05: "CALIBRATION_TIMEOUT",
-    0x06: "HUMAN_ESTOP",
-    # 0x07 reserved — was PARAM_OUT_OF_BOUNDS (removed; writes always clamp)
-    0x08: "PITCH_WATCHDOG",
-    0x09: "WHEEL_RUNAWAY",
-    0x0A: "IMU_LOST",
-    0x0B: "WHEEL_FEEDBACK_LOST",
-    0x0C: "WHEEL_INIT_TIMEOUT",
-    0x0D: "STANDUP_FAILED",
-}
-# MIRROR: fault_description() in firmware/robot_teensy/esp32/src/main.cpp — keep wording
-# in sync whenever a fault is added/changed (that copy must stay ASCII-only, no UTF-8).
-_FAULT_DESCRIPTIONS = {
-    0x00: "",
-    0x01: "IMU reported ERROR during startup",
-    0x02: "No CAN reply from hip motors within 2 s of boot",
-    0x03: "Hip CAN feedback timed out during operation (> 20 ms)",
-    0x04: "Commanded hip position jump exceeded MAX_HIP_DELTA_RAD",
-    0x05: "Hardstop not found within CALIB_SAFETY_BOUND_RAD",
-    0x06: "Human triggered ESTOP",
-    0x08: "|pitch| > 50° for > 200 ms — robot tipped",
-    0x09: "Wheel velocity exceeded 2× soft governor limit",
-    0x0A: "IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)",
-    0x0B: "Wheel encoder timeout or ODrive error during operation",
-    0x0C: "No CAN reply from wheel motors within 2 s of boot",
-    0x0D: "Standup denied or failed — pitch out of recoverable range",
-}
+from .generated_protocol import (
+    STATE_NAMES as _STATE_NAMES, FAULT_NAMES as _FAULT_NAMES,
+    FAULT_DESCRIPTIONS as _FAULT_DESCRIPTIONS,
+)
 
 # Struct formats for split telemetry (V11, packed, little-endian)
 # TELEM_A: bytes 0-117 of TelemetryPayload

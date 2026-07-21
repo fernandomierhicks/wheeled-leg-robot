@@ -11,6 +11,24 @@ from PyQt6.QtWidgets import (
 
 from .comm_commands import send_param_get, send_param_set
 from .telemetry_bus import TelemetryBus
+from .generated_protocol import (
+    PARAM_LQR_K_PITCH_RET as _PARAM_LQR_K_PITCH_RET,
+    PARAM_LQR_K_RATE_RET as _PARAM_LQR_K_RATE_RET,
+    PARAM_LQR_K_PITCH_EXT as _PARAM_LQR_K_PITCH_EXT,
+    PARAM_LQR_K_RATE_EXT as _PARAM_LQR_K_RATE_EXT,
+    PARAM_LQR_K_VEL as _PARAM_LQR_K_VEL,
+    PARAM_VEL_PI_KP as _PARAM_VEL_PI_KP,
+    PARAM_VEL_PI_KI as _PARAM_VEL_PI_KI,
+    PARAM_VEL_PI_KFF as _PARAM_VEL_PI_KFF,
+    PARAM_YAW_PI_KP as _PARAM_YAW_PI_KP,
+    PARAM_YAW_PI_KI as _PARAM_YAW_PI_KI,
+    PARAM_FF1_ALPHA as _PARAM_FF1_ALPHA,
+    PARAM_FF2_ALPHA as _PARAM_FF2_ALPHA,
+    PARAM_SIM_PITCH_RAD as _PARAM_SIM_PITCH_RAD,
+    PARAM_ENABLE_SIM_PITCH_RAD as _PARAM_ENABLE_SIM_PITCH_RAD,
+    PARAM_SIM_PITCH_RATE_RAD_S as _PARAM_SIM_PITCH_RATE_RAD_S,
+    PARAM_ENABLE_SIM_PITCH_RATE as _PARAM_ENABLE_SIM_PITCH_RATE,
+)
 from .theme import BG, BORDER, BLUE, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, YELLOW
 
 _BUF = 300  # rolling chart samples
@@ -27,18 +45,6 @@ _HEALTH_WM_R_VEL_LIMITED = 1 << 10
 # CMD_ID_PARAM_SET, and the box stays synced to the live value via
 # PARAM_REPORT echoes (ptype 0x06) — including edits made elsewhere (e.g. the
 # Params tab). alpha=0 -> retracted, alpha=1 -> extended (LQR gain table).
-_PARAM_LQR_K_PITCH_RET = 0x0424
-_PARAM_LQR_K_RATE_RET  = 0x0425
-_PARAM_LQR_K_PITCH_EXT = 0x0426
-_PARAM_LQR_K_RATE_EXT  = 0x0427
-_PARAM_LQR_K_VEL       = 0x0428
-_PARAM_VEL_PI_KP       = 0x0405
-_PARAM_VEL_PI_KI       = 0x0406
-_PARAM_VEL_PI_KFF      = 0x0407
-_PARAM_YAW_PI_KP       = 0x040D
-_PARAM_YAW_PI_KI       = 0x040E
-_PARAM_FF1_ALPHA       = 0x0412
-_PARAM_FF2_ALPHA       = 0x0413
 
 # param_id -> (label, decimals, step). Steps are a starting increment for the
 # up/down arrows; the actual editable range comes from the firmware's
@@ -66,10 +72,6 @@ _GAIN_DEFS: dict[int, tuple[str, int, float]] = {
 
 # Sim-pitch injection params (param_ids.h) — bench-test only, no arming
 # interlock in firmware, so this control must be disarmed before running for real.
-_PARAM_SIM_PITCH_RAD          = 0x0401
-_PARAM_ENABLE_SIM_PITCH_RAD   = 0x0420
-_PARAM_SIM_PITCH_RATE_RAD_S   = 0x0421
-_PARAM_ENABLE_SIM_PITCH_RATE  = 0x0422
 
 _SIM_PITCH_MAX_DEG   = 90.0   # matches firmware clamp on sim_pitch_rad (+-1.5708 rad)
 _SIM_PITCH_RATE_MAX  = 10.0   # matches firmware clamp on sim_pitch_rate (rad/s)

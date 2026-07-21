@@ -12,16 +12,17 @@ from PyQt6.QtWidgets import (
 )
 
 from .comm_commands import send_param_get_all
+from .generated_protocol import (
+    PARAM_HIP_L_ENABLE as _PARAM_HIP_L_ENABLE,
+    PARAM_HIP_R_ENABLE as _PARAM_HIP_R_ENABLE,
+    PARAM_WHEEL_L_ENABLE as _PARAM_WHEEL_L_ENABLE,
+    PARAM_WHEEL_R_ENABLE as _PARAM_WHEEL_R_ENABLE,
+)
 from .telemetry_bus import TelemetryBus
 from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, YELLOW, WHITE
 
 # Per-motor presence params (firmware ParamRegistry GROUP_SYSTEM) — read-only
 # indicators here; toggle via the Parameters tab's param browser.
-_PARAM_HIP_L_ENABLE   = 0x0005
-_PARAM_HIP_R_ENABLE   = 0x0006
-_PARAM_WHEEL_L_ENABLE = 0x0007
-_PARAM_WHEEL_R_ENABLE = 0x0008
-
 pg.setConfigOptions(antialias=True, background=BG, foreground=TEXT)
 
 # ── Baseline-1 geometry (params.py RobotGeometry, run_id 51167) ───────────────

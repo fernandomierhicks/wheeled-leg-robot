@@ -30,6 +30,12 @@ import struct
 import sys
 import threading
 import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # software/gui/
+from tabs.generated_protocol import (  # noqa: E402
+    CMD_ID_PARAM_GET, CMD_ID_PING, CMD_ID_REBOOT,
+)
 
 UDP_PORT = 5005
 TCP_PORT = 5006
@@ -44,10 +50,6 @@ _COMM_END      = 0xEF
 _COMM_SRC_PC   = 0x03
 _COMM_TYPE_CMD = 0x02
 _CMD_PAYLOAD_V = 2
-
-CMD_ID_PING      = 0x02
-CMD_ID_REBOOT    = 0x06
-CMD_ID_PARAM_GET = 0x11
 
 _CRC8_TABLE = []
 for _i in range(256):

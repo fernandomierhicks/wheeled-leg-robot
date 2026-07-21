@@ -16,9 +16,13 @@ Usage:
 import struct
 import sys
 import time
+from pathlib import Path
 
 import serial
 from serial.tools import list_ports
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # software/gui/
+from tabs.generated_protocol import CMD_ID_LOG  # noqa: E402
 
 TEENSY_VID_PID = (0x16C0, 0x0483)
 BAUD = 115200
@@ -27,7 +31,6 @@ BAUD = 115200
 START_A, START_B, END = 0xAA, 0x55, 0xEF
 SRC_PC = 0x03
 TYPE_COMMAND, TYPE_LOG, TYPE_LOG_INFO = 0x02, 0x04, 0x12
-CMD_ID_LOG = 0x12
 LOG_SUB_START = 0x01
 LOG_LEVEL_NAMES = {1: "INFO", 2: "WARN", 3: "ERROR"}
 LOG_INFO_TYPE_NAMES = {1: "ENTRY", 2: "LIST_END", 3: "XFER_BEGIN", 4: "XFER_END", 5: "STATUS"}

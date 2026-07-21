@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_PATH = ROOT / "firmware/robot_teensy/teensy/test/state_machine_contract.json"
-STATE_HEADER = ROOT / "firmware/robot_teensy/teensy/src/robot_state.h"
+STATE_HEADER = ROOT / "firmware/robot_teensy/teensy/src/generated_robot_state.h"
 STATE_MACHINE = ROOT / "firmware/robot_teensy/teensy/src/state_machine.cpp"
 
 

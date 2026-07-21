@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "generated_protocol_ids.h"
 
 // ── Bandwidth budget ─────────────────────────────────────────────────────────
 // Teensy→ESP32 (UART, 4 Mbaud):  50 Hz × 2 frames × 130 bytes ≈  13 kB/s  — UART easily handles this.
@@ -82,20 +83,7 @@ typedef struct __attribute__((packed)) {
 //   - software/gui/tabs/telem_format.py   _FAULT_NAMES and _FAULT_DESCRIPTIONS dicts
 //   - esp32/src/main.cpp               fault_description()
 //   - firmware/robot_teensy/README.md  fault code table
-#define FAULT_NONE               0x00
-#define FAULT_IMU_ERROR          0x01  // IMU reported ERROR during startup
-#define FAULT_HIP_INIT_TIMEOUT   0x02  // no CAN reply from hip motors within 2 s of boot
-#define FAULT_HIP_FEEDBACK_LOST  0x03  // hip CAN feedback timed out during operation
-#define FAULT_HIP_LARGE_POS_CMD  0x04  // commanded position jump exceeded MAX_HIP_DELTA_RAD
-#define FAULT_CALIBRATION_TIMEOUT 0x05 // hardstop not found within CALIB_SAFETY_BOUND_RAD
-#define FAULT_HUMAN_ESTOP        0x06  // ESTOP requested by user via GUI button or radio
 // 0x07 reserved — was FAULT_PARAM_OUT_OF_BOUNDS (removed; out-of-range writes always clamp)
-#define FAULT_PITCH_WATCHDOG     0x08  // |pitch| > 50° for > 200 ms
-#define FAULT_WHEEL_RUNAWAY      0x09  // wheel velocity exceeded 2× soft governor limit
-#define FAULT_IMU_LOST           0x0A  // IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)
-#define FAULT_WHEEL_FEEDBACK_LOST 0x0B // wheel encoder timeout or ODrive error during operation
-#define FAULT_WHEEL_INIT_TIMEOUT 0x0C  // no CAN reply from wheel motors within 2 s of boot
-#define FAULT_STANDUP_FAILED     0x0D  // standup denied (pitch out of recoverable range) or exhausted retries/diverged
 
 // ── Fault severity tiers (used by state machine + GUI recovery panel) ────────
 // IMPORTANT: when adding fault codes, update fault_severity() below too.
@@ -485,12 +473,6 @@ typedef struct __attribute__((packed)) {
 
 // ── Command IDs ───────────────────────────────────────────────────────────────
 // MIRROR: software/gui/hip_motors.py  _CMD_ID_* constants must stay in sync
-#define CMD_ID_SET_MODE   0x01  // payload: uint8_t target_state (RobotStateEnum)
-#define CMD_ID_PING       0x02  // payload: none — GUI heartbeat; feeds the MANUAL GUI watchdog only
-#define CMD_ID_HIP        0x05  // payload: uint8_t motor_id, uint8_t sub_cmd [, 5×float]
-#define CMD_ID_REBOOT     0x06  // payload: none — triggers a full MCU reset (reruns setup())
-#define CMD_ID_WHEEL      0x07  // payload: uint8_t sub_cmd [, data]
-#define CMD_ID_SET_TELEM_TRANSPORT 0x08  // PC→ESP32 only (intercepted, never forwarded to Teensy):
                                           // payload: uint8_t suppress_wifi (0=send WiFi telemetry
                                           // when connected [default], 1=suppress — GUI is on USB)
 
@@ -498,12 +480,7 @@ typedef struct __attribute__((packed)) {
 #define WHEEL_SUB_SET_MODE     0x01  // payload: uint8_t mode (WheelMode)
 #define WHEEL_SUB_SEND         0x02  // payload: float L, float R
 #define WHEEL_SUB_CLEAR_ERRORS 0x03  // no payload
-#define CMD_ID_PARAM_SET  0x10  // payload: uint16_t param_id, float value  (6 bytes after cmd_id)
-#define CMD_ID_PARAM_GET  0x11  // payload: uint16_t param_id  (0xFFFF = dump all)
-#define CMD_ID_LOG        0x12  // payload: uint8_t sub_cmd [, args] — high-datarate SD logging
-#define CMD_ID_PARAM_RESET_DEFAULTS  0x13  // payload: none — reverts all writable params to
                                             // compile-time defaults, replies with a full PARAM_REPORT dump
-#define CMD_ID_TEST_INJECT_CORRUPT   0x14  // TEST ONLY (Phase 9, UARTplat.md stress testing):
                                             // payload: uint8_t count, uint8_t target, uint8_t mode
                                             // target 0 = UART (Teensy's next `count` outgoing
                                             //   TELEM_A frames to the ESP32 get corrupted per
