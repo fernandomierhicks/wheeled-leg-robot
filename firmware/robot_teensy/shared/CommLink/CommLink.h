@@ -60,8 +60,10 @@ public:
     bool send(uint8_t type, uint8_t version, const void* payload, uint16_t len,
               uint8_t corrupt_mode_for_test = 0);
 
-    // Drive the receive parser — call every main-loop iteration.
-    void update();
+    // Drive the receive parser — call every main-loop iteration. A byte budget
+    // bounds one scheduler pass without changing parser state or frame semantics.
+    // The default preserves the original drain-until-empty behavior.
+    size_t update(size_t max_bytes = SIZE_MAX);
 
     // Register callback invoked on every fully-validated received packet.
     void onPacket(CommPacketCb cb);

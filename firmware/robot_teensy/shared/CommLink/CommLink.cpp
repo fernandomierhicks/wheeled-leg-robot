@@ -85,7 +85,8 @@ bool CommLink::send(uint8_t type, uint8_t version, const void* payload, uint16_t
     return _s.write(frame, frame_len) == frame_len;
 }
 
-void CommLink::update() {
+size_t CommLink::update(size_t max_bytes) {
+    size_t processed = 0;
     // Fix 1: timeout — if stuck mid-frame, abandon and count a drop.
     // Protects against Teensy reboot mid-frame, FIFO overflow tail loss, etc.
 #ifdef ARDUINO
@@ -96,8 +97,9 @@ void CommLink::update() {
     }
 #endif
 
-    while (_s.available()) {
+    while (processed < max_bytes && _s.available()) {
         uint8_t b = (uint8_t)_s.read();
+        ++processed;
         switch (_ps) {
             case PS_IDLE:
                 if (b == COMM_START_A) {
@@ -175,6 +177,7 @@ void CommLink::update() {
                 break;
         }
     }
+    return processed;
 }
 
 void CommLink::_reset_parser() {

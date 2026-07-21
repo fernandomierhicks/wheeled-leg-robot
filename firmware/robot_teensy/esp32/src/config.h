@@ -5,7 +5,10 @@
 #define TEENSY_UART_RX    16
 #define TEENSY_UART_TX    17
 #define UPLINK_QUEUE_LEN        24      // uplink_task queue depth — ~200 ms absorb at 100 frames/s
+#define CONTROL_UPLINK_QUEUE_LEN 8      // command results/params/log messages, drained first
 #define LOG_UPLINK_QUEUE_LEN     4      // ACK flow control keeps at most one data chunk in flight
+#define UART_PARSE_BUDGET_BYTES  2048   // maximum Serial2 bytes parsed per loop pass
+#define HOST_PARSE_BUDGET_BYTES   512   // maximum USB/TCP bytes parsed per loop pass
 #define TEENSY_LINK_TIMEOUT_MS  1500    // single truth for "Teensy link up": TFT active-state,
                                          // Neopixel linked-state, and face-mode connected-state
 

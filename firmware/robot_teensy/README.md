@@ -209,7 +209,16 @@ ESP32 on_teensy_packet()  (core 1, inside g_teensy.update()'s parse loop)
     │  NO TEENSY under WiFi load; see git log for "ESP32 Phase 1")
     ▼
 ESP32 uplink_task  (core 0 — the only writer to Serial/TCP/UDP)
+    │  drains control/result, ACK-paced bulk-log, and lossy telemetry queues
+    │  in that order; every queue operation is bounded
+    │  uses one CommLink sequence generator per physical output
+    │  uses non-blocking TCP sends and disconnects a stalled peer after 250 ms
     forwards over USB serial (CP2102) and WiFi UDP/TCP as appropriate
+
+Each ESP32 parser pass is byte-budgeted (`UART_PARSE_BUDGET_BYTES` and
+`HOST_PARSE_BUDGET_BYTES`). Serial2 has one core-1 reader/writer, USB has one
+core-1 reader and the sole core-0 writer, and each network stream has one
+reader and one writer. No UART callback performs network or USB I/O.
 
 Independently, the ESP32 sends its own COMM_TYPE_ESP32_STATUS heartbeat to the
 Teensy at 5 Hz (ESP32<->Teensy link supervision, telemetry-only), and its own
@@ -422,10 +431,10 @@ means the same *state transitions* the radio triggers (`CALIBRATION`,
 
 `esp_task_wdt_init()`/`esp_task_wdt_add(uplink_task_handle)` in
 `esp32/src/main.cpp` — kept permanently as a safety net, not a test you run.
-This is what caught `uplink_task` hanging inside a blocking
-`WiFiClient::write()` call (Phase 9, root cause of the wildly inconsistent
-early WiFi test results) — if `uplink_task` ever stalls again, it force-
-reboots via the watchdog instead of silently going dark.
+This originally caught `uplink_task` hanging inside a blocking
+`WiFiClient::write()` call. Production TCP output now uses `MSG_DONTWAIT` and
+disconnects a non-reading client after 250 ms; the watchdog remains a final
+safety net for any unrelated future task stall.
 
 ## Each driver has its own README
 

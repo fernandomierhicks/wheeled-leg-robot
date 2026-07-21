@@ -319,6 +319,23 @@ void test_overlapping_magic_and_sequence_wrap(void) {
     TEST_ASSERT_EQUAL_UINT32(0, receiver.rx_seq_gaps());
 }
 
+void test_bounded_update_preserves_partial_frame(void) {
+    LoopbackStream ls;
+    CommLink receiver(ls, COMM_SRC_TEENSY);
+    receiver.onPacket(on_packet);
+    uint8_t payload[6] = {1, 2, 3, 4, 5, 6};
+    auto frame = make_frame(COMM_TYPE_COMMAND, 1, COMM_SRC_PC, 9,
+                            payload, sizeof(payload));
+    ls.write_raw(frame.data(), frame.size());
+
+    s_got = false;
+    TEST_ASSERT_EQUAL_UINT32(5, receiver.update(5));
+    TEST_ASSERT_FALSE_MESSAGE(s_got, "budget boundary must not emit a partial frame");
+    TEST_ASSERT_EQUAL_UINT32(frame.size() - 5, receiver.update(100));
+    TEST_ASSERT_TRUE_MESSAGE(s_got, "next bounded pass must resume the same frame");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, s_buf, sizeof(payload));
+}
+
 // ── Entry (native — no Arduino runtime, see [env:native] in platformio.ini) ──
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
@@ -333,5 +350,6 @@ int main(int argc, char** argv) {
     RUN_TEST(test_max_payload_roundtrip);
     RUN_TEST(test_corruption_modes_drop_and_next_frame_recovers);
     RUN_TEST(test_overlapping_magic_and_sequence_wrap);
+    RUN_TEST(test_bounded_update_preserves_partial_frame);
     return UNITY_END();
 }

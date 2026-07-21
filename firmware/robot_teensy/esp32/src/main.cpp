@@ -9,7 +9,7 @@
 #include <driver/uart.h>
 #include <esp_system.h>
 #include <esp_task_wdt.h>  // uplink_task watchdog — see esp_task_wdt_init() in setup()
-#include <lwip/sockets.h>  // select()/fd_set for the TCP write-readiness pre-check below
+#include <lwip/sockets.h>  // non-blocking TCP writes used by BoundedTcpStream
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 #include <string.h>
@@ -538,16 +538,39 @@ static CommLink g_usb(Serial,    COMM_SRC_ESP32);
 // bytes from g_usb/g_teensy's RX parsers. Kept separate from g_telem_udp so their
 // own _seq_tx counters don't interleave into the telemetry seq stream that the
 // A/B pairing metric depends on.
-static CommLink g_usb_diag(Serial, COMM_SRC_ESP32);
+// g_usb is the only encoder/writer for the physical USB stream. Diagnostics,
+// relayed traffic, and log chunks therefore share one continuous sequence.
 
 // ── WiFi / TCP / UDP ──────────────────────────────────────────────────────────
 
+// WiFiClient::write() may retry internally for seconds when a peer stops
+// reading. CommLink writes a complete frame in one call, so this non-blocking
+// adapter gives the uplink owner a strict one-attempt deadline while preserving
+// the shared frame encoder and sequence counter.
+class BoundedTcpStream : public Stream {
+public:
+    void bind(WiFiClient* client) { _client = client; }
+    size_t write(const uint8_t* buf, size_t len) override {
+        if (!_client || !_client->connected()) return 0;
+        int fd = _client->fd();
+        if (fd < 0) return 0;
+        int n = ::send(fd, buf, len, MSG_DONTWAIT);
+        return n > 0 ? (size_t)n : 0;
+    }
+    size_t write(uint8_t b) override { return write(&b, 1); }
+    int available() override { return _client ? _client->available() : 0; }
+    int read() override { return _client ? _client->read() : -1; }
+    int peek() override { return _client ? _client->peek() : -1; }
+    void flush() override {}
+private:
+    WiFiClient* _client = nullptr;
+};
+
 static WiFiServer  g_tcp_server(CMD_TCP_PORT);
 static WiFiClient  g_tcp_client;
+static BoundedTcpStream g_tcp_stream;
 static CommLink*   g_comm_tcp   = nullptr;
 static UDPStream   g_udp_stream;
-static UDPStream   g_udp_diag_stream;
-static CommLink    g_wifi_diag(g_udp_diag_stream, COMM_SRC_ESP32);
 static CommLink    g_telem_udp(g_udp_stream, COMM_SRC_ESP32);
 static bool        g_wifi_inited = false;
 
@@ -570,6 +593,8 @@ enum : uint8_t {
 
 static QueueHandle_t      g_uplink_q        = nullptr;
 static uint32_t           g_uplink_drops    = 0;   // frames dropped because queue was full
+static QueueHandle_t      g_control_uplink_q = nullptr;
+static uint32_t           g_control_uplink_drops = 0;
 static QueueHandle_t      g_log_uplink_q    = nullptr;
 static uint32_t           g_log_uplink_drops = 0;
 static uint16_t           g_log_generation  = 0;
@@ -588,14 +613,8 @@ static QueueHandle_t      g_log_ack_q = nullptr;
 // Both command parsers run from loop() on core 1, as does on_teensy_packet(),
 // so reading/writing this byte needs no cross-core lock.
 static uint8_t            g_log_uplink_dest   = UPLINK_DEST_ALL;
-static uint32_t           g_tcp_send_skipped = 0;  // TCP sends skipped because the socket
-                                                    // wasn't write-ready — see the select()
-                                                    // pre-check in uplink_task: WiFiClient::write()
-                                                    // has a hardcoded 10x1s blocking retry loop
-                                                    // (framework source, not ours to change) that
-                                                    // was observed hanging uplink_task for so long
-                                                    // the task watchdog fired — this counter tracks
-                                                    // how often that's being avoided.
+static uint32_t           g_tcp_send_skipped = 0;
+static uint32_t           g_tcp_stall_since_ms = 0;
 static volatile uint16_t  g_tcp_send_max_us = 0;   // like g_udp_send_max_us; core 0 writes,
                                                     // core 1 reads/resets in send_wifi_diag —
                                                     // volatile 16-bit access is atomic on Xtensa,
@@ -612,29 +631,22 @@ static SemaphoreHandle_t g_tcp_mutex = nullptr;
 // must never wait behind a potentially slow TCP write and stop draining UART2.
 static volatile bool g_tcp_connected_cached = false;
 
-// Guards every write to Serial (UART0/USB-CDC to the GUI): g_usb.send(),
-// g_usb_diag.send(), and the one-shot debug Serial.printf lines below.
-// Arduino's Serial.write() isn't thread-safe against concurrent callers —
-// log_uplink_task writes frames alongside uplink_task, so an
-// unguarded interleaved write corrupts the CommLink framing
-// on the wire (bytes from two frames mixed together), which the receiver
-// can only see as a checksum failure / dropped frame. Same reasoning as
-// g_tcp_mutex, just for the USB link instead of the TCP one.
-static SemaphoreHandle_t g_usb_mutex = nullptr;
-
 // Pending one-shot debug lines set by loop()/on_teensy_packet (core 1) and
-// printed by uplink_task (core 0). g_usb_mutex keeps these plain-text writes
-// from interleaving with binary frames from log_uplink_task.
-static volatile bool g_dbg_version_mismatch_pending = false;
-static volatile uint8_t g_dbg_mismatch_version       = 0;
-static char           g_dbg_wifi_ip[24]              = {0};
-static volatile bool  g_dbg_wifi_ip_pending           = false;
-static char           g_dbg_tcp_client_ip[24]         = {0};
-static volatile bool  g_dbg_tcp_client_pending        = false;
+// printed by the sole USB writer, uplink_task (core 0), between framed writes.
 
-// Enqueue one frame for uplink_task. Never blocks: on a full queue, drops the
-// oldest queued frame to make room (never blocks the caller — see 2.1).
+static bool is_control_uplink(uint8_t type) {
+    return type == COMM_TYPE_COMMAND_RESULT || type == COMM_TYPE_PARAM_REPORT ||
+           type == COMM_TYPE_LOG || type == COMM_TYPE_CALIB_EVENT;
+}
+
+// Enqueue one frame for uplink_task. Never blocks. Control/result traffic has
+// a dedicated high-priority lane; lossy telemetry/diagnostics use the normal
+// lane and evict its oldest frame when saturated.
 static void enqueue_uplink(uint8_t type, uint8_t version, const void* payload, uint16_t len) {
+    if (len > COMM_MAX_PAYLOAD) {
+        ++g_uplink_drops;
+        return;
+    }
     UplinkFrame f;
     f.type    = type;
     f.version = version;
@@ -642,11 +654,13 @@ static void enqueue_uplink(uint8_t type, uint8_t version, const void* payload, u
     f.generation = 0;
     f.len     = len;
     memcpy(f.payload, payload, len);
-    if (xQueueSend(g_uplink_q, &f, 0) != pdTRUE) {
+    QueueHandle_t queue = is_control_uplink(type) ? g_control_uplink_q : g_uplink_q;
+    uint32_t* drops = is_control_uplink(type) ? &g_control_uplink_drops : &g_uplink_drops;
+    if (xQueueSend(queue, &f, 0) != pdTRUE) {
         static UplinkFrame scratch;
-        xQueueReceive(g_uplink_q, &scratch, 0);
-        xQueueSend(g_uplink_q, &f, 0);
-        ++g_uplink_drops;
+        xQueueReceive(queue, &scratch, 0);
+        xQueueSend(queue, &f, 0);
+        ++(*drops);
     }
 }
 
@@ -661,7 +675,7 @@ static void enqueue_local_command_result(uint8_t destination, uint32_t request_i
     frame.destinations = destination;
     frame.len = sizeof(result);
     memcpy(frame.payload, &result, sizeof(result));
-    if (xQueueSend(g_uplink_q, &frame, 0) != pdTRUE) ++g_uplink_drops;
+    if (xQueueSend(g_control_uplink_q, &frame, 0) != pdTRUE) ++g_control_uplink_drops;
 }
 
 // Bulk log frames use a lossless, ACK-controlled lane. If this small queue is
@@ -669,6 +683,10 @@ static void enqueue_local_command_result(uint8_t destination, uint32_t request_i
 // resends it after its ACK timeout. Never evict XFER_BEGIN or an older chunk.
 static void enqueue_uplink_log(uint8_t type, uint8_t version,
                                const void* payload, uint16_t len) {
+    if (len > COMM_MAX_PAYLOAD) {
+        ++g_log_uplink_drops;
+        return;
+    }
     UplinkFrame f;
     f.type = type;
     f.version = version;
@@ -677,6 +695,14 @@ static void enqueue_uplink_log(uint8_t type, uint8_t version,
     f.len = len;
     memcpy(f.payload, payload, len);
     if (xQueueSend(g_log_uplink_q, &f, 0) != pdTRUE) ++g_log_uplink_drops;
+}
+
+static void enqueue_text_log(uint8_t level, const char* text) {
+    uint8_t payload[1 + 95];
+    payload[0] = level;
+    size_t n = strnlen(text, sizeof(payload) - 1);
+    memcpy(payload + 1, text, n);
+    enqueue_uplink(COMM_TYPE_LOG, LOG_PAYLOAD_V1, payload, (uint16_t)(n + 1));
 }
 
 // ── Command routing ───────────────────────────────────────────────────────────
@@ -875,13 +901,16 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
         if (chunk_index + 1 > g_log_chunks_done) g_log_chunks_done = chunk_index + 1;
     }
 
-    // Version mismatch: flag on either half so display updates immediately
+// Version mismatch: flag on either half so display updates immediately
     if ((type == COMM_TYPE_TELEM_A || type == COMM_TYPE_TELEM_B) && version != TELEM_VERSION) {
         if (!g_version_mismatch) {
             g_version_mismatch             = true;
             g_display_dirty                = true;
-            g_dbg_mismatch_version         = version;
-            g_dbg_version_mismatch_pending = true;
+            char msg[96];
+            snprintf(msg, sizeof(msg),
+                     "[VERSION MISMATCH] Teensy telem v%u, expected v%u; reflash both boards",
+                     version, TELEM_VERSION);
+            enqueue_text_log(LOG_LEVEL_ERROR, msg);
         }
         if (!g_teensy_ever_heard) g_display_dirty = true;
         g_last_teensy_ms    = millis();
@@ -918,15 +947,10 @@ static bool send_uplink_frame(uint8_t type, uint8_t version, const uint8_t* payl
                               uint16_t len, uint8_t destinations) {
     bool delivered = false;
     if (type == COMM_TYPE_WIFI_DIAG) {
-        if (xSemaphoreTake(g_usb_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-            g_usb_diag.send(type, version, payload, len);
-            delivered = true;
-            xSemaphoreGive(g_usb_mutex);
-        }
+        delivered = g_usb.send(type, version, payload, len);
 #if WIFI_ENABLED
         if (g_wifi_inited) {
-            g_wifi_diag.send(type, version, payload, len);
-            delivered = true;
+            delivered = g_telem_udp.send(type, version, payload, len) || delivered;
         }
 #endif
     } else if (type == COMM_TYPE_TELEM_FULL_WIFI) {
@@ -940,49 +964,34 @@ static bool send_uplink_frame(uint8_t type, uint8_t version, const uint8_t* payl
         }
 #endif
     } else {
-        if ((destinations & UPLINK_DEST_USB) &&
-            xSemaphoreTake(g_usb_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        if (destinations & UPLINK_DEST_USB)
             delivered = g_usb.send(type, version, payload, len);
-            xSemaphoreGive(g_usb_mutex);
-        }
 #if WIFI_ENABLED
-        // Bounded, NOT portMAX_DELAY: the normal and bulk relay tasks
-        // can contend for this mutex. If it is held unexpectedly long, skip
-        // instead of blocking the UART parser or tripping a task watchdog.
+        // Bounded mutex acquisition plus a non-blocking socket write: a stalled
+        // TCP peer cannot hold up USB/UDP service or the UART parser.
         if ((destinations & UPLINK_DEST_TCP) &&
             xSemaphoreTake(g_tcp_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
             bool tcp_connected = g_comm_tcp && g_tcp_client.connected();
             g_tcp_connected_cached = tcp_connected;
             if (tcp_connected) {
-                // WiFiClient::write() (framework source) retries up to 10x
-                // with a 1 s select() each — up to 10 s blocking — if the
-                // peer stops draining the socket. That happens while
-                // holding g_tcp_mutex, which then also stalls loop()'s
-                // g_comm_tcp->update()/accept path on core 1, and since
-                // uplink_task is the sole drain point for the WiFi UDP/USB
-                // queue too, EVERYTHING (not just TCP) went dark until the
-                // 10 s retry gave up — root-caused via esp_task_wdt, which
-                // caught uplink_task stuck mid-send() every time (Phase 7,
-                // UARTplat.md). Fix: our own quick (1 ms) write-readiness
-                // check first, skip (drop and count) instead of risking it.
-                int fd = g_tcp_client.fd();
-                bool writable = false;
-                if (fd >= 0) {
-                    fd_set wset;
-                    struct timeval tv = {0, 1000};  // 1 ms
-                    FD_ZERO(&wset);
-                    FD_SET(fd, &wset);
-                    writable = select(fd + 1, nullptr, &wset, nullptr, &tv) > 0
-                               && FD_ISSET(fd, &wset);
-                }
-                if (writable) {
-                    uint32_t t0 = micros();
-                    delivered = g_comm_tcp->send(type, version, payload, len);
-                    uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
-                    if (dt > g_tcp_send_max_us) g_tcp_send_max_us = dt;
+                uint32_t t0 = micros();
+                bool tcp_delivered = g_comm_tcp->send(type, version, payload, len);
+                uint16_t dt = (uint16_t)min((uint32_t)0xFFFF, (uint32_t)(micros() - t0));
+                if (dt > g_tcp_send_max_us) g_tcp_send_max_us = dt;
+                delivered = tcp_delivered || delivered;
+                if (tcp_delivered) {
+                    g_tcp_stall_since_ms = 0;
                 } else {
                     ++g_tcp_send_skipped;
+                    if (g_tcp_stall_since_ms == 0) g_tcp_stall_since_ms = millis();
+                    if ((uint32_t)(millis() - g_tcp_stall_since_ms) >= 250) {
+                        g_tcp_client.stop();
+                        g_tcp_connected_cached = false;
+                        g_tcp_stall_since_ms = 0;
+                    }
                 }
+            } else {
+                g_tcp_stall_since_ms = 0;
             }
             xSemaphoreGive(g_tcp_mutex);
         }
@@ -1009,14 +1018,9 @@ static bool send_uplink_frame(uint8_t type, uint8_t version, const uint8_t* payl
 }
 
 // ── Uplink task (core 0) ──────────────────────────────────────────────────────
-// Writes the TCP client and telemetry/diag UDP sockets (see Phase 1,
-// UARTplat.md); shares Serial (UART0/USB-CDC) with log_uplink_task,
-// guarded by g_usb_mutex (see its declaration). Drains frames enqueued by
-// on_teensy_packet() and send_wifi_diag() (both core 1) and performs the
-// sends that used to run inline in the UART parse path. Uses a bounded wait
-// (not portMAX_DELAY) so the pending debug-print flags below still get
-// serviced promptly even if the Teensy link itself is down (e.g. WiFi/TCP
-// connect events with no Teensy present).
+// Sole writer for USB, TCP, and telemetry/diagnostic UDP. It drains bounded
+// control, ACK-paced bulk-log, and lossy telemetry queues in that priority
+// order; UART parsing never performs or waits for an uplink write.
 static void uplink_task(void*) {
     UplinkFrame f;
     for (;;) {
@@ -1027,55 +1031,35 @@ static void uplink_task(void*) {
         // g_comm_tcp->send() hang below was root-caused (Phase 7, UARTplat.md).
         esp_task_wdt_reset();
 
-        if (xQueueReceive(g_uplink_q, &f, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (xQueueReceive(g_control_uplink_q, &f, 0) == pdTRUE) {
             send_uplink_frame(f.type, f.version, f.payload, f.len, f.destinations);
+            continue;
         }
 
-        if ((g_dbg_version_mismatch_pending || g_dbg_wifi_ip_pending || g_dbg_tcp_client_pending)
-            && xSemaphoreTake(g_usb_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-            if (g_dbg_version_mismatch_pending) {
-                g_dbg_version_mismatch_pending = false;
-                Serial.printf("[VERSION MISMATCH] Teensy telem v%u, expected v%u — reflash both boards\n",
-                              g_dbg_mismatch_version, TELEM_VERSION);
+        if (xQueueReceive(g_log_uplink_q, &f, 0) == pdTRUE) {
+            if (f.generation != g_log_generation) continue;
+            g_log_relay_busy = true;
+            bool delivered = send_uplink_frame(f.type, f.version, f.payload,
+                                               f.len, f.destinations);
+            g_log_relay_busy = false;
+            if (delivered && f.type == COMM_TYPE_LOG_DATA &&
+                f.len >= sizeof(LogDataHeader)) {
+                LogDataHeader hdr;
+                memcpy(&hdr, f.payload, sizeof(hdr));
+                LogRelayAck ack{hdr.file_index, hdr.chunk_index, f.generation};
+                xQueueSend(g_log_ack_q, &ack, 0);
             }
-            if (g_dbg_wifi_ip_pending) {
-                g_dbg_wifi_ip_pending = false;
-                Serial.print("[WiFi] IP: ");
-                Serial.println(g_dbg_wifi_ip);
-            }
-            if (g_dbg_tcp_client_pending) {
-                g_dbg_tcp_client_pending = false;
-                Serial.print("[TCP] client: ");
-                Serial.println(g_dbg_tcp_client_ip);
-            }
-            xSemaphoreGive(g_usb_mutex);
+            continue;
         }
-    }
-}
 
-// Lossless bulk relay. The matching Teensy transfer keeps each chunk in RAM
-// until the ACK below returns, so this task may safely wait on a slow USB/TCP
-// output without blocking UART parsing or allowing later chunks to overrun it.
-static void log_uplink_task(void*) {
-    UplinkFrame f;
-    for (;;) {
-        if (xQueueReceive(g_log_uplink_q, &f, portMAX_DELAY) != pdTRUE) continue;
-        if (f.generation != g_log_generation) continue;
-
-        g_log_relay_busy = true;
-        bool delivered = send_uplink_frame(f.type, f.version, f.payload,
-                                           f.len, f.destinations);
-        g_log_relay_busy = false;
-
-        if (delivered && f.type == COMM_TYPE_LOG_DATA &&
-            f.len >= sizeof(LogDataHeader)) {
-            LogDataHeader hdr;
-            memcpy(&hdr, f.payload, sizeof(hdr));
-            LogRelayAck ack{hdr.file_index, hdr.chunk_index, f.generation};
-            // If core 1 has not drained the previous ACK yet, the Teensy's
-            // timeout will resend this same chunk and give us another chance.
-            xQueueSend(g_log_ack_q, &ack, 0);
+        if (xQueueReceive(g_uplink_q, &f, 0) == pdTRUE) {
+            send_uplink_frame(f.type, f.version, f.payload, f.len, f.destinations);
+            continue;
         }
+
+        // Polling all three queues bounds high-priority wakeup latency to one
+        // scheduler tick without a queue-set allocation or an indefinite wait.
+        vTaskDelay(1);
     }
 }
 
@@ -2497,7 +2481,8 @@ static void send_wifi_diag() {
     d.uart_crc_drops     = (uint16_t)min((uint32_t)0xFFFF, g_teensy.rx_drops());
     d.uart_seq_gaps      = (uint16_t)min((uint32_t)0xFFFF, g_teensy.rx_seq_gaps());
     d.uplink_queue_drops = (uint16_t)min((uint32_t)0xFFFF,
-                                         g_uplink_drops + g_log_uplink_drops);
+                                         g_uplink_drops + g_control_uplink_drops +
+                                         g_log_uplink_drops);
     d.tcp_send_max_us    = g_tcp_send_max_us;
     g_tcp_send_max_us    = 0;
 
@@ -2517,8 +2502,8 @@ static void send_esp32_status() {
     s.uptime_ms            = millis();
     s.wifi_ok              = (WiFi.status() == WL_CONNECTED) ? 1 : 0;
     // Never wait here: this runs on core 1, which must return to g_teensy.update()
-    // fast enough to drain the 4 Mbaud UART continuously. A WiFiClient::write()
-    // on core 0 can retain g_tcp_mutex for seconds despite the writable precheck.
+    // fast enough to drain the 4 Mbaud UART continuously. The sender uses a
+    // non-blocking socket but may briefly own the client mutex.
     // If the mutex is busy, the last lock-protected observation is sufficient
     // for this diagnostic heartbeat.
     bool tcp_connected = g_tcp_connected_cached;
@@ -2530,7 +2515,9 @@ static void send_esp32_status() {
     s.tcp_client_connected = tcp_connected ? 1 : 0;
     s.rssi_dbm             = (WiFi.status() == WL_CONNECTED) ? (int8_t)WiFi.RSSI() : 0;
     s.reserved             = 0;
-    s.uplink_drops         = (uint16_t)min((uint32_t)0xFFFF, g_uplink_drops);
+    s.uplink_drops         = (uint16_t)min((uint32_t)0xFFFF,
+                                           g_uplink_drops + g_control_uplink_drops +
+                                           g_log_uplink_drops);
     s.uart_rx_drops        = (uint16_t)min((uint32_t)0xFFFF, g_teensy.rx_drops());
     s.uart_seq_gaps        = (uint16_t)min((uint32_t)0xFFFF, g_teensy.rx_seq_gaps());
     g_teensy.send(COMM_TYPE_ESP32_STATUS, ESP32_STATUS_PAYLOAD_V1, &s, sizeof(s));
@@ -2573,13 +2560,13 @@ void setup() {
     g_usb.onPacket(forward_usb_to_teensy);
 
     g_uplink_q = xQueueCreate(UPLINK_QUEUE_LEN, sizeof(UplinkFrame));
+    g_control_uplink_q = xQueueCreate(CONTROL_UPLINK_QUEUE_LEN, sizeof(UplinkFrame));
     g_log_uplink_q = xQueueCreate(LOG_UPLINK_QUEUE_LEN, sizeof(UplinkFrame));
     g_log_ack_q = xQueueCreate(LOG_UPLINK_QUEUE_LEN, sizeof(LogRelayAck));
     g_tcp_mutex = xSemaphoreCreateMutex();
-    g_usb_mutex = xSemaphoreCreateMutex();
+    Serial.println("[ESP32] ready");  // final raw write before uplink_task becomes sole writer
     TaskHandle_t uplink_task_handle = nullptr;
     xTaskCreatePinnedToCore(uplink_task, "uplink", 4096, nullptr, 2, &uplink_task_handle, 0);
-    xTaskCreatePinnedToCore(log_uplink_task, "log_uplink", 4096, nullptr, 2, nullptr, 0);
     // Root-caused a WiFiClient::write() hang here (Phase 7, UARTplat.md) via
     // this exact watchdog — keeping it as permanent defense-in-depth: if
     // uplink_task ever blocks for any other reason, a 5 s panic-reboot beats
@@ -2605,8 +2592,6 @@ void setup() {
     xTaskCreatePinnedToCore(display_task, "disp", 6144, nullptr, 1, nullptr, 0);
 #endif
 
-    Serial.println("[ESP32] ready");
-
     // One-shot "ESP32 booted" line in the GUI's robot log — Teensy already
     // announces itself there via comm_log(); this is the ESP32-originated
     // equivalent so a reboot/reflash shows up there too, not just as a
@@ -2625,7 +2610,7 @@ void setup() {
 void loop() {
     uint32_t t_loop_start = micros();
 
-    g_teensy.update();
+    g_teensy.update(UART_PARSE_BUDGET_BYTES);
 
     // Only core 1 writes g_teensy/Serial2. The relay task reports completed
     // chunks through this queue instead of touching CommLink from core 0.
@@ -2639,7 +2624,7 @@ void loop() {
         memcpy(cmd + 4, &relay_ack.chunk_index, 4);
         g_teensy.send(COMM_TYPE_COMMAND, CMD_PAYLOAD_V1, cmd, sizeof(cmd));
     }
-    g_usb.update();
+    g_usb.update(HOST_PARSE_BUDGET_BYTES);
 
     // Process freshest complete telemetry snapshot. If multiple A+B pairs arrived
     // during the previous loop() iteration, all but the last are already overwritten
@@ -2708,7 +2693,7 @@ void loop() {
     if (xSemaphoreTake(g_tcp_mutex, 0) == pdTRUE) {
         bool tcp_connected = g_comm_tcp && g_tcp_client.connected();
         g_tcp_connected_cached = tcp_connected;
-        if (tcp_connected) g_comm_tcp->update();
+        if (tcp_connected) g_comm_tcp->update(HOST_PARSE_BUDGET_BYTES);
         xSemaphoreGive(g_tcp_mutex);
     }
 
@@ -2723,10 +2708,10 @@ void loop() {
         if (WIFI_UNICAST_IP[0] != '\0') telem_target = WIFI_UNICAST_IP;
 #endif
         g_udp_stream.beginSend(telem_target, TELEM_UDP_PORT);
-        g_udp_diag_stream.beginSend(telem_target, TELEM_UDP_PORT);
         g_wifi_inited = true;
-        WiFi.localIP().toString().toCharArray(g_dbg_wifi_ip, sizeof(g_dbg_wifi_ip));
-        g_dbg_wifi_ip_pending = true;
+        char msg[64];
+        snprintf(msg, sizeof(msg), "[WiFi] IP: %s", WiFi.localIP().toString().c_str());
+        enqueue_text_log(LOG_LEVEL_INFO, msg);
     }
 
     static uint32_t last_reconnect_ms = 0;
@@ -2777,12 +2762,17 @@ void loop() {
         WiFiClient c = g_tcp_server.available();
         if (c) {
             g_tcp_client = c;
+            g_tcp_client.setNoDelay(true);
+            g_tcp_stream.bind(&g_tcp_client);
             delete g_comm_tcp;
-            g_comm_tcp = new CommLink(g_tcp_client, COMM_SRC_ESP32);
+            g_comm_tcp = new CommLink(g_tcp_stream, COMM_SRC_ESP32);
             g_comm_tcp->onPacket(forward_tcp_to_teensy);
-            g_tcp_client.remoteIP().toString().toCharArray(g_dbg_tcp_client_ip, sizeof(g_dbg_tcp_client_ip));
             g_tcp_connected_cached = true;
-            g_dbg_tcp_client_pending = true;
+            g_tcp_stall_since_ms = 0;
+            char msg[64];
+            snprintf(msg, sizeof(msg), "[TCP] client: %s",
+                     g_tcp_client.remoteIP().toString().c_str());
+            enqueue_text_log(LOG_LEVEL_INFO, msg);
         }
         xSemaphoreGive(g_tcp_mutex);
     }
