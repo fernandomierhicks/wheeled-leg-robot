@@ -16,7 +16,8 @@ COMM_START_B  = 0x55
 COMM_END      = 0xEF
 COMM_SRC_PC   = 0x03
 COMM_TYPE_CMD = 0x02
-CMD_PAYLOAD_V = 1
+CMD_PAYLOAD_V1 = 1
+CMD_PAYLOAD_V2 = 2
 
 # Command IDs (comm_protocol.h CMD_ID_*)
 CMD_ID_SET_MODE  = 0x01
@@ -57,14 +58,31 @@ STATE_MANUAL     = 5
 STATE_CMD_REJECT = 6
 
 _seq = [0]  # rolling Tx sequence counter
+_request_id = [1]
+_forced_request_id: list[int | None] = [None]  # scoped synchronously by ReliableCommand retries
 
 
-def build_frame(payload: bytes) -> bytes:
-    """Wrap payload in a CommLink COMMAND frame (CRC-8 checksum)."""
+def build_frame(payload: bytes, *, version: int = CMD_PAYLOAD_V2,
+                request_id: int | None = None) -> bytes:
+    """Wrap command bytes in a correlated v2 envelope and CommLink frame.
+
+    ``version=1`` exists only for compatibility/golden-vector tests and ESP32
+    internal relay traffic. Normal GUI operations always use v2.
+    """
+    if version == CMD_PAYLOAD_V2:
+        import struct
+        if request_id is None:
+            request_id = _forced_request_id[0]
+        if request_id is None:
+            request_id = _request_id[0] & 0xFFFFFFFF
+            _request_id[0] = (_request_id[0] + 1) & 0xFFFFFFFF or 1
+        payload = struct.pack("<I", request_id) + payload
+    elif version != CMD_PAYLOAD_V1:
+        raise ValueError(f"unsupported command payload version {version}")
     seq = _seq[0] & 0xFF
     _seq[0] += 1
     plen = len(payload)
-    header = bytes([COMM_TYPE_CMD, CMD_PAYLOAD_V, COMM_SRC_PC,
+    header = bytes([COMM_TYPE_CMD, version, COMM_SRC_PC,
                     seq, plen & 0xFF, (plen >> 8) & 0xFF])
     crc = crc8(header + payload)
     return bytes([COMM_START_A, COMM_START_B]) + header + payload + bytes([crc, COMM_END])
@@ -87,13 +105,7 @@ def build_frame_corrupted(payload: bytes, mode: int = 1) -> bytes:
     None of the three modes touch payload bytes — cmd_id and any command args are
     always intact; only whether the *frame* is accepted changes.
     """
-    seq = _seq[0] & 0xFF
-    _seq[0] += 1
-    plen = len(payload)
-    header = bytes([COMM_TYPE_CMD, CMD_PAYLOAD_V, COMM_SRC_PC,
-                    seq, plen & 0xFF, (plen >> 8) & 0xFF])
-    crc = crc8(header + payload)
-    frame = bytearray(bytes([COMM_START_A, COMM_START_B]) + header + payload + bytes([crc, COMM_END]))
+    frame = bytearray(build_frame(payload))
     if mode == 1:
         frame[-2] ^= 0xFF  # flip CRC byte
     elif mode == 2:
@@ -118,7 +130,7 @@ def send_frame(frame: bytes):
     if active == "wifi":
         from .wifi_transport import WifiTransport
         WifiTransport.instance().send(frame)
-        return
+        return int.from_bytes(frame[8:12], "little") if frame[3] == CMD_PAYLOAD_V2 else None
 
     pm = SerialPortManager.instance()
     with pm._lock:
@@ -126,14 +138,16 @@ def send_frame(frame: bytes):
     if s and s.is_open:
         try:
             s.write(frame)
+            return int.from_bytes(frame[8:12], "little") if frame[3] == CMD_PAYLOAD_V2 else None
         except Exception:
             pass
+    return None
 
 
 def send_set_mode(target: int):
     """Send CMD_ID_SET_MODE with the given target RobotStateEnum value."""
     import struct
-    send_frame(build_frame(struct.pack("<BB", CMD_ID_SET_MODE, target)))
+    return send_frame(build_frame(struct.pack("<BB", CMD_ID_SET_MODE, target)))
 
 
 def send_ping():
@@ -141,38 +155,38 @@ def send_ping():
     watchdog (500 ms): if pings stop (GUI crash/disconnect), the robot exits
     MANUAL and idles the wheels. Sent at 10 Hz by MainWindow."""
     import struct
-    send_frame(build_frame(struct.pack("<B", CMD_ID_PING)))
+    return send_frame(build_frame(struct.pack("<B", CMD_ID_PING)))
 
 
 def send_reboot():
     """Send CMD_ID_REBOOT — triggers a full Teensy MCU reset (reruns setup())."""
     import struct
-    send_frame(build_frame(struct.pack("<B", CMD_ID_REBOOT)))
+    return send_frame(build_frame(struct.pack("<B", CMD_ID_REBOOT)))
 
 
 def send_param_set(param_id: int, value: float):
     """Send CMD_ID_PARAM_SET for one parameter. Firmware clamps and echoes back."""
     import struct
-    send_frame(build_frame(struct.pack("<BHf", CMD_ID_PARAM_SET, param_id, value)))
+    return send_frame(build_frame(struct.pack("<BHf", CMD_ID_PARAM_SET, param_id, value)))
 
 
 def send_param_get(param_id: int):
     """Send CMD_ID_PARAM_GET for one parameter. Firmware replies with a single PARAM_REPORT."""
     import struct
-    send_frame(build_frame(struct.pack("<BH", CMD_ID_PARAM_GET, param_id)))
+    return send_frame(build_frame(struct.pack("<BH", CMD_ID_PARAM_GET, param_id)))
 
 
 def send_param_get_all():
     """Send CMD_ID_PARAM_GET 0xFFFF — firmware replies with one PARAM_REPORT per param."""
     import struct
-    send_frame(build_frame(struct.pack("<BH", CMD_ID_PARAM_GET, 0xFFFF)))
+    return send_frame(build_frame(struct.pack("<BH", CMD_ID_PARAM_GET, 0xFFFF)))
 
 
 def send_param_reset_defaults():
     """Send CMD_ID_PARAM_RESET_DEFAULTS — firmware reverts every writable param to
     its compile-time default, persists it, and replies with a full PARAM_REPORT dump."""
     import struct
-    send_frame(build_frame(struct.pack("<B", CMD_ID_PARAM_RESET_DEFAULTS)))
+    return send_frame(build_frame(struct.pack("<B", CMD_ID_PARAM_RESET_DEFAULTS)))
 
 
 def send_test_inject_corrupt(count: int = 1, target: int = 0, mode: int = 1):
@@ -197,49 +211,49 @@ def send_test_inject_corrupt(count: int = 1, target: int = 0, mode: int = 1):
     doesn't distinguish detection *reason*, only that a frame was rejected.
     """
     import struct
-    send_frame(build_frame(struct.pack("<BBBB", CMD_ID_TEST_INJECT_CORRUPT, count, target, mode)))
+    return send_frame(build_frame(struct.pack("<BBBB", CMD_ID_TEST_INJECT_CORRUPT, count, target, mode)))
 
 
 def send_wheel_set_mode(mode: int):
     """Send CMD_ID_WHEEL / WHEEL_SUB_SET_MODE with WheelMode value."""
     import struct
-    send_frame(build_frame(struct.pack("<BBB", CMD_ID_WHEEL, WHEEL_SUB_SET_MODE, mode)))
+    return send_frame(build_frame(struct.pack("<BBB", CMD_ID_WHEEL, WHEEL_SUB_SET_MODE, mode)))
 
 
 def send_wheel_setpoint(L: float, R: float):
     """Send CMD_ID_WHEEL / WHEEL_SUB_SEND with left and right setpoints."""
     import struct
-    send_frame(build_frame(struct.pack("<BBff", CMD_ID_WHEEL, WHEEL_SUB_SEND, L, R)))
+    return send_frame(build_frame(struct.pack("<BBff", CMD_ID_WHEEL, WHEEL_SUB_SEND, L, R)))
 
 
 def send_wheel_clear_errors():
     """Send CMD_ID_WHEEL / WHEEL_SUB_CLEAR_ERRORS to both ODrive axes."""
     import struct
-    send_frame(build_frame(struct.pack("<BB", CMD_ID_WHEEL, WHEEL_SUB_CLEAR_ERRORS)))
+    return send_frame(build_frame(struct.pack("<BB", CMD_ID_WHEEL, WHEEL_SUB_CLEAR_ERRORS)))
 
 
 def send_log_start(duration_ms: int = 0):
     """Send CMD_ID_LOG / LOG_SUB_START. duration_ms=0 logs until STOP."""
     import struct
-    send_frame(build_frame(struct.pack("<BBI", CMD_ID_LOG, LOG_SUB_START, duration_ms)))
+    return send_frame(build_frame(struct.pack("<BBI", CMD_ID_LOG, LOG_SUB_START, duration_ms)))
 
 
 def send_log_stop():
     """Send CMD_ID_LOG / LOG_SUB_STOP — closes the active log file."""
     import struct
-    send_frame(build_frame(struct.pack("<BB", CMD_ID_LOG, LOG_SUB_STOP)))
+    return send_frame(build_frame(struct.pack("<BB", CMD_ID_LOG, LOG_SUB_STOP)))
 
 
 def send_log_list():
     """Send CMD_ID_LOG / LOG_SUB_LIST — firmware replies with one LOG_INFO ENTRY per file."""
     import struct
-    send_frame(build_frame(struct.pack("<BB", CMD_ID_LOG, LOG_SUB_LIST)))
+    return send_frame(build_frame(struct.pack("<BB", CMD_ID_LOG, LOG_SUB_LIST)))
 
 
 def send_log_get(file_index: int, start_chunk: int = 0):
     """Send CMD_ID_LOG / LOG_SUB_GET — streams LOG_DATA chunks for one file."""
     import struct
-    send_frame(build_frame(struct.pack("<BBHI", CMD_ID_LOG, LOG_SUB_GET, file_index, start_chunk)))
+    return send_frame(build_frame(struct.pack("<BBHI", CMD_ID_LOG, LOG_SUB_GET, file_index, start_chunk)))
 
 
 def send_set_telem_transport(suppress: bool):
@@ -249,23 +263,21 @@ def send_set_telem_transport(suppress: bool):
     No-op when the active source is "teensy" or unset — the ESP32 isn't part
     of that path anyway."""
     import struct
-    send_frame(build_frame(struct.pack("<BB", CMD_ID_SET_TELEM_TRANSPORT, 1 if suppress else 0)))
+    return send_frame(build_frame(struct.pack("<BB", CMD_ID_SET_TELEM_TRANSPORT, 1 if suppress else 0)))
 
 
 def send_log_delete(file_index: int):
     """Send CMD_ID_LOG / LOG_SUB_DELETE — erases one .wlog file."""
     import struct
-    send_frame(build_frame(struct.pack("<BBH", CMD_ID_LOG, LOG_SUB_DELETE, file_index)))
+    return send_frame(build_frame(struct.pack("<BBH", CMD_ID_LOG, LOG_SUB_DELETE, file_index)))
 
 
 # ── Command reliability (effect-confirmed retry, UARTplat.md Phase 5) ────────
 #
-# Design choice: effect-confirmed retry at the GUI layer, no wire-protocol
-# change. A transport-level ACK was considered and rejected: the ESP32
-# re-stamps `seq` when forwarding commands to the Teensy (forward_to_teensy,
-# esp32/src/main.cpp), so GUI seq numbers don't survive the hop, and every
-# discrete command already has an observable confirmation in telemetry. This
-# keeps all three ends untouched at the protocol level.
+# V2 commands carry an end-to-end request ID and produce a COMMAND_RESULT.
+# ReliableCommand still waits for the operation-specific effect (state/value)
+# before reporting success, but an authoritative NACK now stops retries
+# immediately instead of waiting for an unrelated telemetry timeout.
 #
 # Excluded on purpose (never wrapped in send_reliable): CMD_ID_PING and
 # streamed setpoints (HIP_SUB_MIT, WHEEL_SUB_SEND) — superseded by the next
@@ -284,6 +296,19 @@ class CommandAlertBus(QObject):
 
     @classmethod
     def instance(cls) -> "CommandAlertBus":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+
+class CommandResultBus(QObject):
+    """Correlated Teensy/ESP32 command results from the active transport."""
+
+    result = pyqtSignal(dict)
+    _instance: "CommandResultBus | None" = None
+
+    @classmethod
+    def instance(cls) -> "CommandResultBus":
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -317,18 +342,24 @@ class ReliableCommand(QObject):
         self._on_success    = on_success
         self._label         = label
         self._done          = False
+        self._request_ids: set[int] = set()
 
         ReliableCommand._in_flight.add(self)
 
         from .telemetry_bus import TelemetryBus
         self._bus = TelemetryBus.instance()
         self._bus.packet.connect(self._on_packet)
+        self._result_bus = CommandResultBus.instance()
+        self._result_bus.result.connect(self._on_result)
 
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._on_timeout)
 
-        self._send_fn()
+        request_id = self._send_fn()
+        self._primary_request_id = request_id if isinstance(request_id, int) else None
+        if isinstance(request_id, int):
+            self._request_ids.add(request_id)
         self._timer.start(self._timeout_ms)
 
     def cancel(self):
@@ -341,6 +372,7 @@ class ReliableCommand(QObject):
         self._done = True
         self._timer.stop()
         self._bus.packet.disconnect(self._on_packet)
+        self._result_bus.result.disconnect(self._on_result)
         ReliableCommand._in_flight.discard(self)
 
     def _fail(self, message: str):
@@ -361,12 +393,27 @@ class ReliableCommand(QObject):
             if self._on_success is not None:
                 self._on_success(info)
 
+    def _on_result(self, info: dict):
+        if self._done or info.get("request_id") not in self._request_ids:
+            return
+        if not info.get("command_accepted", False):
+            self._fail(
+                f"{self._label} rejected by firmware "
+                f"(reason {info.get('command_reason')}, state {info.get('command_state')})"
+            )
+
     def _on_timeout(self):
         if self._done:
             return
         if self._retries_left > 0:
             self._retries_left -= 1
-            self._send_fn()
+            _forced_request_id[0] = self._primary_request_id
+            try:
+                request_id = self._send_fn()
+            finally:
+                _forced_request_id[0] = None
+            if isinstance(request_id, int):
+                self._request_ids.add(request_id)
             self._timer.start(self._timeout_ms)
         else:
             self._fail(f"{self._label} not confirmed after 3 retries — link degraded?")

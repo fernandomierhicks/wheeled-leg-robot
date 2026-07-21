@@ -31,7 +31,7 @@ from PyQt6.QtCore import QEventLoop, QObject, QTimer
 from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
 from PyQt6.QtWidgets import QApplication
 
-from .comm_commands import send_param_get, send_param_get_all, send_param_set
+from .comm_commands import CommandResultBus, send_param_get, send_param_get_all, send_param_set
 from .log_transfer import LogTransferManager
 from .operator_bridge import GuiOperatorBridge
 from .port_manager import SerialPortManager
@@ -65,6 +65,7 @@ class RemoteControlServer(QObject):
         self._param_cache: dict[int, dict] = {}
         self._latest_telem: dict = {}
         self._latest_telem_monotonic: float | None = None
+        self._latest_command_result: dict = {}
         self._dispatching = False
         self._dispatch_socket: QTcpSocket | None = None
         self._operator = GuiOperatorBridge(parent)
@@ -78,6 +79,7 @@ class RemoteControlServer(QObject):
         self._lease_timer.start()
 
         TelemetryBus.instance().packet.connect(self._on_packet)
+        CommandResultBus.instance().result.connect(self._on_command_result)
         send_param_get_all()  # populate _param_cache so name->id resolution works immediately
 
         self._server = QTcpServer(self)
@@ -111,6 +113,18 @@ class RemoteControlServer(QObject):
         if info.get("type_name") == "TELEM":
             self._latest_telem = info
             self._latest_telem_monotonic = time.monotonic()
+
+    def _on_command_result(self, info: dict):
+        if info.get("command_id") == 0x02:  # heartbeat PING is not an operator transaction
+            return
+        self._latest_command_result = {
+            key: info.get(key)
+            for key in (
+                "request_id", "command_id", "command_status", "command_status_name",
+                "command_reason", "command_reason_name", "command_state", "command_accepted",
+            )
+        }
+        self._latest_command_result["received_monotonic"] = time.monotonic()
 
     # ── TCP connection handling ─────────────────────────────────────────────
 
@@ -202,6 +216,8 @@ class RemoteControlServer(QObject):
     # ── Confirmed param get/set (echo-back predicate, matches params_tab.py) ─
 
     def _param_get_confirmed(self, param_id: int, retries: int = 3, timeout_ms: int = 250) -> dict | None:
+        if SourceManager.instance().active == "wifi":
+            timeout_ms = max(timeout_ms, 750)
         for _ in range(retries + 1):
             pkt = self._wait_for_packet(
                 lambda info: info.get("ptype") == 0x06 and info.get("param_id") == param_id,
@@ -212,6 +228,8 @@ class RemoteControlServer(QObject):
         return None
 
     def _param_set_confirmed(self, param_id: int, value: float, retries: int = 3, timeout_ms: int = 250):
+        if SourceManager.instance().active == "wifi":
+            timeout_ms = max(timeout_ms, 750)
         for _ in range(retries + 1):
             pkt = self._wait_for_packet(
                 lambda info: (
@@ -382,6 +400,10 @@ class RemoteControlServer(QObject):
                 "fault": self._latest_telem.get("fault_name"),
                 "protocol_version": self._latest_telem.get("version"),
                 "timestamp_ms": self._latest_telem.get("timestamp_ms"),
+                "last_command_result": {
+                    key: value for key, value in self._latest_command_result.items()
+                    if key != "received_monotonic"
+                } or None,
             },
             "parameters_cached": len(self._param_cache),
             "lease": self._lease_status(),

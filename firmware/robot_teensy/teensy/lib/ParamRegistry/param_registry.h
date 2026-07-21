@@ -26,6 +26,7 @@ enum class ParamSetResult : uint8_t {
     CLAMPED     = 1,  // value was out of range and silently clamped
     NOT_FOUND   = 3,
     READONLY    = 4,
+    NONFINITE   = 5,
 };
 
 // ── API ───────────────────────────────────────────────────────────────────────

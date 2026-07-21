@@ -1,4 +1,5 @@
 #include "param_registry.h"
+#include <math.h>
 #include "comm_protocol.h"
 #include <LittleFS.h>
 
@@ -336,6 +337,10 @@ ParamSetResult param_set(uint16_t id, float val) {
     Param* p = find(id);
     if (!p)                          return ParamSetResult::NOT_FOUND;
     if (p->flags & PARAM_FLAG_READONLY) return ParamSetResult::READONLY;
+    // A NaN bypasses ordinary min/max comparisons and would otherwise be
+    // persisted and propagated into control arithmetic. Treat every
+    // non-finite value as an invalid write with no side effect.
+    if (!isfinite(val))              return ParamSetResult::NONFINITE;
 
     ParamSetResult result = ParamSetResult::OK;
 

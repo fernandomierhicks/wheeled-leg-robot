@@ -64,17 +64,17 @@ static State* S_ESTOP;
 static State* S_CMD_REJECT;
 static State* S_JUMPING;
 static State* S_STANDING_UP;
+static State* S_DISARMING;
 
 // ── ESTOP hip-disable tracking ────────────────────────────────────────────────
 static bool s_estop_hip_disabled = false;  // set when MIT was killed on ESTOP entry
 static bool s_hip_disarm_ramping = false;  // set while ramping hip torque down after a RUNNING->STANDBY disarm
 
 // ── ESTOP gentle hip-cutoff ramp ───────────────────────────────────────────────
-// Set on ESTOP entry (see on_estop()) from whatever controlLoop_reset_estop_ramp()
-// found actually active; clears (and runs the normal hip MIT exit) once the
-// 1 s ramp finishes. Wheels are not ramped — wheel_motors_set_mode(IDLE) still
-// runs immediately on ESTOP entry, same as before.
+// Compatibility hook for stateMachine_estop_hip_ramping(). ESTOP is now an
+// immediate cutoff; normal hip ramp-down belongs only to DISARMING.
 static bool s_estop_hip_ramping = false;
+static bool s_disarm_done = false;
 
 // ── Pending mode-change requests (set by command handler) ─────────────────────
 static volatile bool s_req_manual        = false;
@@ -135,9 +135,8 @@ static void on_startup()  {
     if (entering) {
         g_state.fault_code = FAULT_NONE;
         comm_log(LOG_LEVEL_INFO, "-> STARTUP");
-        // A reset can cut the gentle ESTOP hip ramp short (on_estop() won't
-        // run again once we've left STATE_ESTOP to finish it) — drop the
-        // cached setpoint so a stale nonzero-kp command doesn't linger.
+        // Defensive cleanup for firmware upgraded from the former ESTOP-ramp
+        // behavior: never carry a cached hip command across reset.
         if (s_estop_hip_ramping) {
             s_estop_hip_ramping = false;
             hip_motors_clear_setpoints();
@@ -150,33 +149,16 @@ static void on_startup()  {
 }
 static void on_standby()  {
     bool entering      = (g_state.state != STATE_STANDBY);
-    bool from_running  = (g_state.state == STATE_RUNNING);
     bool from_calib    = (g_state.state == STATE_CALIBRATION);
     bool from_estop    = (g_state.state == STATE_ESTOP);  // soft-clear path
     bool from_manual   = (g_state.state == STATE_MANUAL);
     bool from_startup  = (g_state.state == STATE_STARTUP);
     g_state.state = STATE_STANDBY;
-
-    // Ramp hip torque down instead of snapping to zero when disarming out of
-    // RUNNING — same rate as the arm-in ramp (PARAM_HIP_RUNNING_RAMP_TIME_S).
-    // A 0 s ramp param falls straight through to the old snap-to-zero behavior.
-    if (entering && from_running && param_get(PARAM_HIP_RUNNING_RAMP_TIME_S) > 0.0f) {
-        controlLoop_reset_hip_disarm_ramp();
-        s_hip_disarm_ramping = true;
-    }
-    if (s_hip_disarm_ramping) {
-        if (!controlLoop_run_hip_disarm_ramp()) {
-            s_hip_disarm_ramping = false;
-            hip_motors_clear_setpoints();
-        }
-    } else {
-        hip_motors_clear_setpoints();  // revert to zero-torque ping (e.g. after CALIBRATION)
-    }
+    hip_motors_clear_setpoints();  // DISARMING has already completed any normal ramp
 
     g_state.whl_tau_l = 0.0f;
     g_state.whl_tau_r = 0.0f;
     if (from_calib) calibration_abort();
-    if (from_running) wheel_motors_set_mode(WheelMode::IDLE);
     if (from_manual) {
         wheel_motors_send(0.0f, 0.0f);
         wheel_motors_set_mode(WheelMode::IDLE);
@@ -186,18 +168,37 @@ static void on_standby()  {
     // replied — startup_ok() is the only path into STANDBY from STARTUP.
     if (entering && from_startup) comm_log(LOG_LEVEL_INFO, "Startup complete");
     if (entering) comm_log(LOG_LEVEL_INFO, "-> STANDBY");
-    if (from_running) g_buzzer.play(DISARMED_MELODY, sizeof(DISARMED_MELODY) / sizeof(DISARMED_MELODY[0]), 200);
     if (from_estop) {
         // Soft-clear: clear fault and restore hip MIT mode skipped by bypassing STARTUP.
         g_state.fault_code = FAULT_NONE;
-        // A soft-clear can cut the gentle ESTOP hip ramp short — the setpoint
-        // clear above (hip_motors_clear_setpoints()) already made that safe;
-        // just drop the now-stale flag.
+        // Defensive cleanup for the former ESTOP-ramp behavior.
         s_estop_hip_ramping = false;
         if (s_estop_hip_disabled) {
             s_estop_hip_disabled = false;
             if (param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) hip_motors_enter_mit();
         }
+    }
+}
+
+static void on_disarming() {
+    bool entering = (g_state.state != STATE_DISARMING);
+    g_state.state = STATE_DISARMING;
+    if (entering) {
+        comm_log(LOG_LEVEL_INFO, "-> DISARMING");
+        wheel_motors_send(0.0f, 0.0f);
+        wheel_motors_set_mode(WheelMode::IDLE);
+        g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = g_state.tau_yaw = 0.0f;
+        s_jp_phase = JP_DONE;
+        s_su_captured = false;
+        controlLoop_reset_hip_disarm_ramp();
+        s_hip_disarm_ramping = param_get(PARAM_HIP_RUNNING_RAMP_TIME_S) > 0.0f;
+        s_disarm_done = !s_hip_disarm_ramping;
+        if (s_disarm_done) hip_motors_clear_setpoints();
+    }
+    if (s_hip_disarm_ramping && !controlLoop_run_hip_disarm_ramp()) {
+        s_hip_disarm_ramping = false;
+        s_disarm_done = true;
+        hip_motors_clear_setpoints();
     }
 }
 static void on_manual() {
@@ -498,8 +499,7 @@ static void on_standing_up() {
     }
 }
 static bool standup_captured() { return s_su_captured; }
-// Immediate hip cutoff — the pre-ramp behavior, now also used to finalize the
-// gentle ramp once it completes.
+// Immediate hip cutoff used by ESTOP. Normal exits use STATE_DISARMING.
 static void estop_cut_hip() {
     if (param_get(PARAM_ESTOP_HIP_DISABLE) >= 0.5f) {
         hip_motors_exit_mit();
@@ -535,19 +535,14 @@ static void on_estop() {
         // through an emergency stop.
         wheel_motors_set_mode(WheelMode::IDLE);
 
-        // Hips: gentle 1 s ramp instead of an instant cutoff if a hip was
-        // actively being commanded (RUNNING/JUMPING/CALIBRATION/MANUAL) —
-        // avoids a leg buckling out from under the robot's own weight on a
-        // mid-motion ESTOP. No active setpoint cuts immediately here, exactly
-        // like before.
-        controlLoop_reset_estop_ramp();
-        s_estop_hip_ramping = controlLoop_estop_ramp_has_hip();
-        if (!s_estop_hip_ramping) estop_cut_hip();
-    }
-
-    if (s_estop_hip_ramping && !controlLoop_run_estop_ramp()) {
-        estop_cut_hip();
+        // ESTOP is the immediate path, distinct from normal DISARMING. Clear
+        // every active hip setpoint in this entry action and apply the
+        // configured MIT-disable policy now; no torque ramp may delay the
+        // emergency output invariant.
+        s_hip_disarm_ramping = false;
         s_estop_hip_ramping = false;
+        hip_motors_clear_setpoints();
+        estop_cut_hip();
     }
 }
 
@@ -595,8 +590,8 @@ static bool motor_feedback_fault() {
     }
     return false;
 }
-// RUNNING/JUMPING only: balancing on a frozen pitch estimate drives the robot
-// over — ESTOP the moment the IMU leaves NOMINAL (silence or heavy packet loss).
+// All energetic states, including DISARMING: a frozen pitch estimate is unsafe,
+// so ESTOP the moment the required IMU leaves NOMINAL.
 static bool running_imu_fault() {
     if (param_get(PARAM_IMU_ENABLE) < 0.5f) return false;
     if (imu_state() == ImuState::NOMINAL) return false;
@@ -608,14 +603,9 @@ static bool req_manual()        { bool v = s_req_manual;  s_req_manual  = false;
 static bool req_standby()       { bool v = s_req_standby; s_req_standby = false; return v; }
 static bool req_reset()         { bool v = s_req_reset;   s_req_reset   = false; return v; }
 static bool req_calibration() {
-    if (!s_req_calibration) return false;
+    bool v = s_req_calibration;
     s_req_calibration = false;
-    if (param_get(PARAM_HIP_L_ENABLE) < 0.5f && param_get(PARAM_HIP_R_ENABLE) < 0.5f) {
-        comm_log(LOG_LEVEL_WARN, "Calibration denied: no hip motors enabled (hip_l_enable=0, hip_r_enable=0)");
-        stateMachine_request_cmd_reject();
-        return false;
-    }
-    return true;
+    return v;
 }
 static bool req_cmd_reject() { bool v = s_req_cmd_reject; s_req_cmd_reject = false; return v; }
 static bool cmd_reject_done() { return (millis() >= s_cmd_reject_deadline_ms); }
@@ -656,14 +646,6 @@ static bool req_running_to_standing_up() {
     if (!s_req_running) return false;
     if (param_get(PARAM_STANDUP_ENABLE) < 0.5f) return false;  // let _direct handle it
     s_req_running = false;
-    if (!req_running_checks_common()) return false;
-    float pitch = g_state.pitch_rad;
-    if (pitch > param_get(PARAM_STANDUP_MAX_PITCH_FWD_RAD) ||
-        pitch < -param_get(PARAM_STANDUP_MAX_PITCH_BWD_RAD)) {
-        comm_log(LOG_LEVEL_WARN, "Standing-up denied: pitch %.3f rad outside recoverable range", pitch);
-        stateMachine_request_cmd_reject();
-        return false;
-    }
     return true;
 }
 // Today's exact behavior, byte-identical, when STANDUP_ENABLE=0 (the default).
@@ -671,9 +653,10 @@ static bool req_running_direct() {
     if (!s_req_running) return false;
     if (param_get(PARAM_STANDUP_ENABLE) >= 0.5f) return false;  // handled above
     s_req_running = false;
-    return req_running_checks_common();
+    return true;
 }
 static bool req_disarm_running() { bool v = s_req_disarm_running; s_req_disarm_running = false; return v; }
+static bool disarm_done()        { return s_disarm_done; }
 static bool req_jump()           { bool v = s_req_jump;           s_req_jump           = false; return v; }
 static bool jump_done()          { return (millis() >= s_jump_deadline_ms); }
 static bool req_estop() {
@@ -714,6 +697,7 @@ void stateMachine_init() {
     S_CMD_REJECT  = sm.addState(on_cmd_reject);
     S_JUMPING     = sm.addState(on_jumping);
     S_STANDING_UP = sm.addState(on_standing_up);
+    S_DISARMING   = sm.addState(on_disarming);
 
     S_STARTUP->addTransition(req_estop,    S_ESTOP);
     S_STARTUP->addTransition(startup_ok,   S_STANDBY);
@@ -741,18 +725,25 @@ void stateMachine_init() {
     S_RUNNING->addTransition(req_estop,            S_ESTOP);
     S_RUNNING->addTransition(motor_feedback_fault, S_ESTOP);
     S_RUNNING->addTransition(running_imu_fault,    S_ESTOP);
-    S_RUNNING->addTransition(req_disarm_running,   S_STANDBY);
+    S_RUNNING->addTransition(req_disarm_running,   S_DISARMING);
     S_RUNNING->addTransition(req_jump,             S_JUMPING);
 
     S_JUMPING->addTransition(req_estop,            S_ESTOP);
     S_JUMPING->addTransition(motor_feedback_fault, S_ESTOP);
     S_JUMPING->addTransition(running_imu_fault,    S_ESTOP);
+    S_JUMPING->addTransition(req_disarm_running,   S_DISARMING);
     S_JUMPING->addTransition(jump_done,            S_RUNNING);
 
     S_STANDING_UP->addTransition(req_estop,            S_ESTOP);
     S_STANDING_UP->addTransition(motor_feedback_fault, S_ESTOP);
     S_STANDING_UP->addTransition(running_imu_fault,    S_ESTOP);
+    S_STANDING_UP->addTransition(req_disarm_running,   S_DISARMING);
     S_STANDING_UP->addTransition(standup_captured,     S_RUNNING);
+
+    S_DISARMING->addTransition(req_estop,            S_ESTOP);
+    S_DISARMING->addTransition(motor_feedback_fault, S_ESTOP);
+    S_DISARMING->addTransition(running_imu_fault,    S_ESTOP);
+    S_DISARMING->addTransition(disarm_done,          S_STANDBY);
 
     S_ESTOP  ->addTransition(req_soft_clear,     S_STANDBY);
     S_ESTOP  ->addTransition(req_reset,          S_STARTUP);
@@ -779,57 +770,104 @@ void stateMachine_update() {
 // arriving while already past STANDBY (e.g. the GUI's dual WiFi+USB send
 // delivering one click twice) would otherwise sit latched indefinitely and
 // immediately re-fire the instant we return to STANDBY for any reason.
-void stateMachine_request_manual() {
-    if (g_state.state == STATE_STANDBY) s_req_manual = true;
+bool stateMachine_request_manual() {
+    if (g_state.state != STATE_STANDBY) return false;
+    s_req_manual = true;
+    return true;
 }
 // req_standby() is only evaluated from S_MANUAL/S_CALIBRATION — guard so a
 // stray "Standby" request sent from some other state (e.g. RUNNING, where
 // disarm_running is the correct path) doesn't latch and fire the moment we
 // next happen to enter MANUAL or CALIBRATION.
-void stateMachine_exit_manual() {
-    if (g_state.state == STATE_MANUAL || g_state.state == STATE_CALIBRATION)
-        s_req_standby = true;
+bool stateMachine_exit_manual() {
+    if (g_state.state != STATE_MANUAL && g_state.state != STATE_CALIBRATION) return false;
+    s_req_standby = true;
+    return true;
 }
 // req_reset() is only evaluated from S_ESTOP — guard so a stray reset request
 // doesn't sit latched and silently clear a later, unrelated ESTOP fault.
-void stateMachine_request_reset() {
-    if (g_state.state == STATE_ESTOP) s_req_reset = true;
+bool stateMachine_request_reset() {
+    if (g_state.state != STATE_ESTOP) return false;
+    s_req_reset = true;
+    return true;
 }
-void stateMachine_request_calibration() {
-    if (g_state.state == STATE_STANDBY) s_req_calibration = true;
+bool stateMachine_request_calibration() {
+    if (g_state.state != STATE_STANDBY) return false;
+    if (param_get(PARAM_HIP_L_ENABLE) < 0.5f && param_get(PARAM_HIP_R_ENABLE) < 0.5f) {
+        comm_log(LOG_LEVEL_WARN, "Calibration denied: no hip motors enabled (hip_l_enable=0, hip_r_enable=0)");
+        stateMachine_request_cmd_reject();
+        return false;
+    }
+    s_req_calibration = true;
+    return true;
 }
-void stateMachine_request_running() {
-    if (g_state.state == STATE_STANDBY) s_req_running = true;
+bool stateMachine_request_running() {
+    if (g_state.state != STATE_STANDBY) return false;
+    if (imu_state() != ImuState::NOMINAL || millis() - imu_last_update_ms() > 50) {
+        comm_log(LOG_LEVEL_WARN, "Running mode denied: IMU not nominal/fresh (state=%d age=%lu ms)",
+                 (int)imu_state(), (unsigned long)(millis() - imu_last_update_ms()));
+        stateMachine_request_cmd_reject();
+        return false;
+    }
+    if (!req_running_checks_common()) return false;
+    if (param_get(PARAM_STANDUP_ENABLE) >= 0.5f) {
+        float pitch = g_state.pitch_rad;
+        if (pitch > param_get(PARAM_STANDUP_MAX_PITCH_FWD_RAD) ||
+            pitch < -param_get(PARAM_STANDUP_MAX_PITCH_BWD_RAD)) {
+            comm_log(LOG_LEVEL_WARN, "Standing-up denied: pitch %.3f rad outside recoverable range", pitch);
+            stateMachine_request_cmd_reject();
+            return false;
+        }
+    }
+    s_req_running = true;
+    return true;
 }
 // req_disarm_running() is only evaluated from S_RUNNING — guard so a stray
 // disarm request doesn't sit latched and fire the instant we next arm,
 // disarming immediately after an operator arms RUNNING.
-void stateMachine_disarm_running() {
-    if (g_state.state == STATE_RUNNING) s_req_disarm_running = true;
+bool stateMachine_disarm_running() {
+    if (g_state.state != STATE_RUNNING && g_state.state != STATE_JUMPING &&
+        g_state.state != STATE_STANDING_UP) return false;
+    s_req_disarm_running = true;
+    return true;
 }
 // Deliberately unguarded: ESTOP must be reachable from any state (it already
 // is, from every state's transition list) and re-requesting it is harmless —
 // idempotent, and there is no origin state where a "stray" estop is wrong.
-void stateMachine_request_estop()       { s_req_estop          = true; }
+bool stateMachine_request_estop() {
+    // Idempotent in ESTOP, and crucially do not leave a stale event that can
+    // fire immediately after RESET enters STARTUP.
+    if (g_state.state == STATE_ESTOP) return true;
+    s_req_estop = true;
+    return true;
+}
 // Only ever called synchronously from within req_calibration()/req_running(),
 // which themselves only run while currentState == S_STANDBY — no external
 // caller, so no stale-latch risk here.
 void stateMachine_request_cmd_reject()  { s_req_cmd_reject     = true; }
 // req_soft_clear() is only evaluated from S_ESTOP — guard so a stray soft
 // clear doesn't sit latched and silently clear a later, unrelated SOFT fault.
-void stateMachine_request_soft_clear() {
-    if (g_state.state == STATE_ESTOP) s_req_soft_clear = true;
+bool stateMachine_request_soft_clear() {
+    if (g_state.state != STATE_ESTOP) return false;
+    if (fault_severity(g_state.fault_code) != FAULT_SEVERITY_SOFT) {
+        comm_log(LOG_LEVEL_WARN, "Soft clear denied: fault 0x%02X is not SOFT severity", g_state.fault_code);
+        return false;
+    }
+    s_req_soft_clear = true;
+    return true;
 }
 // req_jump() is only evaluated from S_RUNNING — guard so a stray jump request
 // doesn't sit latched and fire an unintended jump the instant we next arm.
 // jump_enable is the master gate: with it 0, don't even enter STATE_JUMPING —
 // on_jumping() would skip hip commands, leaving the hips uncommanded for 3 s.
-void stateMachine_request_jump() {
+bool stateMachine_request_jump() {
     if (param_get(PARAM_JUMP_ENABLE) < 0.5f) {
         comm_log(LOG_LEVEL_WARN, "JUMP: blocked — jump_enable=0");
-        return;
+        return false;
     }
-    if (g_state.state == STATE_RUNNING) s_req_jump = true;
+    if (g_state.state != STATE_RUNNING) return false;
+    s_req_jump = true;
+    return true;
 }
 void stateMachine_ping_gui_watchdog()   { s_last_gui_packet_ms = millis(); }
 uint32_t stateMachine_ms_since_gui_packet() { return millis() - s_last_gui_packet_ms; }

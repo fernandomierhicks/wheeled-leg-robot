@@ -455,9 +455,14 @@ def _send_set_mode_reliable(target: int, label: str, on_success=None, on_fail=No
     fire-and-forget confirmation into a synchronous wait; existing call sites
     omit both and keep today's behavior (CommandAlertBus on failure, silent
     on success)."""
+    # STARTUP can complete between two 50 Hz telemetry samples on a bench
+    # configuration with disabled motors. STANDBY is therefore also proof that
+    # a reset request completed successfully; requiring observation of the
+    # transient STARTUP value produced a false timeout after an accepted reset.
+    accepted_states = {target, STATE_STANDBY} if target == STATE_STARTUP else {target}
     send_reliable(
         lambda: send_set_mode(target),
-        confirm_predicate=lambda info: info.get("robot_state") == target,
+        confirm_predicate=lambda info: info.get("robot_state") in accepted_states,
         reject_predicate=lambda info: info.get("robot_state") == STATE_CMD_REJECT,
         label=label,
         on_success=on_success,
@@ -965,7 +970,7 @@ class StatusBar:
             self._btn_reset.setEnabled(False)
             self._btn_reboot.setEnabled(False)
             return
-        color = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE, "STANDBY": YELLOW, "STARTUP": WHITE, "STANDING_UP": "#ff3c00"}.get(state, DIM)
+        color = {"RUNNING": GREEN, "ESTOP": RED, "CALIBRATION": BLUE, "STANDBY": YELLOW, "STARTUP": WHITE, "STANDING_UP": "#ff3c00", "DISARMING": "#ffb400"}.get(state, DIM)
         self._mode.setStyleSheet(f"color: {color}; font-weight: bold;")
         is_fault = state == "ESTOP" and fault and fault != "NONE"
         label = f"{state}  [{fault}]" if is_fault else state

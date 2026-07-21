@@ -6,6 +6,7 @@
 #include "control_loop.h"
 #include "CommLink.h"
 #include "comm_protocol.h"
+#include "command_validation.h"
 #include "IMU.h"
 #include "hip_motors.h"
 #include "wheel_motors.h"
@@ -148,6 +149,37 @@ static const BuzzerNote LOG_START_CHIRP[] = {{79, 40, 0}};               // G5 �
 static const BuzzerNote LOG_GET_CHIRP[]   = {{74, 40, 0}};               // D5 — download started
 static const BuzzerNote LOG_DONE_CHIRP[]  = {{79, 40, 15}, {86, 60, 0}}; // G5→D6 — download complete
 
+static constexpr uint8_t COMMAND_RESULT_CACHE_SIZE = 8;
+static CommandResultPayload s_command_result_cache[COMMAND_RESULT_CACHE_SIZE] = {};
+static bool s_command_result_cache_valid[COMMAND_RESULT_CACHE_SIZE] = {};
+static uint8_t s_command_result_cache_next = 0;
+
+static void emit_command_result(const CommandResultPayload& result) {
+    g_comm.send(COMM_TYPE_COMMAND_RESULT, COMMAND_RESULT_PAYLOAD_V1, &result, sizeof(result));
+    if (Serial) g_comm_usb.send(COMM_TYPE_COMMAND_RESULT, COMMAND_RESULT_PAYLOAD_V1, &result, sizeof(result));
+}
+
+static void send_command_result(uint32_t request_id, uint8_t cmd_id,
+                                uint8_t status, uint8_t reason) {
+    CommandResultPayload result = {
+        request_id, cmd_id, status, reason, (uint8_t)g_state.state
+    };
+    s_command_result_cache[s_command_result_cache_next] = result;
+    s_command_result_cache_valid[s_command_result_cache_next] = true;
+    s_command_result_cache_next = (s_command_result_cache_next + 1) % COMMAND_RESULT_CACHE_SIZE;
+    emit_command_result(result);
+}
+
+static bool resend_cached_command_result(uint32_t request_id) {
+    for (uint8_t i = 0; i < COMMAND_RESULT_CACHE_SIZE; ++i) {
+        if (s_command_result_cache_valid[i] && s_command_result_cache[i].request_id == request_id) {
+            emit_command_result(s_command_result_cache[i]);
+            return true;
+        }
+    }
+    return false;
+}
+
 // ── Command handler ───────────────────────────────────────────────────────────
 
 static void on_command(uint8_t type, uint8_t version, uint8_t source,
@@ -168,34 +200,81 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         return;
     }
 
-    if (type != COMM_TYPE_COMMAND || len < 1) return;
+    if (type != COMM_TYPE_COMMAND) return;
+
+    ValidatedCommand validated{};
+    if (!validate_command_payload(version, payload, len, &validated)) {
+        uint8_t rejected_id = validated.len ? validated.bytes[0] : 0;
+        comm_log(LOG_LEVEL_WARN, "CMD rejected: version=%u len=%u reason=%u",
+                 version, len, validated.reason);
+        if (version == CMD_PAYLOAD_V2)
+            send_command_result(validated.request_id, rejected_id,
+                                CMD_RESULT_REJECTED, validated.reason);
+        return;
+    }
+    payload = validated.bytes;
+    len = validated.len;
+    const bool wants_result = version == CMD_PAYLOAD_V2;
+    if (wants_result && resend_cached_command_result(validated.request_id)) return;
+    auto reply = [&](uint8_t status, uint8_t reason = CMD_REASON_NONE) {
+        if (wants_result)
+            send_command_result(validated.request_id, payload[0], status, reason);
+    };
 
     stateMachine_ping_gui_watchdog();  // feed MANUAL-mode GUI watchdog (any command proves GUI alive)
     uint8_t cmd_id = payload[0];
 
     if (!cmd_allowed(cmd_id, g_state.state)) {
         comm_log(LOG_LEVEL_WARN, "CMD 0x%02X rejected in state %d", cmd_id, (int)g_state.state);
+        reply(CMD_RESULT_REJECTED, CMD_REASON_WRONG_STATE);
         return;
     }
 
     // ── Mode change: signal the state machine ─────────────────────────────────
-    if (cmd_id == CMD_ID_SET_MODE && len >= 2) {
+    if (cmd_id == CMD_ID_SET_MODE) {
         uint8_t target = payload[1];
         comm_log(LOG_LEVEL_INFO, "CMD set_mode -> %d", target);
-        if (target == STATE_MANUAL)      stateMachine_request_manual();
+        bool accepted = false;
+        if (target == g_state.state) accepted = true;
+        else if (target == STATE_MANUAL) accepted = stateMachine_request_manual();
         if (target == STATE_STANDBY) {
             // From ESTOP: attempt soft-clear (ESTOP→STANDBY directly for SOFT faults).
-            // From any other state: exit MANUAL back to STANDBY.
-            if (g_state.state == STATE_ESTOP) stateMachine_request_soft_clear();
-            else                              stateMachine_exit_manual();
+            // Active states enter explicit DISARMING; manual/calibration exit directly.
+            if (g_state.state == STATE_ESTOP) accepted = stateMachine_request_soft_clear();
+            else if (g_state.state == STATE_RUNNING || g_state.state == STATE_JUMPING ||
+                     g_state.state == STATE_STANDING_UP)
+                accepted = stateMachine_disarm_running();
+            else if (g_state.state == STATE_MANUAL || g_state.state == STATE_CALIBRATION)
+                accepted = stateMachine_exit_manual();
         }
-        if (target == STATE_STARTUP)     stateMachine_request_reset();
-        if (target == STATE_CALIBRATION) stateMachine_request_calibration();
-        if (target == STATE_ESTOP)       stateMachine_request_estop();
+        if (target == STATE_STARTUP)     accepted = stateMachine_request_reset();
+        if (target == STATE_CALIBRATION) accepted = stateMachine_request_calibration();
+        if (target == STATE_ESTOP)       accepted = stateMachine_request_estop();
         // STATE_RUNNING: previously radio-only (CH10 arm switch, main.cpp radio_update()).
         // Routed through the identical req_running() gate in state_machine.cpp — same
         // IMU/calibration/motor-enable checks apply, no separate/weaker path.
-        if (target == STATE_RUNNING)     stateMachine_request_running();
+        if (target == STATE_RUNNING)     accepted = stateMachine_request_running();
+        if (target == STATE_JUMPING)     accepted = stateMachine_request_jump();
+        // STANDING_UP, CMD_REJECT, and DISARMING are internal states, not
+        // direct operator targets.
+        if (target == STATE_CMD_REJECT || target == STATE_STANDING_UP || target == STATE_DISARMING) {
+            reply(CMD_RESULT_REJECTED, CMD_REASON_INVALID_TARGET);
+            return;
+        }
+        reply(accepted ? CMD_RESULT_ACCEPTED : CMD_RESULT_REJECTED,
+              accepted ? CMD_REASON_NONE : CMD_REASON_GUARD_REJECTED);
+        return;
+    }
+
+    if (cmd_id == CMD_ID_PING) {
+        reply(CMD_RESULT_APPLIED);
+        return;
+    }
+
+    if (cmd_id == CMD_ID_SET_TELEM_TRANSPORT) {
+        // This command is ESP32-local. Seeing it here means the GUI selected a
+        // direct Teensy link, where no telemetry transport can be gated.
+        reply(CMD_RESULT_REJECTED, CMD_REASON_OPERATION_FAILED);
         return;
     }
 
@@ -206,6 +285,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         comm_log(LOG_LEVEL_WARN, "Reboot requested");
         hip_motors_exit_mit();
         wheel_motors_set_mode(WheelMode::IDLE);
+        reply(CMD_RESULT_ACCEPTED);
         Serial.flush();
         Serial5.flush();
         delay(50);
@@ -227,6 +307,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             memcpy(&g_hip_cmd.tff, payload + 19, 4);
         }
         g_hip_cmd.pending = true;
+        reply(CMD_RESULT_ACCEPTED);
         return;
     }
 
@@ -244,6 +325,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         } else if (sub == WHEEL_SUB_CLEAR_ERRORS) {
             wheel_motors_clear_errors();
         }
+        reply(CMD_RESULT_APPLIED);
         return;
     }
 
@@ -255,6 +337,13 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         comm_log(LOG_LEVEL_INFO, "CMD param_set 0x%04X = %.4f", id, val);
         float old_val = param_get(id);
         ParamSetResult set_result = param_set(id, val);  // out-of-range values clamp to [min, max]
+        if (set_result == ParamSetResult::NOT_FOUND || set_result == ParamSetResult::READONLY ||
+            set_result == ParamSetResult::NONFINITE) {
+            uint8_t reason = set_result == ParamSetResult::NOT_FOUND ? CMD_REASON_NOT_FOUND :
+                             set_result == ParamSetResult::READONLY ? CMD_REASON_READONLY : CMD_REASON_NONFINITE;
+            reply(CMD_RESULT_REJECTED, reason);
+            return;
+        }
         // send_reliable() (GUI comm_commands.py) retries the identical (id, val) up to
         // 3x every 250 ms until it sees the PARAM_REPORT echo, so a slow link can deliver
         // the same value more than once — only chirp when it actually changed.
@@ -266,6 +355,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         // Echo back actual (possibly clamped) value
         Param p; uint16_t idx = 0;
         while (param_by_index(idx, &p)) { if (p.id == id) { send_param_report(idx); break; } idx++; }
+        reply(CMD_RESULT_APPLIED);
         return;
     }
 
@@ -276,9 +366,14 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         if (id == 0xFFFF) {
             s_param_dump_cursor = 0;  // paced by service_param_dump() in loop()
         } else {
+            if (!param_exists(id)) {
+                reply(CMD_RESULT_REJECTED, CMD_REASON_NOT_FOUND);
+                return;
+            }
             Param p; uint16_t idx = 0;
             while (param_by_index(idx, &p)) { if (p.id == id) { send_param_report(idx); break; } idx++; }
         }
+        reply(CMD_RESULT_APPLIED);
         return;
     }
 
@@ -287,6 +382,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         comm_log(LOG_LEVEL_WARN, "CMD param_reset_defaults");
         param_reset_defaults();
         s_param_dump_cursor = 0;  // paced refresh of the GUI table (service_param_dump() in loop())
+        reply(CMD_RESULT_APPLIED);
         return;
     }
 
@@ -299,6 +395,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         g_test_corrupt_mode = (len >= 4) ? payload[3] : 1;
         comm_log(LOG_LEVEL_WARN, "TEST: injecting %u corrupt frame(s) mode=%u to ESP32",
                  payload[1], g_test_corrupt_mode);
+        reply(CMD_RESULT_ACCEPTED);
         return;
     }
 
@@ -313,10 +410,16 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             memcpy(&idx, payload + 2, 2);
             memcpy(&chunk, payload + 4, 4);
             sd_logger_ack_chunk(idx, chunk);
+            // Internal relay traffic is v1 and therefore intentionally has no result.
         } else if (sub == LOG_SUB_START) {
             uint32_t dur = 0; if (len >= 6) memcpy(&dur, payload + 2, 4);
             comm_log(LOG_LEVEL_INFO, "CMD log start dur_ms=%lu", (unsigned long)dur);
-            if (sd_logger_start(dur)) g_buzzer.play(LOG_START_CHIRP, 1, 150);
+            bool started = sd_logger_start(dur);
+            if (started) g_buzzer.play(LOG_START_CHIRP, 1, 150);
+            if (!started) {
+                reply(CMD_RESULT_REJECTED, CMD_REASON_OPERATION_FAILED);
+                return;
+            }
         } else if (sub == LOG_SUB_STOP) {
             comm_log(LOG_LEVEL_INFO, "CMD log stop");
             sd_logger_stop();
@@ -335,6 +438,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
                 p.file_index = idx;
                 p.status     = 1;
                 sd_logger_send(COMM_TYPE_LOG_INFO, LOG_INFO_PAYLOAD_V1, &p, sizeof(p));
+                reply(CMD_RESULT_REJECTED, CMD_REASON_WRONG_STATE);
                 return;
             }
             comm_log(LOG_LEVEL_INFO, "CMD log get idx=%u start_chunk=%lu", idx, (unsigned long)start);
@@ -346,11 +450,16 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             else                   sd_logger_set_get_pacing(0, 1);  // ACK provides relay backpressure
             sd_logger_begin_get(idx, start);
             if (sd_logger_transfer_active()) g_buzzer.play(LOG_GET_CHIRP, 1, 150);
+            else {
+                reply(CMD_RESULT_REJECTED, CMD_REASON_OPERATION_FAILED);
+                return;
+            }
         } else if (sub == LOG_SUB_DELETE && len >= 4) {
             uint16_t idx; memcpy(&idx, payload + 2, 2);
             comm_log(LOG_LEVEL_INFO, "CMD log delete idx=%u", idx);
             sd_logger_delete(idx);
         }
+        reply(CMD_RESULT_APPLIED);
         return;
     }
 }
@@ -750,6 +859,7 @@ static void update_led() {
             case STATE_RUNNING:     g_led.blink(0,   255,   0,  167, 167); break;
             case STATE_JUMPING:     g_led.blink(255, 100,   0,   80,  80); break;  // fast orange: "launching"
             case STATE_STANDING_UP: g_led.blink(255,  60,   0,   60,  60); break;  // fast red-orange strobe: "recovering"
+            case STATE_DISARMING:    g_led.blink(255, 180,   0,  200, 200); break;  // amber: normal torque ramp-down
             case STATE_MANUAL:      g_led.pulse(0,   200, 255, 2000);      break;
             case STATE_ESTOP:       g_led.blink(255,   0,   0,  100, 100); break;
             case STATE_CMD_REJECT:  g_led.blink(255,   0,   0,  300, 300); break;
@@ -881,11 +991,11 @@ static void radio_update() {
     }
     s_was_armed = armed;
 
-    // Disarm is level-based, not edge-based: a CH10 drop during JUMPING would
-    // consume the edge with no effect (disarm only latches from RUNNING); this
-    // catches it the tick the jump completes and RUNNING is re-entered.
+    // Disarm is level-based, not edge-based, and applies to every energetic
+    // state. CH10 loss aborts JUMPING/STANDING_UP immediately through the same
+    // DISARMING path as an ordinary RUNNING exit.
     //
-    // s_disarm_req_sent latches the request to a single send per RUNNING
+    // s_disarm_req_sent latches the request to a single send per active
     // session. Without it, this level check double-fires: g_state.state is
     // only updated when on_standby() actually runs, one tick after the
     // StateMachine library (see State::execute()) has already evaluated the
@@ -895,9 +1005,11 @@ static void radio_update() {
     // it sits stale until the next arm, where it fires instantly and kicks
     // RUNNING straight back to STANDBY (the "have to arm twice" symptom).
     static bool s_disarm_req_sent = false;
-    if (g_state.state != STATE_RUNNING) s_disarm_req_sent = false;
-    if (s_unarmed_ticks >= DISARM_DEBOUNCE_TICKS && g_state.state == STATE_RUNNING && !s_disarm_req_sent) {
-        comm_log(LOG_LEVEL_INFO, "Radio: disarmed -> STANDBY");
+    bool energetic = g_state.state == STATE_RUNNING || g_state.state == STATE_JUMPING ||
+                     g_state.state == STATE_STANDING_UP;
+    if (!energetic) s_disarm_req_sent = false;
+    if (s_unarmed_ticks >= DISARM_DEBOUNCE_TICKS && energetic && !s_disarm_req_sent) {
+        comm_log(LOG_LEVEL_INFO, "Radio: disarmed -> DISARMING");
         stateMachine_disarm_running();
         s_disarm_req_sent = true;
     }

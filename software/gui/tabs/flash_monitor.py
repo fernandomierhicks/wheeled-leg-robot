@@ -212,9 +212,17 @@ _TYPE_NAMES  = {
     0x10: "TELEM_A", 0x11: "TELEM_B",
     0x12: "LOG_INFO", 0x13: "LOG_DATA",
     0x14: "WIFI_DIAG", 0x15: "TELEM_FULL_WIFI",
+    0x16: "COMMAND_RESULT",
 }
 _SRC_NAMES   = {0x01: "TEENSY", 0x02: "ESP32", 0x03: "PC"}
 _LOG_LEVELS  = {0x01: "INFO", 0x02: "WARN", 0x03: "ERROR"}
+_COMMAND_STATUS = {0: "APPLIED", 1: "ACCEPTED", 2: "REJECTED"}
+_COMMAND_REASONS = {
+    0: "NONE", 1: "BAD_VERSION", 2: "BAD_LENGTH", 3: "UNKNOWN_COMMAND",
+    4: "INVALID_ENUM", 5: "INVALID_TARGET", 6: "NONFINITE",
+    7: "WRONG_STATE", 8: "NOT_FOUND", 9: "READONLY",
+    10: "GUARD_REJECTED", 11: "OPERATION_FAILED",
+}
 _FMT_WIFI_DIAG   = "<IbBBBIIHHHHBB"  # WifiDiagPayload V1, 26 bytes, packed/no padding
 _WIFI_DIAG_LEN   = 26
 _FMT_WIFI_DIAG_V2_EXT = "<BBHHHHH"   # V2 additions appended after the V1 26 bytes (12 bytes)
@@ -413,6 +421,18 @@ class PacketDecoder(QObject):
                         info.update(_decode_telem_full(payload))
                         info["ptype"]     = 0x01
                         info["type_name"] = "TELEM"
+                elif ptype == 0x16 and version == 1 and length == 8:
+                    request_id, command_id, status, reason, state = _struct.unpack_from("<IBBBB", payload)
+                    info.update({
+                        "request_id": request_id,
+                        "command_id": command_id,
+                        "command_status": status,
+                        "command_status_name": _COMMAND_STATUS.get(status, str(status)),
+                        "command_reason": reason,
+                        "command_reason_name": _COMMAND_REASONS.get(reason, str(reason)),
+                        "command_state": state,
+                        "command_accepted": status != 2,
+                    })
             except Exception:
                 pass
             self.packet_decoded.emit(info)
@@ -427,6 +447,10 @@ class PacketDecoder(QObject):
                     if SourceManager.instance().is_active(self._device):
                         from .log_bus import LogPacketBus
                         LogPacketBus.instance().packet.emit(info)
+                elif ptype == 0x16:
+                    if SourceManager.instance().is_active(self._device):
+                        from .comm_commands import CommandResultBus
+                        CommandResultBus.instance().result.emit(info)
                 else:
                     from .telemetry_bus import TelemetryBus
                     bus = TelemetryBus.instance()

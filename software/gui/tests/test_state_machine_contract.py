@@ -45,6 +45,25 @@ class StateMachineContractTests(unittest.TestCase):
                     f"{state} has no transition to ESTOP",
                 )
 
+    def test_all_energetic_states_abort_through_disarming(self):
+        transitions = self.contract["transitions"]
+        for state in ("RUNNING", "JUMPING", "STANDING_UP"):
+            with self.subTest(state=state):
+                self.assertIn([state, "req_disarm_running", "DISARMING"], transitions)
+
+    def test_safety_priority_precedes_abort_and_completion(self):
+        by_state = {}
+        for source, guard, target in self.contract["transitions"]:
+            by_state.setdefault(source, []).append((guard, target))
+        for state in ("RUNNING", "JUMPING", "STANDING_UP", "DISARMING"):
+            guards = [guard for guard, _ in by_state[state]]
+            self.assertLess(guards.index("req_estop"), guards.index("motor_feedback_fault"))
+            if "req_disarm_running" in guards:
+                self.assertLess(guards.index("motor_feedback_fault"), guards.index("req_disarm_running"))
+            if state in ("JUMPING", "STANDING_UP"):
+                completion = "jump_done" if state == "JUMPING" else "standup_captured"
+                self.assertLess(guards.index("req_disarm_running"), guards.index(completion))
+
 
 if __name__ == "__main__":
     unittest.main()

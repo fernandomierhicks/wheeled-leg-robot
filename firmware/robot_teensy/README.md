@@ -145,6 +145,7 @@ Full FSM diagram: `teensy/state_machine.md`.
 | 6 | `STATE_CMD_REJECT` | ~1 s transient: buzzer + red blink, auto-returns to prior state |
 | 7 | `STATE_JUMPING` | ~3 s jump sequence from RUNNING; auto-returns to RUNNING |
 | 8 | `STATE_STANDING_UP` | Arm-time recovery from a fallen pose — retract legs, energetic wheel push, then RUNNING |
+| 9 | `STATE_DISARMING` | Normal active-state exit: wheel IDLE immediately, hip torque ramps safely to zero, then STANDBY |
 
 **Standing-up mode (`STATE_STANDING_UP`)**: entered on arm only when `standup_enable=1` and pitch is within the recoverable range; with `standup_enable=0` (default) arming goes straight to `RUNNING`, byte-identical to before this state existed. Two phases: **CROUCH** ramps the hips to the retracted pose and holds them there rigidly for the rest of the sequence — hips move once, to a fixed pose, and never actively right the robot. **RECOVER** does the actual catch entirely with wheel torque: a saturated P/D law on pitch and pitch-rate (`tau = K_pitch*pitch + K_rate*pitch_rate`, same sign convention as the small-angle LQR) pushes the wheelbase back under the CG until pitch settles in-band, then hands off to `RUNNING` for the tuned LQR to take over. Full spec: `standing_up.md`.
 
@@ -163,6 +164,7 @@ One source of truth for `state → RGB`; used by Teensy LED, ESP32 Neopixel base
 | `STATE_CMD_REJECT` | 255 | 120 | 0 | orange |
 | `STATE_JUMPING` | 200 | 0 | 255 | magenta |
 | `STATE_STANDING_UP` | 255 | 60 | 0 | red-orange, fast strobe |
+| `STATE_DISARMING` | 255 | 180 | 0 | amber blink during normal torque ramp-down |
 
 ## Fault codes (`shared/comm_protocol.h`)
 
@@ -226,9 +228,10 @@ Params (GUI → Teensy):
     GUI sends CMD_ID_PARAM_SET frames → CommLink → param_registry.cpp
     Teensy replies with PARAM_REPORT packets (min/max/flags/name per param)
     GUI renders controls from PARAM_REPORT — no hardcoded layout needed
-    Mode/param/reboot commands are retried by the GUI (ReliableCommand,
-    tabs/comm_commands.py) against an observed telemetry effect — no protocol
-    change, no firmware-side ACK.
+    Normal GUI commands use CMD_PAYLOAD_V2: uint32 request_id + the existing
+    command bytes. Teensy replies with COMMAND_RESULT (accepted/applied or a
+    structured rejection reason), and ReliableCommand also verifies the
+    operation-specific telemetry effect. V1 remains accepted during migration.
 ```
 
 **Propagation checklist** when adding/removing telemetry fields: see the `PROPAGATION CHECKLIST` comment in `shared/comm_protocol.h`.
@@ -346,23 +349,25 @@ ever covered the hip check — that asymmetry was the bug this param fixes.
 `PARAM_CALIB_BYPASS_EN`, so it can't be left silently armed across a power
 cycle.
 
-**Known gotcha — no software disarm-from-RUNNING path.** `SET_MODE(STANDBY)`
-calls `stateMachine_exit_manual()`, which only fires from `MANUAL`/
-`CALIBRATION` (see its guard comment in `state_machine.cpp`) — sending it
-from `RUNNING` is a no-op. The only software-only way back to `STANDBY` is
-`SET_MODE(ESTOP)` then `SET_MODE(STANDBY)` (soft-clear — `FAULT_HUMAN_ESTOP`
-is `FAULT_SEVERITY_SOFT`, no full reset needed). Both scripts below use this
-workaround internally (`to_standby()` / recovery step).
+**Software disarm is explicit.** `SET_MODE(STANDBY)` from `RUNNING`,
+`JUMPING`, or `STANDING_UP` enters `STATE_DISARMING`. Fault/ESTOP guards have
+higher priority, wheel output is idled immediately, jump/stand-up sequencing
+is cancelled, and the hip command ramps to zero before STANDBY is reported.
+Re-arm/manual/calibration requests are blocked during this interval.
 
-**Known gotcha — radio disarm interlock fires regardless of arm source.**
-`radio_update()`'s disarm check is level-based and unconditional:
+**Radio disarm interlock fires regardless of arm source.**
+`radio_update()`'s disarm check is level-based and covers every energetic state:
 ```cpp
 bool armed = alive && (ch10 > 1990);
-if (!armed && g_state.state == STATE_RUNNING) stateMachine_disarm_running();
+if (!armed && (g_state.state == STATE_RUNNING ||
+               g_state.state == STATE_JUMPING ||
+               g_state.state == STATE_STANDING_UP)) {
+    stateMachine_disarm_running();
+}
 ```
 `alive` (iBus signal) is false whenever no RC receiver is connected, so
 `armed` is always false — meaning a software-triggered `RUNNING` gets
-disarmed again on the very next ~2 ms tick unless a live receiver also has
+sent to `DISARMING` on the next ~2 ms tick unless a live receiver also has
 CH10 physically held up. This is intentional (RUNNING should only *persist*
 with a live radio link corroborating "armed", regardless of entry path) —
 confirmed and left as-is rather than "fixed". Both tools below account for

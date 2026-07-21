@@ -28,7 +28,7 @@ def crc8(data: bytes) -> int:
         crc = _CRC8_TABLE[crc ^ b]
     return crc
 
-_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING", 8: "STANDING_UP"}
+_STATE_NAMES = {0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP", 5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING", 8: "STANDING_UP", 9: "DISARMING"}
 _FAULT_NAMES = {
     0x00: "NONE",
     0x01: "IMU_ERROR",

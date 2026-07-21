@@ -37,6 +37,7 @@ enum : uint8_t {
     RS_CMD_REJECT  = 6,
     RS_JUMPING     = 7,
     RS_STANDING_UP = 8,
+    RS_DISARMING   = 9,
 };
 
 // ── Strip geometry ────────────────────────────────────────────────────────────
@@ -649,6 +650,20 @@ static void enqueue_uplink(uint8_t type, uint8_t version, const void* payload, u
     }
 }
 
+static void enqueue_local_command_result(uint8_t destination, uint32_t request_id,
+                                         uint8_t cmd_id, uint8_t status, uint8_t reason) {
+    CommandResultPayload result = {
+        request_id, cmd_id, status, reason, g_robot_state
+    };
+    UplinkFrame frame{};
+    frame.type = COMM_TYPE_COMMAND_RESULT;
+    frame.version = COMMAND_RESULT_PAYLOAD_V1;
+    frame.destinations = destination;
+    frame.len = sizeof(result);
+    memcpy(frame.payload, &result, sizeof(result));
+    if (xQueueSend(g_uplink_q, &frame, 0) != pdTRUE) ++g_uplink_drops;
+}
+
 // Bulk log frames use a lossless, ACK-controlled lane. If this small queue is
 // ever full, dropping the new frame is safe: the Teensy retains the chunk and
 // resends it after its ACK timeout. Never evict XFER_BEGIN or an older chunk.
@@ -738,31 +753,46 @@ static volatile uint8_t g_test_corrupt_wifi_mode = 1;  // CommLink::send() corru
 static void forward_to_teensy_from(uint8_t incoming_dest, uint8_t type, uint8_t version,
                                    const uint8_t* payload, uint16_t len) {
     if (type == COMM_TYPE_COMMAND) {
+        const uint8_t* command = payload;
+        uint16_t command_len = len;
+        uint32_t request_id = 0;
+        if (version == CMD_PAYLOAD_V2) {
+            if (len < 5) return;  // Teensy performs and reports full schema validation
+            memcpy(&request_id, payload, sizeof(request_id));
+            command = payload + 4;
+            command_len = len - 4;
+        }
 #if WIFI_TRANSPORT_GATING
         // §2b: GUI telling the ESP32 which link it's reading. Intercepted here,
         // before the blind forward — the Teensy must never see this cmd_id.
-        if (len >= 1 && payload[0] == CMD_ID_SET_TELEM_TRANSPORT) {
-            bool suppress = (len >= 2) && (payload[1] != 0);
+        if (command_len >= 1 && command[0] == CMD_ID_SET_TELEM_TRANSPORT) {
+            bool suppress = (command_len >= 2) && (command[1] != 0);
             g_active_telem_transport = suppress ? WIFI_DIAG_TRANSPORT_USB_ONLY
                                                  : WIFI_DIAG_TRANSPORT_WIFI_ONLY;
+            if (version == CMD_PAYLOAD_V2)
+                enqueue_local_command_result(incoming_dest, request_id, command[0],
+                                             CMD_RESULT_APPLIED, CMD_REASON_NONE);
             return;
         }
 #endif
         // TEST ONLY: target=1 (WiFi) is handled locally, never reaches the
         // Teensy — see g_test_corrupt_wifi_remaining declaration above.
-        if (len >= 3 && payload[0] == CMD_ID_TEST_INJECT_CORRUPT && payload[2] == 1) {
-            g_test_corrupt_wifi_remaining = payload[1];
-            g_test_corrupt_wifi_mode = (len >= 4) ? payload[3] : 1;
+        if (command_len >= 3 && command[0] == CMD_ID_TEST_INJECT_CORRUPT && command[2] == 1) {
+            g_test_corrupt_wifi_remaining = command[1];
+            g_test_corrupt_wifi_mode = (command_len >= 4) ? command[3] : 1;
+            if (version == CMD_PAYLOAD_V2)
+                enqueue_local_command_result(incoming_dest, request_id, command[0],
+                                             CMD_RESULT_ACCEPTED, CMD_REASON_NONE);
             return;
         }
         // Peek (don't intercept — still forwarded below) at LOG_SUB_START/STOP
         // for g_recording_active: direct signal off the command itself, no
         // round-trip ack needed. See its declaration for what reads it.
-        if (len >= 2 && payload[0] == CMD_ID_LOG) {
+        if (command_len >= 2 && command[0] == CMD_ID_LOG) {
             // Route every response for this operation back to its requester.
             // This includes LIST/STATUS as well as bulk GET frames.
             g_log_uplink_dest = incoming_dest;
-            if (payload[1] == LOG_SUB_GET) {
+            if (command[1] == LOG_SUB_GET) {
                 // A repair GET supersedes every queued frame/ACK from the old
                 // stream. Generation tagging also rejects one frame which may
                 // already be blocked in the relay task when this reset occurs.
@@ -770,20 +800,20 @@ static void forward_to_teensy_from(uint8_t incoming_dest, uint8_t type, uint8_t 
                 if (g_log_uplink_q) xQueueReset(g_log_uplink_q);
                 if (g_log_ack_q) xQueueReset(g_log_ack_q);
             }
-            if (payload[1] == LOG_SUB_START) {
+            if (command[1] == LOG_SUB_START) {
                 g_recording_active = true;
                 uint32_t dur = 0;
-                if (len >= 6) memcpy(&dur, payload + 2, sizeof(dur));
+                if (command_len >= 6) memcpy(&dur, command + 2, sizeof(dur));
                 // +500 ms matches the GUI's own auto-stop-fire margin
                 // (log_transfer.py: duration_ms + 500) — covers command
                 // transit time so this deadline doesn't fire early.
                 g_recording_deadline_ms = (dur != 0) ? (millis() + dur + 500) : 0;
-            } else if (payload[1] == LOG_SUB_STOP) {
+            } else if (command[1] == LOG_SUB_STOP) {
                 g_recording_active = false;
             }
         }
         g_teensy.send(type, version, payload, len);
-        log_command(payload, len);
+        log_command(command, command_len);
     }
 }
 
@@ -1176,6 +1206,7 @@ static uint16_t mode_color(uint8_t state) {
         case RS_CMD_REJECT:  return tft.color565(255, 100, 0);
         case RS_JUMPING:     return tft.color565(200, 0, 255);  // magenta
         case RS_STANDING_UP: return tft.color565(255, 60, 0);   // red-orange
+        case RS_DISARMING:   return tft.color565(255, 180, 0);  // amber
         default:             return TFT_WHITE;
     }
 }
@@ -1191,6 +1222,7 @@ static const char* mode_name(uint8_t state) {
         case RS_CMD_REJECT:  return "REJECTED";
         case RS_JUMPING:     return "JUMP!";
         case RS_STANDING_UP: return "STANDUP";
+        case RS_DISARMING:   return "DISARM";
         default:             return "UNKNOWN";
     }
 }

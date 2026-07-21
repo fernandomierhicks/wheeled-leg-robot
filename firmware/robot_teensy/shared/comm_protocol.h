@@ -35,6 +35,7 @@
 #define COMM_TYPE_LOG_DATA     0x13  // Teensy→PC: SD-log file chunk (LogDataHeader + raw bytes)
 #define COMM_TYPE_WIFI_DIAG    0x14  // ESP32→PC only: link/loop diagnostics (WifiDiagPayload)
 #define COMM_TYPE_TELEM_FULL_WIFI 0x15  // ESP32→PC, WiFi-only: full TelemetryPayload as one datagram (WIFI_TELEM_COMBINED)
+#define COMM_TYPE_COMMAND_RESULT  0x16  // Teensy→PC: correlated ACK/NACK for a v2 command request
 #define COMM_TYPE_ESP32_STATUS 0x16  // ESP32→Teensy: 5 Hz link heartbeat + ESP32 health (Esp32StatusPayload)
 
 // ── Calibration event sub-types ───────────────────────────────────────────────
@@ -437,6 +438,45 @@ static_assert(sizeof(WifiDiagPayload) == 38, "WifiDiagPayload must be 38 bytes")
 
 // ── Payload: command ──────────────────────────────────────────────────────────
 #define CMD_PAYLOAD_V1  1
+#define CMD_PAYLOAD_V2  2
+
+// V2 keeps the existing command bytes intact and prefixes a caller-generated
+// request ID. The ID survives ESP32 forwarding and makes retries/results
+// unambiguous end-to-end. Payload: uint32 request_id + v1 command bytes.
+typedef struct __attribute__((packed)) {
+    uint32_t request_id;
+    uint8_t  command[];
+} CommandEnvelopeV2;
+
+#define COMMAND_RESULT_PAYLOAD_V1 1
+#define CMD_RESULT_APPLIED  0
+#define CMD_RESULT_ACCEPTED 1
+#define CMD_RESULT_REJECTED 2
+
+#define CMD_REASON_NONE             0
+#define CMD_REASON_BAD_VERSION      1
+#define CMD_REASON_BAD_LENGTH       2
+#define CMD_REASON_UNKNOWN_COMMAND  3
+#define CMD_REASON_INVALID_ENUM     4
+#define CMD_REASON_INVALID_TARGET   5
+#define CMD_REASON_NONFINITE        6
+#define CMD_REASON_WRONG_STATE      7
+#define CMD_REASON_NOT_FOUND        8
+#define CMD_REASON_READONLY         9
+#define CMD_REASON_GUARD_REJECTED  10
+#define CMD_REASON_OPERATION_FAILED 11
+
+typedef struct __attribute__((packed)) {
+    uint32_t request_id;
+    uint8_t  cmd_id;
+    uint8_t  status;       // CMD_RESULT_*
+    uint8_t  reason;       // CMD_REASON_*
+    uint8_t  state;        // resulting/current RobotStateEnum numeric value
+} CommandResultPayload;
+
+#ifdef __cplusplus
+static_assert(sizeof(CommandResultPayload) == 8, "CommandResultPayload must be 8 bytes");
+#endif
 
 typedef struct __attribute__((packed)) {
     uint8_t cmd_id;
