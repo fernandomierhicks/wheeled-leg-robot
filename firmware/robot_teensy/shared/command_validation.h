@@ -111,6 +111,16 @@ static inline bool validate_command_payload(uint8_t version, const uint8_t* payl
                 case LOG_SUB_STOP:
                 case LOG_SUB_LIST:      if (n == 2) return true; break;
                 case LOG_SUB_GET:
+                    // byte 8 (kind) is optional — omitted (n==8) defaults to
+                    // LOG_FILE_KIND_WLOG, see comm_protocol.h.
+                    if (n == 8) return true;
+                    if (n == 9) {
+                        if (p[8] > LOG_FILE_KIND_PARAMS) {
+                            out->reason = CMD_REASON_INVALID_ENUM; return false;
+                        }
+                        return true;
+                    }
+                    break;
                 case LOG_SUB_CHUNK_ACK: if (n == 8) return true; break;
                 case LOG_SUB_DELETE:    if (n == 4) return true; break;
                 default: out->reason = CMD_REASON_INVALID_ENUM; return false;

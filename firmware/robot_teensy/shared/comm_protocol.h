@@ -328,13 +328,35 @@ typedef struct __attribute__((packed)) {
     TelemetryPayload telem;    // the exact 247-byte struct, TELEM_VERSION 11
 } LogRecord;                   // 251 bytes — one per control tick
 
+// ── Param dump/change sidecar (LOGnnnn.PARAMS) ────────────────────────────────
+//
+// Written alongside every LOGnnnn.WLOG, same index, by sd_logger.cpp. Plain CSV
+// text (not a binary struct — small and rare enough not to need one), one line
+// per event, same t_micros clock as LogRecord.t_micros above so a line can be
+// correlated to the exact tick in the paired .wlog:
+//
+//   # t_micros,event,id,name,value
+//   1234,DUMP,17,hip_l_kp,12
+//   ...                          (one DUMP line per non-PARAM_FLAG_COMMAND param,
+//                                  written once at sd_logger_start())
+//   48211,CHANGE,17,hip_l_kp,14  (one CHANGE line whenever a tracked param's live
+//                                  value differs from its last-logged value)
+//
+// Retrieved over the wire via the same LOG_SUB_GET pipeline as the .wlog file —
+// see LOG_FILE_KIND_* below.
+
 // ── Payload: COMM_TYPE_LOG_INFO (Teensy→PC) ──────────────────────────────────
 #define LOG_INFO_PAYLOAD_V1  1
-#define LOG_INFO_ENTRY       0x01  // one directory entry (reply to LIST): file_index, file_size
+#define LOG_INFO_ENTRY       0x01  // one directory entry (reply to LIST): file_index, file_size;
+                                    //   status reused as has_params (0/1) — whether a paired
+                                    //   LOGnnnn.PARAMS sidecar exists for this index
 #define LOG_INFO_LIST_END    0x02  // end of directory listing
 #define LOG_INFO_XFER_BEGIN  0x03  // start of a GET: file_index, file_size, total_chunks
 #define LOG_INFO_XFER_END    0x04  // end of a GET: file_index, total_chunks, crc32
 #define LOG_INFO_STATUS      0x05  // START/STOP/DELETE ack: file_index, status (0=ok)
+#define LOG_INFO_STARTED     0x06  // recording began, any trigger (GUI cmd or onboard e.g. radio switch):
+                                    //   file_index; file_size reused to carry duration_ms (0=indefinite)
+#define LOG_INFO_STOPPED     0x07  // recording ended, any trigger: file_index
 
 typedef struct __attribute__((packed)) {
     uint8_t  info_type;    // LOG_INFO_*
@@ -506,9 +528,19 @@ typedef struct __attribute__((packed)) {
 #define LOG_SUB_START     0x01  // + uint32_t duration_ms (0 = log until STOP)
 #define LOG_SUB_STOP      0x02  // no args — close the active log file
 #define LOG_SUB_LIST      0x03  // no args — reply: one LOG_INFO ENTRY per file, then LIST_END
-#define LOG_SUB_GET       0x04  // + uint16_t file_index, uint32_t start_chunk — stream LOG_DATA
-#define LOG_SUB_DELETE    0x05  // + uint16_t file_index — erase one .wlog file
+#define LOG_SUB_GET       0x04  // + uint16_t file_index, uint32_t start_chunk, uint8_t kind
+                                 //   (LOG_FILE_KIND_*, optional — byte omitted, i.e. len==8,
+                                 //   defaults to LOG_FILE_KIND_WLOG for wire back-compat) —
+                                 //   stream LOG_DATA
+#define LOG_SUB_DELETE    0x05  // + uint16_t file_index — erase one .wlog file AND its paired
+                                 //   .PARAMS sidecar (best-effort — sidecar may not exist)
 #define LOG_SUB_CHUNK_ACK 0x06  // ESP32→Teensy internal: + uint16_t file_index, uint32_t chunk_index
+
+// LOG_SUB_GET file-kind selector — which per-index file to stream. Transfers
+// are strictly serial (one active transfer at a time on both ends), so this
+// is only ever request-side state; it isn't echoed back in LogInfoPayload.
+#define LOG_FILE_KIND_WLOG    0  // LOGnnnn.WLOG — high-rate telemetry (default)
+#define LOG_FILE_KIND_PARAMS  1  // LOGnnnn.PARAMS — param dump/change sidecar, see above
 
 // ── Payload: param report (COMM_TYPE_PARAM_REPORT) ───────────────────────────
 #define PARAM_REPORT_PAYLOAD_V1  1

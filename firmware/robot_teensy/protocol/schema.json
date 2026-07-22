@@ -200,10 +200,6 @@
     {
       "symbol": "GROUP_COMMAND",
       "id": 5
-    },
-    {
-      "symbol": "GROUP_IBUS",
-      "id": 6
     }
   ],
   "parameters": [
@@ -811,7 +807,9 @@
       "default": 0.0,
       "min": -2.0,
       "max": 2.0,
-      "flags": [],
+      "flags": [
+        "command"
+      ],
       "description": "Desired forward velocity setpoint [m/s]; GUI/Phase3 testing."
     },
     {
@@ -887,7 +885,9 @@
       "default": 0.0,
       "min": -4.0,
       "max": 4.0,
-      "flags": [],
+      "flags": [
+        "command"
+      ],
       "description": "Desired yaw rate [rad/s]; positive = CCW from above."
     },
     {
@@ -1123,7 +1123,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "LQR pitch gain, fully retracted leg. Default -13.0495742."
+      "description": "LQR pitch gain, fully retracted leg. Default -0.3 — conservative bench-tuning starting point, not the earlier sim-derived value."
     },
     {
       "symbol": "PARAM_LQR_K_RATE_RET",
@@ -1136,7 +1136,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "LQR pitch-rate gain, fully retracted leg. Default -2.18083692."
+      "description": "LQR pitch-rate gain, fully retracted leg. Default -0.1 — conservative bench-tuning starting point, not the earlier sim-derived value."
     },
     {
       "symbol": "PARAM_LQR_K_PITCH_EXT",
@@ -1149,7 +1149,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "LQR pitch gain, fully extended leg. Default -7.92908352."
+      "description": "LQR pitch gain, fully extended leg. Default -0.3 — conservative bench-tuning starting point, not the earlier sim-derived value."
     },
     {
       "symbol": "PARAM_LQR_K_RATE_EXT",
@@ -1162,7 +1162,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "LQR pitch-rate gain, fully extended leg. Default -1.69084204."
+      "description": "LQR pitch-rate gain, fully extended leg. Default -0.1 — conservative bench-tuning starting point, not the earlier sim-derived value."
     },
     {
       "symbol": "PARAM_LQR_K_VEL",
@@ -1175,7 +1175,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "LQR velocity-error gain, invariant across leg height. Default -7.13051190e-03."
+      "description": "LQR velocity-error gain, invariant across leg height. Default -0.007."
     },
     {
       "symbol": "PARAM_RUNNING_WHEEL_BYPASS_EN",
@@ -1604,216 +1604,6 @@
         "command"
       ],
       "description": "Active speed profile index (0/1/2), selected by CH9; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH0",
-      "id": 1536,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch0",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 0 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH1",
-      "id": 1537,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch1",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 1 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH2",
-      "id": 1538,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch2",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 2 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH3",
-      "id": 1539,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch3",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 3 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH4",
-      "id": 1540,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch4",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 4 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH5",
-      "id": 1541,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch5",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 5 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH6",
-      "id": 1542,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch6",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 6 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH7",
-      "id": 1543,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch7",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 7 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH8",
-      "id": 1544,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch8",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 8 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH9",
-      "id": 1545,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch9",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 9 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH10",
-      "id": 1546,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch10",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 10 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH11",
-      "id": 1547,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch11",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 11 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH12",
-      "id": 1548,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch12",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 12 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_CH13",
-      "id": 1549,
-      "group": "GROUP_IBUS",
-      "name": "ibus_ch13",
-      "default": 1500.0,
-      "min": 1000.0,
-      "max": 2000.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC receiver channel 13 raw pulse width [1000–2000 µs]; firmware-written, READONLY."
-    },
-    {
-      "symbol": "PARAM_IBUS_ALIVE",
-      "id": 1550,
-      "group": "GROUP_IBUS",
-      "name": "ibus_alive",
-      "default": 0.0,
-      "min": 0.0,
-      "max": 1.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "RC link alive: 1.0 = packet received within 500 ms, 0.0 = link lost; firmware-written, READONLY."
     }
   ]
 }

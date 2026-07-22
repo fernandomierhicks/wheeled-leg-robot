@@ -429,6 +429,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         } else if (sub == LOG_SUB_GET && len >= 8) {
             uint16_t idx; uint32_t start;
             memcpy(&idx, payload + 2, 2); memcpy(&start, payload + 4, 4);
+            uint8_t kind = (len >= 9) ? payload[8] : LOG_FILE_KIND_WLOG;
             // Bulk streaming only when the robot is inert (audit W5) — a GET
             // during RUNNING adds blocking-write jitter to the control loop.
             if (g_state.state != STATE_STANDBY && g_state.state != STATE_ESTOP) {
@@ -448,7 +449,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             sd_logger_set_get_ack_required(!s_log_get_via_usb);
             if (s_log_get_via_usb) sd_logger_set_get_pacing(0, 2);  // unthrottled direct USB
             else                   sd_logger_set_get_pacing(0, 1);  // ACK provides relay backpressure
-            sd_logger_begin_get(idx, start);
+            sd_logger_begin_get(idx, start, kind);
             if (sd_logger_transfer_active()) g_buzzer.play(LOG_GET_CHIRP, 1, 150);
             else {
                 reply(CMD_RESULT_REJECTED, CMD_REASON_OPERATION_FAILED);
@@ -914,9 +915,6 @@ static void read_sensors(bool prof) {
 
     t0 = micros();
     g_ibus.update();
-    for (uint8_t i = 1; i <= IBUS_NUM_CH; i++)
-        param_force_set(PARAM_IBUS_CH0 + (i - 1), (float)g_ibus.channel(i));
-    param_force_set(PARAM_IBUS_ALIVE, g_ibus.alive() ? 1.0f : 0.0f);
     if (prof) prof_mark(s_prof_max.ibus, t0);
 }
 
@@ -929,6 +927,7 @@ static const BuzzerNote ARM_IGNORED_MELODY[]  = {{69, 60, 40}, {69, 60, 0}};   /
 // CH10 > 1990: arm into RUNNING (requires prior calibration).
 // CH10 drop:   disarm back to STANDBY.
 // CH5  > 1990: trigger CALIBRATION (only from STANDBY, rising edge).
+// CH6  > 1500: start/continue SD log (debounced). < 1500: stop log (debounced).
 // CH3 1000–2000: maps to PARAM_RADIO_HIP_CMD as t ∈ [0,1].
 //   Left stale when radio is dead.
 
@@ -1022,24 +1021,29 @@ static void radio_update() {
     }
     s_was_calib = calib;
 
-    static bool s_was_jump = false;
-    bool jump_sw = alive && (ch6 > 1990);
-    if (jump_sw && !s_was_jump && g_state.state == STATE_RUNNING) {
-        comm_log(LOG_LEVEL_INFO, "Radio: CH6 -> JUMPING");
-        stateMachine_request_jump();
+    // CH6: SD log start/stop, debounced symmetrically (LOG_DEBOUNCE_TICKS
+    // consecutive ticks on each side of the 1500 threshold) so a brief blip
+    // near the switch's midpoint can't start-then-immediately-stop a log.
+    static constexpr uint8_t LOG_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
+    static uint8_t s_log_hi_ticks = 0;
+    static uint8_t s_log_lo_ticks = 0;
+    bool log_hi = alive && (ch6 > 1500);
+    if (log_hi) {
+        if (s_log_hi_ticks < LOG_DEBOUNCE_TICKS) s_log_hi_ticks++;
+        s_log_lo_ticks = 0;
+    } else {
+        if (s_log_lo_ticks < LOG_DEBOUNCE_TICKS) s_log_lo_ticks++;
+        s_log_hi_ticks = 0;
     }
-    s_was_jump = jump_sw;
 
-    // RC log start/stop stub — CH5/6/7/9/10 already assigned (calib/jump/trim/profile/arm).
-    // TODO(user): assign a spare iBUS channel for log start/stop.
-    // Set LOG_SWITCH_CH to a real channel index (1-based) to enable; 0 keeps this disabled.
-    static constexpr uint8_t LOG_SWITCH_CH = 0;   // 0 = unassigned (stub)
-    if (LOG_SWITCH_CH != 0) {
-        bool on = g_ibus.channel(LOG_SWITCH_CH) > 1500;
-        static bool prev = false;
-        if (on && !prev) { if (!sd_logger_is_active()) sd_logger_start(0); }
-        if (!on && prev) { sd_logger_stop(); }
-        prev = on;
+    static bool s_logging = false;
+    if (!s_logging && s_log_hi_ticks >= LOG_DEBOUNCE_TICKS) {
+        comm_log(LOG_LEVEL_INFO, "Radio: CH6 -> log start");
+        s_logging = sd_logger_start(0);
+    } else if (s_logging && s_log_lo_ticks >= LOG_DEBOUNCE_TICKS) {
+        comm_log(LOG_LEVEL_INFO, "Radio: CH6 -> log stop");
+        sd_logger_stop();
+        s_logging = false;
     }
 
     // §1d (tuning.md): while PARAM_GUI_MOTION_CTRL_EN is set, the two radio-driven

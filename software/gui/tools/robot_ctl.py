@@ -80,7 +80,9 @@ def _build(argv: list[str]) -> dict:
     if cmd == "log_download":
         if len(rest) != 1:
             raise SystemExit("usage: log_download <file_index>")
-        return {"cmd": "log_download", "file_index": int(rest[0])}
+        # remote_control.py scales its own wait up to LOG_DOWNLOAD_TIMEOUT_CAP_MS
+        # (600s) for large files; give the socket at least that long too.
+        return {"cmd": "log_download", "file_index": int(rest[0]), "timeout_ms": 600000}
     if cmd == "telem":
         return {"cmd": "telem"}
     if cmd == "motion_set":

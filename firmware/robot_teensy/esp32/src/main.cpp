@@ -137,9 +137,12 @@ static volatile bool     g_log_relay_busy       = false;
 // something else) is forced to repaint instead of concluding "unchanged".
 static volatile bool     g_banner_force_redraw  = false;
 
-// Set from LOG_SUB_START/STOP commands seen passing through forward_to_teensy()
-// — direct, immediate signal (no round-trip ack needed), independent of
-// telemetry. A duration-bound recording (the common case — see tuning.md's
+// Set from two sources: (1) LOG_SUB_START/STOP commands seen passing through
+// forward_to_teensy() — optimistic, immediate feedback for GUI-issued starts,
+// no round-trip ack needed; (2) LOG_INFO_STARTED/STOPPED from on_teensy_packet()
+// — authoritative, straight from sd_logger_start()/stop() on the Teensy, so
+// triggers with no command of their own (e.g. the CH6 radio switch) are still
+// reflected. A duration-bound recording (the common case — see tuning.md's
 // Test Protocol) auto-stops firmware-side with no explicit STOP command ever
 // sent (mirrors sd_logger.cpp's own g_stop_deadline_ms), so g_recording_active
 // alone would get stuck true forever after the first timed trial — use
@@ -650,7 +653,10 @@ static QueueHandle_t      g_control_uplink_q = nullptr;
 static uint32_t           g_control_uplink_drops = 0;
 static QueueHandle_t      g_log_uplink_q    = nullptr;
 static uint32_t           g_log_uplink_drops = 0;
-static uint16_t           g_log_generation  = 0;
+// Written by the command parser on core 1 and read by the relay task on
+// core 0.  Mark it volatile so a repair GET cannot be compared against a
+// stale cached generation while the other core is draining an old frame.
+static volatile uint16_t  g_log_generation  = 0;
 
 typedef struct {
     uint16_t file_index;
@@ -946,6 +952,17 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
             g_log_xfer_active  = true;
         } else if (info_type == LOG_INFO_XFER_END) {
             g_log_xfer_active = false;
+        } else if (info_type == LOG_INFO_STARTED && len >= sizeof(LogInfoPayload)) {
+            // Authoritative signal straight from sd_logger_start() — covers
+            // triggers with no command of their own to snoop (CH6 radio
+            // switch) and also confirms/corrects the optimistic deadline the
+            // CMD_ID_LOG snoop above already set for GUI-issued starts.
+            uint32_t duration_ms;
+            memcpy(&duration_ms, payload + 3, sizeof(duration_ms));  // LogInfoPayload::file_size offset
+            g_recording_active = true;
+            g_recording_deadline_ms = (duration_ms != 0) ? (millis() + duration_ms + 500) : 0;
+        } else if (info_type == LOG_INFO_STOPPED) {
+            g_recording_active = false;
         }
     } else if (type == COMM_TYPE_LOG_DATA && len >= sizeof(LogDataHeader)) {
         g_last_log_activity_ms = millis();

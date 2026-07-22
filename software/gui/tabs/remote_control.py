@@ -42,6 +42,18 @@ from .telemetry_bus import TelemetryBus
 
 PORT = 8765
 
+# log_download wait budget: the ESP32-USB relay paces LOG_DATA one chunk at a
+# time with an ACK round trip per chunk (sd_logger.cpp), so large files run
+# well under the raw ~92 kB/s CP2102 ceiling. A flat 90s wait mistakenly
+# reported multi-MB downloads as "timed out" while they kept completing
+# successfully in the background seconds to minutes later. Scale the wait
+# with the file's cached directory size instead; unchanged (90s) when the
+# size isn't known or the file is small.
+LOG_DOWNLOAD_TIMEOUT_FLOOR_MS = 90_000
+LOG_DOWNLOAD_TIMEOUT_CAP_MS   = 600_000   # hard cap: don't block a single request forever
+LOG_DOWNLOAD_MIN_BPS          = 8_000     # conservative effective throughput, margin below observed ~12-15 kB/s
+LOG_DOWNLOAD_OVERHEAD_MS      = 15_000    # XFER_BEGIN handshake + repair-retry margin
+
 # GROUP_CONTROL params referenced directly by motion_set/motion_release
 # (param_ids.h — tuning.md Sec1 d).
 _STATE_NAME_TO_ID = {name: pid for pid, name in _STATE_NAMES.items()}
@@ -596,13 +608,23 @@ class RemoteControlServer(QObject):
     def _cmd_log_download(self, cmd: dict) -> dict:
         idx = int(cmd.get("file_index"))
         mgr = LogTransferManager.instance()
+        size = mgr.known_size(idx)
+        if size is None:
+            timeout_ms = LOG_DOWNLOAD_TIMEOUT_CAP_MS
+        else:
+            timeout_ms = min(
+                LOG_DOWNLOAD_TIMEOUT_CAP_MS,
+                max(LOG_DOWNLOAD_TIMEOUT_FLOOR_MS,
+                    int(size / LOG_DOWNLOAD_MIN_BPS * 1000) + LOG_DOWNLOAD_OVERHEAD_MS),
+            )
         args = self._wait_for_signal(
             mgr.transfer_complete,
-            90000,
+            timeout_ms,
             trigger=lambda: mgr.download(idx),
         )
         if args is None:
-            return {"ok": False, "error": "timeout waiting for download"}
+            return {"ok": False, "error": f"timeout waiting for download ({timeout_ms // 1000}s budget); "
+                    "the transfer may still complete in the background — retrying will resume, not restart, it"}
         file_index, local_path, crc_ok = args
         if not crc_ok or not local_path:
             return {"ok": False, "error": "download failed (CRC mismatch or transfer error)"}

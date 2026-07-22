@@ -15,9 +15,9 @@ one it won't silently flip — it's persisted and has a bigger footprint than
 this test's own throwaway run_wheel_bypass_en flag).
 
 What this test does NOT cover: it cannot simulate physical RC transmitter
-input (CH5/CH9/CH10 channel values) — those are read-only telemetry mirrors
-of the real iBus receiver (PARAM_IBUS_CH*, PARAM_FLAG_READONLY), with no
-software injection point in the current firmware. "Radio commands" here
+input (CH5/CH9/CH10 channel values) — those only reach the GUI via telemetry
+(TelemetryPayload::ibus_ch/ibus_alive), with no software injection point in
+the current firmware. "Radio commands" here
 means the same state transitions the radio triggers (CALIBRATION, RUNNING),
 issued instead through CMD_ID_SET_MODE. Profile switching (CH9) has no
 non-radio trigger at all right now, so it isn't exercised here.

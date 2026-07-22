@@ -101,13 +101,13 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0408` | `PARAM_VEL_PI_THETA_MAX` | `vel_pi_theta_max` | 0.698 | 0.1 … 0.698 | persistent |
 | `0x0409` | `PARAM_VEL_PI_RATE_LIM` | `vel_pi_rate_lim` | 1.745 | 0.1 … 10 | persistent |
 | `0x040A` | `PARAM_VEL_PI_INT_MAX` | `vel_pi_int_max` | 1 | 0.1 … 5 | persistent |
-| `0x040B` | `PARAM_V_CMD_MS` | `v_cmd_ms` | 0 | -2 … 2 | - |
+| `0x040B` | `PARAM_V_CMD_MS` | `v_cmd_ms` | 0 | -2 … 2 | command |
 | `0x040C` | `PARAM_YAW_PI_EN` | `yaw_pi_en` | 1 | 0 … 1 | persistent |
 | `0x040D` | `PARAM_YAW_PI_KP` | `yaw_pi_kp` | 0.2 | 0 … 5 | persistent |
 | `0x040E` | `PARAM_YAW_PI_KI` | `yaw_pi_ki` | 0.1 | 0 … 5 | persistent |
 | `0x040F` | `PARAM_YAW_PI_TORQUE_MAX` | `yaw_pi_torque_max` | 0.2 | 0 … 3 | persistent |
 | `0x0410` | `PARAM_YAW_PI_INT_MAX` | `yaw_pi_int_max` | 0.5 | 0 … 3 | persistent |
-| `0x0411` | `PARAM_OMEGA_CMD_RDS` | `omega_cmd_rds` | 0 | -4 … 4 | - |
+| `0x0411` | `PARAM_OMEGA_CMD_RDS` | `omega_cmd_rds` | 0 | -4 … 4 | command |
 | `0x0412` | `PARAM_FF1_ALPHA` | `ff1_alpha` | 0 | 0 … 1 | - |
 | `0x0413` | `PARAM_FF2_ALPHA` | `ff2_alpha` | 0 | 0 … 1 | - |
 | `0x0414` | `PARAM_FF1_KT_HIP` | `ff1_kt_hip` | 1.2732 | 0 … 5 | readonly |
@@ -164,18 +164,3 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0517` | `PARAM_PROFILE_3_YAW_MAX` | `profile3_yaw_max` | 2 | 0 … 4 | persistent |
 | `0x0518` | `PARAM_PROFILE_3_TORQUE_LIM` | `profile3_torque_lim` | 0.3 | 0 … 7 | persistent |
 | `0x0519` | `PARAM_ACTIVE_PROFILE` | `active_profile` | 0 | 0 … 2 | readonly, command |
-| `0x0600` | `PARAM_IBUS_CH0` | `ibus_ch0` | 1500 | 1000 … 2000 | readonly, command |
-| `0x0601` | `PARAM_IBUS_CH1` | `ibus_ch1` | 1500 | 1000 … 2000 | readonly, command |
-| `0x0602` | `PARAM_IBUS_CH2` | `ibus_ch2` | 1500 | 1000 … 2000 | readonly, command |
-| `0x0603` | `PARAM_IBUS_CH3` | `ibus_ch3` | 1500 | 1000 … 2000 | readonly, command |
-| `0x0604` | `PARAM_IBUS_CH4` | `ibus_ch4` | 1500 | 1000 … 2000 | readonly, command |
-| `0x0605` | `PARAM_IBUS_CH5` | `ibus_ch5` | 1500 | 1000 … 2000 | readonly, command |
-| `0x0606` | `PARAM_IBUS_CH6` | `ibus_ch6` | 1500 | 1000 … 2000 | readonly, command |
-| `0x0607` | `PARAM_IBUS_CH7` | `ibus_ch7` | 1500 | 1000 … 2000 | readonly, command |
-| `0x0608` | `PARAM_IBUS_CH8` | `ibus_ch8` | 1500 | 1000 … 2000 | readonly, command |
-| `0x0609` | `PARAM_IBUS_CH9` | `ibus_ch9` | 1500 | 1000 … 2000 | readonly, command |
-| `0x060A` | `PARAM_IBUS_CH10` | `ibus_ch10` | 1500 | 1000 … 2000 | readonly, command |
-| `0x060B` | `PARAM_IBUS_CH11` | `ibus_ch11` | 1500 | 1000 … 2000 | readonly, command |
-| `0x060C` | `PARAM_IBUS_CH12` | `ibus_ch12` | 1500 | 1000 … 2000 | readonly, command |
-| `0x060D` | `PARAM_IBUS_CH13` | `ibus_ch13` | 1500 | 1000 … 2000 | readonly, command |
-| `0x060E` | `PARAM_IBUS_ALIVE` | `ibus_alive` | 0 | 0 … 1 | readonly, command |

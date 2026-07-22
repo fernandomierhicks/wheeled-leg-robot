@@ -19,7 +19,7 @@ class LogTransferRepairTests(unittest.TestCase):
         self._old_send_log_get = log_transfer.send_log_get
         log_transfer.LOG_DIR = Path(self._temp_dir.name)
         self.requests = []
-        log_transfer.send_log_get = lambda index, start=0: self.requests.append((index, start))
+        log_transfer.send_log_get = lambda index, start=0, kind=0: self.requests.append((index, start, kind))
         self.manager = log_transfer.LogTransferManager()
         self.manager._watchdog.stop()
         self.completed = []
@@ -61,14 +61,14 @@ class LogTransferRepairTests(unittest.TestCase):
         whole = b"".join(chunks)
 
         self.manager.download(7)
-        self.assertEqual(self.requests, [(7, 0)])
+        self.assertEqual(self.requests, [(7, 0, 0)])
         self._begin(7, len(chunks))
         self._chunk(7, 0, chunks[0])
         self._chunk(7, 2, chunks[2])
         self._chunk(7, 3, chunks[3])
         self._end(7, whole)
 
-        self.assertEqual(self.requests[-1], (7, 1))
+        self.assertEqual(self.requests[-1], (7, 1, 0))
         self.assertEqual(self.manager._chunks, {0: chunks[0]})
 
         self._begin(7, len(chunks))
@@ -89,14 +89,14 @@ class LogTransferRepairTests(unittest.TestCase):
         self._chunk(4, 0, chunks[0])
         self._chunk(4, 2, chunks[2])
         self._end(4, b"".join(chunks))
-        self.assertEqual(self.requests[-1], (4, 1))
+        self.assertEqual(self.requests[-1], (4, 1, 0))
 
         self._begin(4, len(chunks))
         self._chunk(4, 1, chunks[1])
         self._chunk(4, 2, b"corrupt")
         self._end(4, b"".join(chunks[1:]))
 
-        self.assertEqual(self.requests[-1], (4, 1))
+        self.assertEqual(self.requests[-1], (4, 1, 0))
         self.assertEqual(self.manager._chunks, {0: chunks[0]})
         self.assertEqual(self.completed, [])
 
@@ -104,7 +104,33 @@ class LogTransferRepairTests(unittest.TestCase):
         self.manager.download(9)
         self.manager._last_chunk_ms -= log_transfer.CHUNK_TIMEOUT_S + 1
         self.manager._check_timeout()
-        self.assertEqual(self.requests, [(9, 0), (9, 0)])
+        self.assertEqual(self.requests, [(9, 0, 0), (9, 0, 0)])
+
+    def test_duplicate_chunk_does_not_mask_a_stalled_relay(self):
+        self.manager.download(9)
+        self._begin(9, 3)
+        self._chunk(9, 0, b"zero")
+        self.manager._last_chunk_ms -= log_transfer.CHUNK_TIMEOUT_S + 1
+
+        # This is what arrives when the ESP32 received a retransmission but
+        # its acknowledgement cannot advance the Teensy stream.  It is not
+        # progress and must not reset the GUI repair watchdog.
+        self._chunk(9, 0, b"zero")
+        self.manager._check_timeout()
+
+        self.assertEqual(self.requests[-1], (9, 1, 0))
+
+    def test_get_status_error_fails_without_waiting_for_timeouts(self):
+        self.manager.download(6)
+        self.manager._on_log_info({
+            "log_info_type": log_transfer.LOG_INFO_STATUS,
+            "log_file_index": 6,
+            "log_status": 1,
+        })
+
+        self.assertFalse(self.manager.is_transferring())
+        self.assertEqual(self.manager.failure_reason(), "log GET was rejected by the robot")
+        self.assertEqual(self.completed, [(6, "", False)])
 
     def test_stale_frames_are_ignored_until_repair_begin(self):
         chunks = [b"zero", b"one", b"two"]
@@ -114,14 +140,14 @@ class LogTransferRepairTests(unittest.TestCase):
         self._chunk(5, 0, chunks[0])
         self._chunk(5, 2, chunks[2])
         self._end(5, b"".join(chunks))
-        self.assertEqual(self.requests[-1], (5, 1))
+        self.assertEqual(self.requests[-1], (5, 1, 0))
 
         # These can already be in the ESP32/OS transmit path when the repair
         # request is issued. They belong to the superseded attempt.
         self._chunk(5, 1, b"stale")
         self._end(5, b"".join(chunks))
         self.assertEqual(self.manager._chunks, {0: chunks[0]})
-        self.assertEqual(self.requests, [(5, 0), (5, 1)])
+        self.assertEqual(self.requests, [(5, 0, 0), (5, 1, 0)])
 
         self._begin(5, len(chunks))
         self._chunk(5, 1, chunks[1])

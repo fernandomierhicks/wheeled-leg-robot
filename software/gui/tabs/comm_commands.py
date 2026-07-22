@@ -34,6 +34,10 @@ LOG_SUB_LIST   = 0x03
 LOG_SUB_GET    = 0x04
 LOG_SUB_DELETE = 0x05
 
+# LOG_SUB_GET file-kind selector (comm_protocol.h LOG_FILE_KIND_*)
+LOG_FILE_KIND_WLOG   = 0  # LOGnnnn.WLOG — high-rate telemetry (default)
+LOG_FILE_KIND_PARAMS = 1  # LOGnnnn.PARAMS — param dump/change sidecar
+
 # Wheel sub-commands (comm_protocol.h WHEEL_SUB_*)
 WHEEL_SUB_SET_MODE     = 0x01
 WHEEL_SUB_SEND         = 0x02
@@ -239,10 +243,12 @@ def send_log_list():
     return send_frame(build_frame(struct.pack("<BB", CMD_ID_LOG, LOG_SUB_LIST)))
 
 
-def send_log_get(file_index: int, start_chunk: int = 0):
-    """Send CMD_ID_LOG / LOG_SUB_GET — streams LOG_DATA chunks for one file."""
+def send_log_get(file_index: int, start_chunk: int = 0, kind: int = LOG_FILE_KIND_WLOG):
+    """Send CMD_ID_LOG / LOG_SUB_GET — streams LOG_DATA chunks for one file.
+    kind selects LOGnnnn.WLOG (default) or LOGnnnn.PARAMS."""
     import struct
-    return send_frame(build_frame(struct.pack("<BBHI", CMD_ID_LOG, LOG_SUB_GET, file_index, start_chunk)))
+    return send_frame(build_frame(
+        struct.pack("<BBHIB", CMD_ID_LOG, LOG_SUB_GET, file_index, start_chunk, kind)))
 
 
 def send_set_telem_transport(suppress: bool):

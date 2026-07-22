@@ -17,7 +17,10 @@ from pathlib import Path
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
-from .comm_commands import send_log_get, send_log_list, send_log_start, send_log_stop
+from .comm_commands import (
+    LOG_FILE_KIND_PARAMS, LOG_FILE_KIND_WLOG, send_log_get, send_log_list,
+    send_log_start, send_log_stop,
+)
 from .log_bus import LogPacketBus
 
 LOG_DIR = Path(__file__).parent.parent / "logs"
@@ -28,6 +31,8 @@ LOG_INFO_LIST_END   = 0x02
 LOG_INFO_XFER_BEGIN = 0x03
 LOG_INFO_XFER_END   = 0x04
 LOG_INFO_STATUS     = 0x05
+LOG_INFO_STARTED    = 0x06
+LOG_INFO_STOPPED    = 0x07
 
 CHUNK_TIMEOUT_S = 3.0   # re-request if no metadata/chunk arrives for this long
 MAX_RETRIES     = 12    # inexpensive suffix repairs, not whole-file restarts
@@ -57,15 +62,21 @@ class LogTransferManager(QObject):
 
         self._xfer_active = False
         self._xfer_index  = -1
+        self._xfer_kind   = LOG_FILE_KIND_WLOG
         self._xfer_total  = 0
         self._xfer_crc    = 0
         self._full_crc: int | None = None
         self._request_start = 0
         self._awaiting_begin = False
         self._chunks: dict[int, bytes] = {}
+        # Timestamp of the last *new* valid chunk, rather than merely the
+        # last packet.  The Teensy retransmits an unacknowledged chunk every
+        # 100 ms; treating those duplicates as activity used to leave the GUI
+        # waiting forever if the ESP32->GUI hop was stuck after that chunk.
         self._last_chunk_ms = 0.0
         self._retries = 0
         self._failure_reason = "transfer failed"
+        self._pending_params_index: int | None = None  # see download_with_params()
 
         self._logging       = False
         self._logging_token = 0
@@ -79,8 +90,14 @@ class LogTransferManager(QObject):
 
     # ── Logging start/stop (single source of truth for all GUI controls) ──────
     # The firmware's LOG_INFO STATUS ack doesn't distinguish START/STOP/DELETE,
-    # so button state here is driven by the click + a local mirror of the
-    # firmware's own auto-stop deadline, not by waiting for that ack.
+    # so a GUI-initiated click drives button state immediately (+ a local
+    # mirror of the firmware's own auto-stop deadline) rather than waiting on
+    # that ack. A trigger with no GUI command of its own — e.g. the CH6 radio
+    # switch (see teensy/src/main.cpp radio_update()) — has no click to drive
+    # off of, so LOG_INFO_STARTED/STOPPED (_on_log_info below) is the fallback:
+    # authoritative, firmware-sourced, and a no-op whenever the click path
+    # already has us in the right state (so it never fights that path's own
+    # token/timer bookkeeping).
 
     def is_logging(self) -> bool:
         return self._logging
@@ -117,11 +134,22 @@ class LogTransferManager(QObject):
         self._listing = []
         send_log_list()
 
-    def download(self, file_index: int):
-        """Start (or restart) downloading one .wlog file. Result arrives via
-        transfer_progress (repeatedly) then transfer_complete (once)."""
+    def download(self, file_index: int, kind: int = LOG_FILE_KIND_WLOG):
+        """Start downloading one file (.wlog by default, or its .PARAMS sidecar
+        via kind=LOG_FILE_KIND_PARAMS), or attach to an already-running
+        download of the same file+kind. Result arrives via transfer_progress
+        (repeatedly) then transfer_complete (once).
+
+        A caller that gives up waiting and calls this again for the same file
+        (e.g. a client-side timeout on a large, still-in-progress transfer)
+        must not discard the accumulated chunks — that would restart the
+        whole transfer from scratch and could prevent it from ever finishing.
+        """
+        if self._xfer_active and self._xfer_index == file_index and self._xfer_kind == kind:
+            return
         self._xfer_active = True
         self._xfer_index  = file_index
+        self._xfer_kind   = kind
         self._xfer_total  = 0
         self._xfer_crc    = 0
         self._full_crc    = None
@@ -131,13 +159,28 @@ class LogTransferManager(QObject):
         self._retries     = 0
         self._failure_reason = "transfer failed"
         self._last_chunk_ms = time.monotonic()
-        send_log_get(file_index, 0)
+        send_log_get(file_index, 0, kind)
+
+    def download_with_params(self, file_index: int):
+        """Download a .wlog and, once that finishes successfully, its paired
+        .PARAMS sidecar — the single place that knows about the two-file
+        pairing so callers (e.g. the Logs tab's Download button) don't need to."""
+        # Older recordings do not have a sidecar.  Do not convert a perfectly
+        # successful .WLOG download into a long, futile .PARAMS retry in that
+        # case.  A missing listing is treated conservatively as WLOG-only.
+        entry = next((f for f in self._directory if f["index"] == file_index), None)
+        self._pending_params_index = file_index if entry and entry.get("has_params") else None
+        self.download(file_index, LOG_FILE_KIND_WLOG)
 
     def is_transferring(self) -> bool:
         return self._xfer_active
 
     def failure_reason(self) -> str:
         return self._failure_reason
+
+    def known_size(self, file_index: int) -> int | None:
+        """Cached file size (bytes) from the last directory listing, if any."""
+        return next((f["size"] for f in self._directory if f["index"] == file_index), None)
 
     # ── LogPacketBus handler ────────────────────────────────────────────────
 
@@ -152,7 +195,11 @@ class LogTransferManager(QObject):
         sub = info.get("log_info_type")
         idx = info.get("log_file_index")
         if sub == LOG_INFO_ENTRY:
-            self._listing.append({"index": idx, "size": info.get("log_file_size", 0)})
+            self._listing.append({
+                "index": idx,
+                "size": info.get("log_file_size", 0),
+                "has_params": bool(info.get("log_status", 0)),
+            })
         elif sub == LOG_INFO_LIST_END:
             self._directory = list(self._listing)
             self.directory_updated.emit(self._directory)
@@ -174,15 +221,45 @@ class LogTransferManager(QObject):
                 self._full_crc = self._xfer_crc
             self._finish_transfer()
         elif sub == LOG_INFO_STATUS:
-            self.status_ack.emit(idx, info.get("log_status", 1))
+            status = info.get("log_status", 1)
+            self.status_ack.emit(idx, status)
+            # A failed GET is reported as STATUS, not XFER_BEGIN.  Fail it
+            # immediately; previously this looked exactly like silence and
+            # cost 36+ seconds of timeout retries.
+            if status and self._xfer_active and idx == self._xfer_index:
+                self._xfer_active = False
+                self._pending_params_index = None
+                self._failure_reason = "log GET was rejected by the robot"
+                self.transfer_complete.emit(self._xfer_index, "", False)
+        elif sub == LOG_INFO_STARTED:
+            if not self._logging:
+                self._logging = True
+                self._logging_token += 1
+                self.logging_state_changed.emit(True)
+        elif sub == LOG_INFO_STOPPED:
+            if self._logging:
+                self._logging_token += 1
+                self._logging = False
+                self.logging_state_changed.emit(False)
 
     def _on_log_data(self, info: dict):
         idx = info.get("log_file_index")
         if (not self._xfer_active or idx != self._xfer_index
                 or self._awaiting_begin):
             return
-        self._chunks[info.get("log_chunk_index")] = info.get("log_data", b"")
-        self._last_chunk_ms = time.monotonic()
+        chunk_index = info.get("log_chunk_index")
+        data = info.get("log_data", b"")
+        if not isinstance(chunk_index, int) or not isinstance(data, bytes):
+            return
+        # Do not let a malformed or stale frame outside this GET's advertised
+        # range affect progress or postpone recovery.
+        if chunk_index < self._request_start or (
+                self._xfer_total and chunk_index >= self._xfer_total):
+            return
+        previous = self._chunks.get(chunk_index)
+        self._chunks[chunk_index] = data
+        if previous != data:
+            self._last_chunk_ms = time.monotonic()
         if self._xfer_total:
             self.transfer_progress.emit(self._xfer_index, len(self._chunks), self._xfer_total)
 
@@ -221,7 +298,7 @@ class LogTransferManager(QObject):
         self._awaiting_begin = True
         self._xfer_crc = 0
         self._last_chunk_ms = time.monotonic()
-        send_log_get(self._xfer_index, start_chunk)
+        send_log_get(self._xfer_index, start_chunk, self._xfer_kind)
         return True
 
     def _check_timeout(self):
@@ -256,7 +333,15 @@ class LogTransferManager(QObject):
             self._restart_transfer(0, "full-file CRC mismatch")
             return
 
-        out_path = LOG_DIR / f"LOG{self._xfer_index:04d}.WLOG"
+        ext = "PARAMS" if self._xfer_kind == LOG_FILE_KIND_PARAMS else "WLOG"
+        out_path = LOG_DIR / f"LOG{self._xfer_index:04d}.{ext}"
         out_path.write_bytes(data)
+        finished_index = self._xfer_index
+        finished_kind = self._xfer_kind
         self._xfer_active = False
-        self.transfer_complete.emit(self._xfer_index, str(out_path), True)
+        self.transfer_complete.emit(finished_index, str(out_path), True)
+
+        if (finished_kind == LOG_FILE_KIND_WLOG
+                and self._pending_params_index == finished_index):
+            self._pending_params_index = None
+            self.download(finished_index, LOG_FILE_KIND_PARAMS)

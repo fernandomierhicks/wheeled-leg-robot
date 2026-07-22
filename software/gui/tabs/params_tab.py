@@ -12,6 +12,7 @@ button sends CMD_ID_PARAM_SET and the cell flashes green on echo-back.
 
 import json
 import struct
+from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QDoubleValidator
@@ -588,7 +589,8 @@ class ParamsTab(QWidget):
             QMessageBox.information(self, "Export Parameters",
                                      "No confirmed params to export — connect and click Refresh first.")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Export Parameters", "params.json",
+        default_path = str(Path(__file__).resolve().parent.parent / "parameter_exports" / "Default gains.json")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Parameters", default_path,
                                                "JSON Files (*.json)")
         if not path:
             return
@@ -602,7 +604,8 @@ class ParamsTab(QWidget):
         self._lbl_status.setStyleSheet(f"color: {TEXT}; font-size: 11px;")
 
     def _on_import(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Import Parameters", "",
+        default_path = str(Path(__file__).resolve().parent.parent / "parameter_exports" / "Default gains.json")
+        path, _ = QFileDialog.getOpenFileName(self, "Import Parameters", default_path,
                                                "JSON Files (*.json)")
         if not path:
             return

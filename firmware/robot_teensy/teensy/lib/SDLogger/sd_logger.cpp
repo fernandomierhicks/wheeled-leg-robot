@@ -1,4 +1,5 @@
 #include "sd_logger.h"
+#include "param_registry.h"
 #include <SdFat.h>
 #include <RingBuf.h>
 #include <string.h>
@@ -23,10 +24,22 @@ static bool   g_overflow = false;
 // placed in DMAMEM to keep it out of the fast, small RAM1 region.
 DMAMEM static RingBuf<FsFile, 32768> rb;
 
+// ── Param dump/change sidecar (LOGnnnn.PARAMS) ─────────────────────────────
+// Rare, small writes (human/GUI timescale, not per-tick) — a direct write on
+// change is fine, unlike g_wr_file this needs no ring buffer.
+static FsFile g_param_file;
+static bool   g_param_active = false;
+// Snapshot of the last value logged for each param, indexed the same as
+// param_by_index(). Sized generously above today's ~124 registered params;
+// the scan clamps to it defensively if the table ever grows past it.
+static constexpr uint16_t MAX_TRACKED_PARAMS = 256;
+static float  s_param_snapshot[MAX_TRACKED_PARAMS];
+
 // ── Retrieval / transfer ───────────────────────────────────────────────────
 static FsFile   g_rd_file;
 static bool     g_xfer_active = false;
 static uint16_t g_xfer_index = 0;
+static uint8_t  g_xfer_kind = LOG_FILE_KIND_WLOG;
 static uint32_t g_xfer_chunk = 0;
 static uint32_t g_xfer_total_chunks = 0;
 static uint64_t g_xfer_file_size = 0;
@@ -81,6 +94,20 @@ static void make_filename(uint16_t idx, char* buf, size_t n) {
     snprintf(buf, n, "LOG%04u.WLOG", idx);
 }
 
+static void make_param_filename(uint16_t idx, char* buf, size_t n) {
+    snprintf(buf, n, "LOG%04u.PARAMS", idx);
+}
+
+// event is "DUMP" or "CHANGE". %.20s bounds name since Param::name is a fixed
+// 20-byte field with no guaranteed trailing null.
+static void write_param_line(const char* event, uint16_t id, const char* name, float value) {
+    if (!g_param_active) return;
+    char line[96];
+    int n = snprintf(line, sizeof(line), "%lu,%s,%u,%.20s,%g\n",
+                      (unsigned long)micros(), event, id, name, (double)value);
+    if (n > 0) g_param_file.write(line, (size_t)n);
+}
+
 // Expects the exact 8.3 short name this module writes: "LOGnnnn.WLOG".
 static bool parse_log_filename(const char* name, uint16_t* idx_out) {
     if (strlen(name) != 12) return false;
@@ -99,6 +126,27 @@ static void emit_status(uint16_t idx, uint8_t status) {
     p.info_type = LOG_INFO_STATUS;
     p.file_index = idx;
     p.status = status;
+    g_sender(COMM_TYPE_LOG_INFO, LOG_INFO_PAYLOAD_V1, &p, sizeof(p));
+}
+
+// Unlike emit_status() (an ack tied to whichever command asked for it), these
+// are unsolicited so a trigger source with no round-trip ack of its own — e.g.
+// the CH6 radio switch in teensy/src/main.cpp — still tells listeners (ESP32
+// display/LED) that a recording is genuinely active.
+static void emit_started(uint16_t idx, uint32_t duration_ms) {
+    if (!g_sender) return;
+    LogInfoPayload p{};
+    p.info_type = LOG_INFO_STARTED;
+    p.file_index = idx;
+    p.file_size = duration_ms;  // reused field, see LOG_INFO_STARTED in comm_protocol.h
+    g_sender(COMM_TYPE_LOG_INFO, LOG_INFO_PAYLOAD_V1, &p, sizeof(p));
+}
+
+static void emit_stopped(uint16_t idx) {
+    if (!g_sender) return;
+    LogInfoPayload p{};
+    p.info_type = LOG_INFO_STOPPED;
+    p.file_index = idx;
     g_sender(COMM_TYPE_LOG_INFO, LOG_INFO_PAYLOAD_V1, &p, sizeof(p));
 }
 
@@ -161,6 +209,28 @@ bool sd_logger_start(uint32_t duration_ms) {
     g_last_flush_ms = millis();
     g_active = true;
     emit_status(idx, 0);
+    emit_started(idx, duration_ms);
+
+    // Param sidecar: best-effort — never abort a good .wlog recording just
+    // because this tiny companion file failed to open.
+    char pname[16];
+    make_param_filename(idx, pname, sizeof(pname));
+    g_param_active = g_param_file.open(pname, O_RDWR | O_CREAT | O_TRUNC);
+    if (g_param_active) {
+        g_param_file.write("# t_micros,event,id,name,value\n");
+        uint16_t n = param_count();
+        if (n > MAX_TRACKED_PARAMS) n = MAX_TRACKED_PARAMS;
+        for (uint16_t i = 0; i < n; i++) {
+            Param p;
+            if (!param_by_index(i, &p)) continue;
+            s_param_snapshot[i] = p.value;
+            if (p.flags & PARAM_FLAG_COMMAND) continue;  // excluded from the log entirely
+            write_param_line("DUMP", p.id, p.name, p.value);
+        }
+        g_param_file.sync();
+    } else {
+        comm_log(LOG_LEVEL_WARN, "SDLogger: param sidecar open failed, continuing without it");
+    }
     return true;
 }
 
@@ -171,6 +241,13 @@ void sd_logger_stop() {
     g_wr_file.close();
     g_active = false;
     emit_status(g_active_index, g_overflow ? 2 : 0);
+    emit_stopped(g_active_index);
+
+    if (g_param_active) {
+        g_param_file.sync();
+        g_param_file.close();
+        g_param_active = false;
+    }
 }
 
 bool sd_logger_is_active() { return g_active; }
@@ -209,6 +286,21 @@ void sd_logger_service() {
 
     if (g_has_deadline && (int32_t)(now - g_stop_deadline_ms) >= 0) {
         sd_logger_stop();
+        return;
+    }
+
+    if (g_param_active) {
+        uint16_t n = param_count();
+        if (n > MAX_TRACKED_PARAMS) n = MAX_TRACKED_PARAMS;
+        for (uint16_t i = 0; i < n; i++) {
+            Param p;
+            if (!param_by_index(i, &p)) continue;
+            if (p.flags & PARAM_FLAG_COMMAND) continue;
+            if (p.value != s_param_snapshot[i]) {
+                s_param_snapshot[i] = p.value;
+                write_param_line("CHANGE", p.id, p.name, p.value);
+            }
+        }
     }
 }
 
@@ -229,6 +321,9 @@ void sd_logger_list() {
                     p.info_type = LOG_INFO_ENTRY;
                     p.file_index = idx;
                     p.file_size = (uint32_t)entry.fileSize();
+                    char pname[16];
+                    make_param_filename(idx, pname, sizeof(pname));
+                    p.status = sd.exists(pname) ? 1 : 0;  // reused: has_params, see comm_protocol.h
                     g_sender(COMM_TYPE_LOG_INFO, LOG_INFO_PAYLOAD_V1, &p, sizeof(p));
                 }
             }
@@ -243,7 +338,7 @@ void sd_logger_list() {
     g_sender(COMM_TYPE_LOG_INFO, LOG_INFO_PAYLOAD_V1, &end, sizeof(end));
 }
 
-void sd_logger_begin_get(uint16_t idx, uint32_t start_chunk) {
+void sd_logger_begin_get(uint16_t idx, uint32_t start_chunk, uint8_t kind) {
     if (g_xfer_active) {
         // GET is an idempotent restart command. If the GUI stopped receiving
         // because XFER_END or several chunks were lost in the ESP32 relay, its
@@ -255,7 +350,8 @@ void sd_logger_begin_get(uint16_t idx, uint32_t start_chunk) {
     }
 
     char name[16];
-    make_filename(idx, name, sizeof(name));
+    if (kind == LOG_FILE_KIND_PARAMS) make_param_filename(idx, name, sizeof(name));
+    else                              make_filename(idx, name, sizeof(name));
     if (!g_rd_file.open(name, O_RDONLY)) {
         emit_status(idx, 1);
         return;
@@ -269,6 +365,7 @@ void sd_logger_begin_get(uint16_t idx, uint32_t start_chunk) {
     g_rd_file.seekSet(seek_pos);
 
     g_xfer_index = idx;
+    g_xfer_kind = kind;
     g_xfer_chunk = start_chunk;
     g_xfer_waiting_ack = false;
     g_xfer_pending_len = 0;
@@ -374,6 +471,11 @@ void sd_logger_delete(uint16_t idx) {
     char name[16];
     make_filename(idx, name, sizeof(name));
     bool ok = sd.remove(name);
+
+    char pname[16];
+    make_param_filename(idx, pname, sizeof(pname));
+    sd.remove(pname);  // best-effort — older logs have no sidecar to remove
+
     emit_status(idx, ok ? 0 : 1);
 }
 

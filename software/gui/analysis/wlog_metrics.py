@@ -61,7 +61,7 @@ _SCALAR_FIELDS = [
     "yaw_rad", "yaw_rate_rads", "wheel_vel_avg", "wm_l_vel_turns_s", "wm_r_vel_turns_s",
     "hip_l_current_a", "hip_r_current_a", "whl_tau_l", "whl_tau_r",
     "theta_ref", "v_ref", "omega_cmd_rds", "tau_sym", "tau_yaw",
-    "health_flags", "fault_code", "robot_state", "loop_count",
+    "health_flags", "fault_code", "robot_state", "loop_count", "active_profile",
 ]
 
 # gain_sched_alpha isn't in TelemetryPayload yet — tuning.md §1a (bump
@@ -78,6 +78,7 @@ class DecodedRun:
     telem_version: int
     sample_rate_hz: int
     count: int
+    t_micros: np.ndarray        # raw uint32 firmware clock, shared with .PARAMS
     t_s: np.ndarray             # seconds since first record (from t_micros)
     fields: dict                # field name -> np.ndarray, see _SCALAR_FIELDS
     has_gain_sched_alpha: bool
@@ -126,8 +127,14 @@ def decode_wlog(path) -> DecodedRun:
     if n == 0:
         raise ValueError(f"{path}: no records decoded")
 
-    t_micros_arr = np.asarray(t_micros_list, dtype=np.float64)
-    t_s = (t_micros_arr - t_micros_arr[0]) / 1e6
+    t_micros_arr = np.asarray(t_micros_list, dtype=np.uint32)
+    # Accumulate uint32 deltas so logs remain monotonic across a micros() wrap.
+    if t_micros_arr.size > 1:
+        deltas_us = np.diff(t_micros_arr).astype(np.uint32).astype(np.float64)
+        elapsed_us = np.concatenate(([0.0], np.cumsum(deltas_us)))
+    else:
+        elapsed_us = np.zeros(t_micros_arr.size, dtype=np.float64)
+    t_s = elapsed_us / 1e6
 
     fields = {name: np.asarray(vals, dtype=np.float64) for name, vals in per_field.items()}
     if has_alpha:
@@ -135,7 +142,8 @@ def decode_wlog(path) -> DecodedRun:
 
     return DecodedRun(
         path=path, telem_version=telem_ver, sample_rate_hz=sample_hz, count=n,
-        t_s=t_s, fields=fields, has_gain_sched_alpha=bool(has_alpha),
+        t_micros=t_micros_arr, t_s=t_s, fields=fields,
+        has_gain_sched_alpha=bool(has_alpha),
     )
 
 

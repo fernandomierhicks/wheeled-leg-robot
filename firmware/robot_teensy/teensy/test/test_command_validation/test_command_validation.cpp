@@ -69,6 +69,24 @@ void test_nonfinite_values_are_rejected_atomically(void) {
     }
 }
 
+void test_log_sub_get_kind_byte_is_optional_and_bounds_checked(void) {
+    // 8 bytes: kind omitted, defaults to LOG_FILE_KIND_WLOG.
+    validate({CMD_ID_LOG, LOG_SUB_GET, 0, 0, 0, 0, 0, 0}, CMD_PAYLOAD_V1, true);
+    // 9 bytes: explicit valid kind (LOG_FILE_KIND_WLOG or LOG_FILE_KIND_PARAMS).
+    validate({CMD_ID_LOG, LOG_SUB_GET, 0, 0, 0, 0, 0, 0, LOG_FILE_KIND_WLOG},
+              CMD_PAYLOAD_V1, true);
+    validate({CMD_ID_LOG, LOG_SUB_GET, 0, 0, 0, 0, 0, 0, LOG_FILE_KIND_PARAMS},
+              CMD_PAYLOAD_V1, true);
+    // 9 bytes: out-of-range kind.
+    auto out = validate({CMD_ID_LOG, LOG_SUB_GET, 0, 0, 0, 0, 0, 0, 2}, CMD_PAYLOAD_V1, false);
+    TEST_ASSERT_EQUAL_UINT8(CMD_REASON_INVALID_ENUM, out.reason);
+    // Neither 8 nor 9 bytes.
+    out = validate({CMD_ID_LOG, LOG_SUB_GET, 0, 0, 0, 0, 0}, CMD_PAYLOAD_V1, false);
+    TEST_ASSERT_EQUAL_UINT8(CMD_REASON_BAD_LENGTH, out.reason);
+    out = validate({CMD_ID_LOG, LOG_SUB_GET, 0, 0, 0, 0, 0, 0, 0, 0}, CMD_PAYLOAD_V1, false);
+    TEST_ASSERT_EQUAL_UINT8(CMD_REASON_BAD_LENGTH, out.reason);
+}
+
 void test_invalid_ids_enums_versions_and_targets_reject(void) {
     auto out = validate({0xFE}, CMD_PAYLOAD_V1, false);
     TEST_ASSERT_EQUAL_UINT8(CMD_REASON_UNKNOWN_COMMAND, out.reason);
@@ -86,6 +104,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_v2_envelope_preserves_request_and_command);
     RUN_TEST(test_every_fixed_command_rejects_trailing_and_missing_bytes);
     RUN_TEST(test_nonfinite_values_are_rejected_atomically);
+    RUN_TEST(test_log_sub_get_kind_byte_is_optional_and_bounds_checked);
     RUN_TEST(test_invalid_ids_enums_versions_and_targets_reject);
     return UNITY_END();
 }

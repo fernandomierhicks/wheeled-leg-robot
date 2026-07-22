@@ -8,7 +8,6 @@
 #define GROUP_WHEEL              0x03
 #define GROUP_CONTROL            0x04
 #define GROUP_COMMAND            0x05
-#define GROUP_IBUS               0x06
 
 // Parameters
 #define PARAM_IMU_ENABLE                           0x0000
@@ -120,18 +119,3 @@
 #define PARAM_PROFILE_3_YAW_MAX                    0x0517
 #define PARAM_PROFILE_3_TORQUE_LIM                 0x0518
 #define PARAM_ACTIVE_PROFILE                       0x0519
-#define PARAM_IBUS_CH0                             0x0600
-#define PARAM_IBUS_CH1                             0x0601
-#define PARAM_IBUS_CH2                             0x0602
-#define PARAM_IBUS_CH3                             0x0603
-#define PARAM_IBUS_CH4                             0x0604
-#define PARAM_IBUS_CH5                             0x0605
-#define PARAM_IBUS_CH6                             0x0606
-#define PARAM_IBUS_CH7                             0x0607
-#define PARAM_IBUS_CH8                             0x0608
-#define PARAM_IBUS_CH9                             0x0609
-#define PARAM_IBUS_CH10                            0x060A
-#define PARAM_IBUS_CH11                            0x060B
-#define PARAM_IBUS_CH12                            0x060C
-#define PARAM_IBUS_CH13                            0x060D
-#define PARAM_IBUS_ALIVE                           0x060E

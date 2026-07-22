@@ -205,10 +205,12 @@ void controlLoop_run() {
     // ── Phase 5: Hip gain scheduling ─────────────────────────────────────────
     // alpha ∈ [0,1]: 0 = fully retracted (high gains), 1 = fully extended (low gains).
     // Uses the calibrated position range so it is coordinate-system agnostic.
-    float alpha = 0.5f;  // default to midpoint if calibration not done
-    // §1c (tuning.md): hips zip-tied retracted and disabled, so real calibration
-    // can never complete — force the retracted anchor directly, no encoder read,
-    // no calibration dependency. Skips the block below entirely.
+    // §1c (tuning.md): hips are zip-tied retracted and disabled for Phase 1, so
+    // real calibration can never complete — default to the retracted anchor
+    // whenever calibration is invalid, rather than an arbitrary midpoint, so
+    // alpha_force_ret_en doesn't need to be set every session. That param stays
+    // available to force retracted even once calibration is valid.
+    float alpha = 0.0f;  // default: retracted, used whenever calibration is invalid
     if (param_get(PARAM_ALPHA_FORCE_RETRACTED_EN) >= 0.5f) {
         alpha = 0.0f;
     } else if (hm_limits_L.valid && hm_limits_R.valid) {

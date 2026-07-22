@@ -4,7 +4,10 @@
 
 
 ---Fernandos note dont change below
+ready to do legs. 
 
+
+GUI log decored see Guilog.md
 
 live run with gain optimizer. tuning.md
 

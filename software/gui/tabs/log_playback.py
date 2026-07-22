@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .comm_commands import send_log_delete
+from .host_logger import HostLogger
 from .log_transfer import LOG_DIR, LogTransferManager
 from .telem_format import TELEM_VERSION, decode_telem_full
 from .telemetry_bus import TelemetryBus
@@ -212,11 +213,13 @@ class LogsTab(QWidget):
         super().__init__(parent)
         self._xfer = LogTransferManager.instance()
         self._pb   = LogPlaybackController.instance()
+        self._host = HostLogger.instance()
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(10)
         outer.addWidget(self._build_retrieve_panel())
+        outer.addWidget(self._build_host_capture_panel())
         outer.addWidget(self._build_playback_panel())
         outer.addStretch()
 
@@ -225,6 +228,9 @@ class LogsTab(QWidget):
         self._xfer.transfer_complete.connect(self._on_transfer_complete)
         self._xfer.status_ack.connect(self._on_status_ack)
         self._xfer.logging_state_changed.connect(self._on_logging_state)
+
+        self._host.logging_state_changed.connect(self._on_host_logging_state)
+        self._host.record_count_changed.connect(self._on_host_record_count)
 
         self._pb.file_opened.connect(self._on_file_opened)
         self._pb.open_failed.connect(self._on_open_failed)
@@ -314,7 +320,8 @@ class LogsTab(QWidget):
         self._file_list.clear()
         for e in entries:
             size_kb = e["size"] / 1024.0
-            item = QListWidgetItem(f"LOG{e['index']:04d}.WLOG   ({size_kb:.1f} KB)")
+            tag = "  [+params]" if e.get("has_params") else ""
+            item = QListWidgetItem(f"LOG{e['index']:04d}.WLOG   ({size_kb:.1f} KB){tag}")
             item.setData(Qt.ItemDataRole.UserRole, e["index"])
             self._file_list.addItem(item)
         self._lbl_status.setText(f"{len(entries)} log(s) on card")
@@ -329,7 +336,7 @@ class LogsTab(QWidget):
             return
         self._progress.setValue(0)
         self._lbl_status.setText(f"Downloading LOG{idx:04d}.WLOG...")
-        self._xfer.download(idx)
+        self._xfer.download_with_params(idx)
 
     def _on_delete(self):
         idx = self._selected_index()
@@ -340,14 +347,19 @@ class LogsTab(QWidget):
     def _on_progress(self, idx, got, total):
         pct = int(100 * got / total) if total else 0
         self._progress.setValue(pct)
-        self._lbl_status.setText(f"LOG{idx:04d}.WLOG: {got}/{total} chunks ({pct}%)")
+        self._lbl_status.setText(f"LOG{idx:04d}: {got}/{total} chunks ({pct}%)")
 
     def _on_transfer_complete(self, idx, path, crc_ok):
+        # Fires once per file — download_with_params() chains a second
+        # (.PARAMS) transfer after the .wlog succeeds, so this can run twice
+        # per Download click. Name comes from the path, not a hardcoded
+        # extension, so the status line reflects whichever file just finished.
+        name = Path(path).name if path else f"LOG{idx:04d}"
         if crc_ok:
-            self._lbl_status.setText(f"LOG{idx:04d}.WLOG downloaded OK -> {path}")
+            self._lbl_status.setText(f"{name} downloaded OK -> {path}")
         else:
             self._lbl_status.setText(
-                f"LOG{idx:04d}.WLOG download FAILED ({self._xfer.failure_reason()})"
+                f"LOG{idx:04d} download FAILED ({self._xfer.failure_reason()})"
             )
         self._xfer.refresh()
         self._refresh_local_files()
@@ -357,6 +369,61 @@ class LogsTab(QWidget):
         self._lbl_status.setText(f"LOG{idx:04d}.WLOG command ack: {ok}")
         if status == 0:
             self._xfer.refresh()
+
+    # ── Host capture panel ───────────────────────────────────────────────────
+
+    def _build_host_capture_panel(self) -> QWidget:
+        frame = QFrame()
+        frame.setStyleSheet(f"QFrame {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 4px; }}")
+        lay = QVBoxLayout(frame)
+
+        title = QLabel("Host Capture (GUI-side)")
+        title.setStyleSheet(f"color: {TEXT}; font-weight: bold; font-size: 13px;")
+        lay.addWidget(title)
+
+        note = QLabel(
+            "Records every packet this GUI receives — telemetry, robot log "
+            "messages, calibration events, WiFi diagnostics — to a timestamped "
+            ".jsonl file in gui/logs/, at whatever rate it arrives. Independent "
+            "of SD logging; starts/stops only when you click below."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet(f"color: {DIM}; font-size: 11px;")
+        lay.addWidget(note)
+
+        ctrl_row = QHBoxLayout()
+        self._btn_host_start = QPushButton("Start")
+        self._btn_host_start.setStyleSheet(_btn_style(GREEN))
+        self._btn_host_start.clicked.connect(self._host.start)
+        ctrl_row.addWidget(self._btn_host_start)
+
+        self._btn_host_stop = QPushButton("Stop")
+        self._btn_host_stop.setStyleSheet(_btn_style(RED))
+        self._btn_host_stop.setEnabled(False)
+        self._btn_host_stop.clicked.connect(self._host.stop)
+        ctrl_row.addWidget(self._btn_host_stop)
+        ctrl_row.addStretch()
+        lay.addLayout(ctrl_row)
+
+        self._lbl_host_status = QLabel("Not capturing")
+        self._lbl_host_status.setStyleSheet(f"color: {DIM}; font-size: 11px;")
+        lay.addWidget(self._lbl_host_status)
+
+        return frame
+
+    def _on_host_logging_state(self, active: bool):
+        self._btn_host_start.setEnabled(not active)
+        self._btn_host_stop.setEnabled(active)
+        if active:
+            self._lbl_host_status.setText(f"Capturing -> {self._host.path().name}")
+        elif self._host.path() is not None:
+            self._lbl_host_status.setText(
+                f"Stopped. Wrote {self._host.record_count()} records -> {self._host.path()}"
+            )
+
+    def _on_host_record_count(self, count: int):
+        if self._host.is_logging():
+            self._lbl_host_status.setText(f"Capturing -> {self._host.path().name}  ({count} records)")
 
     # ── Playback panel ───────────────────────────────────────────────────────
 

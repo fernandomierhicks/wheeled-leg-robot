@@ -18,11 +18,14 @@ uint16_t sd_logger_active_index();        // current LOGxxxx index (for status r
 
 // Retrieval (driven by on_command in main.cpp; all Teensy→PC replies via callbacks)
 void     sd_logger_list();                        // emit LOG_INFO ENTRY per file + LIST_END
-void     sd_logger_begin_get(uint16_t idx, uint32_t start_chunk); // arm a streaming transfer
+// kind: LOG_FILE_KIND_WLOG (default) or LOG_FILE_KIND_PARAMS — which per-index
+// file to stream (see comm_protocol.h).
+void     sd_logger_begin_get(uint16_t idx, uint32_t start_chunk,
+                              uint8_t kind = LOG_FILE_KIND_WLOG); // arm a streaming transfer
 void     sd_logger_service_transfer();            // paced LOG_DATA streaming; emit XFER_END
 bool     sd_logger_transfer_active();
 void     sd_logger_ack_chunk(uint16_t idx, uint32_t chunk_index);
-void     sd_logger_delete(uint16_t idx);          // erase + LOG_INFO STATUS ack
+void     sd_logger_delete(uint16_t idx);          // erase .wlog + paired .PARAMS, LOG_INFO STATUS ack
 
 // Transfer pacing (audit W5): every interval_ms, service_transfer sends at most
 // `burst` chunks. Set BEFORE sd_logger_begin_get() based on the requesting

@@ -24,6 +24,7 @@ from tabs.wheel_motors import WheelMotorsTab
 from tabs.controllers_tab import ControllersTab
 from tabs.log_playback import LogsTab, LogPlaybackController
 from tabs.log_transfer import LogTransferManager
+from tabs.host_logger import HostLogger
 from tabs.log_analyzer_tab import LogAnalyzerTab
 from tabs.wifi_diag_tab import WifiDiagTab
 from tabs.telemetry_bus import TelemetryBus
@@ -659,6 +660,67 @@ class RadioSignalWidget(QWidget):
         p.end()
 
 
+# ── Alive waveform widget (status bar) ────────────────────────────────────────
+
+class AliveWaveformWidget(QWidget):
+    """Tiny scrolling trace of the 2 Hz sine `test_val` field — an unmistakable
+    "the firmware link is alive" indicator for the status bar: a flat/dim line
+    means no fresh telemetry, a moving green trace means the pipeline is live."""
+
+    _BUF     = 60  # samples; at 50 Hz telemetry ≈ 1.2 s of history
+    _LABEL_H = 10  # px reserved at the top for the "LIVE" label
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(80, 34)
+        self._buf = deque([0.0] * self._BUF, maxlen=self._BUF)
+        self._alive = False
+
+        self._lbl = QLabel("LIVE", self)
+        self._lbl.move(0, -1)
+        self._lbl.setStyleSheet(f"color: {DIM}; font-size: 8px; font-weight: bold;")
+
+        TelemetryBus.instance().packet.connect(self._on_packet)
+
+    def _on_packet(self, info: dict):
+        val = info.get("test_val")
+        if val is None:
+            return
+        self._buf.append(val)
+        self._alive = True
+        self._lbl.setStyleSheet(f"color: {GREEN}; font-size: 8px; font-weight: bold;")
+        self.update()
+
+    def set_connected(self, connected: bool):
+        if not connected:
+            self._alive = False
+            self._buf = deque([0.0] * self._BUF, maxlen=self._BUF)
+            self._lbl.setStyleSheet(f"color: {DIM}; font-size: 8px; font-weight: bold;")
+            self.update()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+
+        pts = list(self._buf)
+        n = len(pts)
+        col = QColor(GREEN if self._alive else DIM)
+        p.setPen(QPen(col, 1.4))
+
+        plot_h = h - self._LABEL_H
+        mid    = self._LABEL_H + plot_h / 2
+        scale  = plot_h / 2 - 2
+        prev = None
+        for i, v in enumerate(pts):
+            x = i / (n - 1) * (w - 1)
+            y = mid - v * scale
+            if prev is not None:
+                p.drawLine(int(prev[0]), int(prev[1]), int(x), int(y))
+            prev = (x, y)
+        p.end()
+
+
 # ── Status bar ────────────────────────────────────────────────────────────────
 
 def _vsep() -> QFrame:
@@ -669,25 +731,48 @@ def _vsep() -> QFrame:
 
 
 class LogMiniControls(QWidget):
-    """Compact SD-logging + playback controls for the status bar — start/stop
-    a log or play/pause an open .wlog from any tab, without switching to
-    the Logs tab. Both drive the same LogTransferManager/LogPlaybackController
-    singletons the Logs tab uses, so state always stays in sync."""
+    """Compact status-bar controls for both logging paths, plus playback,
+    from any tab without switching to the Logs tab:
+      - SD (Teensy): records the fixed TELEM struct onto the robot's SD card
+        (LogTransferManager) — retrieved after the fact via the Logs tab.
+      - GUI (host): records every packet this GUI receives, as it receives it,
+        to a .jsonl file on the PC (HostLogger) — independent of the SD card.
+    All three drive the same singletons the Logs tab uses, so state always
+    stays in sync regardless of which tab is visible."""
 
     def __init__(self):
         super().__init__()
         self._xfer = LogTransferManager.instance()
+        self._host = HostLogger.instance()
         self._pb   = LogPlaybackController.instance()
 
-        self._rec_lbl = QLabel("● REC")
-        self._rec_lbl.setStyleSheet(f"color: {DIM}; font-weight: bold; font-size: 12px;")
-        self._rec_lbl.setToolTip("Lit while an SD log is actively recording")
+        sd_lbl = QLabel("SD:")
+        sd_lbl.setStyleSheet(f"color: {DIM}; font-size: 11px;")
+        sd_lbl.setToolTip("Logging onto the Teensy's SD card (.WLOG) — retrieve via the Logs tab")
 
-        self._btn_log = QPushButton()
-        self._btn_log.setFixedWidth(64)
-        self._btn_log.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_log.clicked.connect(self._on_log_clicked)
-        self._style_log_button(False)
+        self._sd_rec_lbl = QLabel("●")
+        self._sd_rec_lbl.setStyleSheet(f"color: {DIM}; font-weight: bold; font-size: 12px;")
+        self._sd_rec_lbl.setToolTip("Lit while an SD log is actively recording")
+
+        self._btn_sd_log = QPushButton()
+        self._btn_sd_log.setFixedWidth(64)
+        self._btn_sd_log.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_sd_log.clicked.connect(self._on_sd_log_clicked)
+        self._style_sd_button(False)
+
+        gui_lbl = QLabel("GUI:")
+        gui_lbl.setStyleSheet(f"color: {DIM}; font-size: 11px;")
+        gui_lbl.setToolTip("Host-side capture of everything this GUI receives, to a .jsonl on this PC")
+
+        self._gui_rec_lbl = QLabel("●")
+        self._gui_rec_lbl.setStyleSheet(f"color: {DIM}; font-weight: bold; font-size: 12px;")
+        self._gui_rec_lbl.setToolTip("Lit while GUI-side capture is active")
+
+        self._btn_gui_log = QPushButton()
+        self._btn_gui_log.setFixedWidth(64)
+        self._btn_gui_log.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_gui_log.clicked.connect(self._on_gui_log_clicked)
+        self._style_gui_button(False)
 
         self._btn_play = QPushButton("▶")
         self._btn_play.setFixedWidth(26)
@@ -709,38 +794,70 @@ class LogMiniControls(QWidget):
         lay = QHBoxLayout(self)
         lay.setContentsMargins(4, 0, 4, 0)
         lay.setSpacing(6)
-        lay.addWidget(self._rec_lbl)
-        lay.addWidget(self._btn_log)
+        lay.addWidget(sd_lbl)
+        lay.addWidget(self._sd_rec_lbl)
+        lay.addWidget(self._btn_sd_log)
+        lay.addWidget(_vsep())
+        lay.addWidget(gui_lbl)
+        lay.addWidget(self._gui_rec_lbl)
+        lay.addWidget(self._btn_gui_log)
+        lay.addWidget(_vsep())
         lay.addWidget(self._btn_play)
         lay.addWidget(self._pb_lbl)
 
-        self._xfer.logging_state_changed.connect(self._on_logging_state)
+        self._xfer.logging_state_changed.connect(self._on_sd_logging_state)
+        self._host.logging_state_changed.connect(self._on_gui_logging_state)
         self._pb.file_opened.connect(self._on_file_opened)
         self._pb.playing_changed.connect(self._on_playing_changed)
         self._pb.position_changed.connect(self._on_position_changed)
 
-    def _style_log_button(self, active: bool):
+    def _style_sd_button(self, active: bool):
         color = RED if active else GREEN
-        self._btn_log.setText("■ Stop" if active else "● Log")
-        self._btn_log.setToolTip(
+        self._btn_sd_log.setText("■ Stop" if active else "● Log")
+        self._btn_sd_log.setToolTip(
             "Stop the active SD log" if active else
-            "Start logging until Stop is clicked (use the Logs tab for a timed duration)"
+            "Start SD logging until Stop is clicked (use the Logs tab for a timed duration)"
         )
-        self._btn_log.setStyleSheet(
+        self._btn_sd_log.setStyleSheet(
             f"QPushButton{{background:transparent;color:{color};border:1px solid {color};"
             f"border-radius:3px;padding:2px 6px;font-size:11px}}"
             f"QPushButton:hover{{background:{BORDER}}}"
         )
 
-    def _on_log_clicked(self):
+    def _style_gui_button(self, active: bool):
+        color = RED if active else GREEN
+        self._btn_gui_log.setText("■ Stop" if active else "● Log")
+        self._btn_gui_log.setToolTip(
+            "Stop GUI-side capture" if active else
+            "Start GUI-side capture of every received packet until Stop is clicked"
+        )
+        self._btn_gui_log.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{color};border:1px solid {color};"
+            f"border-radius:3px;padding:2px 6px;font-size:11px}}"
+            f"QPushButton:hover{{background:{BORDER}}}"
+        )
+
+    def _on_sd_log_clicked(self):
         if self._xfer.is_logging():
             self._xfer.stop_logging()
         else:
             self._xfer.start_logging(0)
 
-    def _on_logging_state(self, active: bool):
-        self._style_log_button(active)
-        self._rec_lbl.setStyleSheet(
+    def _on_gui_log_clicked(self):
+        if self._host.is_logging():
+            self._host.stop()
+        else:
+            self._host.start()
+
+    def _on_sd_logging_state(self, active: bool):
+        self._style_sd_button(active)
+        self._sd_rec_lbl.setStyleSheet(
+            f"color: {RED if active else DIM}; font-weight: bold; font-size: 12px;"
+        )
+
+    def _on_gui_logging_state(self, active: bool):
+        self._style_gui_button(active)
+        self._gui_rec_lbl.setStyleSheet(
             f"color: {RED if active else DIM}; font-weight: bold; font-size: 12px;"
         )
 
@@ -777,6 +894,7 @@ class StatusBar:
         self._profile.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-weight: bold;")
         self._batt      = BatteryStatusWidget()
         self._radio     = RadioSignalWidget()
+        self._alive     = AliveWaveformWidget()
         self._conn      = QLabel("● Disconnected")
         self._conn.setStyleSheet(f"color: {RED};")
 
@@ -822,7 +940,7 @@ class StatusBar:
         self._btn_reboot.setEnabled(False)
         self._btn_reboot.clicked.connect(self._on_reboot_clicked)
 
-        for w in (self._source, _vsep(), self._transport, _vsep(), self._dt, _vsep(), self._mode, self._profile, _vsep(), self._batt, _vsep(), self._radio):
+        for w in (self._source, _vsep(), self._transport, _vsep(), self._dt, _vsep(), self._mode, self._profile, _vsep(), self._batt, _vsep(), self._radio, _vsep(), self._alive):
             sb.addWidget(w)
         self._mismatch_lbl = QLabel("FIRMWARE MISMATCH — reflash ESP32/Teensy")
         self._mismatch_lbl.setStyleSheet(
@@ -1031,6 +1149,7 @@ class StatusBar:
             self._conn.setToolTip(tooltip)
             self._batt.set_connected(False)
             self._radio.set_connected(False)
+            self._alive.set_connected(False)
         else:
             self._conn.setStyleSheet(f"color: {RED};")
             self._conn.setText("● Disconnected")
@@ -1038,6 +1157,7 @@ class StatusBar:
             self._mismatch_lbl.setVisible(False)
             self._batt.set_connected(False)
             self._radio.set_connected(False)
+            self._alive.set_connected(False)
 
     def set_link_alert(self, message: str):
         if message:
@@ -1347,6 +1467,8 @@ class MainWindow(QMainWindow):
 
             from tabs.wifi_transport import WifiTransport
             WifiTransport.instance().stop()
+
+            HostLogger.instance().stop()
 
             if hasattr(self, "_remote_control"):
                 self._remote_control.close()
