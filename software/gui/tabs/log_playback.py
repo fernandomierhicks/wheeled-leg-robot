@@ -25,7 +25,8 @@ from PyQt6.QtWidgets import (
 
 from .comm_commands import send_log_delete
 from .host_logger import HostLogger
-from .log_transfer import LOG_DIR, LogTransferManager
+from .log_paths import RUNS_DIR
+from .log_transfer import LogTransferManager
 from .telem_format import TELEM_VERSION, decode_telem_full
 from .telemetry_bus import TelemetryBus
 from .theme import BG, BLUE, BORDER, DIM, GREEN, RED, SURFACE, TEXT
@@ -382,9 +383,9 @@ class LogsTab(QWidget):
         lay.addWidget(title)
 
         note = QLabel(
-            "Records every packet this GUI receives — telemetry, robot log "
+            "Records every packet from the selected live source before UI coalescing — telemetry, robot log "
             "messages, calibration events, WiFi diagnostics — to a timestamped "
-            ".jsonl file in gui/logs/, at whatever rate it arrives. Independent "
+            ".jsonl file in data/logs/runs/, at whatever rate it arrives. Independent "
             "of SD logging; starts/stops only when you click below."
         )
         note.setWordWrap(True)
@@ -436,7 +437,7 @@ class LogsTab(QWidget):
         title.setStyleSheet(f"color: {TEXT}; font-weight: bold; font-size: 13px;")
         lay.addWidget(title)
 
-        lbl_local = QLabel(f"Saved locally in {LOG_DIR}:")
+        lbl_local = QLabel(f"Saved locally in {RUNS_DIR}:")
         lbl_local.setStyleSheet(f"color: {DIM}; font-size: 11px;")
         lay.addWidget(lbl_local)
 
@@ -518,9 +519,9 @@ class LogsTab(QWidget):
 
     def _refresh_local_files(self):
         self._local_list.clear()
-        if not LOG_DIR.exists():
+        if not RUNS_DIR.exists():
             return
-        for p in sorted(LOG_DIR.glob("*.[Ww][Ll][Oo][Gg]")):
+        for p in sorted(RUNS_DIR.rglob("*.[Ww][Ll][Oo][Gg]")):
             size_kb = p.stat().st_size / 1024.0
             item = QListWidgetItem(f"{p.name}   ({size_kb:.1f} KB)")
             item.setData(Qt.ItemDataRole.UserRole, str(p))
@@ -536,7 +537,7 @@ class LogsTab(QWidget):
         self._pb.open(Path(item.data(Qt.ItemDataRole.UserRole)))
 
     def _on_browse(self):
-        start_dir = str(LOG_DIR) if LOG_DIR.exists() else str(Path.home())
+        start_dir = str(RUNS_DIR) if RUNS_DIR.exists() else str(Path.home())
         path, _ = QFileDialog.getOpenFileName(self, "Open .wlog", start_dir, "WLOG files (*.WLOG *.wlog)")
         if path:
             self._pb.open(Path(path))

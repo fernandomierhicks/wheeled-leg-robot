@@ -1,5 +1,8 @@
 # HipMotors
 
+> **AI maintenance note:** If you find anything here that is stale while
+> working in this tree, update this README in the same change.
+
 AK45-10 hip motor driver — MIT Cheetah protocol over CAN2 (FlexCAN_T4).
 
 ## Wiring

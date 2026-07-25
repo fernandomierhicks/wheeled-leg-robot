@@ -81,7 +81,7 @@
     {
       "symbol": "FAULT_CALIBRATION_TIMEOUT",
       "id": 5,
-      "description": "hardstop not found within CALIB_SAFETY_BOUND_RAD"
+      "description": "retract-switch homing safety check failed"
     },
     {
       "symbol": "FAULT_HUMAN_ESTOP",
@@ -385,33 +385,46 @@
     },
     {
       "symbol": "PARAM_CALIB_SEEK_SPEED",
-      "id": 256,
+      "id": 288,
       "group": "GROUP_CALIB",
       "name": "calib_seek_speed",
       "default": 0.17453,
       "min": 0.01,
-      "max": 1.0,
+      "max": 0.5,
       "flags": [
         "persistent"
       ],
-      "description": "Ramp speed toward hardstop while seeking [rad/s]."
+      "description": "Slow position-ramp speed toward the retract limit switch [rad/s]."
     },
     {
-      "symbol": "PARAM_CALIB_KP_BOTTOM",
-      "id": 257,
+      "symbol": "PARAM_CALIB_MOVE_SPEED",
+      "id": 289,
       "group": "GROUP_CALIB",
-      "name": "calib_kp_bottom",
-      "default": 16.0,
-      "min": 0.0,
-      "max": 500.0,
+      "name": "calib_move_speed",
+      "default": 0.174533,
+      "min": 0.01,
+      "max": 0.5,
       "flags": [
         "persistent"
       ],
-      "description": "Position gain while seeking SEEK_BOTTOM (retract, weight-assisted); also reused by CAL_RETURN_HOME's traverse-back move."
+      "description": "Slow position-ramp speed while releasing and backing away from the switch [rad/s]."
+    },
+    {
+      "symbol": "PARAM_CALIB_SEEK_KP",
+      "id": 290,
+      "group": "GROUP_CALIB",
+      "name": "calib_seek_kp",
+      "default": 16.0,
+      "min": 0.1,
+      "max": 100.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Weak MIT position-gain target while seeking toward the retract switch; authority slews up from zero over calib_rampdown_s."
     },
     {
       "symbol": "PARAM_CALIB_KD",
-      "id": 258,
+      "id": 291,
       "group": "GROUP_CALIB",
       "name": "calib_kd",
       "default": 0.05,
@@ -420,207 +433,154 @@
       "flags": [
         "persistent"
       ],
-      "description": "Damping while seeking, both phases."
+      "description": "MIT damping gain used for all switch-homing motion."
     },
     {
-      "symbol": "PARAM_CALIB_HOLD_KP",
-      "id": 259,
+      "symbol": "PARAM_CALIB_SEEK_CURRENT_LIMIT_A",
+      "id": 292,
       "group": "GROUP_CALIB",
-      "name": "calib_hold_kp",
-      "default": 1.0,
-      "min": 0.0,
-      "max": 500.0,
-      "flags": [
-        "persistent"
-      ],
-      "description": "Position gain while holding at home."
-    },
-    {
-      "symbol": "PARAM_CALIB_HOLD_KD",
-      "id": 260,
-      "group": "GROUP_CALIB",
-      "name": "calib_hold_kd",
-      "default": 0.05,
-      "min": 0.0,
+      "name": "calib_seek_cur_lim",
+      "default": 0.75,
+      "min": 0.2,
       "max": 5.0,
       "flags": [
         "persistent"
       ],
-      "description": "Damping while holding at home."
+      "description": "Measured motor-current safety threshold while seeking toward the retract switch [A]; it must be exceeded continuously for calib_cur_trip_ms before calibration fails."
     },
     {
-      "symbol": "PARAM_CALIB_STALL_CUR_BOTTOM",
-      "id": 261,
+      "symbol": "PARAM_CALIB_MOVE_CURRENT_LIMIT_A",
+      "id": 293,
       "group": "GROUP_CALIB",
-      "name": "calib_stall_cur_btm",
-      "default": 0.75,
-      "min": 0.1,
+      "name": "calib_move_cur_lim",
+      "default": 1.5,
+      "min": 0.2,
       "max": 10.0,
       "flags": [
         "persistent"
       ],
-      "description": "Current threshold to declare a hardstop while seeking SEEK_BOTTOM (retract) [A]."
+      "description": "Measured motor-current safety threshold while moving away from an initially pressed retract switch or backing off after zeroing [A]; it must be exceeded continuously for calib_cur_trip_ms before calibration fails."
     },
     {
-      "symbol": "PARAM_CALIB_STALL_DEADBAND",
-      "id": 262,
+      "symbol": "PARAM_CALIB_BACKOFF_RAD",
+      "id": 294,
       "group": "GROUP_CALIB",
-      "name": "calib_stall_db",
-      "default": 0.015,
-      "min": 0.001,
-      "max": 0.5,
+      "name": "calib_backoff_rad",
+      "default": 0.0872665,
+      "min": 0.01,
+      "max": 0.35,
       "flags": [
         "persistent"
       ],
-      "description": "Max position movement per tick to still count as stalled [rad]."
+      "description": "Actual encoder distance the hip must move away from the switch during initial clearance and after homing [rad]; default 5 degrees."
     },
     {
-      "symbol": "PARAM_CALIB_STALL_TICKS",
-      "id": 263,
+      "symbol": "PARAM_CALIB_RANGE_L_RAD",
+      "id": 295,
       "group": "GROUP_CALIB",
-      "name": "calib_stall_ticks",
-      "default": 60.0,
-      "min": 5.0,
-      "max": 500.0,
+      "name": "calib_range_l_rad",
+      "default": 1.5708,
+      "min": 0.1,
+      "max": 3.14159,
       "flags": [
         "persistent"
       ],
-      "description": "Consecutive stalled ticks before declaring a hardstop."
+      "description": "Left hip extended software limit as an angular delta from retract-switch zero [rad]."
     },
     {
-      "symbol": "PARAM_CALIB_MARGIN",
-      "id": 264,
+      "symbol": "PARAM_CALIB_RANGE_R_RAD",
+      "id": 296,
       "group": "GROUP_CALIB",
-      "name": "calib_margin",
-      "default": 0.17453,
-      "min": 0.0,
+      "name": "calib_range_r_rad",
+      "default": 1.5708,
+      "min": 0.1,
+      "max": 3.14159,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Right hip extended software limit as an angular delta from retract-switch zero [rad]."
+    },
+    {
+      "symbol": "PARAM_CALIB_SEEK_TIMEOUT_S",
+      "id": 297,
+      "group": "GROUP_CALIB",
+      "name": "calib_seek_timeout",
+      "default": 30.0,
+      "min": 1.0,
+      "max": 60.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Maximum time to seek a retract switch before calibration faults [s]."
+    },
+    {
+      "symbol": "PARAM_CALIB_RELEASE_TIMEOUT_S",
+      "id": 298,
+      "group": "GROUP_CALIB",
+      "name": "calib_release_to",
+      "default": 5.0,
+      "min": 0.5,
+      "max": 30.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Maximum time allowed for an initially or newly pressed switch to release [s]."
+    },
+    {
+      "symbol": "PARAM_CALIB_MAX_SEEK_TRAVEL_RAD",
+      "id": 299,
+      "group": "GROUP_CALIB",
+      "name": "calib_max_seek_rad",
+      "default": 2.0,
+      "min": 0.1,
+      "max": 6.28319,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Maximum commanded travel while seeking a retract switch before calibration faults [rad]."
+    },
+    {
+      "symbol": "PARAM_CALIB_MAX_RELEASE_TRAVEL_RAD",
+      "id": 300,
+      "group": "GROUP_CALIB",
+      "name": "calib_max_rel_rad",
+      "default": 0.5,
+      "min": 0.05,
       "max": 1.5708,
       "flags": [
         "persistent"
       ],
-      "description": "Safety margin kept from each hardstop [rad]."
+      "description": "Maximum commanded travel allowed while moving away from a retract switch; must be at least calib_backoff_rad [rad]."
     },
     {
-      "symbol": "PARAM_CALIB_SAFETY_BOUND",
-      "id": 265,
+      "symbol": "PARAM_CALIB_CURRENT_TRIP_MS",
+      "id": 301,
       "group": "GROUP_CALIB",
-      "name": "calib_safety_bound",
-      "default": 1.5708,
-      "min": 0.5,
-      "max": 6.28319,
-      "flags": [
-        "readonly"
-      ],
-      "description": "Max CAL_SEEK_BOTTOM travel before fault [rad] — worst case an unknown start position needs the full joint range to reach the first hardstop. Geometry-derived; READONLY, edit + reflash to change."
-    },
-    {
-      "symbol": "PARAM_CALIB_L_SEEK_DIR",
-      "id": 266,
-      "group": "GROUP_CALIB",
-      "name": "calib_l_seek_dir",
-      "default": 1.0,
-      "min": -1.0,
-      "max": 1.0,
-      "flags": [
-        "readonly"
-      ],
-      "description": "Sign (+1/-1) toward left hip bottom hardstop. Wiring-direction constant; READONLY, edit + reflash to change."
-    },
-    {
-      "symbol": "PARAM_CALIB_R_SEEK_DIR",
-      "id": 267,
-      "group": "GROUP_CALIB",
-      "name": "calib_r_seek_dir",
-      "default": 1.0,
-      "min": -1.0,
-      "max": 1.0,
-      "flags": [
-        "readonly"
-      ],
-      "description": "Sign (+1/-1) toward right hip bottom hardstop. Flipped from -1.0 — confirmed backwards on the hardware bench. Wiring-direction constant; READONLY, edit + reflash to change."
-    },
-    {
-      "symbol": "PARAM_CALIB_DONE",
-      "id": 268,
-      "group": "GROUP_CALIB",
-      "name": "calib_done",
-      "default": 0.0,
-      "min": 0.0,
-      "max": 1.0,
-      "flags": [
-        "persistent",
-        "readonly"
-      ],
-      "description": "1.0 = calibration has completed at least once (persisted across reboots)."
-    },
-    {
-      "symbol": "PARAM_CALIB_SAFETY_BOUND_TOP",
-      "id": 269,
-      "group": "GROUP_CALIB",
-      "name": "calib_bound_top",
-      "default": 3.14159,
-      "min": 0.5,
-      "max": 6.28319,
-      "flags": [
-        "readonly"
-      ],
-      "description": "Max CAL_SEEK_TOP travel before fault [rad], measured from the just-zeroed bottom hardstop. Geometry-derived; READONLY, edit + reflash to change."
-    },
-    {
-      "symbol": "PARAM_CALIB_KP_TOP",
-      "id": 270,
-      "group": "GROUP_CALIB",
-      "name": "calib_kp_top",
-      "default": 32.0,
+      "name": "calib_cur_trip_ms",
+      "default": 50.0,
       "min": 0.0,
       "max": 500.0,
       "flags": [
         "persistent"
       ],
-      "description": "Position gain while seeking SEEK_TOP (extend, fights robot weight)."
+      "description": "Continuous time motor current must remain above the active calibration current limit before faulting [ms]; 0 restores immediate trips."
     },
     {
-      "symbol": "PARAM_CALIB_STALL_CUR_TOP",
-      "id": 271,
+      "symbol": "PARAM_CALIB_MOVE_KP",
+      "id": 302,
       "group": "GROUP_CALIB",
-      "name": "calib_stall_cur_top",
-      "default": 1.5,
+      "name": "calib_move_kp",
+      "default": 32.0,
       "min": 0.1,
-      "max": 10.0,
+      "max": 100.0,
       "flags": [
         "persistent"
       ],
-      "description": "Current threshold to declare a hardstop while seeking SEEK_TOP (extend) [A]; higher than the retract threshold since fighting gravity raises baseline current."
-    },
-    {
-      "symbol": "PARAM_CALIB_RETRACT_ENABLE",
-      "id": 272,
-      "group": "GROUP_CALIB",
-      "name": "calib_retract_en",
-      "default": 0.0,
-      "min": 0.0,
-      "max": 1.0,
-      "flags": [
-        "persistent"
-      ],
-      "description": "1 = run SEEK_BOTTOM (retract), the prerequisite phase that establishes the zero reference. 0 skips the whole axis, like a disabled hip motor. READONLY, edit + reflash to change."
-    },
-    {
-      "symbol": "PARAM_CALIB_EXTEND_ENABLE",
-      "id": 273,
-      "group": "GROUP_CALIB",
-      "name": "calib_extend_en",
-      "default": 1.0,
-      "min": 0.0,
-      "max": 1.0,
-      "flags": [
-        "persistent"
-      ],
-      "description": "1 = run SEEK_TOP (extend) after retract. 0 holds at CAL_HOLD_RETRACT instead — no limits computed, calibration_done() never fires for that axis. READONLY, edit + reflash to change."
+      "description": "MIT position-gain target while moving away from the retract switch against robot weight; uses the same calib_rampdown_s authority slew."
     },
     {
       "symbol": "PARAM_CALIB_RAMPDOWN_TIME_S",
-      "id": 274,
+      "id": 303,
       "group": "GROUP_CALIB",
       "name": "calib_rampdown_s",
       "default": 2.0,
@@ -629,20 +589,20 @@
       "flags": [
         "persistent"
       ],
-      "description": "Seconds to ramp kp/kd from hold values down to zero before calibration_done() fires, so exiting CALIBRATION never yanks torque to zero in one tick. 0 = no ramp."
+      "description": "Seconds for calibration Kp to slew up from zero and for Kp/Kd to ramp back to zero at successful completion or operator cancellation; 0 disables ramping."
     },
     {
       "symbol": "PARAM_CALIB_BYPASS_EN",
-      "id": 275,
+      "id": 305,
       "group": "GROUP_CALIB",
       "name": "calib_bypass_en",
-      "default": 1.0,
+      "default": 0.0,
       "min": 0.0,
       "max": 1.0,
       "flags": [
         "persistent"
       ],
-      "description": "1 = allow RUNNING mode without a completed hardstop calibration (hip position limits unenforced — bench-test only). Persisted; default 0."
+      "description": "1 = allow RUNNING without completed switch calibration or valid hip limits; dangerous bench-test bypass."
     },
     {
       "symbol": "PARAM_WM_ENC_TIMEOUT_MS",
@@ -1014,7 +974,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Hard cutoff margin from the calibrated hardstop [rad]."
+      "description": "Hard cutoff margin from the configured extended hip software limit [rad]."
     },
     {
       "symbol": "PARAM_JUMP_KP",
@@ -1197,7 +1157,7 @@
       "min": 0.0,
       "max": 1.0,
       "flags": [],
-      "description": "1 = force the hip gain-schedule blend to alpha=0.0 (fully-retracted LQR gains), bypassing the hm_limits valid-calibration check entirely. For hardware tuning with hips zip-tied retracted and disabled, where real calibration can never complete. Not persisted — always boots to 0."
+      "description": "1 = force the hip gain-schedule blend to alpha=0.0 (fully-retracted LQR gains), bypassing the hm_limits valid-calibration check entirely. For hardware tuning at the retracted anchor without needing a completed calibration. Not persisted — always boots to 0."
     },
     {
       "symbol": "PARAM_GUI_MOTION_CTRL_EN",
@@ -1403,7 +1363,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Retry attempts after the first (total attempts = this + 1); int-as-float, mirrors calib_stall_ticks convention."
+      "description": "Retry attempts after the first (total attempts = this + 1); integer stored as a float."
     },
     {
       "symbol": "PARAM_STANDUP_RETRY_PAUSE_S",
@@ -1417,6 +1377,32 @@
         "persistent"
       ],
       "description": "Wheels-off settle time [s] between retry attempts."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_RET",
+      "id": 1084,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_pitch_trim_ret",
+      "default": 0.0,
+      "min": -0.3491,
+      "max": 0.3491,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Balance-point pitch offset [rad], fully retracted leg (alpha=0). The lean the LQR holds for zero velocity, compensating a CG that is not exactly over the wheel axle. Interpolated toward lqr_pitch_trim_ext by the gain-schedule alpha. Not currently a live-tune target (see LIVE_TUNE_SLOTS in main.cpp) — edit via the Params tab, or repoint a live-tune slot at this param for a future bench session."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_EXT",
+      "id": 1085,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_pitch_trim_ext",
+      "default": 0.0,
+      "min": -0.3491,
+      "max": 0.3491,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Balance-point pitch offset [rad], fully extended leg (alpha=1). Companion to lqr_pitch_trim_ret; the two are linearly interpolated by the gain-schedule alpha (higher order later if needed)."
     },
     {
       "symbol": "PARAM_RADIO_HIP_CMD",
@@ -1461,18 +1447,32 @@
       "description": "Max yaw rate mapped from full CH4 deflection [rad/s]. READONLY — copied from the active CH9 profile's yaw_max. Edit profile1/2/3_yaw_max instead."
     },
     {
-      "symbol": "PARAM_RADIO_PITCH_TRIM",
+      "symbol": "PARAM_LIVE_TUNE_CH7_VAL",
       "id": 1283,
       "group": "GROUP_COMMAND",
-      "name": "radio_pitch_trim",
+      "name": "live_tune_ch7_val",
       "default": 0.0,
-      "min": -0.0873,
-      "max": 0.0873,
+      "min": 0.0,
+      "max": 0.5,
       "flags": [
         "readonly",
         "command"
       ],
-      "description": "Pitch equilibrium trim from CH7 [rad]; hook only, not yet applied to LQR."
+      "description": "Live-tune shadow value for CH7's knob, mapped into whatever param CH7 is currently wired to in main.cpp's LIVE_TUNE_SLOTS table (see live_tune.h) — currently vel_pi_kp. Only takes effect (overrides the real param in the control loop) once the knob has been swept through the target's current value (\"pickup\", avoids a step change) and live-tune mode is active (RUNNING + calibration switch up). Write live_tune_latch=1 to persist the shadow into the real param. Firmware-written, stale when the radio link is dead."
+    },
+    {
+      "symbol": "PARAM_LIVE_TUNE_CH8_VAL",
+      "id": 1307,
+      "group": "GROUP_COMMAND",
+      "name": "live_tune_ch8_val",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 0.5,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Live-tune shadow value for CH8's knob — same mechanism as live_tune_ch7_val, currently wired to vel_pi_ki. See LIVE_TUNE_SLOTS in main.cpp."
     },
     {
       "symbol": "PARAM_PROFILE_1_VEL_MAX",
@@ -1604,6 +1604,19 @@
         "command"
       ],
       "description": "Active speed profile index (0/1/2), selected by CH9; firmware-written, READONLY."
+    },
+    {
+      "symbol": "PARAM_LIVE_TUNE_LATCH",
+      "id": 1306,
+      "group": "GROUP_COMMAND",
+      "name": "live_tune_latch",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "command"
+      ],
+      "description": "Write 1 while live-tuning (RUNNING + calibration switch up) to persist every currently-picked-up LIVE_TUNE_SLOTS entry's shadow value into its real param. One-shot: firmware performs the latch(es) and resets this to 0. Slots that haven't picked up yet (knob never swept through the target's current value) are skipped, not latched at their un-picked-up shadow value. Ignored outside live-tune mode."
     }
   ]
 }

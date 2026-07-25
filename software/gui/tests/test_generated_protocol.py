@@ -37,10 +37,13 @@ class GeneratedProtocolTests(unittest.TestCase):
         self.assertEqual(len(params), len({item["name"] for item in params}))
         self.assertTrue(all(len(item["name"].encode("ascii")) <= 19 for item in params))
 
-    def test_calibration_done_is_really_persistent(self):
-        calib_done = next(item for item in self.schema["parameters"]
-                          if item["symbol"] == "PARAM_CALIB_DONE")
-        self.assertEqual(set(calib_done["flags"]), {"persistent", "readonly"})
+    def test_hardware_calibration_state_is_not_exposed_as_parameters(self):
+        symbols = {item["symbol"] for item in self.schema["parameters"]}
+        self.assertFalse({
+            "PARAM_CALIB_DONE",
+            "PARAM_CALIB_L_SEEK_DIR",
+            "PARAM_CALIB_R_SEEK_DIR",
+        } & symbols)
 
 
 if __name__ == "__main__":

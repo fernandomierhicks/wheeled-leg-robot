@@ -4,7 +4,7 @@ Pure Python, no Qt/hardware dependency. Claude calls this directly (Python,
 not a CLI) during a live tuning session — there's no §2-3 remote-control loop
 yet to chain a CLI step onto, so this is a library, not a script.
 
-Owns two things per `software/gui/logs/retracted_tuning/`:
+Owns two things per tuning-session directory (normally under `data/logs/runs/`):
   - `session.json` — resumable state: current stage, current best gains +
     fitness, current step size, trial count since last improvement.
   - `trials.csv`   — append-only, one row per hardware run (mirrors the sim's

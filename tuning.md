@@ -8,8 +8,8 @@ Tune the LQR pitch/rate, vel-PI, and yaw-PI gains on real hardware, starting fro
 
 ## Constraints this phase
 
-- **Hips are zip-tied fully retracted, hip motors disabled** (`hip_l_enable=0`, `hip_r_enable=0`) for all of Phase 1. There is no leg to hold — Fernando's only job during a run is the radio arm switch (CH10) and disarming if something looks wrong.
-- **Real hip calibration can never complete** with hips zip-tied (it requires cycling them through their range), so `alpha` (the leg-height gain-schedule blend) can't be computed the normal way — see `alpha_force_ret_en` below.
+- **Hips are free-running.** Fernando's job during a run is the radio arm switch (CH10) and disarming if something looks wrong.
+- `alpha` (the leg-height gain-schedule blend) still needs a completed calibration to compute normally — until that's run this session, it defaults to the retracted anchor, or force it explicitly with `alpha_force_ret_en` (see below).
 - **Velocity/yaw setpoints for vel-PI/yaw-PI trials come from the GUI motion channel, not Fernando's sticks** — a human-held stick can't reproduce the same profile trial-to-trial. Arming stays exclusively radio-sourced throughout; the motion channel only ever gates *what* `v_cmd_ms`/`omega_cmd_rds` are set to, never *whether* the robot is armed. Fernando can always kill a run via CH10 regardless of what Claude is commanding.
 - Mid/extended leg positions are out of scope for Phase 1 — see "Deferred to Phase 2" at the bottom.
 
@@ -121,7 +121,7 @@ Accept rule (1/5-success): `safety_ok and fitness < best_fitness` → adopt as n
 ## Safety
 
 - Existing hard clamps (`PARAM_LQR_TORQUE_LIMIT`, `PARAM_WHEEL_VEL_LIMIT_TURNS_S` + its 2× hard-fault multiplier, `PITCH_WATCHDOG_RAD` 50°, `MAX_HIP_DELTA_RAD`, and the vel-PI/yaw-PI clamp params) stay exactly as configured throughout — the search only ever varies the stage's own Kp/Ki (or K_pitch/K_rate) pair, never loosens a limit to "let a candidate through." They apply identically regardless of whether `v_cmd_ms`/`omega_cmd_rds` came from radio or the GUI motion channel.
-- **Hip motors are physically disabled and legs zip-tied for all of Phase 1** — no hip-torque hazard this phase regardless of any parameter or stick.
+- **Hips are free-running and enabled** — real hip-torque hazard now applies; treat hip current/position the same as any other energized axis when deciding whether a candidate is safe.
 - **Arming is unconditionally radio-sourced** — `gui_motion_ctrl_en` only ever gates `v_cmd_ms`/`omega_cmd_rds`, never CH10's arm/disarm authority. Fernando holds the arm switch every run and disarms immediately if the response looks wrong.
 - The GUI motion channel has its own ~300 ms staleness watchdog (see the re-send gotcha above) — if Claude's process stalls mid-sequence, firmware zeroes the setpoints and reverts to radio control on its own, independent of Fernando noticing.
 - Check every run's health flags, currents, and fault code *before* deciding whether to keep a candidate, independent of the fitness score — `evaluate()`'s `safety_ok` already does this; never adopt a candidate where it's `False`.
@@ -163,4 +163,4 @@ Not built or scheduled in Phase 1 — revisit once the retracted anchor's LQR + 
 - Default value = the current linear-interpolated midpoint of the (by-then Phase-1-tuned) RET/EXT gains — behavior at every `alpha` stays identical to today's 2-point blend until NOM is actually tuned away from that midpoint. Compute the actual numbers from the live RET/EXT values on the device, not guessed.
 - `control_loop.cpp`'s gain interpolation becomes piecewise-linear: `alpha ∈ [0, 0.5]` blends RET→NOM, `alpha ∈ [0.5, 1.0]` blends NOM→EXT.
 
-vel-PI and yaw-PI are not height-scheduled today, and this plan doesn't propose making them so. Phase 2's job for those two is *validating* the Phase-1-tuned gains still hold up at nominal/extended (re-tuning only if they clearly don't), not adding new scheduling machinery. Phase 2 also needs real hip calibration back (hips un-zip-tied) and `alpha_force_ret_en` cleared.
+vel-PI and yaw-PI are not height-scheduled today, and this plan doesn't propose making them so. Phase 2's job for those two is *validating* the Phase-1-tuned gains still hold up at nominal/extended (re-tuning only if they clearly don't), not adding new scheduling machinery. Phase 2 also needs a completed real hip calibration and `alpha_force_ret_en` cleared.

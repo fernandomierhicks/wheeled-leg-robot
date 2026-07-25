@@ -2,7 +2,7 @@
 
 Displays live position + command for both hip axes. The "Command" trace
 always shows a position in degrees: the MIT setpoint (p°, from Send MIT /
-test wave) in MANUAL mode, the firmware's hardstop-seek ramp in CALIBRATION,
+test wave) in MANUAL mode, the firmware's switch-homing ramp in CALIBRATION,
 or the active position command in all other states.
 Controls: Enable / Disable / Zero per-motor and both,
           MIT position command (p°, Kp, Kd, τff).
@@ -424,7 +424,7 @@ class _MotorPanel(QWidget):
             self._lbl_limits.setText(f"[{min_rad:+.3f}, {max_rad:+.3f}] rad")
             # Sync the p° clamp spinboxes to the calibrated range so the jog
             # slider (which is clamped through _send_mit like any other p°
-            # command) actually reaches the true retract/extend hardstops.
+            # command) reaches the configured retract/extend software limits.
             self._sp_min.setValue(math.degrees(min_rad))
             self._sp_max.setValue(math.degrees(max_rad))
         self._update_jog_enabled()

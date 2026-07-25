@@ -26,6 +26,7 @@ import json
 import math
 import time
 import uuid
+from pathlib import Path
 
 from PyQt6.QtCore import QEventLoop, QObject, QTimer
 from PyQt6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket
@@ -33,6 +34,7 @@ from PyQt6.QtWidgets import QApplication
 
 from .comm_commands import CommandResultBus, send_param_get, send_param_get_all, send_param_set
 from .generated_protocol import PARAM_GUI_MOTION_CTRL_EN, PARAM_V_CMD_MS, PARAM_OMEGA_CMD_RDS
+from .host_logger import HostLogger
 from .log_transfer import LogTransferManager
 from .operator_bridge import GuiOperatorBridge
 from .port_manager import SerialPortManager
@@ -598,6 +600,57 @@ class RemoteControlServer(QObject):
         LogTransferManager.instance().stop_logging()
         return {"ok": True}
 
+    def _cmd_host_log_status(self, cmd: dict) -> dict:
+        logger = HostLogger.instance()
+        return {
+            "ok": True,
+            "active": logger.is_logging(),
+            "path": str(logger.path()) if logger.path() is not None else None,
+            "record_count": logger.record_count(),
+        }
+
+    def _cmd_host_log_start(self, cmd: dict) -> dict:
+        logger = HostLogger.instance()
+        if not logger.is_logging():
+            logger.start()
+        return self._cmd_host_log_status(cmd)
+
+    def _cmd_host_log_stop(self, cmd: dict) -> dict:
+        logger = HostLogger.instance()
+        path = logger.path()
+        count = logger.record_count()
+        logger.stop()
+        return {
+            "ok": True,
+            "active": False,
+            "path": str(path) if path is not None else None,
+            "record_count": count,
+        }
+
+    def _cmd_analyzer_load(self, cmd: dict) -> dict:
+        raw_path = cmd.get("path")
+        if not raw_path:
+            return {"ok": False, "error": "path is required"}
+        path = Path(str(raw_path)).expanduser().resolve()
+        if not path.is_file():
+            return {"ok": False, "error": f"log file does not exist: {path}"}
+        analyzer = getattr(self.parent(), "_tab_widgets", {}).get("Log Analyzer")
+        if analyzer is None:
+            return {"ok": False, "error": "Log Analyzer tab is unavailable"}
+        analyzer._load(path)
+        if analyzer._run is None:
+            return {"ok": False, "error": analyzer._lbl_file.text()}
+        return {
+            "ok": True,
+            "path": str(analyzer._run.path),
+            "source_kind": analyzer._run.source_kind,
+            "telem_version": analyzer._run.telem_version,
+            "sample_rate_hz": analyzer._run.sample_rate_hz,
+            "record_count": analyzer._run.count,
+            "parameter_snapshot": analyzer._params is not None,
+            "metrics": analyzer._metrics,
+        }
+
     def _cmd_log_list(self, cmd: dict) -> dict:
         mgr = LogTransferManager.instance()
         args = self._wait_for_signal(mgr.directory_updated, 3000, trigger=mgr.refresh)
@@ -617,18 +670,51 @@ class RemoteControlServer(QObject):
                 max(LOG_DOWNLOAD_TIMEOUT_FLOOR_MS,
                     int(size / LOG_DOWNLOAD_MIN_BPS * 1000) + LOG_DOWNLOAD_OVERHEAD_MS),
             )
-        args = self._wait_for_signal(
-            mgr.transfer_complete,
-            timeout_ms,
-            trigger=lambda: mgr.download(idx),
-        )
-        if args is None:
+        entry = next((item for item in mgr._directory if item.get("index") == idx), None)
+        expect_params = bool(entry and entry.get("has_params"))
+        loop = QEventLoop()
+        result: dict = {"paths": []}
+
+        def on_complete(file_index, local_path, crc_ok):
+            if file_index != idx:
+                return
+            if not crc_ok or not local_path:
+                result["error"] = mgr.failure_reason()
+                loop.quit()
+                return
+            result["paths"].append(local_path)
+            if not expect_params or Path(local_path).suffix.casefold() == ".params":
+                loop.quit()
+
+        mgr.transfer_complete.connect(on_complete)
+        timer = QTimer()
+        timer.setSingleShot(True)
+        timer.timeout.connect(loop.quit)
+        timer.start(timeout_ms)
+        try:
+            mgr.download_with_params(idx)
+            loop.exec()
+        finally:
+            mgr.transfer_complete.disconnect(on_complete)
+            timer.stop()
+
+        if not result["paths"] or (expect_params and len(result["paths"]) < 2):
+            detail = result.get("error")
+            if detail:
+                return {"ok": False, "error": f"download failed: {detail}"}
             return {"ok": False, "error": f"timeout waiting for download ({timeout_ms // 1000}s budget); "
                     "the transfer may still complete in the background — retrying will resume, not restart, it"}
-        file_index, local_path, crc_ok = args
-        if not crc_ok or not local_path:
-            return {"ok": False, "error": "download failed (CRC mismatch or transfer error)"}
-        return {"ok": True, "file_index": file_index, "path": local_path}
+        wlog_path = next(
+            (path for path in result["paths"] if Path(path).suffix.casefold() == ".wlog"),
+            result["paths"][0],
+        )
+        return {
+            "ok": True,
+            "file_index": idx,
+            "path": wlog_path,
+            "paths": result["paths"],
+            "parameter_sidecar": expect_params,
+        }
 
     def _cmd_telem(self, cmd: dict) -> dict:
         age_ms = None

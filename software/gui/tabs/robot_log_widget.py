@@ -13,7 +13,7 @@ from .theme import BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
 _AXIS_NAMES = {0x00: "BOTH", 0x01: "L", 0x02: "R"}
 _CALIB_EVENTS = {
     0x01: ("CALIB START",        BLUE),
-    0x02: ("CALIB BOTTOM FOUND", TEXT),
+    0x02: ("CALIB SWITCH ZERO", TEXT),
     0x03: ("CALIB LIMITS",       GREEN),
     0x04: ("CALIB DONE",         GREEN),
     0x05: ("CALIB FAULT",        RED),
@@ -154,12 +154,12 @@ class RobotLogWidget(QWidget):
             if event == 0x01:
                 self._append("── calibration started ──", BLUE)
             elif event == 0x02:
-                self._append(f"{axis_name}: bottom hardstop found, zeroed @ {pos:+.3f} rad", color)
+                self._append(f"{axis_name}: retract switch found, encoder zeroed", color)
             elif event == 0x03:
                 self._append(f"{axis_name}: limits [{mn:+.3f}, {mx:+.3f}] rad  (range {pos:+.3f})", color)
             elif event == 0x04:
                 self._append(f"{axis_name}: done, holding @ {pos:+.3f} rad  limits [{mn:+.3f}, {mx:+.3f}]", color)
             elif event == 0x05:
-                self._append(f"{axis_name}: FAULT — hardstop not found @ {pos:+.3f} rad", color)
+                self._append(f"{axis_name}: FAULT during switch homing @ {pos:+.3f} rad", color)
             else:
                 self._append(f"{axis_name}: {event_name}  pos={pos:+.3f}", color)

@@ -142,6 +142,7 @@ static void rx_callback(const CAN_message_t& msg) {
     ax->vel_rad_s  = vel;
     ax->current_A  = cur;
     ax->last_fb_ms = millis();
+    ax->feedback_seq++;
     ax->ever_heard = true;
 }
 
@@ -291,8 +292,8 @@ void hip_motors_clear_setpoints() {
 void hip_cmd_to_setpoints(float t, float* pos_L, float* pos_R) {
     float span_L = hm_limits_L.max_rad - hm_limits_L.min_rad;
     float span_R = hm_limits_R.max_rad - hm_limits_R.min_rad;
-    float dir_L  = param_get(PARAM_CALIB_L_SEEK_DIR);
-    float dir_R  = param_get(PARAM_CALIB_R_SEEK_DIR);
+    float dir_L  = CALIB_L_SEEK_DIR;
+    float dir_R  = CALIB_R_SEEK_DIR;
     *pos_L = (dir_L > 0.0f) ? (hm_limits_L.max_rad - t * span_L)
                              : (hm_limits_L.min_rad + t * span_L);
     *pos_R = (dir_R > 0.0f) ? (hm_limits_R.max_rad - t * span_R)
@@ -303,4 +304,18 @@ bool hip_motors_ok() {
     bool l_ok = (param_get(PARAM_HIP_L_ENABLE) < 0.5f) || hm_L.ok;
     bool r_ok = (param_get(PARAM_HIP_R_ENABLE) < 0.5f) || hm_R.ok;
     return l_ok && r_ok;
+}
+
+void hip_motors_forgive_feedback_stall() {
+    // AK45 MIT feedback is request-response: the motor only replies to a
+    // command frame. A deliberate, known-blocking main-loop operation (opening
+    // or finalizing an SD log) can freeze the 500 Hz tick for tens of ms, so no
+    // command goes out and last_fb_ms goes stale — which the next poll() would
+    // otherwise read as a motor dropout and ESTOP. Reset the freshness clock so
+    // that self-inflicted stall isn't blamed on the motor. This grants exactly
+    // one HIP_CAN_TIMEOUT_MS of grace; a genuinely dead motor still faults on
+    // the following interval because no real reply refreshes last_fb_ms.
+    uint32_t now = millis();
+    hm_L.last_fb_ms = now;
+    hm_R.last_fb_ms = now;
 }

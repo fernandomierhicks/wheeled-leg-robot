@@ -80,12 +80,14 @@ def main():
     print(f"Wrote {len(df)} rows -> {out_path}", file=sys.stderr)
 
     # Loop-timing sanity check: t_micros deltas should sit near 1e6/sample_rate_hz
-    # (2000 us at 500 Hz), with only rare, small overruns above the 2 ms tick budget.
+    # (2000 us at 500 Hz), with jitter when SD service briefly occupies a control tick.
     dt = df["t_micros"].diff().dropna()
     if not dt.empty:
+        slow_delta_us = float(dt.median()) + 200.0
         print(
             f"t_micros delta [us]: mean={dt.mean():.1f}  p95={dt.quantile(0.95):.1f}  "
-            f"max={dt.max():.1f}  min={dt.min():.1f}  n_over_2200us={(dt > 2200).sum()}",
+            f"max={dt.max():.1f}  min={dt.min():.1f}  "
+            f"n_over_{slow_delta_us:.0f}us={(dt > slow_delta_us).sum()}",
             file=sys.stderr,
         )
 

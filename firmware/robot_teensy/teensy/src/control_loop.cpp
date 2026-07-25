@@ -6,6 +6,7 @@
 #include "hip_motors.h"
 #include "wheel_motors.h"
 #include "param_registry.h"
+#include "live_tune.h"
 #include "IMU.h"
 #include <math.h>
 #include <Arduino.h>
@@ -205,19 +206,18 @@ void controlLoop_run() {
     // ── Phase 5: Hip gain scheduling ─────────────────────────────────────────
     // alpha ∈ [0,1]: 0 = fully retracted (high gains), 1 = fully extended (low gains).
     // Uses the calibrated position range so it is coordinate-system agnostic.
-    // §1c (tuning.md): hips are zip-tied retracted and disabled for Phase 1, so
-    // real calibration can never complete — default to the retracted anchor
-    // whenever calibration is invalid, rather than an arbitrary midpoint, so
-    // alpha_force_ret_en doesn't need to be set every session. That param stays
-    // available to force retracted even once calibration is valid.
+    // §1c (tuning.md): default to the retracted anchor whenever calibration is
+    // invalid (e.g. not yet run this session), rather than an arbitrary
+    // midpoint. alpha_force_ret_en stays available to force retracted even
+    // once calibration is valid.
     float alpha = 0.0f;  // default: retracted, used whenever calibration is invalid
     if (param_get(PARAM_ALPHA_FORCE_RETRACTED_EN) >= 0.5f) {
         alpha = 0.0f;
     } else if (hm_limits_L.valid && hm_limits_R.valid) {
         float span_L = hm_limits_L.max_rad - hm_limits_L.min_rad;
         float span_R = hm_limits_R.max_rad - hm_limits_R.min_rad;
-        float dir_L  = param_get(PARAM_CALIB_L_SEEK_DIR);
-        float dir_R  = param_get(PARAM_CALIB_R_SEEK_DIR);
+        float dir_L  = CALIB_L_SEEK_DIR;
+        float dir_R  = CALIB_R_SEEK_DIR;
         float t_L = (dir_L > 0.0f) ? (hm_limits_L.max_rad - hm_L.pos_rad) / span_L
                                     : (hm_L.pos_rad - hm_limits_L.min_rad) / span_L;
         float t_R = (dir_R > 0.0f) ? (hm_limits_R.max_rad - hm_R.pos_rad) / span_R
@@ -255,9 +255,12 @@ void controlLoop_run() {
         if (s_vel_integral < -int_max) s_vel_integral = -int_max;
 
         float dv_cmd_dt = (v_desired - s_prev_v_desired) / DT;
-        float theta_raw = param_get(PARAM_VEL_PI_KP)  * v_err
-                        + param_get(PARAM_VEL_PI_KI)  * s_vel_integral
-                        + param_get(PARAM_VEL_PI_KFF) * dv_cmd_dt;
+        // live_tune_value(): drop-in for param_get() so CH7/CH8 (live_tune.h)
+        // can override these two live during bench tuning without touching the
+        // persisted default until explicitly latched.
+        float theta_raw = live_tune_value(PARAM_VEL_PI_KP)  * v_err
+                        + live_tune_value(PARAM_VEL_PI_KI)  * s_vel_integral
+                        + param_get(PARAM_VEL_PI_KFF)       * dv_cmd_dt;
 
         float theta_max = param_get(PARAM_VEL_PI_THETA_MAX);
         if (theta_raw >  theta_max) theta_raw =  theta_max;
@@ -306,11 +309,22 @@ void controlLoop_run() {
     }
     g_state.tau_yaw         = tau_yaw;
 
+    // ── Balance-point pitch trim ─────────────────────────────────────────────
+    // The lean that holds zero velocity isn't pitch=0 when the CG isn't exactly
+    // over the wheel axle; it also shifts with leg height. Gain-schedule the
+    // trim by the same alpha as the LQR gains (linear ret→ext for now). Tuned
+    // live via a CH7/CH8 live-tune slot (live_tune.h) and latched into these two
+    // params when satisfied -- this always reads the latched value, not a live
+    // override, since trim isn't the live-tune target for the current bench
+    // session (see LIVE_TUNE_SLOTS in main.cpp). Offsets only the LQR pitch
+    // error, never the velocity setpoint.
+    float trim_ret = param_get(PARAM_LQR_PITCH_TRIM_RET);
+    float trim_ext = param_get(PARAM_LQR_PITCH_TRIM_EXT);
+    float pitch_trim = trim_ret + alpha * (trim_ext - trim_ret);
+    g_state.applied_pitch_trim = pitch_trim;
+
     // ── Balance LQR (Phase 5: gain-scheduled) ────────────────────────────────
-    // TODO: apply PARAM_RADIO_PITCH_TRIM as offset to pitch_ref here before computing x0.
-    //       Add: theta_ref += param_get(PARAM_RADIO_PITCH_TRIM);
-    //       Decide whether trim should also offset the vel_PI setpoint or only the LQR error.
-    float x0 = pitch - theta_ref;         // pitch error relative to lean setpoint
+    float x0 = pitch - theta_ref - pitch_trim;  // pitch error vs. lean setpoint + balance trim
     float x1 = g_state.pitch_rate_rads;   // blended in read_sensors() (real or injected)
     float x2 = vel_avg_ms - g_state.v_ref;  // zero when at commanded speed
 

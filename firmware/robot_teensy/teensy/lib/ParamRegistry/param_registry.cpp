@@ -36,13 +36,9 @@ static uint32_t       s_last_change_ms = 0;
 static const uint32_t FLUSH_QUIET_MS   = 1000;
 
 // ── Registry table ────────────────────────────────────────────────────────────
-// Add new params here. Defaults are the compile-time values previously in config.h.
-// IMPORTANT: After adding a param here and in param_ids.h, update
-//            software/gui/tabs/params_tab.py:
-//              - _SUBGROUPS, so the GUI shows it in the correct section
-//              - _PARAM_DEFS, adding this id's (name, description) entry —
-//                name copied from the "name" string below, description from
-//                the comment on this param's #define in param_ids.h.
+// Generated from protocol/schema.json. Edit the schema, then run
+// protocol/generate_protocol.py; params_tab.py only owns optional GUI subgroup
+// placement.
 // clang-format off
 static Param g_params[] = {
 #include "generated_param_table.inc"

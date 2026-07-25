@@ -1,0 +1,4 @@
+.playbypoint-profile/
+logs/
+config.json
+node_modules/

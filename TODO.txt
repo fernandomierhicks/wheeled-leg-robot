@@ -4,15 +4,14 @@
 
 
 ---Fernandos note dont change below
-ready to do legs. 
 
+Roll controller. 
 
-GUI log decored see Guilog.md
-
-live run with gain optimizer. tuning.md
 
 CAD up leg protectors ont he back and on the front below the screen. foam?
 Thin RGB strip
+
+
 
 ------------------------------------------------------firmware
 --------------------------NON-CRITICAL

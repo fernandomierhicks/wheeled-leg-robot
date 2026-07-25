@@ -1,5 +1,8 @@
 # SH2 Sensorhub driver for MCU application (No RTOS version)
 
+> **AI maintenance note:** This is vendored upstream documentation. If it
+> becomes stale, update it together with the vendored source and parent README.
+
 The files in this repository provide application-level SH2 sensor hub functionality.
 
 To use this code, an application developer will need to:

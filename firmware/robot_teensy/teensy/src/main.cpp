@@ -15,6 +15,8 @@
 #include "param_registry.h"
 #include "IBus.h"
 #include "sd_logger.h"
+#include "limit_switches.h"
+#include "live_tune.h"
 
 CommLink g_comm(Serial5, COMM_SRC_TEENSY);     // ESP32 UART bridge
 CommLink g_comm_usb(Serial, COMM_SRC_TEENSY);  // direct PC USB
@@ -23,6 +25,26 @@ RgbLed   g_led(PIN_LED_R, PIN_LED_G, PIN_LED_B);
 Buzzer   g_buzzer(PIN_BUZZER);
 
 HipCmd   g_hip_cmd = {};
+
+enum class ArmAuthority : uint8_t { NONE, GUI, RADIO };
+static ArmAuthority s_arm_authority = ArmAuthority::NONE;
+
+static const char* arm_authority_name() {
+    switch (s_arm_authority) {
+        case ArmAuthority::GUI:   return "GUI";
+        case ArmAuthority::RADIO: return "RADIO";
+        default:                  return "NONE";
+    }
+}
+
+// USB Serial's bool conversion only reports that the host configured the
+// device; it does not guarantee the host is currently draining its endpoint.
+// A write to an abandoned/full endpoint can block the 500 Hz loop for >100 ms.
+static bool usb_send_if_ready(uint8_t type, uint8_t version,
+                              const void* payload, uint16_t len) {
+    if (!Serial || Serial.availableForWrite() < (int)(10u + len)) return false;
+    return g_comm_usb.send(type, version, payload, len);
+}
 
 // Latest ToF packet received from ESP32 (updated in on_command, read in state machine and telemetry)
 TofPayload g_tof         = {{0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF}, 0xFFFF, 0xFFFF};
@@ -49,7 +71,7 @@ void comm_log(uint8_t level, const char* fmt, ...) {
     buf[0] = level;
     memcpy(buf + 1, msg, n);
     g_comm.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
-    if (Serial) g_comm_usb.send(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
+    usb_send_if_ready(COMM_TYPE_LOG, LOG_PAYLOAD_V1, buf, 1 + n);
 }
 
 // Which link requested the active SD-log GET (audit W5): bulk LOG_DATA chunks
@@ -64,7 +86,7 @@ static void sd_logger_send(uint8_t type, uint8_t version, const void* payload, u
         return;
     }
     g_comm.send(type, version, payload, len);
-    if (Serial) g_comm_usb.send(type, version, payload, len);
+    usb_send_if_ready(type, version, payload, len);
 }
 
 void comm_send_calib_event(uint8_t axis, uint8_t event,
@@ -76,7 +98,7 @@ void comm_send_calib_event(uint8_t axis, uint8_t event,
     p.min_rad = min_rad;
     p.max_rad = max_rad;
     g_comm.send(COMM_TYPE_CALIB_EVENT, CALIB_EVENT_PAYLOAD_V1, &p, sizeof(p));
-    if (Serial) g_comm_usb.send(COMM_TYPE_CALIB_EVENT, CALIB_EVENT_PAYLOAD_V1, &p, sizeof(p));
+    usb_send_if_ready(COMM_TYPE_CALIB_EVENT, CALIB_EVENT_PAYLOAD_V1, &p, sizeof(p));
 }
 
 // ── Param report helper ───────────────────────────────────────────────────────
@@ -93,7 +115,7 @@ static void send_param_report(uint16_t idx) {
     static_assert(sizeof(rpt.name) == 20, "name size mismatch");
     memcpy(rpt.name, p.name, 20);
     g_comm.send(COMM_TYPE_PARAM_REPORT, PARAM_REPORT_PAYLOAD_V1, &rpt, sizeof(rpt));
-    if (Serial) g_comm_usb.send(COMM_TYPE_PARAM_REPORT, PARAM_REPORT_PAYLOAD_V1, &rpt, sizeof(rpt));
+    usb_send_if_ready(COMM_TYPE_PARAM_REPORT, PARAM_REPORT_PAYLOAD_V1, &rpt, sizeof(rpt));
 }
 
 // TEST ONLY (Phase 9, UARTplat.md stress testing): armed by CMD_ID_TEST_INJECT_CORRUPT,
@@ -137,7 +159,7 @@ static bool cmd_allowed(uint8_t cmd_id, RobotStateEnum s) {
     }
 }
 
-// Very short chirp for a param write while STANDBY — distinct from RADIO_ACQ_MELODY
+// Very short chirp for a param write, in any state — distinct from RADIO_ACQ_MELODY
 // (main.cpp's radio_update()) so the two aren't confused on the bench.
 static const BuzzerNote PARAM_SET_CHIRP[] = {{84, 30, 0}};  // C6, 30 ms
 
@@ -156,7 +178,7 @@ static uint8_t s_command_result_cache_next = 0;
 
 static void emit_command_result(const CommandResultPayload& result) {
     g_comm.send(COMM_TYPE_COMMAND_RESULT, COMMAND_RESULT_PAYLOAD_V1, &result, sizeof(result));
-    if (Serial) g_comm_usb.send(COMM_TYPE_COMMAND_RESULT, COMMAND_RESULT_PAYLOAD_V1, &result, sizeof(result));
+    usb_send_if_ready(COMM_TYPE_COMMAND_RESULT, COMMAND_RESULT_PAYLOAD_V1, &result, sizeof(result));
 }
 
 static void send_command_result(uint32_t request_id, uint8_t cmd_id,
@@ -181,6 +203,10 @@ static bool resend_cached_command_result(uint32_t request_id) {
 }
 
 // ── Command handler ───────────────────────────────────────────────────────────
+
+// Defined below (near run_control_loop); forward-declared here for the SD-log
+// command path. See its definition for the self-inflicted-stall rationale.
+static void forgive_sd_blocking_stall();
 
 static void on_command(uint8_t type, uint8_t version, uint8_t source,
                        const uint8_t* payload, uint16_t len) {
@@ -242,8 +268,12 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             // Active states enter explicit DISARMING; manual/calibration exit directly.
             if (g_state.state == STATE_ESTOP) accepted = stateMachine_request_soft_clear();
             else if (g_state.state == STATE_RUNNING || g_state.state == STATE_JUMPING ||
-                     g_state.state == STATE_STANDING_UP)
+                     g_state.state == STATE_STANDING_UP) {
+                comm_log(LOG_LEVEL_INFO,
+                         "DISARM reason=GUI_REQUEST: authority=%s state=%d -> DISARMING",
+                         arm_authority_name(), (int)g_state.state);
                 accepted = stateMachine_disarm_running();
+            }
             else if (g_state.state == STATE_MANUAL || g_state.state == STATE_CALIBRATION)
                 accepted = stateMachine_exit_manual();
         }
@@ -253,7 +283,21 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         // STATE_RUNNING: previously radio-only (CH10 arm switch, main.cpp radio_update()).
         // Routed through the identical req_running() gate in state_machine.cpp — same
         // IMU/calibration/motor-enable checks apply, no separate/weaker path.
-        if (target == STATE_RUNNING)     accepted = stateMachine_request_running();
+        if (target == STATE_RUNNING) {
+            if (g_ibus.alive()) {
+                comm_log(LOG_LEVEL_WARN,
+                         "ARM rejected: GUI requested RUNNING while radio ONLINE (CH10=%u); radio owns arming",
+                         (unsigned)g_ibus.channel(10));
+                accepted = false;
+            } else {
+                accepted = stateMachine_request_running();
+                if (accepted) {
+                    s_arm_authority = ArmAuthority::GUI;
+                    comm_log(LOG_LEVEL_INFO,
+                             "ARM authority=GUI: radio absent; GUI RUNNING request accepted");
+                }
+            }
+        }
         if (target == STATE_JUMPING)     accepted = stateMachine_request_jump();
         // STANDING_UP, CMD_REJECT, and DISARMING are internal states, not
         // direct operator targets.
@@ -344,12 +388,19 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             reply(CMD_RESULT_REJECTED, reason);
             return;
         }
+        bool changed = (set_result == ParamSetResult::OK || set_result == ParamSetResult::CLAMPED) &&
+                       param_get(id) != old_val;
+        // Buzzer volume normally only applies at boot (param_init() ran before
+        // g_buzzer.set_volume() in setup()) — re-apply live so a volume change
+        // (including muting to 0) takes effect on every chirp immediately,
+        // not just after a reboot.
+        if (changed && id == PARAM_BUZZER_VOLUME) {
+            g_buzzer.set_volume(param_get(id));
+        }
         // send_reliable() (GUI comm_commands.py) retries the identical (id, val) up to
         // 3x every 250 ms until it sees the PARAM_REPORT echo, so a slow link can deliver
         // the same value more than once — only chirp when it actually changed.
-        if (g_state.state == STATE_STANDBY &&
-            (set_result == ParamSetResult::OK || set_result == ParamSetResult::CLAMPED) &&
-            param_get(id) != old_val) {
+        if (changed) {
             g_buzzer.play(PARAM_SET_CHIRP, 1, 120);
         }
         // Echo back actual (possibly clamped) value
@@ -414,7 +465,13 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         } else if (sub == LOG_SUB_START) {
             uint32_t dur = 0; if (len >= 6) memcpy(&dur, payload + 2, 4);
             comm_log(LOG_LEVEL_INFO, "CMD log start dur_ms=%lu", (unsigned long)dur);
+            if (g_state.state != STATE_STANDBY && g_state.state != STATE_ESTOP) {
+                comm_log(LOG_LEVEL_WARN, "CMD log start denied: start before arming");
+                reply(CMD_RESULT_REJECTED, CMD_REASON_OPERATION_FAILED);
+                return;
+            }
             bool started = sd_logger_start(dur);
+            forgive_sd_blocking_stall();  // sd_logger_start() can block the loop ~96 ms
             if (started) g_buzzer.play(LOG_START_CHIRP, 1, 150);
             if (!started) {
                 reply(CMD_RESULT_REJECTED, CMD_REASON_OPERATION_FAILED);
@@ -523,6 +580,10 @@ void setup() {
     g_led.begin();
     g_buzzer.begin();
     g_buzzer.set_volume(param_get(PARAM_BUZZER_VOLUME));
+    limit_switches_begin();
+    comm_log(LOG_LEVEL_INFO, "Limit switches ready: L(pin %u)=%s R(pin %u)=%s",
+             PIN_LIMIT_LEFT, limit_switch_left_active() ? "PRESSED" : "RELEASED",
+             PIN_LIMIT_RIGHT, limit_switch_right_active() ? "PRESSED" : "RELEASED");
 
     // Boot indicator: quick rainbow flash + low-volume chime, ~1.3 s total.
     static const uint8_t BOOT_RAINBOW[][3] = {
@@ -765,7 +826,10 @@ static void fill_telemetry(TelemetryPayload& t) {
     t.loop_count            = g_state.loop_count;
     // V8 — radio channel assignments
     t.active_profile        = (uint8_t)param_get(PARAM_ACTIVE_PROFILE);
-    t.pitch_trim_rad        = param_get(PARAM_RADIO_PITCH_TRIM);
+    // Applied balance-point trim actually used in the LQR error (live knob while
+    // live-trimming, otherwise the scheduled ret/ext value) — the number the
+    // operator reads off to record/latch.
+    t.pitch_trim_rad        = g_state.applied_pitch_trim;
     // V9 — ESP32<->Teensy link supervision (telemetry only, see Phase 3, UARTplat.md)
     uint32_t esp32_status_age = millis() - s_last_esp32_status_ms;
     uint32_t uart_rx_drops    = g_comm.rx_drops();
@@ -798,7 +862,7 @@ static void send_telemetry(bool prof) {
     if (prof) prof_mark(s_prof_max.telem_esp, t0);
 
     t0 = micros();
-    if (Serial) {
+    if (Serial.availableForWrite() >= (int)(20u + TELEM_A_LEN + TELEM_B_LEN)) {
         g_comm_usb.send(COMM_TYPE_TELEM_A, TELEM_VERSION, tp,               TELEM_A_LEN);
         g_comm_usb.send(COMM_TYPE_TELEM_B, TELEM_VERSION, tp + TELEM_A_LEN, TELEM_B_LEN);
     }
@@ -923,10 +987,46 @@ static const BuzzerNote RADIO_ACQ_MELODY[]    = {{76, 80, 0}};             // E5
 static const BuzzerNote RADIO_LOST_MELODY[]   = {{64, 100, 30}, {60, 150, 0}}; // E4→C4 desc: "link lost"
 static const BuzzerNote ARM_IGNORED_MELODY[]  = {{69, 60, 40}, {69, 60, 0}};   // A4-A4 double-tap: "not ready, try again"
 
+// ── Live parameter tuning (live_tune.h) ────────────────────────────────────────
+// CH7/CH8 knob -> param mapping for the current bench-tuning session. Repoint a
+// knob at a different param here and reflash; no other code changes needed as
+// long as the target's control-loop read site uses live_tune_value(). Range is
+// the knob's own sweep, independent of the target param's registry min/max.
+struct LiveTuneSlot {
+    uint8_t  ibus_channel;       // 1-indexed CH number
+    uint16_t live_param_id;      // readonly+command shadow, telemetry-visible
+    uint16_t persist_param_id;   // real, persistent, control-loop-facing param
+    float    range_min;
+    float    range_max;
+};
+static const LiveTuneSlot LIVE_TUNE_SLOTS[] = {
+    { 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_VEL_PI_KP, 0.0f, 0.5f },
+    { 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_VEL_PI_KI, 0.0f, 0.5f },
+};
+static constexpr uint8_t NUM_LIVE_TUNE_SLOTS = sizeof(LIVE_TUNE_SLOTS) / sizeof(LIVE_TUNE_SLOTS[0]);
+static bool s_live_tune_picked_up[NUM_LIVE_TUNE_SLOTS] = {};
+static bool s_live_tune_mode_active = false;
+
+// See live_tune.h. Only a picked-up slot's live shadow overrides the real
+// param; everything else (including a not-yet-picked-up slot) falls through
+// to the normal persisted value.
+float live_tune_value(uint16_t persist_param_id) {
+    if (s_live_tune_mode_active) {
+        for (uint8_t i = 0; i < NUM_LIVE_TUNE_SLOTS; i++) {
+            if (LIVE_TUNE_SLOTS[i].persist_param_id == persist_param_id && s_live_tune_picked_up[i]) {
+                return param_get(LIVE_TUNE_SLOTS[i].live_param_id);
+            }
+        }
+    }
+    return param_get(persist_param_id);
+}
+
 // ── Radio interpretation ───────────────────────────────────────────────────────
 // CH10 > 1990: arm into RUNNING (requires prior calibration).
 // CH10 drop:   disarm back to STANDBY.
-// CH5  > 1990: trigger CALIBRATION (only from STANDBY, rising edge).
+// CH5  > 1990: trigger CALIBRATION only after a live, debounced CH5-low
+//               followed by a rising edge while in STANDBY.
+// CH5 drop:    gracefully cancel a radio-triggered calibration via DISARMING.
 // CH6  > 1500: start/continue SD log (debounced). < 1500: stop log (debounced).
 // CH3 1000–2000: maps to PARAM_RADIO_HIP_CMD as t ∈ [0,1].
 //   Left stale when radio is dead.
@@ -937,14 +1037,50 @@ static void radio_update() {
     uint16_t ch5  = g_ibus.channel(5);
     uint16_t ch6  = g_ibus.channel(6);
 
-    static bool s_was_alive = false;
-    if (alive && !s_was_alive) {
-        comm_log(LOG_LEVEL_INFO, "Radio: signal OK");
-        g_buzzer.play(RADIO_ACQ_MELODY, 1, 120);
+    bool energetic = g_state.state == STATE_RUNNING || g_state.state == STATE_JUMPING ||
+                     g_state.state == STATE_STANDING_UP;
+    static RobotStateEnum s_authority_prev_state = (RobotStateEnum)0xFF;
+    bool entered_standby = g_state.state == STATE_STANDBY &&
+                           s_authority_prev_state != STATE_STANDBY;
+    if (entered_standby || g_state.state == STATE_ESTOP ||
+        g_state.state == STATE_STARTUP || g_state.state == STATE_CMD_REJECT) {
+        s_arm_authority = ArmAuthority::NONE;
     }
-    if (!alive && s_was_alive) {
-        comm_log(LOG_LEVEL_WARN, "Radio: signal lost");
+    s_authority_prev_state = g_state.state;
+
+    static bool s_was_alive = false;
+    static bool s_disarm_req_sent = false;
+    bool radio_acquired = alive && !s_was_alive;
+    bool radio_lost = !alive && s_was_alive;
+    bool authority_disarm_requested = false;
+    if (radio_acquired) {
+        comm_log(LOG_LEVEL_INFO,
+                 "Radio: signal acquired CH10=%u state=%d authority=%s",
+                 (unsigned)ch10, (int)g_state.state, arm_authority_name());
+        g_buzzer.play(RADIO_ACQ_MELODY, 1, 120);
+        if (energetic && s_arm_authority == ArmAuthority::GUI) {
+            comm_log(LOG_LEVEL_WARN,
+                     "DISARM reason=RADIO_TAKEOVER: radio acquired during GUI run CH10=%u -> DISARMING",
+                     (unsigned)ch10);
+            comm_log(LOG_LEVEL_INFO,
+                     "Radio handover: wait for STANDBY, then raise CH10 to arm with radio");
+            stateMachine_disarm_running();
+            authority_disarm_requested = true;
+            s_disarm_req_sent = true;
+        }
+    }
+    if (radio_lost) {
+        comm_log(LOG_LEVEL_WARN,
+                 "Radio: signal lost state=%d authority=%s",
+                 (int)g_state.state, arm_authority_name());
         g_buzzer.play(RADIO_LOST_MELODY, 2, 120);
+        if (energetic && s_arm_authority == ArmAuthority::RADIO) {
+            comm_log(LOG_LEVEL_ERROR,
+                     "DISARM reason=RADIO_SIGNAL_LOST: radio-owned run lost link -> DISARMING");
+            stateMachine_disarm_running();
+            authority_disarm_requested = true;
+            s_disarm_req_sent = true;
+        }
     }
     s_was_alive = alive;
 
@@ -960,12 +1096,18 @@ static void radio_update() {
     static uint8_t s_armed_ticks   = 0;
     static uint8_t s_unarmed_ticks = 0;
     bool armed_raw = alive && (ch10 > 1990);
+    bool disarmed_raw = alive && (ch10 <= 1990);
     if (armed_raw) {
         if (s_armed_ticks < ARM_DEBOUNCE_TICKS) s_armed_ticks++;
         s_unarmed_ticks = 0;
-    } else {
+    } else if (disarmed_raw) {
         if (s_unarmed_ticks < DISARM_DEBOUNCE_TICKS) s_unarmed_ticks++;
         s_armed_ticks = 0;
+    } else {
+        // No radio link is neutral. It neither arms nor disarms; GUI/API
+        // control remains usable with the transmitter completely off.
+        s_armed_ticks = 0;
+        s_unarmed_ticks = 0;
     }
     bool armed = s_armed_ticks >= ARM_DEBOUNCE_TICKS;
 
@@ -976,8 +1118,23 @@ static void radio_update() {
             comm_log(LOG_LEVEL_INFO, "Radio: soft-clear ESTOP [0x%02X]", g_state.fault_code);
             stateMachine_request_soft_clear();
         } else if (g_state.state == STATE_STANDBY) {
-            comm_log(LOG_LEVEL_INFO, "Radio: armed -> RUNNING");
-            stateMachine_request_running();
+            if (ch5 > 1990) {
+                // CH5 up in RUNNING means "live pitch-trim mode"; refuse to arm
+                // into RUNNING with it already raised so the operator can't enter
+                // trim mode by accident on the same flip that arms.
+                comm_log(LOG_LEVEL_WARN,
+                         "Radio: arm denied — calibration switch (CH5) active; lower it before arming");
+                g_buzzer.play(ARM_IGNORED_MELODY, sizeof(ARM_IGNORED_MELODY) / sizeof(ARM_IGNORED_MELODY[0]), 120);
+                s_profile_flash_rgb[0] = 255; s_profile_flash_rgb[1] = 0; s_profile_flash_rgb[2] = 255;
+                s_profile_flash_until_ms = millis() + 200;
+            } else {
+                bool accepted = stateMachine_request_running();
+                if (accepted) {
+                    s_arm_authority = ArmAuthority::RADIO;
+                    comm_log(LOG_LEVEL_INFO,
+                             "ARM authority=RADIO: live CH10 HIGH -> RUNNING");
+                }
+            }
         } else {
             // stateMachine_request_running() only latches from STANDBY, so a flip
             // that lands mid-transition (e.g. tail end of CALIBRATION, or still in
@@ -991,8 +1148,9 @@ static void radio_update() {
     s_was_armed = armed;
 
     // Disarm is level-based, not edge-based, and applies to every energetic
-    // state. CH10 loss aborts JUMPING/STANDING_UP immediately through the same
-    // DISARMING path as an ordinary RUNNING exit.
+    // state, but only while the radio link is live. A live CH10-low aborts
+    // JUMPING/STANDING_UP immediately; a missing/off radio is neutral so a
+    // GUI/API-armed session is not immediately undone.
     //
     // s_disarm_req_sent latches the request to a single send per active
     // session. Without it, this level check double-fires: g_state.state is
@@ -1003,23 +1161,84 @@ static void radio_update() {
     // the FSM has already moved on to STANDBY, so it's never consumed there —
     // it sits stale until the next arm, where it fires instantly and kicks
     // RUNNING straight back to STANDBY (the "have to arm twice" symptom).
-    static bool s_disarm_req_sent = false;
-    bool energetic = g_state.state == STATE_RUNNING || g_state.state == STATE_JUMPING ||
-                     g_state.state == STATE_STANDING_UP;
     if (!energetic) s_disarm_req_sent = false;
-    if (s_unarmed_ticks >= DISARM_DEBOUNCE_TICKS && energetic && !s_disarm_req_sent) {
-        comm_log(LOG_LEVEL_INFO, "Radio: disarmed -> DISARMING");
+    if (s_unarmed_ticks >= DISARM_DEBOUNCE_TICKS && energetic &&
+        !s_disarm_req_sent && !authority_disarm_requested) {
+        comm_log(LOG_LEVEL_WARN,
+                 "DISARM reason=RADIO_SWITCH_LOW: live CH10=%u authority=%s state=%d -> DISARMING",
+                 (unsigned)ch10, arm_authority_name(), (int)g_state.state);
         stateMachine_disarm_running();
         s_disarm_req_sent = true;
     }
 
-    static bool s_was_calib = false;
-    bool calib = alive && (ch5 > 1990);
-    if (calib && !s_was_calib && g_state.state == STATE_STANDBY) {
-        comm_log(LOG_LEVEL_INFO, "Radio: calib trigger");
-        stateMachine_request_calibration();
+    // Debounce CH5 symmetrically. Loss of the radio link is neutral: it does
+    // not masquerade as an operator-requested calibration abort.
+    static constexpr uint8_t CALIB_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
+    static uint8_t s_calib_hi_ticks = 0;
+    static uint8_t s_calib_lo_ticks = 0;
+    static bool s_calib_switch_high = false;
+    // Startup/link acquisition is an unknown switch state, not an OFF state.
+    // Require a debounced low before accepting the next high edge so powering
+    // up or reconnecting with CH5 already high cannot start calibration.
+    static bool s_calib_low_seen = false;
+    static bool s_radio_calib_owned = false;
+    static bool s_radio_calib_entered = false;
+
+    const bool calib_hi_raw = alive && (ch5 > 1990);
+    const bool calib_lo_raw = alive && (ch5 <= 1990);
+    if (calib_hi_raw) {
+        if (s_calib_hi_ticks < CALIB_DEBOUNCE_TICKS) s_calib_hi_ticks++;
+        s_calib_lo_ticks = 0;
+    } else if (calib_lo_raw) {
+        if (s_calib_lo_ticks < CALIB_DEBOUNCE_TICKS) s_calib_lo_ticks++;
+        s_calib_hi_ticks = 0;
+    } else {
+        s_calib_hi_ticks = 0;
+        s_calib_lo_ticks = 0;
+        s_calib_low_seen = false;
     }
-    s_was_calib = calib;
+
+    if (s_radio_calib_owned && g_state.state == STATE_CALIBRATION)
+        s_radio_calib_entered = true;
+    if (s_radio_calib_owned && s_radio_calib_entered &&
+        g_state.state != STATE_CALIBRATION) {
+        s_radio_calib_owned = false;
+        s_radio_calib_entered = false;
+    }
+
+    if (s_calib_lo_ticks >= CALIB_DEBOUNCE_TICKS)
+        s_calib_low_seen = true;
+
+    if (s_calib_hi_ticks >= CALIB_DEBOUNCE_TICKS &&
+        !s_calib_switch_high) {
+        s_calib_switch_high = true;
+        const bool valid_off_to_on_transition = s_calib_low_seen;
+        // Consume the gate on every rising edge. If that edge occurred outside
+        // STANDBY, the operator must switch OFF then ON again once ready.
+        s_calib_low_seen = false;
+        if (valid_off_to_on_transition && g_state.state == STATE_STANDBY) {
+            comm_log(LOG_LEVEL_INFO, "Radio: calibration switch ACTIVE");
+            if (stateMachine_request_calibration()) {
+                s_radio_calib_owned = true;
+                s_radio_calib_entered = false;
+            }
+        } else if (!valid_off_to_on_transition &&
+                   g_state.state == STATE_STANDBY) {
+            comm_log(LOG_LEVEL_WARN,
+                     "Radio: calibration ignored; switch OFF then ON");
+        }
+    }
+    if (s_calib_lo_ticks >= CALIB_DEBOUNCE_TICKS &&
+        s_calib_switch_high) {
+        s_calib_switch_high = false;
+        if (s_radio_calib_owned && g_state.state == STATE_CALIBRATION) {
+            comm_log(LOG_LEVEL_WARN,
+                     "Radio: calibration switch INACTIVE -> DISARMING");
+            stateMachine_disarm_calibration();
+            s_radio_calib_owned = false;
+            s_radio_calib_entered = false;
+        }
+    }
 
     // CH6: SD log start/stop, debounced symmetrically (LOG_DEBOUNCE_TICKS
     // consecutive ticks on each side of the 1500 threshold) so a brief blip
@@ -1038,8 +1257,15 @@ static void radio_update() {
 
     static bool s_logging = false;
     if (!s_logging && s_log_hi_ticks >= LOG_DEBOUNCE_TICKS) {
-        comm_log(LOG_LEVEL_INFO, "Radio: CH6 -> log start");
-        s_logging = sd_logger_start(0);
+        if (g_state.state == STATE_STANDBY || g_state.state == STATE_ESTOP) {
+            comm_log(LOG_LEVEL_INFO, "Radio: CH6 -> log start");
+            s_logging = sd_logger_start(0);
+            forgive_sd_blocking_stall();  // sd_logger_start() can block the loop ~96 ms
+        } else {
+            comm_log(LOG_LEVEL_WARN, "Radio: log start denied: enable CH6 before arming");
+            // Latch this switch position so the warning is not retried at 500 Hz.
+            s_logging = true;
+        }
     } else if (s_logging && s_log_lo_ticks >= LOG_DEBOUNCE_TICKS) {
         comm_log(LOG_LEVEL_INFO, "Radio: CH6 -> log stop");
         sd_logger_stop();
@@ -1048,10 +1274,10 @@ static void radio_update() {
 
     // §1d (tuning.md): while PARAM_GUI_MOTION_CTRL_EN is set, the two radio-driven
     // writes to v_cmd_ms/omega_cmd_rds below are skipped so a GUI/CLI param_set()
-    // on those two params stands instead. Never gates arming (CH10 stays
-    // unconditional below) and never suppresses the !alive branch's zeroing —
-    // a radio dropout always wins. Auto-reverts to radio control if no GUI
-    // command packet arrives for GUI_MOTION_CTRL_TIMEOUT_MS, mirroring
+    // on those two params stands instead. Never gates radio arming/disarming.
+    // When the radio is absent, fresh GUI commands stand; the watchdog zeros
+    // them and releases the override if packets stop arriving. Auto-reverts
+    // after GUI_MOTION_CTRL_TIMEOUT_MS, mirroring
     // state_machine.cpp's MANUAL_GUI_TIMEOUT_MS watchdog pattern.
     static constexpr uint32_t GUI_MOTION_CTRL_TIMEOUT_MS = 300;
     bool gui_motion_ctrl = param_get(PARAM_GUI_MOTION_CTRL_EN) >= 0.5f;
@@ -1125,12 +1351,55 @@ static void radio_update() {
             }
         }
 
-        // CH7: pitch trim hook — reads knob, writes param; LQR wiring deferred (see control_loop.cpp TODO)
-        float pitch_trim = constrain((g_ibus.channel(7) - 1500.0f) / 500.0f * 0.08727f, -0.08727f, 0.08727f);
-        param_force_set(PARAM_RADIO_PITCH_TRIM, pitch_trim);
-    } else {
+    } else if (!gui_motion_ctrl) {
         param_force_set(PARAM_V_CMD_MS, 0.0f);
         param_force_set(PARAM_OMEGA_CMD_RDS, 0.0f);
+    }
+
+    // ── Live parameter tuning (CH7/CH8 knobs) ──────────────────────────────────
+    // Active while RUNNING with the calibration switch raised -- same gate the
+    // pitch-trim live-tune used, generalized to N knob->param slots. See
+    // live_tune.h for the safety rationale (pickup, explicit latch).
+    bool live_tune_active = (g_state.state == STATE_RUNNING) && s_calib_switch_high;
+    static constexpr float LIVE_TUNE_PICKUP_EPS = 0.01f;
+    for (uint8_t i = 0; i < NUM_LIVE_TUNE_SLOTS; i++) {
+        const LiveTuneSlot& slot = LIVE_TUNE_SLOTS[i];
+        if (!live_tune_active) { s_live_tune_picked_up[i] = false; continue; }
+        uint16_t raw = g_ibus.channel(slot.ibus_channel);
+        float knob_val = slot.range_min + constrain((raw - 1000.0f) / 1000.0f, 0.0f, 1.0f)
+                                            * (slot.range_max - slot.range_min);
+        param_force_set(slot.live_param_id, knob_val);  // telemetry mirror, always kept live
+        float current = param_get(slot.persist_param_id);
+        if (!s_live_tune_picked_up[i] && fabsf(knob_val - current) <= LIVE_TUNE_PICKUP_EPS) {
+            s_live_tune_picked_up[i] = true;
+            comm_log(LOG_LEVEL_INFO, "Live-tune slot %u picked up: CH%u -> param 0x%04X",
+                     (unsigned)i, (unsigned)slot.ibus_channel, (unsigned)slot.persist_param_id);
+        }
+    }
+    s_live_tune_mode_active = live_tune_active;  // read by live_tune_value()
+
+    // Latch (one-shot): commit every currently-picked-up slot's shadow into its
+    // real, persistent param. A slot that hasn't picked up yet is skipped, not
+    // latched at whatever the knob happens to read. Serviced regardless of
+    // live_tune_active so the command flag is always consumed and reset.
+    if (param_get(PARAM_LIVE_TUNE_LATCH) >= 0.5f) {
+        if (live_tune_active) {
+            bool any = false;
+            for (uint8_t i = 0; i < NUM_LIVE_TUNE_SLOTS; i++) {
+                if (!s_live_tune_picked_up[i]) continue;
+                const LiveTuneSlot& slot = LIVE_TUNE_SLOTS[i];
+                float v = param_get(slot.live_param_id);
+                param_set(slot.persist_param_id, v);  // persistent write; flushed by param_flush_service()
+                comm_log(LOG_LEVEL_INFO, "Live-tune latched: %.4f -> param 0x%04X (CH%u)",
+                         v, (unsigned)slot.persist_param_id, (unsigned)slot.ibus_channel);
+                any = true;
+            }
+            if (!any) comm_log(LOG_LEVEL_WARN, "Live-tune latch ignored: no slot has picked up yet");
+        } else {
+            comm_log(LOG_LEVEL_WARN,
+                     "Live-tune latch ignored: enter live-tune mode first (RUNNING + calib switch up)");
+        }
+        param_force_set(PARAM_LIVE_TUNE_LATCH, 0.0f);
     }
 
     // Mirrors v_cmd_ms live regardless of FSM state (like w_cmd/omega_cmd_rds
@@ -1141,6 +1410,18 @@ static void radio_update() {
 
 static void run_control_loop() {
     stateMachine_update();
+}
+
+// SD-log open/finalize are known-blocking main-loop operations that can freeze
+// the 500 Hz tick for tens of ms (measured ~96 ms on open, ~56 ms on finalize).
+// During that freeze no motor command goes out, so request-response feedback
+// (AK45 hips) goes stale and the feedback watchdog would spuriously ESTOP on
+// the next poll(). Call this right after any such op — logs only ever open or
+// finalize in non-energetic states (STANDBY/ESTOP/STARTUP/CMD_REJECT), so a
+// one-interval grace here can't hide a dropout that matters to balance.
+static void forgive_sd_blocking_stall() {
+    hip_motors_forgive_feedback_stall();
+    wheel_motors_forgive_feedback_stall();
 }
 
 // Watch for IMU state transitions and emit a log packet on each change.
@@ -1164,6 +1445,38 @@ static void check_imu_state() {
     }
 }
 
+static void check_limit_switches() {
+    const uint8_t changes = limit_switches_update();
+    const bool left_pressed =
+        (changes & LIMIT_SWITCH_LEFT_CHANGED) && limit_switch_left_active();
+    const bool right_pressed =
+        (changes & LIMIT_SWITCH_RIGHT_CHANGED) && limit_switch_right_active();
+
+    if (changes & LIMIT_SWITCH_LEFT_CHANGED) {
+        comm_log(LOG_LEVEL_INFO, "Limit switch LEFT (pin %u): %s",
+                 PIN_LIMIT_LEFT,
+                 limit_switch_left_active() ? "PRESSED" : "RELEASED");
+    }
+    if (changes & LIMIT_SWITCH_RIGHT_CHANGED) {
+        comm_log(LOG_LEVEL_INFO, "Limit switch RIGHT (pin %u): %s",
+                 PIN_LIMIT_RIGHT,
+                 limit_switch_right_active() ? "PRESSED" : "RELEASED");
+    }
+
+    // Preserve both audible events if the two debounced edges land in the
+    // same 500 Hz tick; separate midi() calls would let the second overwrite
+    // the first in the single-channel buzzer driver.
+    static const BuzzerNote BOTH_SWITCH_CHIRPS[] = {
+        {84, 50, 15}, {88, 50, 0}
+    };
+    if (left_pressed && right_pressed)
+        g_buzzer.play(BOTH_SWITCH_CHIRPS, 2, 120);
+    else if (left_pressed)
+        g_buzzer.midi(84, 120, 60);
+    else if (right_pressed)
+        g_buzzer.midi(88, 120, 60);
+}
+
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
 void loop() {
@@ -1176,6 +1489,7 @@ void loop() {
     t0 = micros(); receive_commands();     if (prof) prof_mark(s_prof_max.recv,       t0);
     service_param_dump();
     t0 = micros(); read_sensors(prof);     if (prof) prof_mark(s_prof_max.sens_total, t0);
+    check_limit_switches();
     t0 = micros(); check_imu_state();      if (prof) prof_mark(s_prof_max.imu_chk,    t0);
     t0 = micros(); radio_update();         if (prof) prof_mark(s_prof_max.radio,      t0);
     t0 = micros(); run_control_loop();     if (prof) prof_mark(s_prof_max.ctrl,       t0);
@@ -1183,6 +1497,14 @@ void loop() {
     t0 = micros(); update_buzzer();        if (prof) prof_mark(s_prof_max.buz,        t0);
 
     t0 = micros();
+    bool sd_recording_safe = g_state.state == STATE_STARTUP ||
+                             g_state.state == STATE_STANDBY ||
+                             g_state.state == STATE_ESTOP ||
+                             g_state.state == STATE_CMD_REJECT;
+    if (sd_logger_is_active() && !sd_recording_safe) {
+        comm_log(LOG_LEVEL_INFO, "SDLogger: stopping before energetic state");
+        sd_logger_stop();
+    }
     if (sd_logger_is_active()) {
         static LogRecord rec;
         fill_telemetry(rec.telem);
@@ -1191,6 +1513,10 @@ void loop() {
     }
     sd_logger_service();            // 1 sector/tick + auto-stop
     sd_logger_service_transfer();   // paced chunk streaming during a GET
+    // Closing a preallocated log may sync/truncate for tens of milliseconds.
+    // Defer that work until no energetic state needs the 500 Hz controller.
+    if (sd_logger_finalize_service(sd_recording_safe))
+        forgive_sd_blocking_stall();  // finalize blocked the loop ~56 ms
     // Download-complete chirp: sd_logger_service_transfer() emits XFER_END
     // and clears its own active flag internally (sd_logger.cpp) with no
     // callback out to here, so detect the same thing via the falling edge
@@ -1206,7 +1532,11 @@ void loop() {
     // Deferred param flash flush — a LittleFS rewrite stalls the loop for
     // several ms, so never while balancing (RUNNING/JUMPING).
     t0 = micros();
-    param_flush_service(g_state.state != STATE_RUNNING && g_state.state != STATE_JUMPING);
+    // LittleFS save/verify takes several milliseconds. Keep it out of every
+    // energetic or ramp-down state, not just RUNNING/JUMPING: a flush during
+    // DISARMING was measured at 4.6 ms and starved the IMU badly enough to
+    // trigger IMU_LOST. sd_recording_safe names the same inert-state set.
+    param_flush_service(sd_recording_safe);
     if (prof) prof_mark(s_prof_max.flash, t0);
 
     // Send telemetry at 50 Hz (every 10th tick of the 500 Hz loop) — skipped

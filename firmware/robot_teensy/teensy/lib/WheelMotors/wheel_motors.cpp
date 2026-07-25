@@ -110,6 +110,17 @@ void wheel_motors_poll() {
     }
 }
 
+void wheel_motors_forgive_feedback_stall() {
+    // Companion to hip_motors_forgive_feedback_stall(): after a deliberate,
+    // known-blocking main-loop operation (SD-log open/finalize) froze the tick,
+    // reset the encoder-freshness clock so the self-inflicted stall isn't read
+    // as an encoder dropout on the next poll(). Only the freshness timeout is
+    // forgiven — a real ODrive error flag (wm_*.error) still faults.
+    uint32_t now = millis();
+    wm_L.last_fb_ms = now;
+    wm_R.last_fb_ms = now;
+}
+
 void wheel_motors_set_mode(WheelMode mode) {
     bool l_en = param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f;
     bool r_en = param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f;

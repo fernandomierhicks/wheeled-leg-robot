@@ -1,5 +1,8 @@
 # LED
 
+> **AI maintenance note:** If you find anything here that is stale while
+> working in this tree, update this README in the same change.
+
 Non-blocking RGB LED driver with animations (solid, blink, pulse, fade).
 
 ## Wiring

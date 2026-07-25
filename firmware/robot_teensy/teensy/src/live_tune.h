@@ -1,0 +1,20 @@
+#pragma once
+#include <stdint.h>
+
+// Generic radio-knob live parameter tuning. Active while RUNNING with the
+// calibration switch (CH5) raised (see radio_update() in main.cpp). Knob->
+// param mappings live in LIVE_TUNE_SLOTS (main.cpp) -- repoint a knob at a
+// different param for a future tuning session by editing that table and
+// reflashing; no other code changes needed as long as the target's read
+// site uses live_tune_value() instead of a bare param_get().
+//
+// Safety: each slot requires "pickup" -- the knob must be swept through the
+// target's current persisted value before it takes control, so entering
+// live-tune mode never causes a step change from wherever the knob happens
+// to be sitting. Nothing is written to the real persistent param until
+// PARAM_LIVE_TUNE_LATCH is set to 1 (and only picked-up slots latch).
+
+// Live value for a param currently driven by a picked-up live-tune slot, or
+// the normal param_get(persist_param_id) otherwise. Drop-in replacement for
+// param_get() at any control-loop read site that should be live-tunable.
+float live_tune_value(uint16_t persist_param_id);

@@ -61,8 +61,8 @@ Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN6
 | 19 | I2C_SCL | Spare / future sensor | Wire | 3.3V | |
 | 20 | EXT_MCU_TX | ESP32 | Serial5 | 3.3V | Teensy TX → ESP32 GPIO16 (RX2) |
 | 21 | EXT_MCU_RX | ESP32 | Serial5 | 3.3V | Teensy RX ← ESP32 GPIO17 (TX2) |
-| 22 | (spare) | — | — | — | |
-| 23 | (spare) | — | — | — | |
+| 22 | LIMIT_RIGHT | Right leg limit switch | GPIO input | 3.3V | NC contact to GND; internal pull-up; LOW=released, HIGH=pressed |
+| 23 | LIMIT_LEFT | Left leg 1 / motor 1 / channel 1 limit switch | GPIO input | 3.3V | NC contact to GND; internal pull-up; LOW=released, HIGH=pressed |
 | 24 | (spare) | — | — | — | |
 | 25 | (spare) | — | — | — | |
 | 26 | (spare) | — | — | — | |

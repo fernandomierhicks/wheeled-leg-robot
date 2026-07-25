@@ -1,4 +1,4 @@
-"""analyze_hw_run.py — analyze one hardware .wlog run: metrics + fitness + safety verdict.
+"""analyze_hw_run.py — analyze one hardware .wlog or host .jsonl run.
 
 Thin CLI wrapper around analysis/wlog_metrics.py — this is what Claude invokes
 in the Phase-1 hardware tuning loop's automated per-trial step (tuning.md
@@ -6,7 +6,7 @@ in the Phase-1 hardware tuning loop's automated per-trial step (tuning.md
 to stderr.
 
 Usage:
-    python analyze_hw_run.py <path.wlog> --stage {lqr,vel_pi,yaw_pi} [--wheel-vel-limit N]
+    python analyze_hw_run.py <path> --stage {lqr,vel_pi,yaw_pi} [--wheel-vel-limit N]
 
 Exit codes: 0 = safe, 2 = unsafe (safety-maxima violation), 1 = couldn't analyze.
 """
@@ -22,7 +22,7 @@ from analysis.wlog_metrics import DEFAULT_WHEEL_VEL_LIMIT_TURNS_S, STAGES, evalu
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("wlog_path", type=Path)
+    ap.add_argument("log_path", type=Path)
     ap.add_argument("--stage", choices=STAGES, required=True)
     ap.add_argument(
         "--wheel-vel-limit", type=float, default=DEFAULT_WHEEL_VEL_LIMIT_TURNS_S,
@@ -32,7 +32,7 @@ def main():
     args = ap.parse_args()
 
     try:
-        result = evaluate(args.wlog_path, args.stage, args.wheel_vel_limit)
+        result = evaluate(args.log_path, args.stage, args.wheel_vel_limit)
     except (ValueError, OSError) as e:
         print(json.dumps({"error": str(e)}), file=sys.stderr)
         sys.exit(1)

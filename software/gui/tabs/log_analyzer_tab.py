@@ -1,4 +1,4 @@
-"""Parameter-aware visual analysis for downloaded WLOG controller trials.
+"""Parameter-aware visual analysis for SD WLOG and host JSONL controller trials.
 
 The numerical fitness calculations remain in analysis.wlog_metrics and retain
 their firmware/SI units.  This tab is a display layer: all angular signals and
@@ -17,16 +17,18 @@ from PyQt6.QtWidgets import (
     QSplitter, QVBoxLayout, QWidget,
 )
 
-from analysis.param_sidecar import active_profile_series, load_matching_sidecar
-from analysis.wlog_metrics import (
-    HIP_CURRENT_EPS_A, SETTLE_DEG, compute_metrics, decode_wlog,
+from analysis.param_sidecar import (
+    ParamSidecar, active_profile_series, load_host_param_sidecar, load_matching_sidecar,
 )
-from .log_transfer import LOG_DIR
+from analysis.wlog_metrics import (
+    HIP_CURRENT_EPS_A, SETTLE_DEG, compute_metrics, decode_run,
+)
+from .log_paths import RUNS_DIR
 from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, WHITE, YELLOW
 
 pg.setConfigOptions(antialias=True, background=BG, foreground=TEXT)
 
-_FLAVORS = ["LQR", "Vel-PI", "Yaw-PI", "Torque / Current", "Gain schedule"]
+_FLAVORS = ["Overview", "LQR", "Vel-PI", "Yaw-PI", "Torque / Current", "Gain schedule"]
 
 _HF_VEL_PI_SAT = 1 << 7
 _HF_YAW_PI_SAT = 1 << 8
@@ -71,6 +73,46 @@ def _event_summary(t: np.ndarray, mask: np.ndarray) -> str:
     return f"{len(intervals)} event{'s' if len(intervals) != 1 else ''}, {sum(durations):.3f} s total"
 
 
+def _parameter_change_groups(sidecar: ParamSidecar | None,
+                             sample_t_micros: np.ndarray,
+                             sample_t_s: np.ndarray) -> list[tuple[float, tuple]]:
+    """Align real parameter CHANGE events to the nearest log sample.
+
+    DUMP rows describe the initial snapshot and are intentionally omitted.
+    Events sharing a sample are grouped so the overview draws one marker.
+    """
+    if sidecar is None:
+        return []
+    sample_t_micros = np.asarray(sample_t_micros, dtype=np.uint32)
+    sample_t_s = np.asarray(sample_t_s, dtype=np.float64)
+    if sample_t_micros.size == 0 or sample_t_s.size != sample_t_micros.size:
+        return []
+
+    elapsed_us = np.concatenate((
+        np.asarray([0], dtype=np.uint64),
+        np.cumsum(np.diff(sample_t_micros).astype(np.uint32).astype(np.uint64),
+                  dtype=np.uint64),
+    ))
+    start = int(sample_t_micros[0])
+    grouped: dict[int, list] = {}
+    for event in sidecar.events:
+        if event.event.upper() != "CHANGE":
+            continue
+        delta = ((int(event.t_micros) - start + (1 << 31)) % (1 << 32)) - (1 << 31)
+        index = 0 if delta <= 0 else int(np.searchsorted(elapsed_us, delta, side="left"))
+        if index < sample_t_s.size:
+            grouped.setdefault(index, []).append(event)
+    return [(float(sample_t_s[index]), tuple(events))
+            for index, events in sorted(grouped.items())]
+
+
+def _parameter_change_label(events: tuple, max_names: int = 2) -> str:
+    shown = [f"{event.name}={event.value:g}" for event in events[:max_names]]
+    if len(events) > max_names:
+        shown.append(f"+{len(events) - max_names}")
+    return ", ".join(shown)
+
+
 def _transparent_brush(color: str, alpha: int = 34):
     qcolor = QColor(color)
     qcolor.setAlpha(alpha)
@@ -107,7 +149,7 @@ class LogAnalyzerTab(QWidget):
         outer.setSpacing(8)
 
         bar = QHBoxLayout()
-        btn_open = QPushButton("Open .wlog…")
+        btn_open = QPushButton("Open log…")
         btn_open.setStyleSheet(_btn_style(BLUE))
         btn_open.clicked.connect(self._on_open)
         bar.addWidget(btn_open)
@@ -155,15 +197,16 @@ class LogAnalyzerTab(QWidget):
     # ── File loading ────────────────────────────────────────────────────────
 
     def _on_open(self):
-        start_dir = str(LOG_DIR) if LOG_DIR.exists() else str(Path.home())
+        start_dir = str(RUNS_DIR) if RUNS_DIR.exists() else str(Path.home())
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open .wlog", start_dir, "WLOG files (*.WLOG *.wlog)")
+            self, "Open controller log", start_dir,
+            "Controller logs (*.WLOG *.wlog *.jsonl)")
         if path:
             self._load(Path(path))
 
     def _load(self, path: Path):
         try:
-            run = decode_wlog(path)
+            run = decode_run(path)
         except (ValueError, OSError) as exc:
             self._run = None
             self._metrics = None
@@ -177,13 +220,16 @@ class LogAnalyzerTab(QWidget):
         self._params = None
         self._param_error = ""
         try:
-            self._params = load_matching_sidecar(path)
+            self._params = (
+                load_host_param_sidecar(path) if run.source_kind == "host"
+                else load_matching_sidecar(path)
+            )
         except (ValueError, OSError) as exc:
             self._param_error = str(exc)
 
         sidecar_status = (
             f"limits: {self._params.path.name}" if self._params is not None
-            else "limits unavailable (.PARAMS not found)"
+            else "limits unavailable (parameter snapshot not found)"
         )
         if self._param_error:
             sidecar_status = "limits unavailable (.PARAMS invalid)"
@@ -203,11 +249,13 @@ class LogAnalyzerTab(QWidget):
             if widget is not None:
                 widget.deleteLater()
 
-    def _new_plot(self, title: str, axis_text: str, units: str = "") -> pg.PlotWidget:
+    def _new_plot(self, title: str, axis_text: str, units: str = "",
+                  auto_si_prefix: bool = True) -> pg.PlotWidget:
         plot = pg.PlotWidget()
         plot.setTitle(title, color=TEXT, size="11pt")
         plot.showGrid(x=True, y=True, alpha=0.12)
         plot.setLabel("left", axis_text, units=units or None, color=DIM)
+        plot.getAxis("left").enableAutoSIPrefix(auto_si_prefix)
         plot.addLegend(offset=(5, 5), verSpacing=-2)
         if self._plots:
             plot.setXLink(self._plots[0])
@@ -255,6 +303,30 @@ class LogAnalyzerTab(QWidget):
             sample = pg.PlotDataItem(pen=pg.mkPen(color, width=5))
             plot.plotItem.legend.addItem(sample, short_name)
             _set_legend_tooltip(plot.plotItem.legend, sample, tooltip)
+
+    @staticmethod
+    def _add_parameter_changes(plot: pg.PlotWidget, changes: list[tuple[float, tuple]],
+                               show_labels: bool = False):
+        """Draw synchronized vertical markers without affecting auto-range."""
+        for t_s, events in changes:
+            full_label = _parameter_change_label(events, max_names=len(events))
+            marker = pg.InfiniteLine(
+                pos=t_s, angle=90, movable=False,
+                pen=pg.mkPen(YELLOW, width=1.0, style=Qt.PenStyle.DashLine),
+                label=_parameter_change_label(events) if show_labels else None,
+                labelOpts={"color": YELLOW, "position": 0.92},
+            )
+            marker.setToolTip(f"Parameter change at {t_s:.3f} s: {full_label}")
+            marker.setZValue(30)
+            plot.addItem(marker, ignoreBounds=True)
+
+        if changes and plot.plotItem.legend is not None:
+            sample = pg.PlotDataItem(
+                pen=pg.mkPen(YELLOW, width=1.5, style=Qt.PenStyle.DashLine))
+            plot.plotItem.legend.addItem(sample, "Parameter change")
+            _set_legend_tooltip(
+                plot.plotItem.legend, sample,
+                "Firmware parameter value changed at this time; hover a marker for details.")
 
     def _param_series(self, name: str) -> np.ndarray | None:
         if self._params is None or self._run is None:
@@ -316,7 +388,65 @@ class LogAnalyzerTab(QWidget):
         health = fields["health_flags"].astype(np.int64)
         flavor = self._flavor_combo.currentText()
 
-        if flavor == "LQR":
+        if flavor == "Overview":
+            changes = _parameter_change_groups(self._params, run.t_micros, t)
+
+            velocity_plot = self._new_plot(
+                "Forward command and measured motion", "Velocity", "m/s",
+                auto_si_prefix=False)
+            self._curve(velocity_plot, t, fields["v_ref"], GREEN,
+                        "Velocity command vref — requested forward speed (m/s)", 1.6)
+            self._curve(velocity_plot, t, fields["wheel_vel_avg"], BLUE,
+                        "Average wheel velocity — measured forward speed (m/s)", 1.45)
+            self._add_parameter_changes(velocity_plot, changes, show_labels=True)
+
+            yaw_plot = self._new_plot(
+                "Yaw command and measured turn rate", "Yaw rate", "°/s",
+                auto_si_prefix=False)
+            self._curve(yaw_plot, t, np.degrees(fields["omega_cmd_rds"]), GREEN,
+                        "Yaw command ωcmd — requested turn rate (°/s)", 1.6)
+            self._curve(yaw_plot, t, np.degrees(fields["yaw_rate_rads"]), BLUE,
+                        "Measured yaw rate — IMU turn rate (°/s)", 1.45)
+            self._add_parameter_changes(yaw_plot, changes)
+
+            pitch_plot = self._new_plot(
+                "Pitch/roll and controller lean target", "Angle", "°",
+                auto_si_prefix=False)
+            self._curve(pitch_plot, t, np.degrees(fields["pitch_rad"]), BLUE,
+                        "Pitch — measured body tilt (°)", 1.6)
+            self._curve(pitch_plot, t, np.degrees(fields["theta_ref"]), ORANGE,
+                        "Lean target θref — controller target angle (°)", 1.4)
+            self._curve(pitch_plot, t, np.degrees(fields["roll_rad"]), RED,
+                        "Roll — measured body roll (°)", 1.4)
+            self._add_parameter_changes(pitch_plot, changes)
+
+            change_text = "none"
+            if changes:
+                event_count = sum(len(events) for _time, events in changes)
+                change_text = f"{event_count} change{'s' if event_count != 1 else ''} at " + \
+                    ", ".join(f"{time_s:.2f} s" for time_s, _events in changes[:4])
+                if len(changes) > 4:
+                    change_text += f", +{len(changes) - 4} more times"
+            self._set_meta_rows([
+                ("Source", "Host JSONL" if run.source_kind == "host" else "SD WLOG",
+                 "Both sources use the same decoded-run and chart pipeline."),
+                ("Duration", f"{metrics['duration_s']:.3f} s",
+                 f"{run.count:,} telemetry samples at approximately {run.sample_rate_hz} Hz."),
+                ("Parameter changes", change_text,
+                 "Dashed yellow markers show actual value changes; initial snapshot rows are omitted."),
+                ("Peak velocity command", f"{np.max(np.abs(fields['v_ref'])):.3f} m/s",
+                 "Largest requested forward or reverse speed."),
+                ("Peak yaw command", f"{np.max(np.abs(np.degrees(fields['omega_cmd_rds']))):.2f} °/s",
+                 "Largest requested left or right turn rate."),
+                ("Pitch range",
+                 f"{np.min(np.degrees(fields['pitch_rad'])):.2f}° to "
+                 f"{np.max(np.degrees(fields['pitch_rad'])):.2f}°",
+                 "Full measured body-pitch range over the log."),
+                ("Active profile", self._profile_text(),
+                 "Speed profile reported by telemetry."),
+            ])
+
+        elif flavor == "LQR":
             pitch_deg = np.degrees(fields["pitch_rad"])
             target_deg = np.degrees(fields["theta_ref"])
             error_deg = pitch_deg - target_deg
@@ -590,7 +720,7 @@ class LogAnalyzerTab(QWidget):
                 f"loop-overrun warning active: {_event_summary(t, overrun)} "
                 "(the flag stays asserted for 1 s after an overrun)")
         if self._params is None:
-            warnings.append("parameter limits unavailable because the paired .PARAMS file is missing")
+            warnings.append("parameter limits unavailable because no parameter snapshot was found")
         if self._param_error:
             warnings.append(f"parameter sidecar could not be parsed: {self._param_error}")
 

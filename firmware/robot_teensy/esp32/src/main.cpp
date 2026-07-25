@@ -1293,7 +1293,7 @@ static const char* fault_description(uint8_t code) {
         case FAULT_HIP_INIT_TIMEOUT:   return "No CAN reply from hip motors within 2 s of boot";
         case FAULT_HIP_FEEDBACK_LOST:  return "Hip CAN feedback timed out during operation (> 20 ms)";
         case FAULT_HIP_LARGE_POS_CMD:  return "Commanded hip position jump exceeded MAX_HIP_DELTA_RAD";
-        case FAULT_CALIBRATION_TIMEOUT:return "Hardstop not found within CALIB_SAFETY_BOUND_RAD";
+        case FAULT_CALIBRATION_TIMEOUT:return "Retract-switch homing safety check failed";
         case FAULT_HUMAN_ESTOP:        return "Human triggered ESTOP";
         case FAULT_PITCH_WATCHDOG:     return "|pitch| > 50 deg for > 200 ms - robot tipped";
         case FAULT_WHEEL_RUNAWAY:      return "Wheel velocity exceeded 2x soft governor limit";

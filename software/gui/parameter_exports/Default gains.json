@@ -35,81 +35,73 @@
     "name": "loop_profile_enable",
     "value": 0.0
   },
-  "0x0100": {
+  "0x0120": {
     "name": "calib_seek_speed",
     "value": 0.17453
   },
-  "0x0101": {
-    "name": "calib_kp_bottom",
+  "0x0121": {
+    "name": "calib_move_speed",
+    "value": 0.174533
+  },
+  "0x0122": {
+    "name": "calib_seek_kp",
     "value": 16.0
   },
-  "0x0102": {
+  "0x0123": {
     "name": "calib_kd",
     "value": 0.05
   },
-  "0x0103": {
-    "name": "calib_hold_kp",
-    "value": 1.0
-  },
-  "0x0104": {
-    "name": "calib_hold_kd",
-    "value": 0.05
-  },
-  "0x0105": {
-    "name": "calib_stall_cur_btm",
+  "0x0124": {
+    "name": "calib_seek_cur_lim",
     "value": 0.75
   },
-  "0x0106": {
-    "name": "calib_stall_db",
-    "value": 0.015
-  },
-  "0x0107": {
-    "name": "calib_stall_ticks",
-    "value": 60.0
-  },
-  "0x0108": {
-    "name": "calib_margin",
-    "value": 0.17453
-  },
-  "0x0109": {
-    "name": "calib_safety_bound",
-    "value": 1.5708
-  },
-  "0x010A": {
-    "name": "calib_l_seek_dir",
-    "value": 1.0
-  },
-  "0x010B": {
-    "name": "calib_r_seek_dir",
-    "value": 1.0
-  },
-  "0x010C": {
-    "name": "calib_done",
-    "value": 0.0
-  },
-  "0x010D": {
-    "name": "calib_bound_top",
-    "value": 3.14159
-  },
-  "0x010E": {
-    "name": "calib_kp_top",
-    "value": 32.0
-  },
-  "0x010F": {
-    "name": "calib_stall_cur_top",
+  "0x0125": {
+    "name": "calib_move_cur_lim",
     "value": 1.5
   },
-  "0x0111": {
-    "name": "calib_extend_en",
-    "value": 1.0
+  "0x0126": {
+    "name": "calib_backoff_rad",
+    "value": 0.0872665
   },
-  "0x0112": {
+  "0x0127": {
+    "name": "calib_range_l_rad",
+    "value": 1.5708
+  },
+  "0x0128": {
+    "name": "calib_range_r_rad",
+    "value": 1.5708
+  },
+  "0x0129": {
+    "name": "calib_seek_timeout",
+    "value": 30.0
+  },
+  "0x012A": {
+    "name": "calib_release_to",
+    "value": 5.0
+  },
+  "0x012B": {
+    "name": "calib_max_seek_rad",
+    "value": 2.0
+  },
+  "0x012C": {
+    "name": "calib_max_rel_rad",
+    "value": 0.5
+  },
+  "0x012D": {
+    "name": "calib_cur_trip_ms",
+    "value": 50.0
+  },
+  "0x012E": {
+    "name": "calib_move_kp",
+    "value": 32.0
+  },
+  "0x012F": {
     "name": "calib_rampdown_s",
     "value": 2.0
   },
-  "0x0113": {
+  "0x0131": {
     "name": "calib_bypass_en",
-    "value": 1.0
+    "value": 0.0
   },
   "0x0200": {
     "name": "estop_hip_disable",

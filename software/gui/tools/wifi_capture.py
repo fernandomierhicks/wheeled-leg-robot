@@ -46,7 +46,8 @@ from tabs.telem_format import (  # noqa: E402
 )
 
 _GUI_DIR = Path(__file__).resolve().parent.parent
-_DEFAULT_LOG_DIR = _GUI_DIR / "logs"
+_DEFAULT_LOG_DIR = _GUI_DIR.parent.parent / "data" / "logs" / "diagnostics" / "wifi"
+_DEFAULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 UDP_PORT = 5005
 DISCOVERY_PORT = 5007

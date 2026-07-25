@@ -50,6 +50,10 @@ class StateMachineContractTests(unittest.TestCase):
         for state in ("RUNNING", "JUMPING", "STANDING_UP"):
             with self.subTest(state=state):
                 self.assertIn([state, "req_disarm_running", "DISARMING"], transitions)
+        self.assertIn(
+            ["CALIBRATION", "req_disarm_calibration", "DISARMING"],
+            transitions,
+        )
 
     def test_safety_priority_precedes_abort_and_completion(self):
         by_state = {}

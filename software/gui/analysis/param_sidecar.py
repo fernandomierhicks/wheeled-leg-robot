@@ -9,6 +9,8 @@ GUI and offline analysis tools can reuse it.
 from __future__ import annotations
 
 import csv
+import json
+from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -113,6 +115,65 @@ def load_param_sidecar(path: Path) -> ParamSidecar:
 def load_matching_sidecar(wlog_path: Path) -> ParamSidecar | None:
     path = find_matching_sidecar(wlog_path)
     return load_param_sidecar(path) if path is not None else None
+
+
+def load_host_param_sidecar(path: Path) -> ParamSidecar | None:
+    """Build a parameter timeline from PARAM_REPORT records in a host log.
+
+    Host packets do not carry firmware micros() directly, so each report is
+    aligned to the most recent captured TELEM timestamp on the monotonic host
+    clock. HostLogger requests a complete dump immediately after capture starts.
+    """
+    path = Path(path)
+    anchors: list[tuple[int, int]] = []
+    reports: list[tuple[int, dict]] = []
+    with path.open("r", encoding="utf-8-sig") as handle:
+        lines = handle.readlines()
+    for index, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            if index == len(lines) - 1 and not line.endswith(("\n", "\r")):
+                continue
+            raise ValueError(f"{path}: line {index + 1}: malformed JSON") from exc
+        if not isinstance(record, dict):
+            continue
+        host_ns = record.get("host_monotonic_ns")
+        if host_ns is None:
+            continue
+        if record.get("ptype") == 0x01 and "timestamp_ms" in record:
+            t_micros = (int(record["timestamp_ms"]) * 1000) & 0xFFFFFFFF
+            anchors.append((int(host_ns), t_micros))
+        elif record.get("ptype") == 0x06 and all(
+                key in record for key in ("param_id", "param_name", "param_value")):
+            reports.append((int(host_ns), record))
+
+    if not reports or not anchors:
+        return None
+    anchors.sort(key=lambda item: item[0])
+    anchor_host = [item[0] for item in anchors]
+    last_values: dict[str, float] = {}
+    events: list[ParamEvent] = []
+    for host_ns, record in reports:
+        anchor_index = max(0, bisect_right(anchor_host, host_ns) - 1)
+        name = str(record["param_name"])
+        value = float(record["param_value"])
+        previous = last_values.get(name)
+        if previous is not None and value == previous:
+            # The GUI may poll a parameter while capture is active. Repeated
+            # reports are observations, not changes, and would otherwise
+            # clutter the analyzer's parameter-change timeline.
+            continue
+        events.append(ParamEvent(
+            t_micros=anchors[anchor_index][1],
+            event="CHANGE" if previous is not None else "DUMP",
+            param_id=int(record["param_id"]),
+            name=name, value=value,
+        ))
+        last_values[name] = value
+    return ParamSidecar(path, events)
 
 
 def active_profile_series(sidecar: ParamSidecar | None, suffix: str,

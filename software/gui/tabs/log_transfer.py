@@ -11,8 +11,10 @@ suffix. The CRC from the initial start_chunk=0 request is retained as the
 whole-file CRC, so the final assembled file still gets end-to-end validation.
 """
 
+import json
 import time
 import zlib
+from datetime import datetime, timezone
 from pathlib import Path
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
@@ -22,9 +24,10 @@ from .comm_commands import (
     send_log_start, send_log_stop,
 )
 from .log_bus import LogPacketBus
+from .log_paths import RUNS_DIR
 
-LOG_DIR = Path(__file__).parent.parent / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+LOG_DIR = RUNS_DIR
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 LOG_INFO_ENTRY      = 0x01
 LOG_INFO_LIST_END   = 0x02
@@ -77,6 +80,7 @@ class LogTransferManager(QObject):
         self._retries = 0
         self._failure_reason = "transfer failed"
         self._pending_params_index: int | None = None  # see download_with_params()
+        self._output_dir: Path | None = None
 
         self._logging       = False
         self._logging_token = 0
@@ -147,6 +151,19 @@ class LogTransferManager(QObject):
         """
         if self._xfer_active and self._xfer_index == file_index and self._xfer_kind == kind:
             return
+        if kind == LOG_FILE_KIND_WLOG or self._output_dir is None:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
+            self._output_dir = LOG_DIR / f"{stamp}_SD_LOG{file_index:04d}"
+            self._output_dir.mkdir(parents=True, exist_ok=False)
+            (self._output_dir / "manifest.json").write_text(
+                json.dumps({
+                    "capture_schema": 1,
+                    "source_kind": "sd",
+                    "downloaded_utc": datetime.now(timezone.utc).isoformat(),
+                    "robot_log_index": file_index,
+                }, indent=2) + "\n",
+                encoding="utf-8",
+            )
         self._xfer_active = True
         self._xfer_index  = file_index
         self._xfer_kind   = kind
@@ -229,6 +246,7 @@ class LogTransferManager(QObject):
             if status and self._xfer_active and idx == self._xfer_index:
                 self._xfer_active = False
                 self._pending_params_index = None
+                self._output_dir = None
                 self._failure_reason = "log GET was rejected by the robot"
                 self.transfer_complete.emit(self._xfer_index, "", False)
         elif sub == LOG_INFO_STARTED:
@@ -281,6 +299,7 @@ class LogTransferManager(QObject):
         self._retries += 1
         if self._retries > MAX_RETRIES:
             self._xfer_active = False
+            self._output_dir = None
             self._failure_reason = f"{reason} after {MAX_RETRIES} retries"
             self.transfer_complete.emit(self._xfer_index, "", False)
             return False
@@ -334,7 +353,9 @@ class LogTransferManager(QObject):
             return
 
         ext = "PARAMS" if self._xfer_kind == LOG_FILE_KIND_PARAMS else "WLOG"
-        out_path = LOG_DIR / f"LOG{self._xfer_index:04d}.{ext}"
+        if self._output_dir is None:
+            raise RuntimeError("log transfer has no output bundle")
+        out_path = self._output_dir / f"LOG{self._xfer_index:04d}.{ext}"
         out_path.write_bytes(data)
         finished_index = self._xfer_index
         finished_kind = self._xfer_kind
@@ -345,3 +366,5 @@ class LogTransferManager(QObject):
                 and self._pending_params_index == finished_index):
             self._pending_params_index = None
             self.download(finished_index, LOG_FILE_KIND_PARAMS)
+        else:
+            self._output_dir = None

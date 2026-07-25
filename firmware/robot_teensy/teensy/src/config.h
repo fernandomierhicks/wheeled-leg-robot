@@ -33,6 +33,10 @@
 #define PIN_ESP32_TX    20
 #define PIN_ESP32_RX    21
 
+// --- Hip/leg NC limit switches to GND (LOW=released, HIGH=pressed) ---
+#define PIN_LIMIT_LEFT  23  // leg 1 / motor 1 / channel 1
+#define PIN_LIMIT_RIGHT 22
+
 // --- ESP32 UART baud ---
 #define ESP32_BAUD      4000000UL
 
@@ -53,7 +57,10 @@
                                           // CAN frame at 1 Mbps takes ~110-130us worst-case
                                           // (bit-stuffed), so 500 was ~4x that
 
-// --- Hip hardstop calibration ---
-// Tunable calibration parameters are now in ParamRegistry (param_ids.h / param_registry.cpp).
-// Defaults: seek speed 10 deg/s, Kp 16, Kd 0.05, stall 0.75 A / 45 ticks,
-//           margin 10 deg, safety bound 360 deg, L seek dir +1, R seek dir -1.
+// --- Hip retract-switch calibration ---
+// Motor/wiring orientation is a hardware property, not a runtime parameter.
+// Signs use the normalized firmware frame after the left motor's mirroring.
+#define CALIB_L_SEEK_DIR  (+1.0f)
+#define CALIB_R_SEEK_DIR  (+1.0f)
+// Tunable motion, current, range, timeout, and ramp settings are in
+// ParamRegistry (generated from protocol/schema.json).

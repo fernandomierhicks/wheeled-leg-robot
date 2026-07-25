@@ -26,7 +26,7 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x02` | `FAULT_HIP_INIT_TIMEOUT` | no CAN reply from hip motors within 2 s of boot |
 | `0x03` | `FAULT_HIP_FEEDBACK_LOST` | hip CAN feedback timed out during operation |
 | `0x04` | `FAULT_HIP_LARGE_POS_CMD` | commanded position jump exceeded MAX_HIP_DELTA_RAD |
-| `0x05` | `FAULT_CALIBRATION_TIMEOUT` | hardstop not found within CALIB_SAFETY_BOUND_RAD |
+| `0x05` | `FAULT_CALIBRATION_TIMEOUT` | retract-switch homing safety check failed |
 | `0x06` | `FAULT_HUMAN_ESTOP` | ESTOP requested by user via GUI button or radio |
 | `0x08` | `FAULT_PITCH_WATCHDOG` | |pitch| > 50° for > 200 ms |
 | `0x09` | `FAULT_WHEEL_RUNAWAY` | wheel velocity exceeded 2× soft governor limit |
@@ -69,26 +69,23 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0203` | `PARAM_HIP_RUNNING_TFF` | `hip_running_tff` | 0 | -5 … 5 | persistent |
 | `0x0204` | `PARAM_HIP_RUNNING_RAMP_TIME_S` | `hip_running_ramp_s` | 2 | 0 … 10 | persistent |
 | `0x0200` | `PARAM_ESTOP_HIP_DISABLE` | `estop_hip_disable` | 1 | 0 … 1 | persistent |
-| `0x0100` | `PARAM_CALIB_SEEK_SPEED` | `calib_seek_speed` | 0.17453 | 0.01 … 1 | persistent |
-| `0x0101` | `PARAM_CALIB_KP_BOTTOM` | `calib_kp_bottom` | 16 | 0 … 500 | persistent |
-| `0x0102` | `PARAM_CALIB_KD` | `calib_kd` | 0.05 | 0 … 5 | persistent |
-| `0x0103` | `PARAM_CALIB_HOLD_KP` | `calib_hold_kp` | 1 | 0 … 500 | persistent |
-| `0x0104` | `PARAM_CALIB_HOLD_KD` | `calib_hold_kd` | 0.05 | 0 … 5 | persistent |
-| `0x0105` | `PARAM_CALIB_STALL_CUR_BOTTOM` | `calib_stall_cur_btm` | 0.75 | 0.1 … 10 | persistent |
-| `0x0106` | `PARAM_CALIB_STALL_DEADBAND` | `calib_stall_db` | 0.015 | 0.001 … 0.5 | persistent |
-| `0x0107` | `PARAM_CALIB_STALL_TICKS` | `calib_stall_ticks` | 60 | 5 … 500 | persistent |
-| `0x0108` | `PARAM_CALIB_MARGIN` | `calib_margin` | 0.17453 | 0 … 1.5708 | persistent |
-| `0x0109` | `PARAM_CALIB_SAFETY_BOUND` | `calib_safety_bound` | 1.5708 | 0.5 … 6.28319 | readonly |
-| `0x010A` | `PARAM_CALIB_L_SEEK_DIR` | `calib_l_seek_dir` | 1 | -1 … 1 | readonly |
-| `0x010B` | `PARAM_CALIB_R_SEEK_DIR` | `calib_r_seek_dir` | 1 | -1 … 1 | readonly |
-| `0x010C` | `PARAM_CALIB_DONE` | `calib_done` | 0 | 0 … 1 | persistent, readonly |
-| `0x010D` | `PARAM_CALIB_SAFETY_BOUND_TOP` | `calib_bound_top` | 3.14159 | 0.5 … 6.28319 | readonly |
-| `0x010E` | `PARAM_CALIB_KP_TOP` | `calib_kp_top` | 32 | 0 … 500 | persistent |
-| `0x010F` | `PARAM_CALIB_STALL_CUR_TOP` | `calib_stall_cur_top` | 1.5 | 0.1 … 10 | persistent |
-| `0x0110` | `PARAM_CALIB_RETRACT_ENABLE` | `calib_retract_en` | 0 | 0 … 1 | persistent |
-| `0x0111` | `PARAM_CALIB_EXTEND_ENABLE` | `calib_extend_en` | 1 | 0 … 1 | persistent |
-| `0x0112` | `PARAM_CALIB_RAMPDOWN_TIME_S` | `calib_rampdown_s` | 2 | 0 … 10 | persistent |
-| `0x0113` | `PARAM_CALIB_BYPASS_EN` | `calib_bypass_en` | 1 | 0 … 1 | persistent |
+| `0x0120` | `PARAM_CALIB_SEEK_SPEED` | `calib_seek_speed` | 0.17453 | 0.01 … 0.5 | persistent |
+| `0x0121` | `PARAM_CALIB_MOVE_SPEED` | `calib_move_speed` | 0.174533 | 0.01 … 0.5 | persistent |
+| `0x0122` | `PARAM_CALIB_SEEK_KP` | `calib_seek_kp` | 16 | 0.1 … 100 | persistent |
+| `0x0123` | `PARAM_CALIB_KD` | `calib_kd` | 0.05 | 0 … 5 | persistent |
+| `0x0124` | `PARAM_CALIB_SEEK_CURRENT_LIMIT_A` | `calib_seek_cur_lim` | 0.75 | 0.2 … 5 | persistent |
+| `0x0125` | `PARAM_CALIB_MOVE_CURRENT_LIMIT_A` | `calib_move_cur_lim` | 1.5 | 0.2 … 10 | persistent |
+| `0x0126` | `PARAM_CALIB_BACKOFF_RAD` | `calib_backoff_rad` | 0.0872665 | 0.01 … 0.35 | persistent |
+| `0x0127` | `PARAM_CALIB_RANGE_L_RAD` | `calib_range_l_rad` | 1.5708 | 0.1 … 3.14159 | persistent |
+| `0x0128` | `PARAM_CALIB_RANGE_R_RAD` | `calib_range_r_rad` | 1.5708 | 0.1 … 3.14159 | persistent |
+| `0x0129` | `PARAM_CALIB_SEEK_TIMEOUT_S` | `calib_seek_timeout` | 30 | 1 … 60 | persistent |
+| `0x012A` | `PARAM_CALIB_RELEASE_TIMEOUT_S` | `calib_release_to` | 5 | 0.5 … 30 | persistent |
+| `0x012B` | `PARAM_CALIB_MAX_SEEK_TRAVEL_RAD` | `calib_max_seek_rad` | 2 | 0.1 … 6.28319 | persistent |
+| `0x012C` | `PARAM_CALIB_MAX_RELEASE_TRAVEL_RAD` | `calib_max_rel_rad` | 0.5 | 0.05 … 1.5708 | persistent |
+| `0x012D` | `PARAM_CALIB_CURRENT_TRIP_MS` | `calib_cur_trip_ms` | 50 | 0 … 500 | persistent |
+| `0x012E` | `PARAM_CALIB_MOVE_KP` | `calib_move_kp` | 32 | 0.1 … 100 | persistent |
+| `0x012F` | `PARAM_CALIB_RAMPDOWN_TIME_S` | `calib_rampdown_s` | 2 | 0 … 10 | persistent |
+| `0x0131` | `PARAM_CALIB_BYPASS_EN` | `calib_bypass_en` | 0 | 0 … 1 | persistent |
 | `0x0300` | `PARAM_WM_ENC_TIMEOUT_MS` | `wm_enc_timeout_ms` | 20 | 5 … 500 | persistent |
 | `0x0400` | `PARAM_LQR_ENABLE` | `lqr_enable` | 1 | 0 … 1 | persistent |
 | `0x0401` | `PARAM_SIM_PITCH_RAD` | `sim_pitch_rad` | 0 | -1.5708 … 1.5708 | - |
@@ -150,10 +147,13 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0439` | `PARAM_STANDUP_ATTEMPT_TIMEOUT_S` | `standup_timeout` | 1.5 | 0.2 … 5 | persistent |
 | `0x043A` | `PARAM_STANDUP_MAX_RETRIES` | `standup_max_retries` | 2 | 0 … 10 | persistent |
 | `0x043B` | `PARAM_STANDUP_RETRY_PAUSE_S` | `standup_retry_pause` | 0.3 | 0 … 3 | persistent |
+| `0x043C` | `PARAM_LQR_PITCH_TRIM_RET` | `lqr_pitch_trim_ret` | 0 | -0.3491 … 0.3491 | persistent |
+| `0x043D` | `PARAM_LQR_PITCH_TRIM_EXT` | `lqr_pitch_trim_ext` | 0 | -0.3491 … 0.3491 | persistent |
 | `0x0500` | `PARAM_RADIO_HIP_CMD` | `radio_hip_cmd` | 0 | 0 … 1 | readonly, command |
 | `0x0501` | `PARAM_RADIO_VEL_MAX` | `radio_vel_max` | 0.5 | 0 … 2 | readonly, command |
 | `0x0502` | `PARAM_RADIO_YAW_MAX` | `radio_yaw_max` | 1 | 0 … 4 | readonly, command |
-| `0x0503` | `PARAM_RADIO_PITCH_TRIM` | `radio_pitch_trim` | 0 | -0.0873 … 0.0873 | readonly, command |
+| `0x0503` | `PARAM_LIVE_TUNE_CH7_VAL` | `live_tune_ch7_val` | 0 | 0 … 0.5 | readonly, command |
+| `0x051B` | `PARAM_LIVE_TUNE_CH8_VAL` | `live_tune_ch8_val` | 0 | 0 … 0.5 | readonly, command |
 | `0x0510` | `PARAM_PROFILE_1_VEL_MAX` | `profile1_vel_max` | 0.2 | 0 … 2 | persistent |
 | `0x0511` | `PARAM_PROFILE_1_YAW_MAX` | `profile1_yaw_max` | 0.5 | 0 … 4 | persistent |
 | `0x0512` | `PARAM_PROFILE_1_TORQUE_LIM` | `profile1_torque_lim` | 0.1 | 0 … 7 | persistent |
@@ -164,3 +164,4 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0517` | `PARAM_PROFILE_3_YAW_MAX` | `profile3_yaw_max` | 2 | 0 … 4 | persistent |
 | `0x0518` | `PARAM_PROFILE_3_TORQUE_LIM` | `profile3_torque_lim` | 0.3 | 0 … 7 | persistent |
 | `0x0519` | `PARAM_ACTIVE_PROFILE` | `active_profile` | 0 | 0 … 2 | readonly, command |
+| `0x051A` | `PARAM_LIVE_TUNE_LATCH` | `live_tune_latch` | 0 | 0 … 1 | command |

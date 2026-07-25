@@ -1,5 +1,8 @@
 # Adafruit_BNO08x (vendored, patched)
 
+> **AI maintenance note:** If you find anything here that is stale while
+> working in this tree, update this README in the same change.
+
 Vendored copy of `adafruit/Adafruit BNO08x` (upstream docs in
 `src/README.md`, license in `license.txt`). Previously pulled via
 `platformio.ini`'s `lib_deps`, which meant PlatformIO fetched a fresh,

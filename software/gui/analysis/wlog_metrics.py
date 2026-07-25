@@ -11,6 +11,7 @@ decode logic either way (tabs.telem_format.decode_telem_full), just without
 pulling in LogReader's QObject base.
 """
 
+import json
 import struct
 import sys
 from dataclasses import dataclass
@@ -47,10 +48,11 @@ FAULT_NONE = 0x00
 # Safety-maxima defaults. wheel_vel_limit mirrors PARAM_WHEEL_VEL_LIMIT_TURNS_S's
 # firmware compile-time default (param_registry.cpp) — pass the live value to
 # evaluate()/check_safety() if it's been changed on the device. Hip current
-# epsilon: hips are physically disabled/zip-tied for all of Phase 1, so any
-# nonzero reading is itself a red flag, not just "close to a limit".
+# limit matches PARAM_CALIB_MOVE_CUR_LIM (10 A) — hips are free-running now,
+# so holding/dynamic current is expected; this is a real overcurrent ceiling,
+# not a "should be idle" epsilon.
 DEFAULT_WHEEL_VEL_LIMIT_TURNS_S = 3.0
-HIP_CURRENT_EPS_A = 0.05
+HIP_CURRENT_EPS_A = 10.0
 
 REJECT_PENALTY = 200.0  # matches sim's FALL_PENALTY / W_FALL magnitude
 
@@ -82,6 +84,7 @@ class DecodedRun:
     t_s: np.ndarray             # seconds since first record (from t_micros)
     fields: dict                # field name -> np.ndarray, see _SCALAR_FIELDS
     has_gain_sched_alpha: bool
+    source_kind: str = "wlog"
 
 
 def decode_wlog(path) -> DecodedRun:
@@ -147,6 +150,127 @@ def decode_wlog(path) -> DecodedRun:
     )
 
 
+def _host_json_records(path: Path):
+    """Yield JSON objects while tolerating a crash-truncated final line."""
+    with path.open("r", encoding="utf-8-sig") as handle:
+        lines = handle.readlines()
+    for index, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            is_partial_tail = index == len(lines) - 1 and not line.endswith(("\n", "\r"))
+            if is_partial_tail:
+                continue
+            raise ValueError(f"{path}: line {index + 1}: malformed JSON") from exc
+        if not isinstance(record, dict):
+            raise ValueError(f"{path}: line {index + 1}: expected a JSON object")
+        yield index + 1, record
+
+
+def decode_hostlog(path) -> DecodedRun:
+    """Decode a GUI host JSONL capture into the shared run representation."""
+    path = Path(path)
+    per_field = {name: [] for name in _SCALAR_FIELDS}
+    alpha_vals = []
+    timestamp_ms_raw = []
+    elapsed_ms = []
+    previous_timestamp = None
+    elapsed = 0
+    telem_version = None
+    has_alpha = None
+    previous_identity = None
+
+    for line_number, record in _host_json_records(path):
+        if record.get("ptype") != 0x01:
+            continue
+        version = record.get("version")
+        if version is None:
+            raise ValueError(f"{path}: line {line_number}: TELEM record has no version")
+        if int(version) != TELEM_VERSION:
+            raise ValueError(
+                f"{path}: captured with TELEM_VERSION {version}, this decoder is "
+                f"TELEM_VERSION {TELEM_VERSION}"
+            )
+        if telem_version is None:
+            telem_version = int(version)
+        elif int(version) != telem_version:
+            raise ValueError(f"{path}: line {line_number}: mixed TELEM versions")
+
+        try:
+            timestamp = int(record["timestamp_ms"]) & 0xFFFFFFFF
+            identity = (timestamp, int(record.get("loop_count", -1)))
+            if identity == previous_identity:
+                continue
+            if previous_timestamp is not None:
+                delta = (timestamp - previous_timestamp) & 0xFFFFFFFF
+                if delta == 0:
+                    continue
+                if delta >= 0x80000000:
+                    raise ValueError(
+                        f"{path}: line {line_number}: firmware time moved backward; "
+                        "the capture may contain a source switch or reordered telemetry"
+                    )
+                elapsed += delta
+            for name in _SCALAR_FIELDS:
+                per_field[name].append(record[name])
+        except KeyError as exc:
+            raise ValueError(
+                f"{path}: line {line_number}: TELEM record missing field {exc.args[0]!r}"
+            ) from exc
+
+        if has_alpha is None:
+            has_alpha = _ALPHA_KEY in record
+        if has_alpha:
+            if _ALPHA_KEY not in record:
+                raise ValueError(f"{path}: line {line_number}: inconsistent gain schedule field")
+            alpha_vals.append(record[_ALPHA_KEY])
+        timestamp_ms_raw.append(timestamp)
+        elapsed_ms.append(elapsed)
+        previous_timestamp = timestamp
+        previous_identity = identity
+
+    count = len(timestamp_ms_raw)
+    if count == 0:
+        raise ValueError(f"{path}: no TELEM records decoded")
+
+    timestamp_arr = np.asarray(timestamp_ms_raw, dtype=np.uint64)
+    # timestamp_ms and micros() share the firmware uptime epoch. The derived
+    # value has millisecond precision but preserves the uint32 clock domain
+    # expected by parameter-sidecar alignment.
+    t_micros = ((timestamp_arr * 1000) & 0xFFFFFFFF).astype(np.uint32)
+    t_s = np.asarray(elapsed_ms, dtype=np.float64) / 1000.0
+    positive_dt = np.diff(t_s)
+    positive_dt = positive_dt[positive_dt > 0]
+    sample_rate_hz = max(1, int(round(1.0 / np.median(positive_dt)))) if positive_dt.size else 1
+
+    fields = {name: np.asarray(values, dtype=np.float64) for name, values in per_field.items()}
+    if has_alpha:
+        fields[_ALPHA_KEY] = np.asarray(alpha_vals, dtype=np.float64)
+    return DecodedRun(
+        path=path,
+        telem_version=int(telem_version),
+        sample_rate_hz=sample_rate_hz,
+        count=count,
+        t_micros=t_micros,
+        t_s=t_s,
+        fields=fields,
+        has_gain_sched_alpha=bool(has_alpha),
+        source_kind="host",
+    )
+
+
+def decode_run(path) -> DecodedRun:
+    """Decode any supported controller-run log by extension."""
+    path = Path(path)
+    if path.suffix.casefold() == ".jsonl":
+        return decode_hostlog(path)
+    if path.suffix.casefold() == ".wlog":
+        return decode_wlog(path)
+    raise ValueError(f"{path}: supported log types are .WLOG and .jsonl")
+
+
 def _settle_time(t: np.ndarray, err_deg: np.ndarray, settle_deg: float,
                   settle_window_s: float, duration_s: float) -> float:
     """First timestamp after which err_deg stays below settle_deg for at
@@ -172,18 +296,26 @@ def _oscillation_check(t: np.ndarray, pitch_rad: np.ndarray, settle_time_s: floa
     doesn't (no actuator/sensor noise there to distinguish from genuine
     oscillation)."""
     mask = t >= settle_time_s
+    seg_t = t[mask]
     seg = pitch_rad[mask]
-    if seg.size < 4:
+    if seg.size < 4 or seg_t[-1] <= seg_t[0]:
         return 0.0, None
-    seg = seg - np.mean(seg)
-    signs = np.sign(seg)
+    seg_t, unique_indices = np.unique(seg_t, return_index=True)
+    seg = seg[unique_indices]
+    dt = 1.0 / sample_rate_hz
+    uniform_t = np.arange(seg_t[0], seg_t[-1] + 0.5 * dt, dt)
+    if uniform_t.size < 4:
+        return 0.0, None
+    uniform_seg = np.interp(uniform_t, seg_t, seg)
+    uniform_seg = uniform_seg - np.mean(uniform_seg)
+    signs = np.sign(uniform_seg)
     signs[signs == 0] = 1
     crossings = int(np.sum(signs[:-1] != signs[1:]))
-    span_s = float(t[mask][-1] - t[mask][0])
+    span_s = float(uniform_t[-1] - uniform_t[0])
     zero_cross_hz = crossings / span_s if span_s > 0 else 0.0
 
-    freqs = np.fft.rfftfreq(seg.size, d=1.0 / sample_rate_hz)
-    mag = np.abs(np.fft.rfft(seg))
+    freqs = np.fft.rfftfreq(uniform_seg.size, d=dt)
+    mag = np.abs(np.fft.rfft(uniform_seg))
     mag[0] = 0.0  # drop DC bin
     dominant_freq_hz = float(freqs[int(np.argmax(mag))]) if mag.size > 1 else None
     return zero_cross_hz, dominant_freq_hz
@@ -195,8 +327,19 @@ def compute_metrics(run: DecodedRun) -> dict:
     numbers matter via the fitness_* functions below."""
     f = run.fields
     t = run.t_s
-    dt = 1.0 / run.sample_rate_hz
     duration_s = float(t[-1]) if run.count > 0 else 0.0
+
+    def integral(values: np.ndarray) -> float:
+        values = np.asarray(values, dtype=np.float64)
+        if values.size <= 1 or duration_s <= 0:
+            return float(values[0] / run.sample_rate_hz) if values.size else 0.0
+        return float(np.trapezoid(values, t))
+
+    def time_mean(values: np.ndarray) -> float:
+        values = np.asarray(values, dtype=np.float64)
+        if values.size <= 1 or duration_s <= 0:
+            return float(values[0]) if values.size else 0.0
+        return integral(values) / duration_s
 
     pitch_rad = f["pitch_rad"]
     pitch_rate_rads = f["pitch_rate_rads"]
@@ -209,10 +352,10 @@ def compute_metrics(run: DecodedRun) -> dict:
     pitch_err_rad = pitch_rad - theta_ref
     pitch_err_deg = np.degrees(np.abs(pitch_err_rad))
 
-    rms_pitch_deg = float(np.sqrt(np.mean(pitch_err_deg ** 2)))
-    ise_pitch = float(np.sum(pitch_err_rad ** 2) * dt)
-    ise_pitch_rate = float(np.sum(pitch_rate_rads ** 2) * dt)
-    rms_pitch_rate_dps = float(np.sqrt(np.mean(np.degrees(pitch_rate_rads) ** 2)))
+    rms_pitch_deg = float(np.sqrt(time_mean(pitch_err_deg ** 2)))
+    ise_pitch = integral(pitch_err_rad ** 2)
+    ise_pitch_rate = integral(pitch_rate_rads ** 2)
+    rms_pitch_rate_dps = float(np.sqrt(time_mean(np.degrees(pitch_rate_rads) ** 2)))
     max_pitch_deg = float(np.max(pitch_err_deg))
 
     settle_time_s = _settle_time(t, pitch_err_deg, SETTLE_DEG, SETTLE_WINDOW_S, duration_s)
@@ -220,7 +363,7 @@ def compute_metrics(run: DecodedRun) -> dict:
 
     health = f["health_flags"].astype(np.int64)
     health_fractions = {
-        name: float(np.mean((health & bit) != 0))
+        name: time_mean(((health & bit) != 0).astype(np.float64))
         for name, bit in _HEALTH_FRACTION_FLAGS.items()
     }
 
@@ -233,8 +376,8 @@ def compute_metrics(run: DecodedRun) -> dict:
     max_wm_l_vel_turns_s = float(np.max(np.abs(f["wm_l_vel_turns_s"])))
     max_wm_r_vel_turns_s = float(np.max(np.abs(f["wm_r_vel_turns_s"])))
 
-    vel_track_rms_ms = float(np.sqrt(np.mean((f["wheel_vel_avg"] - f["v_ref"]) ** 2)))
-    yaw_track_rms_rads = float(np.sqrt(np.mean((f["yaw_rate_rads"] - f["omega_cmd_rds"]) ** 2)))
+    vel_track_rms_ms = float(np.sqrt(time_mean((f["wheel_vel_avg"] - f["v_ref"]) ** 2)))
+    yaw_track_rms_rads = float(np.sqrt(time_mean((f["yaw_rate_rads"] - f["omega_cmd_rds"]) ** 2)))
 
     if run.has_gain_sched_alpha:
         alpha = f[_ALPHA_KEY]
@@ -281,10 +424,10 @@ def check_safety(m: dict, wheel_vel_limit_turns_s: float = DEFAULT_WHEEL_VEL_LIM
         reasons.append(f"fault fired mid-run: codes {m['faults_seen']}")
     if m["max_hip_l_current_a"] > HIP_CURRENT_EPS_A:
         reasons.append(
-            f"hip_l_current_a max {m['max_hip_l_current_a']:.3f} A > {HIP_CURRENT_EPS_A} A (hips should be idle)")
+            f"hip_l_current_a max {m['max_hip_l_current_a']:.3f} A > {HIP_CURRENT_EPS_A} A limit")
     if m["max_hip_r_current_a"] > HIP_CURRENT_EPS_A:
         reasons.append(
-            f"hip_r_current_a max {m['max_hip_r_current_a']:.3f} A > {HIP_CURRENT_EPS_A} A (hips should be idle)")
+            f"hip_r_current_a max {m['max_hip_r_current_a']:.3f} A > {HIP_CURRENT_EPS_A} A limit")
     if m["max_wm_l_vel_turns_s"] > wheel_vel_limit_turns_s:
         reasons.append(
             f"wm_l_vel_turns_s max {m['max_wm_l_vel_turns_s']:.3f} > limit {wheel_vel_limit_turns_s}")
@@ -348,7 +491,7 @@ def evaluate(path, stage: str, wheel_vel_limit_turns_s: float = DEFAULT_WHEEL_VE
     what tools/analyze_hw_run.py and tabs/log_analyzer_tab.py both build on."""
     if stage not in STAGES:
         raise ValueError(f"stage must be one of {STAGES}, got {stage!r}")
-    run = decode_wlog(path)
+    run = decode_run(path)
     metrics = compute_metrics(run)
     safety_ok, safety_reasons = check_safety(metrics, wheel_vel_limit_turns_s)
     fitness_val, breakdown = FITNESS_FUNCS[stage](metrics)

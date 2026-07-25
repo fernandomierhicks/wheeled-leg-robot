@@ -41,11 +41,11 @@
 
 // ── Calibration event sub-types ───────────────────────────────────────────────
 #define CALIB_EVENT_PAYLOAD_V1   1
-#define CALIB_EVENT_START        0x01  // both axes: seek begins
-#define CALIB_EVENT_BOTTOM_FOUND 0x02  // axis: bottom hardstop found & zeroed
-#define CALIB_EVENT_LIMITS       0x03  // axis: top hardstop found, limits computed
-#define CALIB_EVENT_DONE         0x04  // axis: returned home, holding
-#define CALIB_EVENT_FAULT        0x05  // axis: hardstop not found within safety bound
+#define CALIB_EVENT_START        0x01  // both axes: switch homing begins
+#define CALIB_EVENT_BOTTOM_FOUND 0x02  // axis: retract switch pressed & encoder zeroed
+#define CALIB_EVENT_LIMITS       0x03  // axis: configured range applied
+#define CALIB_EVENT_DONE         0x04  // axis: backed off from switch
+#define CALIB_EVENT_FAULT        0x05  // axis: switch/current/time/travel safety fault
 
 typedef struct __attribute__((packed)) {
     uint8_t axis;     // HIP_MOTOR_BOTH/L/R

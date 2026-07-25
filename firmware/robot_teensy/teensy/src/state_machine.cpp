@@ -5,6 +5,7 @@
 #include "hip_motors.h"
 #include "calibration.h"
 #include "comm_protocol.h"
+#include "config.h"
 #include "param_registry.h"
 #include "control_loop.h"
 #include "wheel_motors.h"
@@ -68,7 +69,8 @@ static State* S_DISARMING;
 
 // ── ESTOP hip-disable tracking ────────────────────────────────────────────────
 static bool s_estop_hip_disabled = false;  // set when MIT was killed on ESTOP entry
-static bool s_hip_disarm_ramping = false;  // set while ramping hip torque down after a RUNNING->STANDBY disarm
+static bool s_hip_disarm_ramping = false;  // set while ramping hip torque down before STANDBY
+static bool s_disarming_calibration = false;
 
 // ── ESTOP gentle hip-cutoff ramp ───────────────────────────────────────────────
 // Compatibility hook for stateMachine_estop_hip_ramping(). ESTOP is now an
@@ -83,6 +85,7 @@ static volatile bool s_req_reset         = false;
 static volatile bool s_req_calibration   = false;
 static volatile bool s_req_running       = false;
 static volatile bool s_req_disarm_running = false;
+static volatile bool s_req_disarm_calibration = false;
 static volatile bool s_req_estop         = false;
 static volatile bool s_req_cmd_reject    = false;
 static volatile bool s_req_soft_clear    = false;
@@ -150,6 +153,7 @@ static void on_startup()  {
 static void on_standby()  {
     bool entering      = (g_state.state != STATE_STANDBY);
     bool from_calib    = (g_state.state == STATE_CALIBRATION);
+    bool calib_done    = from_calib && calibration_done();
     bool from_estop    = (g_state.state == STATE_ESTOP);  // soft-clear path
     bool from_manual   = (g_state.state == STATE_MANUAL);
     bool from_startup  = (g_state.state == STATE_STARTUP);
@@ -158,7 +162,7 @@ static void on_standby()  {
 
     g_state.whl_tau_l = 0.0f;
     g_state.whl_tau_r = 0.0f;
-    if (from_calib) calibration_abort();
+    if (from_calib && !calib_done) calibration_abort();
     if (from_manual) {
         wheel_motors_send(0.0f, 0.0f);
         wheel_motors_set_mode(WheelMode::IDLE);
@@ -182,6 +186,7 @@ static void on_standby()  {
 
 static void on_disarming() {
     bool entering = (g_state.state != STATE_DISARMING);
+    bool from_calib = (g_state.state == STATE_CALIBRATION);
     g_state.state = STATE_DISARMING;
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> DISARMING");
@@ -190,15 +195,28 @@ static void on_disarming() {
         g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = g_state.tau_yaw = 0.0f;
         s_jp_phase = JP_DONE;
         s_su_captured = false;
-        controlLoop_reset_hip_disarm_ramp();
-        s_hip_disarm_ramping = param_get(PARAM_HIP_RUNNING_RAMP_TIME_S) > 0.0f;
-        s_disarm_done = !s_hip_disarm_ramping;
-        if (s_disarm_done) hip_motors_clear_setpoints();
+        s_disarming_calibration = from_calib;
+        if (s_disarming_calibration) {
+            calibration_begin_disarm();
+            s_hip_disarm_ramping = true;
+            s_disarm_done = false;
+        } else {
+            controlLoop_reset_hip_disarm_ramp();
+            s_hip_disarm_ramping =
+                param_get(PARAM_HIP_RUNNING_RAMP_TIME_S) > 0.0f;
+            s_disarm_done = !s_hip_disarm_ramping;
+            if (s_disarm_done) hip_motors_clear_setpoints();
+        }
     }
-    if (s_hip_disarm_ramping && !controlLoop_run_hip_disarm_ramp()) {
-        s_hip_disarm_ramping = false;
-        s_disarm_done = true;
-        hip_motors_clear_setpoints();
+    if (s_hip_disarm_ramping) {
+        const bool ramping = s_disarming_calibration
+            ? calibration_run_disarm()
+            : controlLoop_run_hip_disarm_ramp();
+        if (!ramping) {
+            s_hip_disarm_ramping = false;
+            s_disarm_done = true;
+            hip_motors_clear_setpoints();
+        }
     }
 }
 static void on_manual() {
@@ -315,13 +333,13 @@ static void on_jumping() {
         }
     }
     else if (s_jp_phase == JP_EXTEND) {
-        // Seek direction sign: same direction calibration moved to reach the extended hardstop
-        float dir_L = param_get(PARAM_CALIB_L_SEEK_DIR);
-        float dir_R = param_get(PARAM_CALIB_R_SEEK_DIR);
+        // seek_dir points toward the retract switch; extension is opposite.
+        float dir_L = CALIB_L_SEEK_DIR;
+        float dir_R = CALIB_R_SEEK_DIR;
 
-        // Extended calibrated limit (already includes CALIB_MARGIN from hardstop)
-        float lim_L = (dir_L > 0.0f) ? hm_limits_L.max_rad : hm_limits_L.min_rad;
-        float lim_R = (dir_R > 0.0f) ? hm_limits_R.max_rad : hm_limits_R.min_rad;
+        // Extended limit is the configured range from switch zero.
+        float lim_L = (dir_L > 0.0f) ? hm_limits_L.min_rad : hm_limits_L.max_rad;
+        float lim_R = (dir_R > 0.0f) ? hm_limits_R.min_rad : hm_limits_R.max_rad;
 
         float dist_L = fabsf(hip_q_L - lim_L);
         float dist_R = fabsf(hip_q_R - lim_R);
@@ -521,6 +539,7 @@ static void on_estop() {
         s_req_calibration    = false;
         s_req_jump           = false;
         s_req_disarm_running = false;
+        s_req_disarm_calibration = false;
         s_req_standby        = false;
         s_req_reset          = false;
         s_req_soft_clear     = false;
@@ -540,6 +559,7 @@ static void on_estop() {
         // configured MIT-disable policy now; no torque ramp may delay the
         // emergency output invariant.
         s_hip_disarm_ramping = false;
+        s_disarming_calibration = false;
         s_estop_hip_ramping = false;
         hip_motors_clear_setpoints();
         estop_cut_hip();
@@ -656,6 +676,11 @@ static bool req_running_direct() {
     return true;
 }
 static bool req_disarm_running() { bool v = s_req_disarm_running; s_req_disarm_running = false; return v; }
+static bool req_disarm_calibration() {
+    bool v = s_req_disarm_calibration;
+    s_req_disarm_calibration = false;
+    return v;
+}
 static bool disarm_done()        { return s_disarm_done; }
 static bool req_jump()           { bool v = s_req_jump;           s_req_jump           = false; return v; }
 static bool jump_done()          { return (millis() >= s_jump_deadline_ms); }
@@ -720,6 +745,7 @@ void stateMachine_init() {
     S_CALIBRATION->addTransition(motor_feedback_fault,  S_ESTOP);
     S_CALIBRATION->addTransition(calibration_failed_fn, S_ESTOP);
     S_CALIBRATION->addTransition(calibration_done_fn,   S_STANDBY);
+    S_CALIBRATION->addTransition(req_disarm_calibration, S_DISARMING);
     S_CALIBRATION->addTransition(req_standby,           S_STANDBY);
 
     S_RUNNING->addTransition(req_estop,            S_ESTOP);
@@ -829,6 +855,11 @@ bool stateMachine_disarm_running() {
     if (g_state.state != STATE_RUNNING && g_state.state != STATE_JUMPING &&
         g_state.state != STATE_STANDING_UP) return false;
     s_req_disarm_running = true;
+    return true;
+}
+bool stateMachine_disarm_calibration() {
+    if (g_state.state != STATE_CALIBRATION) return false;
+    s_req_disarm_calibration = true;
     return true;
 }
 // Deliberately unguarded: ESTOP must be reachable from any state (it already

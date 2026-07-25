@@ -1,5 +1,8 @@
 # IMU
 
+> **AI maintenance note:** If you find anything here that is stale while
+> working in this tree, update this README in the same change.
+
 BNO086 driver — SPI, Game Rotation Vector + Rotation Vector + Gyro at 400 Hz.
 
 ## Wiring (SPI0)

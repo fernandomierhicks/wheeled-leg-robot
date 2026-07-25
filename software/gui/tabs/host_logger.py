@@ -10,11 +10,14 @@ start/stop only (see Logs tab); does not run automatically.
 
 import json
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from .log_transfer import LOG_DIR
+from .comm_commands import send_param_get_all
+from .log_paths import new_run_dir
+from .telem_format import TELEM_VERSION
 from .telemetry_bus import TelemetryBus
 
 
@@ -39,7 +42,7 @@ class HostLogger(QObject):
         self._file  = None
         self._path: Path | None = None
         self._count = 0
-        TelemetryBus.instance().packet.connect(self._on_packet)
+        TelemetryBus.instance().live_packet.connect(self._on_packet)
 
     def is_logging(self) -> bool:
         return self._file is not None
@@ -53,11 +56,28 @@ class HostLogger(QObject):
     def start(self):
         if self._file is not None:
             return
-        self._path = LOG_DIR / f"HOSTLOG_{time.strftime('%Y%m%d_%H%M%S')}.jsonl"
-        self._file = open(self._path, "a", encoding="utf-8")
+        run_dir = new_run_dir("HOST")
+        self._path = run_dir / "host.jsonl"
+        started_utc = datetime.now(timezone.utc).isoformat()
+        manifest = {
+            "capture_schema": 1,
+            "source_kind": "host",
+            "started_utc": started_utc,
+            "telem_version": TELEM_VERSION,
+            "files": {"host": self._path.name},
+        }
+        (run_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        self._file = open(self._path, "x", encoding="utf-8")
+        self._file.write(json.dumps({"record_type": "capture_header", **manifest}) + "\n")
+        self._file.flush()
         self._count = 0
         self.logging_state_changed.emit(True)
         self.record_count_changed.emit(0)
+        # PARAM_REPORT responses travel through live_packet too, giving the
+        # analyzer a complete starting snapshot followed by later set echoes.
+        send_param_get_all()
 
     def stop(self):
         if self._file is None:
@@ -71,11 +91,15 @@ class HostLogger(QObject):
         # historical data being re-viewed, not something newly received.
         if self._file is None or TelemetryBus.instance().playback_active:
             return
-        record = {"host_ts": time.time(), **info}
+        record = {
+            "host_ts": time.time(),
+            "host_utc_ns": time.time_ns(),
+            "host_monotonic_ns": time.monotonic_ns(),
+            **info,
+        }
         self._file.write(json.dumps(record, default=str) + "\n")
-        # Flushed every record, not just buffered: the whole point is to
-        # survive a GUI/firmware crash mid-session, so data must hit disk
-        # as it arrives rather than waiting on Python's buffer to fill.
+        # Flush Python's buffer every record so a process crash loses at most
+        # a partial final JSON line (the decoder explicitly tolerates that).
         self._file.flush()
         self._count += 1
         self.record_count_changed.emit(self._count)

@@ -6,6 +6,9 @@ from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 class TelemetryBus(QObject):
     """App-wide singleton — any decoded telemetry packet is emitted here."""
     packet = pyqtSignal(dict)
+    # Every packet from the SourceManager-selected live transport, before the
+    # 20 Hz UI coalescer. Playback deliberately bypasses this signal.
+    live_packet = pyqtSignal(dict)
 
     # True while the Logs tab is replaying a .wlog file — live sources stop
     # emitting onto `packet` (see flash_monitor.py PacketDecoder._parse())
@@ -42,6 +45,9 @@ class TelemetryBus(QObject):
         Parameter reports, diagnostics, logs, and command evidence remain
         immediate; only ptype 0x01 is latest-sample wins.
         """
+        if self.playback_active:
+            return
+        self.live_packet.emit(info)
         if info.get("ptype") != 0x01:
             self.packet.emit(info)
             return

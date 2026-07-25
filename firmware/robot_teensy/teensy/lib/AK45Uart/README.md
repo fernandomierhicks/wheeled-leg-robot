@@ -1,5 +1,8 @@
 # AK45Uart
 
+> **AI maintenance note:** If you find anything here that is stale while
+> working in this tree, update this README in the same change.
+
 AK45-10 encoder readback over UART (CubeMars ASCII terminal protocol, §5.3.1).
 
 This is a **separate bus from the MIT Cheetah CAN** used by HipMotors. The UART is only for reading encoder angle; all torque commands go over CAN.

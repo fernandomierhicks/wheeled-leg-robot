@@ -12,6 +12,10 @@ Usage:
     python robot_ctl.py log_stop
     python robot_ctl.py log_list
     python robot_ctl.py log_download <file_index>
+    python robot_ctl.py host_log_start
+    python robot_ctl.py host_log_stop
+    python robot_ctl.py host_log_status
+    python robot_ctl.py analyzer_load <path>
     python robot_ctl.py telem
     python robot_ctl.py motion_set <v> <omega>
     python robot_ctl.py motion_release
@@ -83,6 +87,14 @@ def _build(argv: list[str]) -> dict:
         # remote_control.py scales its own wait up to LOG_DOWNLOAD_TIMEOUT_CAP_MS
         # (600s) for large files; give the socket at least that long too.
         return {"cmd": "log_download", "file_index": int(rest[0]), "timeout_ms": 600000}
+    if cmd in ("host_log_start", "host_log_stop", "host_log_status"):
+        if rest:
+            raise SystemExit(f"usage: {cmd}")
+        return {"cmd": cmd}
+    if cmd == "analyzer_load":
+        if len(rest) != 1:
+            raise SystemExit("usage: analyzer_load <path>")
+        return {"cmd": cmd, "path": rest[0]}
     if cmd == "telem":
         return {"cmd": "telem"}
     if cmd == "motion_set":

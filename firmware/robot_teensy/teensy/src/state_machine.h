@@ -8,7 +8,7 @@ bool stateMachine_request_manual();
 bool stateMachine_exit_manual();
 
 // Request entry into STATE_RUNNING (armed). Only takes effect from STANDBY and
-// only if PARAM_CALIB_DONE == 1. Call when CH10 goes above the arm threshold.
+// requires valid in-RAM hip limits unless the calibration bypass is enabled.
 bool stateMachine_request_running();
 
 // Request exit from STATE_RUNNING back to STANDBY. Call when CH10 drops.
@@ -16,6 +16,9 @@ bool stateMachine_disarm_running();
 
 // Request entry into STATE_CALIBRATION. Only takes effect from STANDBY.
 bool stateMachine_request_calibration();
+
+// Gracefully cancel an active radio-triggered calibration through DISARMING.
+bool stateMachine_disarm_calibration();
 
 // Request entry into STATE_JUMPING (3 s jump sequence). Only from STATE_RUNNING.
 // Plays a fanfare, then auto-returns to STATE_RUNNING. Called when CH6 goes 1000→2000.

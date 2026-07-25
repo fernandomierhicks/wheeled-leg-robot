@@ -17,8 +17,8 @@ static bool   g_active = false;
 static uint16_t g_active_index = 0;
 static bool   g_has_deadline = false;
 static uint32_t g_stop_deadline_ms = 0;
-static uint32_t g_last_flush_ms = 0;
 static bool   g_overflow = false;
+static bool   g_finalize_pending = false;
 
 // Ring buffer cushion between the 500 Hz write() calls and the SD write-out;
 // placed in DMAMEM to keep it out of the fast, small RAM1 region.
@@ -160,7 +160,7 @@ bool sd_logger_begin() {
 bool sd_logger_available() { return g_available; }
 
 bool sd_logger_start(uint32_t duration_ms) {
-    if (!g_available || g_active) {
+    if (!g_available || g_active || g_finalize_pending) {
         emit_status(g_active ? g_active_index : 0xFFFF, 1);
         return false;
     }
@@ -206,7 +206,6 @@ bool sd_logger_start(uint32_t duration_ms) {
     g_overflow = false;
     g_has_deadline = duration_ms != 0;
     g_stop_deadline_ms = millis() + duration_ms;
-    g_last_flush_ms = millis();
     g_active = true;
     emit_status(idx, 0);
     emit_started(idx, duration_ms);
@@ -236,10 +235,19 @@ bool sd_logger_start(uint32_t duration_ms) {
 
 void sd_logger_stop() {
     if (!g_active) return;
+    // Stop sampling immediately. Final sync/truncate/close can take tens of
+    // milliseconds on real cards, so main.cpp performs that work later when
+    // the state machine says no active control mode is running.
+    g_active = false;
+    g_finalize_pending = true;
+}
+
+bool sd_logger_finalize_service(bool safe_to_block) {
+    if (!g_finalize_pending || !safe_to_block) return false;
     rb.sync();
     g_wr_file.truncate();
     g_wr_file.close();
-    g_active = false;
+    g_finalize_pending = false;
     emit_status(g_active_index, g_overflow ? 2 : 0);
     emit_stopped(g_active_index);
 
@@ -248,6 +256,7 @@ void sd_logger_stop() {
         g_param_file.close();
         g_param_active = false;
     }
+    return true;
 }
 
 bool sd_logger_is_active() { return g_active; }
@@ -279,10 +288,6 @@ void sd_logger_service() {
     }
 
     uint32_t now = millis();
-    if (now - g_last_flush_ms >= 1000) {
-        g_wr_file.flush();
-        g_last_flush_ms = now;
-    }
 
     if (g_has_deadline && (int32_t)(now - g_stop_deadline_ms) >= 0) {
         sd_logger_stop();

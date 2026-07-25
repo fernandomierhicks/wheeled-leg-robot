@@ -14,11 +14,11 @@ requests.
 | STARTUP | readiness → STANDBY | ESTOP or startup failure → ESTOP |
 | STANDBY | manual, calibration, arm → RUNNING/STANDING_UP | ESTOP or motor fault → ESTOP |
 | MANUAL | operator exit or GUI timeout → STANDBY | ESTOP or motor fault → ESTOP |
-| CALIBRATION | complete/operator exit → STANDBY | ESTOP, motor fault, calibration failure → ESTOP |
+| CALIBRATION | complete → STANDBY; radio-switch cancellation → DISARMING; GUI operator exit → STANDBY | ESTOP, motor fault, calibration failure → ESTOP |
 | RUNNING | disarm → DISARMING; jump → JUMPING | ESTOP, motor fault, or stale/non-nominal IMU → ESTOP |
 | JUMPING | disarm → DISARMING; complete → RUNNING | ESTOP, motor fault, or IMU fault → ESTOP |
 | STANDING_UP | disarm → DISARMING; capture → RUNNING | ESTOP, motor fault, or IMU fault → ESTOP |
-| DISARMING | hip ramp complete → STANDBY | ESTOP, motor fault, or IMU fault → ESTOP |
+| DISARMING | running or calibration hip ramp complete → STANDBY | ESTOP, motor fault, or IMU fault → ESTOP |
 | CMD_REJECT | one-second indication complete → STANDBY | ESTOP or motor fault → ESTOP |
 | ESTOP | soft clear → STANDBY; reset → STARTUP | outputs remain in the ESTOP policy |
 

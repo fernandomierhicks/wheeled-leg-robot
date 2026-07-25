@@ -2,6 +2,9 @@
 
 Two-microcontroller architecture for a wheeled-leg balancing robot.
 
+> **AI maintenance note:** If you find anything here that is stale while
+> working in this tree, update this README in the same change.
+
 ## Architecture
 
 ```
@@ -49,7 +52,7 @@ do not operate the robot on an untrusted network.
 **Key buses on Teensy:**
 - CAN2 @ 1 Mbps → AK45-10 hip motors (MIT Cheetah protocol)
 - CAN3 @ 1 Mbps → ODrive wheel motors
-- SPI0 → BNO086 IMU (CS=D10, INT=D2, RST=D3)
+- SPI0 → BNO086 IMU (CS=D10, INT=D9, RST=D6)
 - Serial2/3 → AK45 UART encoder readback
 - Serial4 RX → FlySky iBUS RC receiver
 - Serial5 ↔ ESP32 (CommLink UART)
@@ -59,13 +62,15 @@ do not operate the robot on an untrusted network.
 ```
 firmware/robot_teensy/
 ├── shared/
-│   └── comm_protocol.h   ← packet types, TelemetryPayload, fault codes (single source of truth)
+│   ├── comm_protocol.h   ← packet types, TelemetryPayload, fault codes (single source of truth)
+│   └── CommLink/         ← framed protocol implementation used by both MCUs
 ├── teensy/               ← Teensy 4.1 PlatformIO project
 │   ├── src/
 │   │   ├── config.h          ← all pin and bus constants
 │   │   ├── robot_state.h     ← RobotState struct + RobotStateEnum
 │   │   ├── state_machine.cpp ← 8-state FSM (see state_machine.md)
 │   │   ├── control_loop.cpp  ← LQR + vel PI + yaw PI + feedforward
+│   │   ├── live_tune.h       ← generic radio-knob live param tuning (slot table in main.cpp)
 │   │   └── main.cpp          ← loop(), radio, telemetry, LED, buzzer
 │   └── lib/
 │       ├── AK45Uart/         ← AK45-10 UART encoder readback
@@ -74,12 +79,38 @@ firmware/robot_teensy/
 │       ├── IMU/              ← BNO086 SPI driver
 │       ├── LED/              ← Non-blocking RGB LED
 │       ├── Buzzer/           ← Non-blocking passive buzzer
-│       ├── CommLink/         ← Framed UART protocol (shared with ESP32)
 │       ├── ParamRegistry/    ← Runtime param table (GUI-tunable, 500 Hz safe)
-│       └── Calibration/      ← Hip hardstop calibration FSM
+│       └── Calibration/      ← Hip retract-switch calibration FSM
 └── esp32/                ← ESP32 PlatformIO project
     └── src/main.cpp      ← all ESP32 logic (display, WiFi, Neopixel, ToF)
 ```
+
+## Flashing (PlatformIO / GUI)
+
+```
+cd teensy && pio run -e teensy41 -t upload    # or esp32/ -e esp32dev
+```
+
+Or remotely, via the running GUI's command server (see `software/gui/CLAUDE.md`
+→ "Remote control / automation"): `python software/gui/tools/robot_ctl.py
+firmware_flash teensy`. Either way, PlatformIO builds first, then needs the
+Teensy in its HalfKay bootloader to actually upload — normally triggered by a
+soft-reset touch over the serial port, but that can fail to land (e.g. the
+GUI already holds the port open in monitor mode) and `teensy_loader_cli` then
+sits waiting for the bootloader indefinitely instead of erroring out.
+
+**Expect to flash twice.** Symptom of the stuck first attempt: the build
+succeeds but the command returns `ok: false` with a truncated/empty output
+tail, and a `teensy_loader_cli` process is left running (check with
+`Get-Process teensy_loader_cli` on Windows). A second `firmware_flash` call
+while that's still alive fails fast with `"teensy flash is already
+running"` — kill the stuck process first (`Stop-Process -Id <pid> -Force`),
+then retry. The retry upload usually succeeds outright; if not, a physical
+tap of the Teensy's PROGRAM button while the loader is waiting forces it into
+bootloader mode. After a successful flash, confirm the new firmware is
+actually running (not just that the loader exited 0) via `telem`'s
+`timestamp_ms`/`loop_count` resetting to a small value — a stale-but-still-
+responding board can look deceptively like a success.
 
 ## Generated protocol and durable parameters
 
@@ -113,10 +144,58 @@ reported in the robot log.
 
 ## Control algorithm (`teensy/src/control_loop.cpp`)
 
-LQR on 3-state linearised inverted pendulum: `[pitch−θ_ref, pitch_rate, wheel_vel_avg−v_ref]`.  
+LQR on 3-state linearised inverted pendulum: `[pitch−θ_ref−trim, pitch_rate, wheel_vel_avg−v_ref]`.  
 Gains are scheduled with leg height (α ∈ [0,1], retracted→extended).  
+Balance-point trim (`lqr_pitch_trim_ret/ext`, same α schedule) offsets the pitch
+target so zero velocity holds at the true balance lean when the CG isn't over the
+axle. Edit via the Params tab, or repoint a live-tune slot at it for a future
+bench session (see below).  
 Outer loops: velocity PI (sets θ_ref), yaw PI (differential torque).  
 Feedforward: FF1 cancels hip reaction torque; FF2 adds gravity compensation.
+
+## Live parameter tuning (`teensy/src/live_tune.h`)
+
+Lets an operator feel a gain/limit's effect live on the bench, via a radio
+knob, instead of editing the Params tab blind and re-arming to see it. Two
+independent slots — one per knob (radio CH7, CH8) — each mapped to a param +
+range in a small fixed table, `LIVE_TUNE_SLOTS` in `main.cpp`:
+
+```cpp
+static const LiveTuneSlot LIVE_TUNE_SLOTS[] = {
+    { 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_VEL_PI_KP, 0.0f, 0.5f },
+    { 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_VEL_PI_KI, 0.0f, 0.5f },
+};
+```
+
+Active while `RUNNING` with the calibration switch (CH5) raised — the same
+gate an earlier, trim-only version of this mechanism used, now generalized to
+N knob→param slots. Two safety properties, independent of which params are
+currently wired:
+
+- **Pickup, not snap.** A knob does nothing on entering live-tune mode until
+  it's swept through its target's *current* value; only then does it "pick
+  up" and start tracking 1:1. Prevents a gain jumping instantly to wherever
+  the knob physically happens to be sitting when CH5 goes up. Resets every
+  time live-tune mode is exited (CH5 low, or leaving `RUNNING`) — re-entering
+  always requires re-sweeping.
+- **Explicit latch, nothing persists by accident.** While picked up, a slot's
+  live shadow value (`live_tune_ch7_val`/`live_tune_ch8_val`, both telemetry-
+  visible) is what the control loop actually uses — real, felt effect on
+  balance — but the real underlying param is untouched until
+  `PARAM_LIVE_TUNE_LATCH` (`live_tune_latch`) is written `1`. One-shot:
+  firmware commits every currently-picked-up slot and resets the flag.
+  Un-picked-up slots are skipped, not latched at a stale value.
+
+**Repointing a knob at a different param** for a future bench session is a
+one-line edit to `LIVE_TUNE_SLOTS` + reflash. The only other requirement: the
+target's read site in `control_loop.cpp` must go through
+`live_tune_value(PARAM_X)` instead of a bare `param_get(PARAM_X)` — that's
+what makes the override actually take effect; two call sites do this today
+(`vel_pi_kp`, `vel_pi_ki`).
+
+Currently wired: CH7 → `vel_pi_kp` (0..0.5), CH8 → `vel_pi_ki` (0..0.5). Full
+step-by-step operator procedure and the CH5/CH7/CH8 radio table: see "Live
+parameter tuning" in `radio_channels.md`.
 
 ## Motor direction / sign conventions
 
@@ -132,11 +211,9 @@ Every place a sign flip or direction constant is applied between a "positive mea
 | 4 | Yaw→per-wheel torque split | hardcoded (structural) | `teensy/src/control_loop.cpp:242-243` | `tau_L = tau_sym + tau_yaw`, `tau_R = tau_sym − tau_yaw` |
 | 5 | Hip L TX flip (commanded pos/vel/torque) | hardcoded | `teensy/lib/HipMotors/hip_motors.cpp:95-100` (`pack_and_send`) | −1, unconditional, applied when `id == AK45_ID_L` |
 | 6 | Hip L RX flip (pos/vel/current feedback) | hardcoded | `hip_motors.cpp:137-140` (`rx_callback`) | −1, unconditional, applied when `msg.id == AK45_ID_L` |
-| 7 | Hip L/R hardstop seek direction | runtime param, `PARAM_FLAG_READONLY` | `teensy/lib/ParamRegistry/param_registry.cpp:82,85` | `+1.0` for both — identical, because #5/#6 already handle the mirroring, exactly like wheels (`hip_motors.h:1-4` explains the frame) |
-| 8 | Hip normalized-command mapping | hardcoded (structural) | `teensy/lib/HipMotors/hip_motors.cpp:277-282` (`hip_cmd_to_setpoints`) | `t∈[0,1]` (0=retract, 1=extend) → `pos = max_rad − t·span` when `dir>0` — same formula, same sign, both sides |
+| 7 | Hip L/R retract-switch seek direction | runtime param, `PARAM_FLAG_READONLY` | generated parameter table | L `-1.0`, R `+1.0`; each points toward its retract switch |
+| 8 | Hip normalized-command mapping | hardcoded (structural) | `teensy/lib/HipMotors/hip_motors.cpp` (`hip_cmd_to_setpoints`) | `t∈[0,1]`: 0 = switch-zero backoff limit, 1 = configured extended limit; endpoint selection follows each axis's seek direction |
 | 9 | GUI hip jog slider → raw degrees | GUI-side, not firmware | `software/gui/tabs/hip_motors.py:493-501` | slider low end → `lo_deg` (≈ `min_rad`), slider high end → `hi_deg` (≈ `max_rad`) — **raw degrees, not the normalized `t`**; now the same physical sense on both sides since #5/#6 unify the frame |
-
-Note: `teensy/src/config.h:56` has a stale comment claiming "R seek dir −1" — that's out of date; #7 above (`param_registry.cpp`, both `+1.0`) is ground truth.
 
 ### Per-motor: what positive should do
 
@@ -154,7 +231,7 @@ Full FSM diagram: `teensy/state_machine.md`.
 | Value | Name | Description |
 |---|---|---|
 | 0 | `STATE_STARTUP` | Boot checks: waits for IMU NOMINAL + hip CAN heartbeats |
-| 1 | `STATE_CALIBRATION` | Hip hardstop homing — only from STANDBY via CH5 |
+| 1 | `STATE_CALIBRATION` | Hip retract-switch homing — only from STANDBY; lowering CH5 after a radio start cancels through DISARMING |
 | 2 | `STATE_STANDBY` | Idle, motors energised but zero torque |
 | 3 | `STATE_RUNNING` | Active balancing — LQR + vel/yaw PI — requires calibration valid |
 | 4 | `STATE_ESTOP` | Fault latch — see fault table below |
@@ -162,7 +239,7 @@ Full FSM diagram: `teensy/state_machine.md`.
 | 6 | `STATE_CMD_REJECT` | ~1 s transient: buzzer + red blink, auto-returns to prior state |
 | 7 | `STATE_JUMPING` | ~3 s jump sequence from RUNNING; auto-returns to RUNNING |
 | 8 | `STATE_STANDING_UP` | Arm-time recovery from a fallen pose — retract legs, energetic wheel push, then RUNNING |
-| 9 | `STATE_DISARMING` | Normal active-state exit: wheel IDLE immediately, hip torque ramps safely to zero, then STANDBY |
+| 9 | `STATE_DISARMING` | Normal active-state or radio-calibration exit: wheel IDLE immediately, hip torque ramps safely to zero, then STANDBY |
 
 **Standing-up mode (`STATE_STANDING_UP`)**: entered on arm only when `standup_enable=1` and pitch is within the recoverable range; with `standup_enable=0` (default) arming goes straight to `RUNNING`, byte-identical to before this state existed. Two phases: **CROUCH** ramps the hips to the retracted pose and holds them there rigidly for the rest of the sequence — hips move once, to a fixed pose, and never actively right the robot. **RECOVER** does the actual catch entirely with wheel torque: a saturated P/D law on pitch and pitch-rate (`tau = K_pitch*pitch + K_rate*pitch_rate`, same sign convention as the small-angle LQR) pushes the wheelbase back under the CG until pitch settles in-band, then hands off to `RUNNING` for the tuned LQR to take over. Full spec: `standing_up.md`.
 
@@ -194,7 +271,7 @@ Set in `g_state.fault_code` before entering `STATE_ESTOP`. Non-zero only while i
 | `0x02` | `FAULT_HIP_INIT_TIMEOUT` | No CAN reply from hip motors within 2 s of boot | REBOOT |
 | `0x03` | `FAULT_HIP_FEEDBACK_LOST` | Hip CAN feedback timed out (> 20 ms) during operation | REBOOT |
 | `0x04` | `FAULT_HIP_LARGE_POS_CMD` | Hip position jump exceeded `MAX_HIP_DELTA_RAD` | GUI_FIX |
-| `0x05` | `FAULT_CALIBRATION_TIMEOUT` | Hardstop not found within `CALIB_SAFETY_BOUND_RAD` | REPOSITION |
+| `0x05` | `FAULT_CALIBRATION_TIMEOUT` | Retract-switch homing safety check failed | REPOSITION |
 | `0x06` | `FAULT_HUMAN_ESTOP` | ESTOP requested by GUI or radio | SOFT |
 | `0x07` | *(reserved)* | Was `FAULT_PARAM_OUT_OF_BOUNDS` — removed; out-of-range param writes always clamp | — |
 | `0x08` | `FAULT_PITCH_WATCHDOG` | `|pitch| > 50°` for > 200 ms | REPOSITION |
@@ -462,5 +539,4 @@ safety net for any unrelated future task stall.
 
 ## Each driver has its own README
 
-See `teensy/lib/<DriverName>/README.md` for wiring, API, and gotchas.  
-Active display redesign plan: `esp32/screen redo.md`.
+See `teensy/lib/<DriverName>/README.md` for wiring, API, and gotchas.

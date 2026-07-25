@@ -1,5 +1,8 @@
 # Buzzer
 
+> **AI maintenance note:** If you find anything here that is stale while
+> working in this tree, update this README in the same change.
+
 Non-blocking passive buzzer driver. Tone, MIDI note, and melody playback via PWM.
 
 ## Wiring

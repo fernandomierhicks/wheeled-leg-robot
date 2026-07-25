@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .port_manager import SerialPortManager
+from .log_paths import DIAGNOSTICS_DIR
 from .telem_format import (
     crc8 as _crc8, decode_telem_a as _decode_telem_a, decode_telem_b as _decode_telem_b,
     decode_telem_full as _decode_telem_full,
@@ -23,8 +24,8 @@ from .theme import BG, BORDER, BLUE, DIM, GREEN, ORANGE, RED, SURFACE, TEXT
 
 _GUI_DIR = Path(__file__).parent.parent
 _FW_ROOT = _GUI_DIR / ".." / ".." / "firmware" / "robot_teensy"
-LOG_DIR  = _GUI_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+LOG_DIR = DIAGNOSTICS_DIR
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 _pio_candidate = Path.home() / ".platformio" / "penv" / "Scripts" / "pio.exe"
 PIO_EXE = str(_pio_candidate) if _pio_candidate.exists() else (shutil.which("pio") or "pio")
@@ -562,6 +563,11 @@ class DevicePanel(QWidget):
         self._pio         = PioRunner(self)
         self._auto_scroll = True
         self._flashing    = False
+        # Teensy upload quirk: the first attempt after a fresh board state
+        # usually fails but leaves the board in a flashable state, so the
+        # second attempt succeeds. Auto-retry once for teensy uploads only.
+        self._last_base_args: list[str] = []
+        self._flash_retried  = False
         # Set only by the user's own Disconnect click (not by flash-release or a
         # real link drop) so _auto_scan() doesn't silently reopen the port a
         # moment later — the ESP32's USB-serial bridge stays enumerated across a
@@ -820,7 +826,7 @@ class DevicePanel(QWidget):
 
     # ── Flash ─────────────────────────────────────────────────────────────────
 
-    def _flash(self, base_args: list[str]):
+    def _flash(self, base_args: list[str], *, is_retry: bool = False):
         if self._pio.running:
             return
         port = self._port_path()
@@ -828,7 +834,10 @@ class DevicePanel(QWidget):
         # release serial port before pio takes it; block auto-reconnect until done
         self._flashing = True
         self._close_port("Flashing…", external=False)
-        self._output.clear()
+        if not is_retry:
+            self._output.clear()
+            self._flash_retried = False
+        self._last_base_args = base_args
 
         args = list(base_args)
         if port:
@@ -857,6 +866,13 @@ class DevicePanel(QWidget):
 
     def _on_flash_done(self, ok: bool):
         self._set_flash_busy(False)
+        if (not ok and self._device == "teensy" and not self._flash_retried
+                and "upload" in self._last_base_args):
+            self._flash_retried = True
+            self._append("[Teensy upload failed — retrying once "
+                          "(first attempt typically just resets the board into a flashable state)]", ORANGE)
+            QTimer.singleShot(800, lambda: self._flash(self._last_base_args, is_retry=True))
+            return
         QTimer.singleShot(3500, self._reconnect_after_flash)
 
     def _reconnect_after_flash(self):

@@ -1,308 +1,406 @@
 #include "calibration.h"
+
 #include <Arduino.h>
 #include <math.h>
-#include "config.h"
-#include "hip_motors.h"
-#include "robot_state.h"
+
 #include "Buzzer.h"
 #include "comm_protocol.h"
+#include "config.h"
+#include "hip_motors.h"
+#include "limit_switches.h"
 #include "param_registry.h"
+#include "robot_state.h"
 
 extern Buzzer g_buzzer;
 
 enum CalibAxisState : uint8_t {
-    CAL_SEEK_BOTTOM,
-    CAL_SEEK_TOP,
-    CAL_RETURN_HOME,
-    // Reached home; kp/kd ramping from hold values down to zero before
-    // CAL_DONE. calibration_done() stays false throughout so STATE_CALIBRATION
-    // doesn't exit to STANDBY (which drops the setpoint entirely) until torque
-    // is already at zero — see PARAM_CALIB_RAMPDOWN_TIME_S.
+    CAL_RELEASE_SWITCH,
+    CAL_SEEK_SWITCH,
+    CAL_WAIT_ZERO_SYNC,
+    CAL_BACKOFF,
     CAL_RAMPDOWN,
     CAL_DONE,
     CAL_FAULT,
-    // Retract found and zeroed, but PARAM_CALIB_EXTEND_ENABLE=0 — hold here
-    // indefinitely. Deliberately NOT CAL_DONE: no limits were computed, and
-    // calibration_done() must stay false so STATE_CALIBRATION doesn't
-    // auto-exit to STANDBY. Operator exits manually once satisfied.
-    CAL_HOLD_RETRACT,
 };
 
 struct CalibAxis {
     CalibAxisState state;
-    float          ramp_target;
-    float          prev_pos;
-    uint8_t        stall_count;
-    float          seek_dir;     // sign toward the "bottom" hardstop
-    float          home_target;  // midpoint of the computed limits
-    float          start_pos;    // position when calibration_start() was called
-    uint32_t       rampdown_start_ms;  // millis() when CAL_RAMPDOWN began
-    float          kp_out;        // slew-limited kp actually being sent (SEEK_*/RETURN_HOME)
-    float          kp0_rampdown;  // kp CAL_RAMPDOWN ramps down from — whatever kp_out was
-    float          kd0_rampdown;  // at the instant home was reached, not a fixed hold_kp/kd
+    float seek_dir;
+    float ramp_target;
+    float phase_start_pos;
+    float home_target;
+    float kp_out;
+    float kp0_rampdown;
+    float kd0_rampdown;
+    uint32_t phase_start_ms;
+    uint32_t rampdown_start_ms;
+    uint32_t overcurrent_since_ms;
+    uint32_t zero_feedback_seq;
+    bool release_seen;
+    bool overcurrent_active;
 };
 
-static CalibAxis ax_L, ax_R;
+static CalibAxis ax_L;
+static CalibAxis ax_R;
 static bool s_done_announced  = false;
 static bool s_fault_announced = false;
+static HipSetpoint s_cancel_sp_L = {};
+static HipSetpoint s_cancel_sp_R = {};
+static uint32_t s_cancel_start_ms = 0;
 
-// Slew-rate-limits kp/kd toward their per-phase target instead of jumping
-// instantly at SEEK_BOTTOM<->SEEK_TOP<->RETURN_HOME boundaries (each phase
-// uses a different kp for its own stall-detection tuning) — otherwise
-// commanding a large position error at a suddenly-different stiffness is a
-// felt torque jerk. Reuses PARAM_CALIB_RAMPDOWN_TIME_S as the "how gentle"
-// knob so there's one setting for calibration smoothness; 0 = instant
-// (old behavior). Scaled off calib_kp_top since it's the largest constant
-// in play, so a full 0->top swing takes ramp_s and smaller swings scale down.
-static float slew_toward(float current, float target, float max_step) {
-    float d = target - current;
-    if (d >  max_step) d =  max_step;
-    if (d < -max_step) d = -max_step;
-    return current + d;
-}
-static float kp_slew_step() {
-    float ramp_s = param_get(PARAM_CALIB_RAMPDOWN_TIME_S);
-    if (ramp_s <= 0.0f) return 1.0e9f;  // instant
-    return param_get(PARAM_CALIB_KP_TOP) / (ramp_s * CONTROL_HZ);
-}
-
-// ── Buzzer cues ──────────────────────────────────────────────────────────────
-
-static const BuzzerNote START_CHIME[] = {
-    {69, 80, 20},  // A4
-    {76, 80,  0},  // E5
-};
+static const BuzzerNote START_CHIME[] = {{69, 80, 20}, {76, 80, 0}};
 static const BuzzerNote DONE_MELODY[] = {
-    {72,  80, 20}, // C5
-    {76,  80, 20}, // E5
-    {79, 120,  0}, // G5
+    {72, 80, 20}, {76, 80, 20}, {79, 120, 0}
 };
-static const BuzzerNote FAULT_MELODY[] = {
-    {60, 150, 50}, // C4
-    {55, 200,  0}, // G3
-};
+static const BuzzerNote FAULT_MELODY[] = {{60, 150, 50}, {55, 200, 0}};
+static constexpr float ZERO_SYNC_TOL_RAD = 0.05f;
 
-// ── Per-axis update ──────────────────────────────────────────────────────────
+using SendFn = void (*)(float, float, float, float, float);
+using ZeroFn = void (*)();
 
-static void update_axis(CalibAxis& ax, HipAxisState& hm, HipLimits& lim,
-                         void (*send)(float, float, float, float, float),
-                         void (*zero)(), const char* tag, uint8_t axis_id) {
+static float slew_toward(float current, float target, float max_step) {
+    float delta = target - current;
+    if (delta > max_step) delta = max_step;
+    if (delta < -max_step) delta = -max_step;
+    return current + delta;
+}
+
+// Match the original hardstop calibration's soft-authority profile: position
+// advances at the configured low speed while Kp takes calib_rampdown_s to rise
+// from zero to its weak calibration target. A zero ramp time means immediate.
+static float kp_slew_step(float kp_target) {
+    const float ramp_s = param_get(PARAM_CALIB_RAMPDOWN_TIME_S);
+    if (ramp_s <= 0.0f) return 1.0e9f;
+    return kp_target / (ramp_s * CONTROL_HZ);
+}
+
+static void set_phase(CalibAxis& ax, CalibAxisState state,
+                      float position, uint32_t now_ms) {
+    ax.state = state;
+    ax.ramp_target = position;
+    ax.phase_start_pos = position;
+    ax.phase_start_ms = now_ms;
+    ax.overcurrent_active = false;
+}
+
+static void fault_axis(CalibAxis& ax, SendFn send, const char* tag,
+                       uint8_t axis_id, float position, const char* reason) {
+    ax.state = CAL_FAULT;
+    send(position, 0.0f, 0.0f, 0.0f, 0.0f);
+    comm_log(LOG_LEVEL_ERROR, "Calib %s: FAULT - %s", tag, reason);
+    comm_send_calib_event(axis_id, CALIB_EVENT_FAULT, position, 0.0f, 0.0f);
+}
+
+static bool command_motion(CalibAxis& ax, HipAxisState& hm, SendFn send,
+                           const char* tag, uint8_t axis_id, float target,
+                           uint16_t current_limit_param, uint16_t kp_param) {
+    const float current_limit = param_get(current_limit_param);
+    const float current = fabsf(hm.current_A);
+
+    if (!hm.ok) {
+        fault_axis(ax, send, tag, axis_id, hm.pos_rad, "hip feedback lost");
+        return false;
+    }
+
+    if (current > current_limit) {
+        const uint32_t now_ms = millis();
+        const uint32_t trip_ms = (uint32_t)(
+            param_get(PARAM_CALIB_CURRENT_TRIP_MS) + 0.5f);
+        if (!ax.overcurrent_active) {
+            ax.overcurrent_active = true;
+            ax.overcurrent_since_ms = now_ms;
+        }
+        const uint32_t overcurrent_ms =
+            (uint32_t)(now_ms - ax.overcurrent_since_ms);
+        if (trip_ms == 0 || overcurrent_ms >= trip_ms) {
+            comm_log(LOG_LEVEL_ERROR,
+                     "Calib %s: current %.2f A exceeded %.2f A for %lu ms",
+                     tag, current, current_limit,
+                     (unsigned long)overcurrent_ms);
+            fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                       "calibration current safety limit exceeded");
+            return false;
+        }
+    } else {
+        ax.overcurrent_active = false;
+    }
+
+    const float kp_target = param_get(kp_param);
+    ax.kp_out = slew_toward(ax.kp_out, kp_target,
+                            kp_slew_step(kp_target));
+    send(target, 0.0f,
+         ax.kp_out, param_get(PARAM_CALIB_KD), 0.0f);
+    return true;
+}
+
+static void define_limits(CalibAxis& ax, HipLimits& limits, float range_rad) {
+    const float away_dir = -ax.seek_dir;
+    const float retracted = away_dir * param_get(PARAM_CALIB_BACKOFF_RAD);
+    const float extended = away_dir * range_rad;
+    limits.min_rad = fminf(retracted, extended);
+    limits.max_rad = fmaxf(retracted, extended);
+    limits.valid = true;
+    ax.home_target = retracted;
+}
+
+static void update_axis(CalibAxis& ax, HipAxisState& hm, HipLimits& limits,
+                        SendFn send, ZeroFn zero, bool switch_pressed,
+                        float range_rad, const char* tag, uint8_t axis_id) {
+    const uint32_t now_ms = millis();
     const float dt = 1.0f / CONTROL_HZ;
+    const float seek_speed = param_get(PARAM_CALIB_SEEK_SPEED);
+    const float move_speed = param_get(PARAM_CALIB_MOVE_SPEED);
+    const float backoff = param_get(PARAM_CALIB_BACKOFF_RAD);
+    const float max_seek = param_get(PARAM_CALIB_MAX_SEEK_TRAVEL_RAD);
+    const float max_release = param_get(PARAM_CALIB_MAX_RELEASE_TRAVEL_RAD);
+    const uint32_t seek_timeout_ms =
+        (uint32_t)(param_get(PARAM_CALIB_SEEK_TIMEOUT_S) * 1000.0f);
+    const uint32_t release_timeout_ms =
+        (uint32_t)(param_get(PARAM_CALIB_RELEASE_TIMEOUT_S) * 1000.0f);
+    const float away_dir = -ax.seek_dir;
+
+    if (range_rad <= backoff) {
+        fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                   "configured range must exceed backoff");
+        return;
+    }
+    if (backoff > max_release) {
+        fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                   "configured backoff exceeds max release travel");
+        return;
+    }
 
     switch (ax.state) {
-        case CAL_SEEK_BOTTOM:
-        case CAL_SEEK_TOP: {
-            float seek_speed   = param_get(PARAM_CALIB_SEEK_SPEED);
-            float kd           = param_get(PARAM_CALIB_KD);
-            float stall_db     = param_get(PARAM_CALIB_STALL_DEADBAND);
-            // SEEK_BOTTOM (retract) is weight-assisted: less kp, more sensitive
-            // (lower) stall threshold. SEEK_TOP (extend) fights robot weight:
-            // more kp, less sensitive (higher) stall threshold.
-            float kp           = (ax.state == CAL_SEEK_BOTTOM)
-                                      ? param_get(PARAM_CALIB_KP_BOTTOM)
-                                      : param_get(PARAM_CALIB_KP_TOP);
-            float stall_cur    = (ax.state == CAL_SEEK_BOTTOM)
-                                      ? param_get(PARAM_CALIB_STALL_CUR_BOTTOM)
-                                      : param_get(PARAM_CALIB_STALL_CUR_TOP);
-            float safety_bound = (ax.state == CAL_SEEK_BOTTOM)
-                                      ? param_get(PARAM_CALIB_SAFETY_BOUND)
-                                      : param_get(PARAM_CALIB_SAFETY_BOUND_TOP);
-            int   stall_ticks  = (int)param_get(PARAM_CALIB_STALL_TICKS);
-            float margin       = param_get(PARAM_CALIB_MARGIN);
+        case CAL_RELEASE_SWITCH: {
+            if (!switch_pressed && !ax.release_seen) {
+                ax.release_seen = true;
+                comm_log(LOG_LEVEL_INFO,
+                         "Calib %s: switch RELEASED during initial backoff", tag);
+            }
 
-            float dir = (ax.state == CAL_SEEK_BOTTOM) ? ax.seek_dir : -ax.seek_dir;
-            ax.ramp_target += dir * seek_speed * dt;
-            ax.kp_out = slew_toward(ax.kp_out, kp, kp_slew_step());
-            send(ax.ramp_target, 0.0f, ax.kp_out, kd, 0.0f);
-
-            bool stalled = fabsf(hm.pos_rad - ax.prev_pos) < stall_db &&
-                           fabsf(hm.current_A) > stall_cur;
-            ax.stall_count = stalled ? ax.stall_count + 1 : 0;
-            ax.prev_pos    = hm.pos_rad;
-
-            if (fabsf(ax.ramp_target - ax.start_pos) > safety_bound) {
-                ax.state = CAL_FAULT;
-                // Split into fully-spelled-out lines for readability
-                // (comm_log messages are capped at 119 chars).
-                comm_log(LOG_LEVEL_ERROR, "%s: FAULT - no hardstop found within %.1f rad", tag, safety_bound);
-                comm_log(LOG_LEVEL_ERROR, "%s: current %.2f amps, threshold %.2f amps", tag, hm.current_A, stall_cur);
-                comm_send_calib_event(axis_id, CALIB_EVENT_FAULT, ax.ramp_target, 0, 0);
+            if ((uint32_t)(now_ms - ax.phase_start_ms) > release_timeout_ms) {
+                fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                           "initial switch backoff timed out");
                 return;
             }
 
-            if (ax.stall_count < stall_ticks) return;
+            ax.ramp_target += away_dir * move_speed * dt;
+            const float commanded_travel =
+                away_dir * (ax.ramp_target - ax.phase_start_pos);
+            if (commanded_travel > max_release) {
+                fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                           "initial switch backoff exceeded max commanded travel");
+                return;
+            }
 
-            // Snapshot the trigger-instant diagnostics before zero()/state resets
-            // below overwrite ramp_target/start_pos — these are what to look at
-            // when tuning if a hardstop is declared too early:
-            //   trig_err = commanded-vs-actual position error (ramp_target - pos_rad)
-            //              at the instant of trigger — the open-loop ramp keeps
-            //              advancing regardless of actual motion, so this is the
-            //              gap that current is reacting to via kp.
-            //   trig_d   = total distance traveled this phase (ramp_target - start_pos)
-            //              — compare against the expected ~90 deg range; a hardstop
-            //              declared after only a few degrees of travel is suspicious.
-            float trig_err = ax.ramp_target - hm.pos_rad;
-            float trig_d   = ax.ramp_target - ax.start_pos;
-            float trig_cur = hm.current_A;
+            if (!command_motion(ax, hm, send, tag, axis_id, ax.ramp_target,
+                                PARAM_CALIB_MOVE_CURRENT_LIMIT_A,
+                                PARAM_CALIB_MOVE_KP)) return;
 
-            if (ax.state == CAL_SEEK_BOTTOM) {
-                zero();
-                // Split across several fully-spelled-out lines for readability
-                // (comm_log messages are capped at 119 chars).
-                comm_log(LOG_LEVEL_INFO, "%s: bottom hardstop found and zeroed", tag);
-                comm_log(LOG_LEVEL_INFO, "%s: current %.2f amps, threshold %.2f amps", tag, trig_cur, stall_cur);
-                comm_log(LOG_LEVEL_INFO, "%s: position error %.2f rad, distance traveled %.2f rad", tag, trig_err, trig_d);
-                comm_log(LOG_LEVEL_INFO, "%s: stall ticks required %d", tag, stall_ticks);
-                comm_send_calib_event(axis_id, CALIB_EVENT_BOTTOM_FOUND, hm.pos_rad, 0, 0);
-                g_buzzer.midi(84, 200, 120);  // C6
-                ax.ramp_target = 0.0f;
-                ax.prev_pos    = 0.0f;
-                ax.stall_count = 0;
-                // zero() just reset the AK45's own position reference to 0 here,
-                // and ramp_target restarts at 0 to match — start_pos must follow
-                // to the same new frame, or the SEEK_TOP safety-bound check below
-                // would compare a fresh relative ramp_target against a stale
-                // pre-zero absolute reading instead of "distance traveled this phase".
-                ax.start_pos   = 0.0f;
-                // The setpoint cache still holds the pre-zero-frame target from
-                // the send() above; hip_motors_poll() would re-send it once in
-                // the NEW frame (a large position error into the hardstop)
-                // before the next update — refresh it to the new frame now.
-                send(ax.ramp_target, 0.0f, kp, kd, 0.0f);
-                if (param_get(PARAM_CALIB_EXTEND_ENABLE) >= 0.5f) {
-                    ax.state = CAL_SEEK_TOP;
-                } else {
-                    ax.state = CAL_HOLD_RETRACT;
-                    comm_log(LOG_LEVEL_WARN, "%s: extend disabled, holding at retract", tag);
+            const float actual_travel =
+                away_dir * (hm.pos_rad - ax.phase_start_pos);
+            if (actual_travel >= backoff) {
+                if (!ax.release_seen || switch_pressed) {
+                    fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                               "switch did not release within initial backoff");
+                    return;
                 }
-            } else {
-                float range = hm.pos_rad;  // signed range from zero
-                lim.min_rad = fminf(0.0f, range) + margin;
-                lim.max_rad = fmaxf(0.0f, range) - margin;
-                lim.valid   = true;
-                comm_log(LOG_LEVEL_INFO, "%s: top hardstop found", tag);
-                comm_log(LOG_LEVEL_INFO, "%s: current %.2f amps, threshold %.2f amps", tag, trig_cur, stall_cur);
-                comm_log(LOG_LEVEL_INFO, "%s: position error %.2f rad, distance traveled %.2f rad", tag, trig_err, trig_d);
-                comm_log(LOG_LEVEL_INFO, "%s: stall ticks required %d", tag, stall_ticks);
-                comm_log(LOG_LEVEL_INFO, "%s: limits min %.3f rad, max %.3f rad", tag, lim.min_rad, lim.max_rad);
-                comm_send_calib_event(axis_id, CALIB_EVENT_LIMITS, range, lim.min_rad, lim.max_rad);
-                g_buzzer.midi(88, 200, 120);  // E6
-                ax.home_target = 0.5f * (lim.min_rad + lim.max_rad);
-                ax.state       = CAL_RETURN_HOME;
-                ax.stall_count = 0;
+                comm_log(LOG_LEVEL_INFO,
+                         "Calib %s: initial backoff %.1f deg complete; re-seeking",
+                         tag, backoff * 57.2957795f);
+                ax.kp_out = fminf(ax.kp_out,
+                                  param_get(PARAM_CALIB_SEEK_KP));
+                set_phase(ax, CAL_SEEK_SWITCH, hm.pos_rad, now_ms);
             }
             break;
         }
 
-        case CAL_RETURN_HOME: {
-            float seek_speed = param_get(PARAM_CALIB_SEEK_SPEED);
-            float kd         = param_get(PARAM_CALIB_KD);
-            ax.kp_out = slew_toward(ax.kp_out, param_get(PARAM_CALIB_KP_BOTTOM), kp_slew_step());
-            float step  = seek_speed * dt;
-            float error = ax.home_target - ax.ramp_target;
-            if (fabsf(error) <= step) {
-                ax.ramp_target = ax.home_target;
-                send(ax.ramp_target, 0.0f, ax.kp_out, kd, 0.0f);
-                ax.state             = CAL_RAMPDOWN;
-                ax.rampdown_start_ms = millis();
-                // Continue smoothly from whatever kp/kd was actually in effect
-                // this instant — not a fixed hold_kp/hold_kd, which would just
-                // move the jump here instead of removing it.
-                ax.kp0_rampdown      = ax.kp_out;
-                ax.kd0_rampdown      = kd;
-                comm_log(LOG_LEVEL_INFO, "%s: done, holding @ %.3f rad", tag, ax.ramp_target);
-                comm_send_calib_event(axis_id, CALIB_EVENT_DONE, ax.ramp_target, lim.min_rad, lim.max_rad);
-            } else {
-                ax.ramp_target += (error > 0.0f) ? step : -step;
-                send(ax.ramp_target, 0.0f, ax.kp_out, kd, 0.0f);
+        case CAL_SEEK_SWITCH:
+            if (switch_pressed) {
+                ax.zero_feedback_seq = hm.feedback_seq;
+                zero();
+                // The motor's zero command changes its coordinate frame
+                // immediately. Keep the local snapshot in that same frame,
+                // but do not measure travel until a newer near-zero CAN frame
+                // confirms that the motor applied the command.
+                hm.pos_rad = 0.0f;
+                hm.vel_rad_s = 0.0f;
+                limits.valid = false;
+                ax.release_seen = false;
+                ax.home_target = away_dir * backoff;
+                set_phase(ax, CAL_WAIT_ZERO_SYNC, 0.0f, now_ms);
+                send(0.0f, 0.0f, ax.kp_out,
+                     param_get(PARAM_CALIB_KD), 0.0f);
+                comm_log(LOG_LEVEL_INFO,
+                         "Calib %s: retract switch PRESSED; encoder zeroed", tag);
+                comm_send_calib_event(axis_id, CALIB_EVENT_BOTTOM_FOUND,
+                                      0.0f, 0.0f, 0.0f);
+                return;
+            }
+            ax.ramp_target += ax.seek_dir * seek_speed * dt;
+            if ((uint32_t)(now_ms - ax.phase_start_ms) > seek_timeout_ms ||
+                fabsf(ax.ramp_target - ax.phase_start_pos) > max_seek) {
+                fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                           "retract switch not found");
+                return;
+            }
+            command_motion(ax, hm, send, tag, axis_id, ax.ramp_target,
+                           PARAM_CALIB_SEEK_CURRENT_LIMIT_A,
+                           PARAM_CALIB_SEEK_KP);
+            break;
+
+        case CAL_WAIT_ZERO_SYNC:
+            if ((uint32_t)(now_ms - ax.phase_start_ms) > release_timeout_ms) {
+                fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                           "encoder zero feedback not confirmed");
+                return;
+            }
+            if (!command_motion(ax, hm, send, tag, axis_id, 0.0f,
+                                PARAM_CALIB_SEEK_CURRENT_LIMIT_A,
+                                PARAM_CALIB_SEEK_KP)) return;
+            if (hm.feedback_seq != ax.zero_feedback_seq &&
+                fabsf(hm.pos_rad) <= ZERO_SYNC_TOL_RAD) {
+                comm_log(LOG_LEVEL_INFO,
+                         "Calib %s: encoder zero feedback confirmed", tag);
+                set_phase(ax, CAL_BACKOFF, hm.pos_rad, now_ms);
+            }
+            break;
+
+        case CAL_BACKOFF: {
+            if (!switch_pressed) ax.release_seen = true;
+            if ((uint32_t)(now_ms - ax.phase_start_ms) > release_timeout_ms) {
+                fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                           (!ax.release_seen || switch_pressed)
+                               ? "switch did not release after zeroing"
+                               : "post-zero backoff timed out");
+                return;
+            }
+
+            ax.ramp_target += away_dir * move_speed * dt;
+            const float commanded_travel =
+                away_dir * (ax.ramp_target - ax.phase_start_pos);
+            if (commanded_travel > max_release) {
+                fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                           "post-zero backoff exceeded max commanded travel");
+                return;
+            }
+
+            if (!command_motion(ax, hm, send, tag, axis_id, ax.ramp_target,
+                                PARAM_CALIB_MOVE_CURRENT_LIMIT_A,
+                                PARAM_CALIB_MOVE_KP)) return;
+
+            const float actual_travel =
+                away_dir * (hm.pos_rad - ax.phase_start_pos);
+            if (actual_travel >= backoff) {
+                if (!ax.release_seen || switch_pressed) {
+                    fault_axis(ax, send, tag, axis_id, hm.pos_rad,
+                               "switch still pressed at backoff position");
+                    return;
+                }
+                define_limits(ax, limits, range_rad);
+                comm_log(LOG_LEVEL_INFO,
+                         "Calib %s: backoff %.1f deg; limits [%.3f, %.3f] rad",
+                         tag, backoff * 57.2957795f,
+                         limits.min_rad, limits.max_rad);
+                comm_send_calib_event(axis_id, CALIB_EVENT_LIMITS,
+                                      away_dir * range_rad,
+                                      limits.min_rad, limits.max_rad);
+                ax.rampdown_start_ms = now_ms;
+                ax.kp0_rampdown = ax.kp_out;
+                ax.kd0_rampdown = param_get(PARAM_CALIB_KD);
+                ax.state = CAL_RAMPDOWN;
+                comm_send_calib_event(axis_id, CALIB_EVENT_DONE,
+                                      ax.home_target,
+                                      limits.min_rad, limits.max_rad);
             }
             break;
         }
 
-        // Hold position fixed at home; ramp kp/kd from whatever was in effect
-        // when home was reached down to zero, so the eventual setpoint-clear
-        // on entering STANDBY is a no-op torque-wise.
         case CAL_RAMPDOWN: {
-            float ramp_s  = param_get(PARAM_CALIB_RAMPDOWN_TIME_S);
-            float elapsed = (millis() - ax.rampdown_start_ms) / 1000.0f;
-            float alpha   = (ramp_s > 0.0f) ? (1.0f - elapsed / ramp_s) : 0.0f;
+            const float ramp_s = param_get(PARAM_CALIB_RAMPDOWN_TIME_S);
+            const float elapsed = (now_ms - ax.rampdown_start_ms) / 1000.0f;
+            float alpha = (ramp_s > 0.0f) ? (1.0f - elapsed / ramp_s) : 0.0f;
             if (alpha < 0.0f) alpha = 0.0f;
-            send(ax.ramp_target, 0.0f, alpha * ax.kp0_rampdown, alpha * ax.kd0_rampdown, 0.0f);
+            send(ax.home_target, 0.0f,
+                 alpha * ax.kp0_rampdown,
+                 alpha * ax.kd0_rampdown, 0.0f);
             if (alpha <= 0.0f) {
                 ax.state = CAL_DONE;
-                comm_log(LOG_LEVEL_INFO, "%s: torque ramped to zero", tag);
+                comm_log(LOG_LEVEL_INFO,
+                         "Calib %s: complete at %.3f rad", tag, ax.home_target);
             }
             break;
         }
 
         case CAL_DONE:
-            // Reached only once CAL_RAMPDOWN has already brought torque to
-            // zero — send(0 kp/kd) here is a no-op vs. hip_motors_clear_setpoints()
-            // on the STANDBY transition that follows immediately after.
-            send(ax.ramp_target, 0.0f, 0.0f, 0.0f, 0.0f);
-            break;
-
-        // Retract-only bench test: hold at the zeroed retract hardstop indefinitely.
-        // No stall detection, no safety-bound check, no further state transition —
-        // deliberately inert until the operator exits calibration manually.
-        case CAL_HOLD_RETRACT:
-            send(ax.ramp_target, 0.0f, param_get(PARAM_CALIB_HOLD_KP), param_get(PARAM_CALIB_HOLD_KD), 0.0f);
+            send(ax.home_target, 0.0f, 0.0f, 0.0f, 0.0f);
             break;
 
         case CAL_FAULT:
+            send(hm.pos_rad, 0.0f, 0.0f, 0.0f, 0.0f);
             break;
     }
 }
 
-// ── Public API ─────────────────────────────────────────────────────────────
+static CalibAxis make_axis(float position, float seek_dir, bool pressed) {
+    CalibAxis axis{};
+    axis.seek_dir = (seek_dir >= 0.0f) ? 1.0f : -1.0f;
+    axis.state = pressed ? CAL_RELEASE_SWITCH : CAL_SEEK_SWITCH;
+    axis.ramp_target = position;
+    axis.phase_start_pos = position;
+    axis.phase_start_ms = millis();
+    return axis;
+}
 
 void calibration_start() {
-    bool l_en      = param_get(PARAM_HIP_L_ENABLE) >= 0.5f;
-    bool r_en      = param_get(PARAM_HIP_R_ENABLE) >= 0.5f;
-    bool retract_en = param_get(PARAM_CALIB_RETRACT_ENABLE) >= 0.5f;
-    ax_L = {CAL_SEEK_BOTTOM, hm_L.pos_rad, hm_L.pos_rad, 0, param_get(PARAM_CALIB_L_SEEK_DIR), 0.0f, hm_L.pos_rad};
-    ax_R = {CAL_SEEK_BOTTOM, hm_R.pos_rad, hm_R.pos_rad, 0, param_get(PARAM_CALIB_R_SEEK_DIR), 0.0f, hm_R.pos_rad};
-    // A disabled/absent motor can't be seeked — mark its axis done immediately
-    // rather than let it ramp until it trips the safety-bound fault.
+    const bool l_en = param_get(PARAM_HIP_L_ENABLE) >= 0.5f;
+    const bool r_en = param_get(PARAM_HIP_R_ENABLE) >= 0.5f;
+
+    ax_L = make_axis(hm_L.pos_rad, CALIB_L_SEEK_DIR,
+                     limit_switch_left_active());
+    ax_R = make_axis(hm_R.pos_rad, CALIB_R_SEEK_DIR,
+                     limit_switch_right_active());
+
     if (!l_en) {
         ax_L.state = CAL_DONE;
-        comm_log(LOG_LEVEL_WARN, "Calib: L skipped (hip_l_enable=0)");
-    } else if (!retract_en) {
-        // SEEK_BOTTOM is the prerequisite phase (establishes the zero
-        // reference) — without it there's nothing meaningful to seek.
-        ax_L.state = CAL_DONE;
-        comm_log(LOG_LEVEL_WARN, "Calib: L skipped (calib_retract_en=0)");
+        comm_log(LOG_LEVEL_WARN, "Calib L: skipped (hip_l_enable=0)");
     }
     if (!r_en) {
         ax_R.state = CAL_DONE;
-        comm_log(LOG_LEVEL_WARN, "Calib: R skipped (hip_r_enable=0)");
-    } else if (!retract_en) {
-        ax_R.state = CAL_DONE;
-        comm_log(LOG_LEVEL_WARN, "Calib: R skipped (calib_retract_en=0)");
+        comm_log(LOG_LEVEL_WARN, "Calib R: skipped (hip_r_enable=0)");
     }
+
     hm_limits_L.valid = false;
     hm_limits_R.valid = false;
-    s_done_announced  = false;
+    s_done_announced = false;
     s_fault_announced = false;
+
     g_buzzer.play(START_CHIME, sizeof(START_CHIME) / sizeof(START_CHIME[0]), 200);
-    comm_log(LOG_LEVEL_INFO, "Calib: starting hardstop search");
+    comm_log(LOG_LEVEL_INFO, "Calib: starting retract-switch homing");
+    if (l_en && limit_switch_left_active())
+        comm_log(LOG_LEVEL_INFO, "Calib L: switch already PRESSED; releasing first");
+    if (r_en && limit_switch_right_active())
+        comm_log(LOG_LEVEL_INFO, "Calib R: switch already PRESSED; releasing first");
     comm_send_calib_event(HIP_MOTOR_BOTH, CALIB_EVENT_START, 0, 0, 0);
 }
 
 void calibration_update() {
-    // Commands go through the setpoint cache (not a direct CAN send):
-    // hip_motors_poll() then transmits exactly ONE MIT frame per motor per
-    // tick — previously calibration sent directly AND poll pinged zero-torque,
-    // chattering effective stiffness at 2 frames/tick during stall detection.
-    if (param_get(PARAM_HIP_L_ENABLE) >= 0.5f)
-        update_axis(ax_L, hm_L, hm_limits_L, hip_motors_set_setpoint_L, hip_motor_zero_L, "L", HIP_MOTOR_L);
-    if (param_get(PARAM_HIP_R_ENABLE) >= 0.5f)
-        update_axis(ax_R, hm_R, hm_limits_R, hip_motors_set_setpoint_R, hip_motor_zero_R, "R", HIP_MOTOR_R);
+    if (param_get(PARAM_HIP_L_ENABLE) >= 0.5f) {
+        update_axis(ax_L, hm_L, hm_limits_L,
+                    hip_motors_set_setpoint_L, hip_motor_zero_L,
+                    limit_switch_left_active(),
+                    param_get(PARAM_CALIB_RANGE_L_RAD), "L", HIP_MOTOR_L);
+    }
+    if (param_get(PARAM_HIP_R_ENABLE) >= 0.5f) {
+        update_axis(ax_R, hm_R, hm_limits_R,
+                    hip_motors_set_setpoint_R, hip_motor_zero_R,
+                    limit_switch_right_active(),
+                    param_get(PARAM_CALIB_RANGE_R_RAD), "R", HIP_MOTOR_R);
+    }
 
     if (calibration_done() && !s_done_announced) {
         s_done_announced = true;
-        param_force_set(PARAM_CALIB_DONE, 1.0f);
+        comm_log(LOG_LEVEL_INFO, "*** CALIBRATION SUCCESSFUL ***");
         g_buzzer.play(DONE_MELODY, sizeof(DONE_MELODY) / sizeof(DONE_MELODY[0]), 200);
     }
     if (calibration_failed() && !s_fault_announced) {
@@ -312,21 +410,71 @@ void calibration_update() {
 }
 
 bool calibration_done() {
-    bool l_done = (param_get(PARAM_HIP_L_ENABLE) < 0.5f) || (ax_L.state == CAL_DONE);
-    bool r_done = (param_get(PARAM_HIP_R_ENABLE) < 0.5f) || (ax_R.state == CAL_DONE);
+    const bool l_done =
+        param_get(PARAM_HIP_L_ENABLE) < 0.5f || ax_L.state == CAL_DONE;
+    const bool r_done =
+        param_get(PARAM_HIP_R_ENABLE) < 0.5f || ax_R.state == CAL_DONE;
     return l_done && r_done;
 }
 
 bool calibration_failed() {
-    bool l_bad = (param_get(PARAM_HIP_L_ENABLE) >= 0.5f) && (ax_L.state == CAL_FAULT);
-    bool r_bad = (param_get(PARAM_HIP_R_ENABLE) >= 0.5f) && (ax_R.state == CAL_FAULT);
+    const bool l_bad =
+        param_get(PARAM_HIP_L_ENABLE) >= 0.5f && ax_L.state == CAL_FAULT;
+    const bool r_bad =
+        param_get(PARAM_HIP_R_ENABLE) >= 0.5f && ax_R.state == CAL_FAULT;
     return l_bad || r_bad;
 }
 
-void calibration_abort() {
-    ax_L.state        = CAL_SEEK_BOTTOM;
-    ax_R.state        = CAL_SEEK_BOTTOM;
-    s_done_announced  = false;
+static void mark_cancelled() {
+    ax_L.state = CAL_FAULT;
+    ax_R.state = CAL_FAULT;
+    hm_limits_L.valid = false;
+    hm_limits_R.valid = false;
+    s_done_announced = false;
     s_fault_announced = false;
-    comm_log(LOG_LEVEL_INFO, "Calib: aborted");
+    comm_log(LOG_LEVEL_INFO, "CALIBRATION CANCELLED");
+}
+
+void calibration_begin_disarm() {
+    s_cancel_sp_L = hm_sp_L;
+    s_cancel_sp_R = hm_sp_R;
+    s_cancel_start_ms = millis();
+    mark_cancelled();
+}
+
+bool calibration_run_disarm() {
+    if (!s_cancel_sp_L.active && !s_cancel_sp_R.active) {
+        hip_motors_clear_setpoints();
+        return false;
+    }
+
+    const float ramp_s = param_get(PARAM_CALIB_RAMPDOWN_TIME_S);
+    const float elapsed = (millis() - s_cancel_start_ms) / 1000.0f;
+    float t = (ramp_s > 0.0f) ? (elapsed / ramp_s) : 1.0f;
+    if (t > 1.0f) t = 1.0f;
+    const float alpha = 1.0f - t;
+
+    if (s_cancel_sp_L.active) {
+        hip_motors_set_setpoint_L(
+            s_cancel_sp_L.p, 0.0f,
+            alpha * s_cancel_sp_L.kp,
+            alpha * s_cancel_sp_L.kd,
+            alpha * s_cancel_sp_L.tff);
+    }
+    if (s_cancel_sp_R.active) {
+        hip_motors_set_setpoint_R(
+            s_cancel_sp_R.p, 0.0f,
+            alpha * s_cancel_sp_R.kp,
+            alpha * s_cancel_sp_R.kd,
+            alpha * s_cancel_sp_R.tff);
+    }
+
+    if (t < 1.0f) return true;
+    hip_motors_clear_setpoints();
+    return false;
+}
+
+void calibration_abort() {
+    mark_cancelled();
+    hip_motors_clear_setpoints();
 }

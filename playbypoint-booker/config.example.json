@@ -1,0 +1,37 @@
+{
+  "facilitySlug": "ipicklearcadia",
+  "timeZone": "America/Los_Angeles",
+  "bookingWindowDays": 10,
+  "releaseTime": "07:00:00",
+  "prewarmSeconds": 20,
+  "releaseOffsetMs": 75,
+  "retryIntervalMs": 250,
+  "retryWindowMs": 6000,
+  "targetDate": null,
+  "facilityId": 549,
+  "sportName": "Pickleball only",
+  "startTime": "20:00",
+  "endTime": "22:00",
+  "timePreferences": [
+    "7-7:30am",
+    "7:30-8am"
+  ],
+  "courtPreferences": [
+    "PB Court 1",
+    "PB Court 2",
+    "PB Court 3",
+    "PB Court 4",
+    "PB Court 5",
+    "PB Court 6",
+    "PB Court 7",
+    "PB Court 8"
+  ],
+  "partySize": 2,
+  "additionalPlayers": [
+    "Guest Player"
+  ],
+  "blockHeavyAssets": true,
+  "headless": false,
+  "autoSubmit": false,
+  "keepOpenSecondsAfterDryRun": 120
+}

@@ -26,6 +26,12 @@ bool wheel_motors_init();
 // Call once per control tick, before reading wheel feedback.
 void wheel_motors_poll();
 
+// Reset the encoder-freshness clock on both axes after a deliberate,
+// known-blocking main-loop operation (e.g. SD-log open/finalize) that froze
+// the tick. Companion to hip_motors_forgive_feedback_stall(); a real ODrive
+// error flag still faults. See definition for details.
+void wheel_motors_forgive_feedback_stall();
+
 // Transition both axes to the requested mode.
 //   IDLE:                    sends AXIS_STATE_IDLE to both axes
 //   VELOCITY/POSITION/TORQUE: sets controller mode then CLOSED_LOOP_CONTROL

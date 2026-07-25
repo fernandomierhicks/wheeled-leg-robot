@@ -11,6 +11,7 @@ struct HipAxisState {
     float    vel_rad_s;    // rotor velocity [rad/s]
     float    current_A;    // phase current  [A]
     uint32_t last_fb_ms;   // millis() of most recent reply
+    uint32_t feedback_seq; // increments for every decoded CAN feedback frame
     bool     ever_heard;   // true once any CAN reply has been received
     bool     ok;           // true when feedback is fresh (< HIP_CAN_TIMEOUT_MS) AND ever_heard
     bool     mit_active;   // true after enter_mit sent, false after exit_mit
@@ -45,6 +46,13 @@ void hip_motors_poll();
 
 // Returns true when both motors have replied at least once and feedback is fresh.
 bool hip_motors_ok();
+
+// Reset the feedback-freshness clock on both axes after a deliberate,
+// known-blocking main-loop operation (e.g. SD-log open/finalize) that froze
+// the tick long enough for last_fb_ms to go stale. Prevents a self-inflicted
+// loop stall from tripping the feedback watchdog; a truly dead motor still
+// faults on the next interval. See definition for details.
+void hip_motors_forgive_feedback_stall();
 
 // Send the MIT-mode enable command to both motors.
 // Called automatically by hip_motors_poll(); call explicitly on startup.

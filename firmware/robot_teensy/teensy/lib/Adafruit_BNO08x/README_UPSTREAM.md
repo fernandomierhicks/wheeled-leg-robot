@@ -1,5 +1,8 @@
 # Adafruit BNO08x [![Build Status](https://github.com/adafruit/Adafruit_BNO08x/workflows/Arduino%20Library%20CI/badge.svg)](https://github.com/adafruit/Adafruit_BNO08x/actions)[![Documentation](https://github.com/adafruit/ci-arduino/blob/master/assets/doxygen_badge.svg)](http://adafruit.github.io/Adafruit_BNO08x/html/index.html)
 
+> **AI maintenance note:** This is an upstream snapshot. If it becomes stale,
+> update it together with the vendored library and the local `README.md`.
+
 
 This is the Adafruit BNO08x 9-DOF Orientation IMU Fusion Breakout for Arduino
 Tested and works great with the Adafruit BNO08x Breakout Board

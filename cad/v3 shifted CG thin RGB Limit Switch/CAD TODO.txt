@@ -1,12 +1,16 @@
 CAD TODO
 
 
-Disasemble RX receiver, put it somewhere that doesn't occupy space?
-
+Disasemble RX receiver, put it somewhere that doesn't occupy space? ---- YES
 Laser mount
 Measure battery strap
 
 
+
+
+
+
+Thin RGB
 
 -------------------------------------------------------
 NOTES

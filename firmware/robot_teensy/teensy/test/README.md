@@ -2,10 +2,17 @@
 
 PlatformIO Unity tests, one per subdirectory. Environment is `test_teensy` in
 `../platformio.ini` (`test_filter = test_*`, excludes `src/`), except
-`test_comm_usb` which has its own `test_comm_usb` env.
+`test_comm_usb` and the desktop-only tests, which have dedicated environments.
 
-Available: `test_buzzer`, `test_comm_usb`, `test_hip_motor`,
-`test_imu`, `test_rc`, `test_uart_hw`, `test_wheel_motor`.
+> **AI maintenance note:** If you find anything here that is stale while
+> working in this tree, update this README in the same change.
+
+Hardware tests: `test_buzzer`, `test_comm_usb`, `test_hip_motor`, `test_imu`,
+`test_rc`, `test_uart_hw`, and `test_wheel_motor`.
+
+Desktop tests: `test_commlink_robustness` (`native` or `windows_x86`),
+`test_command_validation` (`windows_command_validation`), and
+`test_param_store` (`windows_param_store`).
 
 ## Running from the CLI
 

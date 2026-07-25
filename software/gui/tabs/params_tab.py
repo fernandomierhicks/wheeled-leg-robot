@@ -1,16 +1,17 @@
 """params_tab.py — Parameter Registry tab.
 
-Shows every known firmware parameter (from the static _PARAM_DEFS mirror of
-ParamRegistry) as soon as the tab is built, with Value/Range/Flags left blank
-until actually confirmed by hardware — never a guessed or default value. On
-first telemetry received (or when Refresh is clicked) sends CMD_ID_PARAM_GET
-0xFFFF; each PARAM_REPORT response (ptype 0x06) fills in that row's live
-Value/Range/Flags. Rows are grouped by subsystem and split into collapsible
-sub-sections (all start collapsed). Values are editable; Enter or the Set
-button sends CMD_ID_PARAM_SET and the cell flashes green on echo-back.
+Shows every firmware parameter generated from the protocol schema as soon as
+the tab is built, with Value/Range/Flags left blank until actually confirmed by
+hardware — never a guessed or default value. On first telemetry received (or
+when Refresh is clicked) sends CMD_ID_PARAM_GET 0xFFFF; each PARAM_REPORT
+response (ptype 0x06) fills in that row's live Value/Range/Flags. Rows are
+grouped by subsystem and split into collapsible sub-sections (all start
+collapsed). Values are editable; Enter or the Set button sends CMD_ID_PARAM_SET
+and the cell flashes green on echo-back.
 """
 
 import json
+import math
 import struct
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .comm_commands import send_param_get_all, send_param_reset_defaults, send_param_set, send_reliable
+from .generated_protocol import PARAM_BY_NAME as _PARAM_BY_NAME
 from .generated_protocol import PARAM_DEFS as _PARAM_DEFS
 from .telemetry_bus import TelemetryBus
 from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, YELLOW
@@ -34,6 +36,45 @@ _FLAG_COMMAND         = 1 << 2
 # Range column width — kept narrow (elided with a hover tooltip for the full
 # text) so Description gets most of the row.
 _RANGE_COL_WIDTH = 80
+
+# Direct angular quantities are presented in human-friendly degrees while the
+# protocol, firmware registry, and parameter export format remain in radians.
+# Gains whose units merely contain radians (for example N·m/rad) intentionally
+# remain unchanged: they are coefficients, not angle/rate values.
+_ANGLE_PARAM_NAMES = frozenset({
+    "calib_backoff_rad",
+    "calib_range_l_rad",
+    "calib_range_r_rad",
+    "calib_max_seek_rad",
+    "calib_max_rel_rad",
+    "sim_pitch_rad",
+    "vel_pi_theta_max",
+    "jump_ramp_down",
+    "jump_hs_margin",
+    "standup_pitch_fwd",
+    "standup_pitch_bwd",
+    "standup_cap_pitch",
+    "lqr_pitch_trim_ret",
+    "lqr_pitch_trim_ext",
+})
+_ANGULAR_RATE_PARAM_NAMES = frozenset({
+    "calib_seek_speed",
+    "calib_move_speed",
+    "vel_pi_rate_lim",
+    "omega_cmd_rds",
+    "jump_omega_max",
+    "sim_pitch_rate",
+    "standup_cap_rate",
+    "radio_yaw_max",
+    "profile1_yaw_max",
+    "profile2_yaw_max",
+    "profile3_yaw_max",
+})
+_DISPLAY_UNIT_BY_PARAM = {
+    **{_PARAM_BY_NAME[name]: "deg" for name in _ANGLE_PARAM_NAMES},
+    **{_PARAM_BY_NAME[name]: "deg/s" for name in _ANGULAR_RATE_PARAM_NAMES},
+}
+_RAD_TO_DEG = 180.0 / math.pi
 
 # ── Group map (param_ids.h GROUP_*) ───────────────────────────────────────────
 _GROUP_NAMES = {
@@ -70,7 +111,7 @@ _WATCHDOG_PARAM_IDS = frozenset({
     0x0009,  # PARAM_WATCHDOG_ENABLE (hardware WDOG1)
     0x0300,  # PARAM_WM_ENC_TIMEOUT_MS (wheel encoder feedback watchdog)
     0x0423,  # PARAM_PITCH_WATCHDOG_ENABLE
-    0x0113,  # PARAM_CALIB_BYPASS_EN (skip hardstop-calibration requirement for RUNNING)
+    0x0131,  # PARAM_CALIB_BYPASS_EN (skip switch-calibration requirement for RUNNING)
     0x0429,  # PARAM_RUNNING_WHEEL_BYPASS_EN (skip wheel-enable requirement for RUNNING)
     0x042A,  # PARAM_ALPHA_FORCE_RETRACTED_EN (force gain-sched alpha=0, bypass calib-valid check)
 })
@@ -109,14 +150,37 @@ def _effective_group(param_id: int) -> int:
         return _GROUP_SYSTEM
     return (param_id >> 8) & 0xFF
 
-# ── Sub-group definitions (Control group split into logical sections) ──────────
+# ── Sub-group definitions ─────────────────────────────────────────────────────
 # Each entry: (param_id_membership, parent_group_id, sub_group_label)
 # Membership is usually a contiguous range, but Sim Injection's sim_pitch_rad
 # (0x0401) is interleaved inside the LQR Core id block (param_ids.h), so both
 # use explicit id sets instead of a range.
 _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
-    (frozenset({0x010A}), 0x01, "Left"),   # calib_l_seek_dir
-    (frozenset({0x010B}), 0x01, "Right"),  # calib_r_seek_dir
+    # Switch-based hip calibration.
+    (frozenset({
+        0x0120,  # calib_seek_speed
+        0x0122,  # calib_seek_kp
+        0x0124,  # calib_seek_cur_lim
+        0x0129,  # calib_seek_timeout
+        0x012B,  # calib_max_seek_rad
+    }), 0x01, "Retracting"),
+    (frozenset({
+        0x0121,  # calib_move_speed
+        0x0125,  # calib_move_cur_lim
+        0x0126,  # calib_backoff_rad
+        0x0127,  # calib_range_l_rad
+        0x0128,  # calib_range_r_rad
+        0x012A,  # calib_release_to
+        0x012C,  # calib_max_rel_rad
+        0x012E,  # calib_move_kp
+    }), 0x01, "Extending"),
+    (frozenset({
+        0x0123,  # calib_kd
+        0x012D,  # calib_cur_trip_ms
+        0x012F,  # calib_rampdown_s
+    }), 0x01, "Shared"),
+
+    # Balance/control tuning.
     (frozenset({0x0400, 0x0402, 0x0403}), 0x04, "LQR Core"),
     (range(0x0424, 0x0429), 0x04, "LQR Gains"),
     (range(0x0404, 0x040C), 0x04, "Velocity PI"),
@@ -124,7 +188,7 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     (range(0x0412, 0x0415), 0x04, "Feedforward"),
     (range(0x0415, 0x0420), 0x04, "Jump"),
     (frozenset({0x0401, 0x0420, 0x0421, 0x0422}), 0x04, "Sim Injection"),
-    (range(0x0500, 0x0504), 0x05, "Radio Scale"),  # radio_hip_cmd, radio_vel_max, radio_yaw_max, radio_pitch_trim
+    (range(0x0500, 0x0504), 0x05, "Radio Scale"),  # radio_hip_cmd, radio_vel_max, radio_yaw_max, live_tune_ch7_val
     (range(0x0510, 0x0513), 0x05, "Profile 1"),    # profile1_vel_max/yaw_max/torque_lim
     (range(0x0513, 0x0516), 0x05, "Profile 2"),    # profile2_vel_max/yaw_max/torque_lim
     (range(0x0516, 0x0519), 0x05, "Profile 3"),    # profile3_vel_max/yaw_max/torque_lim
@@ -133,8 +197,9 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
 ]
 
 _SUBGROUP_COLORS: dict[str, str] = {
-    "Left":           "#66aaff",
-    "Right":          "#3377cc",
+    "Retracting":     "#66aaff",
+    "Extending":      "#ff9955",
+    "Shared":         "#99aabb",
     "LQR Core":       "#dd99ff",
     "LQR Gains":      "#ee88ff",
     "Velocity PI":    "#bb77ee",
@@ -163,13 +228,11 @@ _SUBGROUP_RANK: dict[tuple[int, str], int] = {
     (gid, name): idx for idx, (_, gid, name) in enumerate(_SUBGROUPS)
 }
 
-# ── Static parameter definitions ──────────────────────────────────────────────
-# Hand-copied from param_ids.h (id + description) and param_registry.cpp (name
-# string). Lets the tab show the full known parameter list — with names and
-# descriptions — before any device is connected; live Value/Range/Flags are
-# filled in from PARAM_REPORT once read.
-# IMPORTANT: keep in sync — when a param is added/changed/removed in either of
-# those files, update the matching entry here too.
+# ── Generated parameter definitions ───────────────────────────────────────────
+# _PARAM_DEFS comes from generated_protocol.py, which is generated from
+# firmware/robot_teensy/protocol/schema.json. This tab only owns presentation
+# details such as effective groups and subgroups; it does not mirror parameter
+# names or descriptions by hand.
 def _hline(color: str = BORDER) -> QFrame:
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
@@ -218,6 +281,14 @@ def _flag_tooltip(flags: int) -> str:
     return "\n".join(lines) or "No flags"
 
 
+def _display_description(description: str, unit: str | None) -> str:
+    if unit is None:
+        return description
+    converted = description.replace("[rad/s]", "[deg/s]").replace("[rad]", "[deg]")
+    firmware_unit = "rad/s" if unit == "deg/s" else "rad"
+    return f"{converted} GUI displays {unit}; firmware stores {firmware_unit}."
+
+
 # ── One param row ─────────────────────────────────────────────────────────────
 
 _EDIT_STYLE_NORMAL = (
@@ -245,6 +316,8 @@ class _ParamRow(QWidget):
         self._name      = name
         self._flags     = flags if flags is not None else 0
         self._confirmed = value is not None
+        self._display_unit = _DISPLAY_UNIT_BY_PARAM.get(param_id)
+        self._display_scale = _RAD_TO_DEG if self._display_unit else 1.0
         readonly        = bool(flags & _FLAG_READONLY) if flags is not None else False
 
         self._flash_timer = QTimer(self)
@@ -255,8 +328,15 @@ class _ParamRow(QWidget):
         lay.setContentsMargins(6, 1, 6, 1)
         lay.setSpacing(8)
 
-        lbl = QLabel(name)
+        lbl = QLabel(
+            f"{name} [{self._display_unit}]" if self._display_unit else name
+        )
         lbl.setFixedWidth(190)
+        if self._display_unit:
+            firmware_unit = "rad/s" if self._display_unit == "deg/s" else "rad"
+            lbl.setToolTip(
+                f"{name}: GUI uses {self._display_unit}; firmware uses {firmware_unit}."
+            )
         lbl.setStyleSheet(f"color: {TEXT}; font-family: Consolas; font-size: 11px;")
         lay.addWidget(lbl)
 
@@ -265,8 +345,15 @@ class _ParamRow(QWidget):
         id_lbl.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-size: 10px;")
         lay.addWidget(id_lbl)
 
-        self._edit = QLineEdit(f"{value:.6g}" if value is not None else "")
+        display_value = value * self._display_scale if value is not None else None
+        self._edit = QLineEdit(
+            f"{display_value:.6g}" if display_value is not None else ""
+        )
         self._edit.setFixedWidth(96)
+        if self._display_unit:
+            self._edit.setToolTip(
+                f"Enter {self._display_unit}; converted to radians when sent."
+            )
         self._edit.setStyleSheet(_EDIT_STYLE_NORMAL)
         self._edit.setEnabled(not readonly)
         validator = QDoubleValidator()
@@ -287,8 +374,10 @@ class _ParamRow(QWidget):
         self._btn.clicked.connect(self._send)
         lay.addWidget(self._btn)
 
-        range_txt = (f"[{min_val:.4g} … {max_val:.4g}]"
-                     if min_val is not None and max_val is not None else "…")
+        range_txt = (
+            self._format_range(min_val, max_val)
+            if min_val is not None and max_val is not None else "…"
+        )
         self._range_lbl = _ElidedLabel(range_txt)
         self._range_lbl.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-size: 10px;")
         self._range_lbl.setFixedWidth(_RANGE_COL_WIDTH)
@@ -300,7 +389,9 @@ class _ParamRow(QWidget):
         self._flag_lbl.setStyleSheet(f"color: {DIM}; font-family: Consolas; font-size: 10px;")
         lay.addWidget(self._flag_lbl)
 
-        desc_lbl = _ElidedLabel(description)
+        desc_lbl = _ElidedLabel(
+            _display_description(description, self._display_unit)
+        )
         desc_lbl.setStyleSheet(f"color: {DIM}; font-size: 10px;")
         lay.addWidget(desc_lbl, stretch=1)
 
@@ -310,10 +401,10 @@ class _ParamRow(QWidget):
         readonly = bool(flags & _FLAG_READONLY)
         self._edit.setEnabled(not readonly)
         self._btn.setEnabled(not readonly)
-        self._range_lbl.set_full_text(f"[{min_val:.4g} … {max_val:.4g}]")
+        self._range_lbl.set_full_text(self._format_range(min_val, max_val))
         self._flag_lbl.setText(_flag_text(flags))
         self._flag_lbl.setToolTip(_flag_tooltip(flags))
-        self._edit.setText(f"{value:.6g}")
+        self._edit.setText(f"{value * self._display_scale:.6g}")
         self._flash_timer.stop()
         self._edit.setStyleSheet(_EDIT_STYLE_OK)
         self._flash_timer.start(700)
@@ -326,7 +417,7 @@ class _ParamRow(QWidget):
 
     def current_value(self) -> float:
         try:
-            return float(self._edit.text())
+            return float(self._edit.text()) / self._display_scale
         except ValueError:
             return 0.0
 
@@ -337,7 +428,7 @@ class _ParamRow(QWidget):
 
     def _send(self):
         try:
-            val = float(self._edit.text())
+            val = float(self._edit.text()) / self._display_scale
         except ValueError:
             return
         pid = self._id
@@ -352,6 +443,12 @@ class _ParamRow(QWidget):
         self._flash_timer.stop()
         self._edit.setStyleSheet(_EDIT_STYLE_PENDING)
         self._flash_timer.start(2500)
+
+    def _format_range(self, min_val: float, max_val: float) -> str:
+        lo = min_val * self._display_scale
+        hi = max_val * self._display_scale
+        unit = f" {self._display_unit}" if self._display_unit else ""
+        return f"[{lo:.4g} … {hi:.4g}]{unit}"
 
     def _clear_flash(self):
         self._edit.setStyleSheet(_EDIT_STYLE_NORMAL)
@@ -677,8 +774,8 @@ class ParamsTab(QWidget):
         if param_id in self._rows:
             self._rows[param_id].update_value(value, min_val, max_val, flags)
         else:
-            # Not in the static mirror (e.g. GUI not yet updated after a
-            # firmware change) — create it on the fly, already confirmed.
+            # Not in this GUI's generated schema (e.g. firmware is newer than
+            # the GUI) — create it on the fly, already confirmed.
             self._ensure_row(
                 param_id,
                 info.get("param_name", f"0x{param_id:04X}"),

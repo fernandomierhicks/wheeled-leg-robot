@@ -1,5 +1,8 @@
 # WheelMotors
 
+> **AI maintenance note:** If you find anything here that is stale while
+> working in this tree, update this README in the same change.
+
 ODrive / ODESC wheel motor driver over CAN3 (FlexCAN_T4).
 
 ## Wiring

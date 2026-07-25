@@ -11,9 +11,13 @@ bool     sd_logger_begin();               // init SDIO card. false = no card (no
 bool     sd_logger_available();           // card present & initialised
 bool     sd_logger_start(uint32_t duration_ms);  // 0 = until stop. false on error
 void     sd_logger_stop();
+// Returns true only on the tick it actually performs the (blocking) sync/
+// truncate/close, so the caller can forgive the resulting loop stall; false
+// (the common case) when there was nothing pending or it wasn't safe to block.
+bool     sd_logger_finalize_service(bool safe_to_block);
 bool     sd_logger_is_active();
-void     sd_logger_write(const LogRecord* rec);  // called EVERY tick when active — RAM memcpy
-void     sd_logger_service();             // drain 1 sector/tick + periodic flush + auto-stop
+void     sd_logger_write(const LogRecord* rec);  // called at WLOG_SAMPLE_HZ when active — RAM memcpy
+void     sd_logger_service();             // drain 1 sector/tick + auto-stop
 uint16_t sd_logger_active_index();        // current LOGxxxx index (for status reporting)
 
 // Retrieval (driven by on_command in main.cpp; all Teensy→PC replies via callbacks)
