@@ -7,6 +7,7 @@
 #include "wheel_motors.h"
 #include "param_registry.h"
 #include "live_tune.h"
+#include "velocity_pi_anti_windup.h"
 #include "IMU.h"
 #include <math.h>
 #include <Arduino.h>
@@ -17,9 +18,16 @@ RobotState g_state = {};
 static constexpr float DT = 0.002f;  // 500 Hz control tick [s]
 
 // ── Pitch watchdog ────────────────────────────────────────────────────────────
-static constexpr float    PITCH_WATCHDOG_RAD = 0.8727f;  // 50°
+// Trip thresholds are asymmetric (PARAM_PITCH_WATCHDOG_FWD/BWD_RET/EXT, gain-
+// scheduled by alpha) since the leg linkage collides with the ground at a
+// different angle forward than backward. Duration is fixed.
 static constexpr uint32_t PITCH_WATCHDOG_MS  = 200;
 static uint32_t s_pitch_fault_start_ms = 0;
+
+// ── Roll watchdog (lateral tip guard) ─────────────────────────────────────────
+// |roll| threshold is PARAM_ROLL_WATCHDOG_LIMIT (runtime); duration is fixed.
+static constexpr uint32_t ROLL_WATCHDOG_MS = 200;
+static uint32_t s_roll_fault_start_ms = 0;
 
 // ── Phase 5: LQR gain table (computed by lqr.py self-test, Q_pitch=0.01,
 //    Q_pitch_rate=0.1884, Q_vel=0.00508442, R=100.0) ─────────────────────────
@@ -42,6 +50,9 @@ static constexpr float WHEEL_R      = 0.075f;     // [m] wheel radius (150 mm OD
 static float s_vel_integral    = 0.0f;
 static float s_prev_v_desired  = 0.0f;
 static float s_theta_ref_rlt   = 0.0f;  // rate-limited theta_ref
+
+// Roll controller — rate-limited roll setpoint [rad]
+static float s_roll_sp_rlt     = 0.0f;
 
 // Phase 4 — Yaw PI
 static float s_yaw_integral    = 0.0f;
@@ -82,6 +93,8 @@ void controlLoop_reset() {
     s_prev_v_desired = 0.0f;
     s_theta_ref_rlt  = 0.0f;
     s_yaw_integral   = 0.0f;
+    s_roll_sp_rlt        = 0.0f;
+    s_roll_fault_start_ms = 0;
 }
 
 // Separate from controlLoop_reset(): called only when arming RUNNING fresh
@@ -165,8 +178,60 @@ void controlLoop_run() {
     float elapsed = (millis() - s_hip_ramp_start_ms) / 1000.0f;
     float ramp_alpha = (ramp_s > 0.0f) ? (elapsed / ramp_s) : 1.0f;
     if (ramp_alpha > 1.0f) ramp_alpha = 1.0f;
-    float running_kp  = ramp_alpha * param_get(PARAM_HIP_RUNNING_KP);
-    float running_kd  = param_get(PARAM_HIP_RUNNING_KD);
+
+    // ── Roll controller (active suspension) ───────────────────────────────────
+    // PD on roll angle/rate → a differential hip position offset (+ on one leg,
+    // − on the other), held with a soft (backdrivable) kp so obstacles can
+    // back-drive the legs. RUNNING only; off by default, in which case the hips
+    // are held symmetrically with the running gains exactly as before.
+    float hip_kp = param_get(PARAM_HIP_RUNNING_KP);
+    float hip_kd = param_get(PARAM_HIP_RUNNING_KD);
+    if (g_state.state == STATE_RUNNING && param_get(PARAM_ROLL_CTRL_EN) >= 0.5f) {
+        float roll      = imu_roll();
+        float roll_rate = imu_roll_rate();
+
+        // Slew-limit the setpoint so a snapped stick can't step-perturb pitch.
+        float roll_sp_raw = param_get(PARAM_ROLL_CMD_RAD);
+        float d_max = param_get(PARAM_ROLL_RATE_LIM) * DT;
+        float dsp = roll_sp_raw - s_roll_sp_rlt;
+        if (dsp >  d_max) dsp =  d_max;
+        if (dsp < -d_max) dsp = -d_max;
+        s_roll_sp_rlt += dsp;
+
+        float offset = live_tune_value(PARAM_ROLL_KP) * (s_roll_sp_rlt - roll)
+                     - live_tune_value(PARAM_ROLL_KD) * roll_rate;
+        float off_max = param_get(PARAM_ROLL_OFFSET_MAX);
+        if (offset >  off_max) offset =  off_max;
+        if (offset < -off_max) offset = -off_max;
+
+        // Differential apply. Hip sign convention (README "Motor direction"):
+        // increasing pos_L/pos_R retracts, decreasing extends. IMU convention
+        // (quat_to_euler): positive roll = lean right (left side up). So a
+        // positive offset (commanding more positive roll) must extend the
+        // left leg (decrease pos_L) and retract the right leg (increase
+        // pos_R).
+        pos_L -= offset;
+        pos_R += offset;
+
+        // Clamp to calibrated hip travel so a bad gain can't overtravel a leg.
+        if (hm_limits_L.valid) {
+            if (pos_L < hm_limits_L.min_rad) pos_L = hm_limits_L.min_rad;
+            if (pos_L > hm_limits_L.max_rad) pos_L = hm_limits_L.max_rad;
+        }
+        if (hm_limits_R.valid) {
+            if (pos_R < hm_limits_R.min_rad) pos_R = hm_limits_R.min_rad;
+            if (pos_R > hm_limits_R.max_rad) pos_R = hm_limits_R.max_rad;
+        }
+
+        // Soft, backdrivable hold while suspension is active.
+        hip_kp = param_get(PARAM_HIP_ROLL_KP);
+        hip_kd = param_get(PARAM_HIP_ROLL_KD);
+    } else {
+        s_roll_sp_rlt = 0.0f;
+    }
+
+    float running_kp  = ramp_alpha * hip_kp;
+    float running_kd  = hip_kd;
     float running_tff = ramp_alpha * param_get(PARAM_HIP_RUNNING_TFF);
     hip_motors_set_setpoint_L(pos_L, 0.0f, running_kp, running_kd, running_tff);
     hip_motors_set_setpoint_R(pos_R, 0.0f, running_kp, running_kd, running_tff);
@@ -181,35 +246,14 @@ void controlLoop_run() {
     // g_state.pitch_rad here is exactly what telemetry/GUI saw this tick too.
     float pitch = g_state.pitch_rad;
 
-    // ── Pitch watchdog ────────────────────────────────────────────────────────
-    if (param_get(PARAM_PITCH_WATCHDOG_ENABLE) >= 0.5f) {
-        if (fabsf(pitch) > PITCH_WATCHDOG_RAD) {
-            if (s_pitch_fault_start_ms == 0) s_pitch_fault_start_ms = millis();
-            if (millis() - s_pitch_fault_start_ms > PITCH_WATCHDOG_MS) {
-                g_state.fault_code = FAULT_PITCH_WATCHDOG;
-                stateMachine_request_estop();
-                return;
-            }
-        } else {
-            s_pitch_fault_start_ms = 0;
-        }
-    }
-
-    // ── Wheel runaway watchdog (hard backup) ──────────────────────────────────
-    float hard_limit = param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S) * 2.0f;
-    if (fabsf(wm_L.vel_turns_s) > hard_limit || fabsf(wm_R.vel_turns_s) > hard_limit) {
-        g_state.fault_code = FAULT_WHEEL_RUNAWAY;
-        stateMachine_request_estop();
-        return;
-    }
-
     // ── Phase 5: Hip gain scheduling ─────────────────────────────────────────
     // alpha ∈ [0,1]: 0 = fully retracted (high gains), 1 = fully extended (low gains).
     // Uses the calibrated position range so it is coordinate-system agnostic.
     // §1c (tuning.md): default to the retracted anchor whenever calibration is
     // invalid (e.g. not yet run this session), rather than an arbitrary
     // midpoint. alpha_force_ret_en stays available to force retracted even
-    // once calibration is valid.
+    // once calibration is valid. Computed here (rather than down by the LQR
+    // gains, its original home) because the pitch watchdog below also needs it.
     float alpha = 0.0f;  // default: retracted, used whenever calibration is invalid
     if (param_get(PARAM_ALPHA_FORCE_RETRACTED_EN) >= 0.5f) {
         alpha = 0.0f;
@@ -228,9 +272,59 @@ void controlLoop_run() {
     }
     g_state.gain_sched_alpha = alpha;
 
-    // Interpolated LQR gains
-    float k_pitch_ret = param_get(PARAM_LQR_K_PITCH_RET);
-    float k_rate_ret  = param_get(PARAM_LQR_K_RATE_RET);
+    // ── Pitch watchdog ────────────────────────────────────────────────────────
+    // Asymmetric, gain-scheduled trip thresholds (both stored as positive
+    // magnitudes; pitch positive = lean forward per quat_to_euler()).
+    if (param_get(PARAM_PITCH_WATCHDOG_ENABLE) >= 0.5f) {
+        float pw_fwd_ret = param_get(PARAM_PITCH_WATCHDOG_FWD_RET);
+        float pw_bwd_ret = param_get(PARAM_PITCH_WATCHDOG_BWD_RET);
+        float pw_fwd_ext = param_get(PARAM_PITCH_WATCHDOG_FWD_EXT);
+        float pw_bwd_ext = param_get(PARAM_PITCH_WATCHDOG_BWD_EXT);
+        float pw_fwd = pw_fwd_ret + alpha * (pw_fwd_ext - pw_fwd_ret);
+        float pw_bwd = pw_bwd_ret + alpha * (pw_bwd_ext - pw_bwd_ret);
+        if (pitch > pw_fwd || pitch < -pw_bwd) {
+            if (s_pitch_fault_start_ms == 0) s_pitch_fault_start_ms = millis();
+            if (millis() - s_pitch_fault_start_ms > PITCH_WATCHDOG_MS) {
+                g_state.fault_code = FAULT_PITCH_WATCHDOG;
+                stateMachine_request_estop();
+                return;
+            }
+        } else {
+            s_pitch_fault_start_ms = 0;
+        }
+    }
+
+    // ── Roll watchdog (lateral tip guard) ─────────────────────────────────────
+    // A commanded/external roll shifts the CG toward the low wheel; wheels make
+    // no lateral force, so past a limit the robot tips sideways with no recovery.
+    if (param_get(PARAM_ROLL_WATCHDOG_EN) >= 0.5f) {
+        if (fabsf(imu_roll()) > param_get(PARAM_ROLL_WATCHDOG_LIMIT)) {
+            if (s_roll_fault_start_ms == 0) s_roll_fault_start_ms = millis();
+            if (millis() - s_roll_fault_start_ms > ROLL_WATCHDOG_MS) {
+                g_state.fault_code = FAULT_ROLL_WATCHDOG;
+                stateMachine_request_estop();
+                return;
+            }
+        } else {
+            s_roll_fault_start_ms = 0;
+        }
+    }
+
+    // ── Wheel runaway watchdog (hard backup) ──────────────────────────────────
+    float hard_limit = param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S) * 2.0f;
+    if (fabsf(wm_L.vel_turns_s) > hard_limit || fabsf(wm_R.vel_turns_s) > hard_limit) {
+        g_state.fault_code = FAULT_WHEEL_RUNAWAY;
+        stateMachine_request_estop();
+        return;
+    }
+
+    // Interpolated LQR gains (alpha computed earlier, above the pitch watchdog).
+    // k_pitch_ret/k_rate_ret are the CH7/CH8 live-tune targets (live_tune.h,
+    // LIVE_TUNE_SLOTS in main.cpp) -- live_tune_value() returns the picked-up
+    // knob shadow while bench-tuning, falling through to the latched persisted
+    // value otherwise.
+    float k_pitch_ret = live_tune_value(PARAM_LQR_K_PITCH_RET);
+    float k_rate_ret  = live_tune_value(PARAM_LQR_K_RATE_RET);
     float k_pitch_ext = param_get(PARAM_LQR_K_PITCH_EXT);
     float k_rate_ext  = param_get(PARAM_LQR_K_RATE_EXT);
     float k_pitch = k_pitch_ret + alpha * (k_pitch_ext - k_pitch_ret);
@@ -249,22 +343,43 @@ void controlLoop_run() {
         // Reset integrator on direction reversal to prevent windup carryover
         if (v_desired * s_prev_v_desired < 0.0f) s_vel_integral = 0.0f;
 
-        float int_max = param_get(PARAM_VEL_PI_INT_MAX);
-        s_vel_integral += v_err * DT;
-        if (s_vel_integral >  int_max) s_vel_integral =  int_max;
-        if (s_vel_integral < -int_max) s_vel_integral = -int_max;
+        // Asymmetric, gain-scheduled lean clamp (both stored as positive
+        // magnitudes) -- mirrors the pitch watchdog split: the leg linkage
+        // clears the ground at a different forward angle than backward.
+        float theta_max_fwd_ret = param_get(PARAM_VEL_PI_THETA_MAX_FWD_RET);
+        float theta_max_bwd_ret = param_get(PARAM_VEL_PI_THETA_MAX_BWD_RET);
+        float theta_max_fwd_ext = param_get(PARAM_VEL_PI_THETA_MAX_FWD_EXT);
+        float theta_max_bwd_ext = param_get(PARAM_VEL_PI_THETA_MAX_BWD_EXT);
+        float theta_max_fwd = theta_max_fwd_ret + alpha * (theta_max_fwd_ext - theta_max_fwd_ret);
+        float theta_max_bwd = theta_max_bwd_ret + alpha * (theta_max_bwd_ext - theta_max_bwd_ret);
 
+        float kp = live_tune_value(PARAM_VEL_PI_KP);
+        float ki = live_tune_value(PARAM_VEL_PI_KI);
         float dv_cmd_dt = (v_desired - s_prev_v_desired) / DT;
-        // live_tune_value(): drop-in for param_get() so CH7/CH8 (live_tune.h)
-        // can override these two live during bench tuning without touching the
-        // persisted default until explicitly latched.
-        float theta_raw = live_tune_value(PARAM_VEL_PI_KP)  * v_err
-                        + live_tune_value(PARAM_VEL_PI_KI)  * s_vel_integral
-                        + param_get(PARAM_VEL_PI_KFF)       * dv_cmd_dt;
+        float theta_non_integral =
+            kp * v_err + param_get(PARAM_VEL_PI_KFF) * dv_cmd_dt;
 
-        float theta_max = param_get(PARAM_VEL_PI_THETA_MAX);
-        if (theta_raw >  theta_max) theta_raw =  theta_max;
-        if (theta_raw < -theta_max) theta_raw = -theta_max;
+        // Conditional integration: freeze only when the proposed I update
+        // would drive theta farther beyond the active lean clamp. Updates that
+        // reduce the stored integral remain enabled so saturation can unwind.
+        s_vel_integral = velocity_pi_integral_step(
+            s_vel_integral,
+            v_err,
+            DT,
+            param_get(PARAM_VEL_PI_INT_MAX),
+            ki,
+            theta_non_integral,
+            theta_max_fwd,
+            theta_max_bwd
+        );
+
+        float theta_raw = theta_non_integral + ki * s_vel_integral;
+        if (theta_raw >  theta_max_fwd) theta_raw =  theta_max_fwd;
+        if (theta_raw < -theta_max_bwd) theta_raw = -theta_max_bwd;
+        // Exposed so main.cpp's HEALTH_VEL_PI_SAT check compares against the
+        // same effective (gain-scheduled) bounds instead of recomputing alpha.
+        g_state.theta_max_fwd = theta_max_fwd;
+        g_state.theta_max_bwd = theta_max_bwd;
 
         // Rate limit: output tracks theta_raw but can only slew at rate_lim [rad/s]
         float d_max = param_get(PARAM_VEL_PI_RATE_LIM) * DT;
@@ -312,13 +427,13 @@ void controlLoop_run() {
     // ── Balance-point pitch trim ─────────────────────────────────────────────
     // The lean that holds zero velocity isn't pitch=0 when the CG isn't exactly
     // over the wheel axle; it also shifts with leg height. Gain-schedule the
-    // trim by the same alpha as the LQR gains (linear ret→ext for now). Tuned
-    // live via a CH7/CH8 live-tune slot (live_tune.h) and latched into these two
-    // params when satisfied -- this always reads the latched value, not a live
-    // override, since trim isn't the live-tune target for the current bench
-    // session (see LIVE_TUNE_SLOTS in main.cpp). Offsets only the LQR pitch
-    // error, never the velocity setpoint.
-    float trim_ret = param_get(PARAM_LQR_PITCH_TRIM_RET);
+    // trim by the same alpha as the LQR gains (linear ret→ext for now).
+    // trim_ret goes through live_tune_value() too (live_tune.h) but currently
+    // has no LIVE_TUNE_SLOTS entry, so it always falls through to the latched
+    // persisted value -- CH7/CH8 are presently assigned to the LQR gains above.
+    // trim_ext has no knob and always reads its persisted value directly.
+    // Offsets only the LQR pitch error, never the velocity setpoint.
+    float trim_ret = live_tune_value(PARAM_LQR_PITCH_TRIM_RET);
     float trim_ext = param_get(PARAM_LQR_PITCH_TRIM_EXT);
     float pitch_trim = trim_ret + alpha * (trim_ext - trim_ret);
     g_state.applied_pitch_trim = pitch_trim;

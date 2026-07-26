@@ -117,6 +117,11 @@
       "symbol": "FAULT_STANDUP_FAILED",
       "id": 13,
       "description": "standup denied (pitch out of recoverable range) or exhausted retries/diverged"
+    },
+    {
+      "symbol": "FAULT_ROLL_WATCHDOG",
+      "id": 14,
+      "description": "|roll| > roll_watchdog_limit for > 200 ms (lateral tip guard)"
     }
   ],
   "commands": [
@@ -721,19 +726,6 @@
       "description": "Velocity PI acceleration feedforward gain [s²·rad/m] (≈ 1/g)."
     },
     {
-      "symbol": "PARAM_VEL_PI_THETA_MAX",
-      "id": 1032,
-      "group": "GROUP_CONTROL",
-      "name": "vel_pi_theta_max",
-      "default": 0.698,
-      "min": 0.1,
-      "max": 0.698,
-      "flags": [
-        "persistent"
-      ],
-      "description": "|theta_ref| hard clamp [rad]."
-    },
-    {
       "symbol": "PARAM_VEL_PI_RATE_LIM",
       "id": 1033,
       "group": "GROUP_CONTROL",
@@ -1070,7 +1062,7 @@
       "min": 0.0,
       "max": 1.0,
       "flags": [],
-      "description": "1 = ESTOP (FAULT_PITCH_WATCHDOG) if |pitch| > 50° for > 200 ms. Default on and NOT persisted — always starts back on after reboot so a bench-test disable can't silently survive into a real run."
+      "description": "1 = ESTOP (FAULT_PITCH_WATCHDOG) if pitch exceeds pitch_watchdog_fwd_ret/ext or pitch_watchdog_bwd_ret/ext (gain-scheduled by leg height) for > 200 ms. Default on and NOT persisted — always starts back on after reboot so a bench-test disable can't silently survive into a real run."
     },
     {
       "symbol": "PARAM_LQR_K_PITCH_RET",
@@ -1130,7 +1122,7 @@
       "group": "GROUP_CONTROL",
       "name": "lqr_k_vel",
       "default": -0.007,
-      "min": -0.05,
+      "min": -1.0,
       "max": 0.0,
       "flags": [
         "persistent"
@@ -1156,8 +1148,10 @@
       "default": 0.0,
       "min": 0.0,
       "max": 1.0,
-      "flags": [],
-      "description": "1 = force the hip gain-schedule blend to alpha=0.0 (fully-retracted LQR gains), bypassing the hm_limits valid-calibration check entirely. For hardware tuning at the retracted anchor without needing a completed calibration. Not persisted — always boots to 0."
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = force the hip gain-schedule blend to alpha=0.0 (fully-retracted LQR gains), bypassing the hm_limits valid-calibration check entirely. For hardware tuning at the retracted anchor without needing a completed calibration. Persistent — survives reboot, so a bench session left with this on stays on until explicitly cleared."
     },
     {
       "symbol": "PARAM_GUI_MOTION_CTRL_EN",
@@ -1383,13 +1377,13 @@
       "id": 1084,
       "group": "GROUP_CONTROL",
       "name": "lqr_pitch_trim_ret",
-      "default": 0.0,
+      "default": -0.14,
       "min": -0.3491,
       "max": 0.3491,
       "flags": [
         "persistent"
       ],
-      "description": "Balance-point pitch offset [rad], fully retracted leg (alpha=0). The lean the LQR holds for zero velocity, compensating a CG that is not exactly over the wheel axle. Interpolated toward lqr_pitch_trim_ext by the gain-schedule alpha. Not currently a live-tune target (see LIVE_TUNE_SLOTS in main.cpp) — edit via the Params tab, or repoint a live-tune slot at this param for a future bench session."
+      "description": "Balance-point pitch offset [rad], fully retracted leg (alpha=0). The lean the LQR holds for zero velocity, compensating a CG that is not exactly over the wheel axle. Interpolated toward lqr_pitch_trim_ext by the gain-schedule alpha. Default -0.14 rad (~-8 deg), measured on the bench 2026-07-25: with this at 0 the vel-PI integrator was doing the trim's job, permanently eating ~8 deg of the backward lean budget. Not currently a live-tune target (see LIVE_TUNE_SLOTS in main.cpp) — edit via the Params tab, or repoint a live-tune slot at this param for a future bench session."
     },
     {
       "symbol": "PARAM_LQR_PITCH_TRIM_EXT",
@@ -1403,6 +1397,110 @@
         "persistent"
       ],
       "description": "Balance-point pitch offset [rad], fully extended leg (alpha=1). Companion to lqr_pitch_trim_ret; the two are linearly interpolated by the gain-schedule alpha (higher order later if needed)."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_THETA_MAX_FWD_RET",
+      "id": 1086,
+      "group": "GROUP_CONTROL",
+      "name": "theta_max_fwd_ret",
+      "default": 0.5235988,
+      "min": 0.1,
+      "max": 0.6981317,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Velocity-PI commanded-lean clamp, forward direction, fully retracted leg [rad, magnitude]. theta_ref is clamped to +this value when leaning forward (pitch positive = lean forward). Gain-scheduled toward vel_pi_theta_max_fwd_ext by the same alpha as the LQR gains. Split from vel_pi_theta_max because the leg linkage clears the ground at a different forward angle than backward."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_THETA_MAX_BWD_RET",
+      "id": 1087,
+      "group": "GROUP_CONTROL",
+      "name": "theta_max_bwd_ret",
+      "default": 0.1745329,
+      "min": 0.1,
+      "max": 0.6981317,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Velocity-PI commanded-lean clamp, backward direction, fully retracted leg [rad, magnitude]. theta_ref is clamped to -this value when leaning backward. Gain-scheduled toward vel_pi_theta_max_bwd_ext by the same alpha as the LQR gains. Split from vel_pi_theta_max because the leg linkage clears the ground at a different backward angle than forward."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_THETA_MAX_FWD_EXT",
+      "id": 1088,
+      "group": "GROUP_CONTROL",
+      "name": "theta_max_fwd_ext",
+      "default": 0.5235988,
+      "min": 0.1,
+      "max": 0.6981317,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Velocity-PI commanded-lean clamp, forward direction, fully extended leg [rad, magnitude]. Companion to vel_pi_theta_max_fwd_ret; the two are linearly interpolated by the gain-schedule alpha. Defaults to the same value as the retracted anchor until bench-tuned separately."
+    },
+    {
+      "symbol": "PARAM_VEL_PI_THETA_MAX_BWD_EXT",
+      "id": 1089,
+      "group": "GROUP_CONTROL",
+      "name": "theta_max_bwd_ext",
+      "default": 0.1745329,
+      "min": 0.1,
+      "max": 0.6981317,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Velocity-PI commanded-lean clamp, backward direction, fully extended leg [rad, magnitude]. Companion to vel_pi_theta_max_bwd_ret; the two are linearly interpolated by the gain-schedule alpha. Defaults to the same value as the retracted anchor until bench-tuned separately."
+    },
+    {
+      "symbol": "PARAM_PITCH_WATCHDOG_FWD_RET",
+      "id": 1090,
+      "group": "GROUP_CONTROL",
+      "name": "pitch_wd_fwd_ret",
+      "default": 0.6981317,
+      "min": 0.0,
+      "max": 1.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch watchdog forward trip threshold, fully retracted leg [rad, magnitude]. ESTOPs (FAULT_PITCH_WATCHDOG) if pitch > this value for > 200 ms (pitch positive = lean forward). Gain-scheduled toward pitch_watchdog_fwd_ext by the same alpha as the LQR gains. Split from the old symmetric PITCH_WATCHDOG_RAD constant because the leg linkage collides with the ground at a different forward angle than backward. Requires pitch_watchdog_en=1."
+    },
+    {
+      "symbol": "PARAM_PITCH_WATCHDOG_BWD_RET",
+      "id": 1091,
+      "group": "GROUP_CONTROL",
+      "name": "pitch_wd_bwd_ret",
+      "default": 0.2617994,
+      "min": 0.0,
+      "max": 1.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch watchdog backward trip threshold, fully retracted leg [rad, magnitude]. ESTOPs (FAULT_PITCH_WATCHDOG) if pitch < -this value for > 200 ms. Gain-scheduled toward pitch_watchdog_bwd_ext by the same alpha as the LQR gains. Split from the old symmetric PITCH_WATCHDOG_RAD constant because the leg linkage collides with the ground at a different backward angle than forward. Requires pitch_watchdog_en=1."
+    },
+    {
+      "symbol": "PARAM_PITCH_WATCHDOG_FWD_EXT",
+      "id": 1092,
+      "group": "GROUP_CONTROL",
+      "name": "pitch_wd_fwd_ext",
+      "default": 0.6981317,
+      "min": 0.0,
+      "max": 1.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch watchdog forward trip threshold, fully extended leg [rad, magnitude]. Companion to pitch_watchdog_fwd_ret; the two are linearly interpolated by the gain-schedule alpha. Defaults to the same value as the retracted anchor until bench-tuned separately."
+    },
+    {
+      "symbol": "PARAM_PITCH_WATCHDOG_BWD_EXT",
+      "id": 1093,
+      "group": "GROUP_CONTROL",
+      "name": "pitch_wd_bwd_ext",
+      "default": 0.2617994,
+      "min": 0.0,
+      "max": 1.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch watchdog backward trip threshold, fully extended leg [rad, magnitude]. Companion to pitch_watchdog_bwd_ret; the two are linearly interpolated by the gain-schedule alpha. Defaults to the same value as the retracted anchor until bench-tuned separately."
     },
     {
       "symbol": "PARAM_RADIO_HIP_CMD",
@@ -1452,13 +1550,13 @@
       "group": "GROUP_COMMAND",
       "name": "live_tune_ch7_val",
       "default": 0.0,
-      "min": 0.0,
-      "max": 0.5,
+      "min": -2.0,
+      "max": 4.0,
       "flags": [
         "readonly",
         "command"
       ],
-      "description": "Live-tune shadow value for CH7's knob, mapped into whatever param CH7 is currently wired to in main.cpp's LIVE_TUNE_SLOTS table (see live_tune.h) — currently vel_pi_kp. Only takes effect (overrides the real param in the control loop) once the knob has been swept through the target's current value (\"pickup\", avoids a step change) and live-tune mode is active (RUNNING + calibration switch up). Write live_tune_latch=1 to persist the shadow into the real param. Firmware-written, stale when the radio link is dead."
+      "description": "Live-tune shadow value for CH7's knob, mapped into whatever param CH7 is currently wired to for the CH5/CH6-selected group in main.cpp's LIVE_TUNE_SLOTS table (see live_tune.h) — group 0 lqr_k_pitch_ret [-0.1,-2.0] (widened 2026-07-26; the 2026-07-25 bench run pegged the old -0.5 end stop), group 1 vel_pi_kp [0.05,1.0], group 2 roll_kp [0.3,4.0]. min/max here is the union across all three groups' ranges, display-only — the firmware write uses param_force_set and is never clamped by this param's own bounds. Only takes effect (overrides the real param in the control loop) once the knob has been swept through the active group's target's current value (\"pickup\", avoids a step change) and live-tune mode is active (RUNNING + calibration switch up). Write live_tune_latch=1 to persist the shadow into the real param. Firmware-written, stale when the radio link is dead."
     },
     {
       "symbol": "PARAM_LIVE_TUNE_CH8_VAL",
@@ -1466,13 +1564,13 @@
       "group": "GROUP_COMMAND",
       "name": "live_tune_ch8_val",
       "default": 0.0,
-      "min": 0.0,
+      "min": -1.0,
       "max": 0.5,
       "flags": [
         "readonly",
         "command"
       ],
-      "description": "Live-tune shadow value for CH8's knob — same mechanism as live_tune_ch7_val, currently wired to vel_pi_ki. See LIVE_TUNE_SLOTS in main.cpp."
+      "description": "Live-tune shadow value for CH8's knob — same mechanism as live_tune_ch7_val, min/max is likewise the display-only union across groups (group 0 lqr_k_rate_ret [-0.01,-1.0], widened 2026-07-26 alongside CH7 so the rate/pitch ratio stays reachable as k_pitch grows; group 1 vel_pi_ki [0.02,0.5]; group 2 roll_kd [0.02,0.5]). See LIVE_TUNE_SLOTS in main.cpp."
     },
     {
       "symbol": "PARAM_PROFILE_1_VEL_MAX",
@@ -1617,6 +1715,190 @@
         "command"
       ],
       "description": "Write 1 while live-tuning (RUNNING + calibration switch up) to persist every currently-picked-up LIVE_TUNE_SLOTS entry's shadow value into its real param. One-shot: firmware performs the latch(es) and resets this to 0. Slots that haven't picked up yet (knob never swept through the target's current value) are skipped, not latched at their un-picked-up shadow value. Ignored outside live-tune mode."
+    },
+    {
+      "symbol": "PARAM_ROLL_CTRL_EN",
+      "id": 1308,
+      "group": "GROUP_CONTROL",
+      "name": "roll_ctrl_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = enable the roll controller: a PD loop on roll angle/rate that adds a differential hip position offset (extend one leg, retract the other) to level/lean the body. Active only in RUNNING. Default off — with it off the hips are held symmetrically exactly as before."
+    },
+    {
+      "symbol": "PARAM_ROLL_KP",
+      "id": 1309,
+      "group": "GROUP_CONTROL",
+      "name": "roll_kp",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 20.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Roll PD proportional gain: hip position offset [rad] per rad of roll error (roll_cmd_rad - measured roll)."
+    },
+    {
+      "symbol": "PARAM_ROLL_KD",
+      "id": 1310,
+      "group": "GROUP_CONTROL",
+      "name": "roll_kd",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Roll PD derivative gain: hip position offset [rad] per rad/s of measured roll rate (damping term)."
+    },
+    {
+      "symbol": "PARAM_ROLL_OFFSET_MAX",
+      "id": 1311,
+      "group": "GROUP_CONTROL",
+      "name": "roll_offset_max",
+      "default": 0.15,
+      "min": 0.0,
+      "max": 0.6,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Clamp on the differential hip position offset [rad] produced by the roll PD loop, applied +offset to one hip and -offset to the other. Bounds how far a bad gain can drive the legs apart; also clamped to calibrated hip travel."
+    },
+    {
+      "symbol": "PARAM_ROLL_RATE_LIM",
+      "id": 1312,
+      "group": "GROUP_CONTROL",
+      "name": "roll_rate_lim",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Slew-rate limit [rad/s] on the roll setpoint (roll_cmd_rad) before it enters the PD loop, so a snapped stick doesn't step-perturb the pitch balancer."
+    },
+    {
+      "symbol": "PARAM_ROLL_WATCHDOG_EN",
+      "id": 1313,
+      "group": "GROUP_CONTROL",
+      "name": "roll_watchdog_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = ESTOP (FAULT_ROLL_WATCHDOG) if |roll| > roll_watchdog_limit for > 200 ms (lateral tip guard). Default off, persistent across reboot and reflash (changed 2026-07-26 — was default-on and non-persistent specifically so a bench-test disable couldn't silently survive into a real run; that safety property no longer holds now that this is persisted default-off)."
+    },
+    {
+      "symbol": "PARAM_ROLL_WATCHDOG_LIMIT",
+      "id": 1314,
+      "group": "GROUP_CONTROL",
+      "name": "roll_watchdog_limit",
+      "default": 0.35,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "|roll| threshold [rad] that trips FAULT_ROLL_WATCHDOG after 200 ms (default ~20°). Set well inside the lateral tip-over angle."
+    },
+    {
+      "symbol": "PARAM_HIP_ROLL_KP",
+      "id": 1315,
+      "group": "GROUP_HIP",
+      "name": "hip_roll_kp",
+      "default": 3.0,
+      "min": 0.0,
+      "max": 100.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Hip MIT position gain [N·m/rad] used for the hip hold while the roll controller is active, replacing hip_running_kp. Set soft so the legs are backdrivable by obstacles (active suspension); keep hip_running_tff high enough that the legs still hold height under load."
+    },
+    {
+      "symbol": "PARAM_HIP_ROLL_KD",
+      "id": 1316,
+      "group": "GROUP_HIP",
+      "name": "hip_roll_kd",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Hip MIT damping gain [N·m·s/rad] used for the hip hold while the roll controller is active, replacing hip_running_kd."
+    },
+    {
+      "symbol": "PARAM_ROLL_CMD_RAD",
+      "id": 1317,
+      "group": "GROUP_COMMAND",
+      "name": "roll_cmd_rad",
+      "default": 0.0,
+      "min": -1.0,
+      "max": 1.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Roll setpoint [rad] from CH1, = CH1_norm * radio_roll_max; firmware-written, zeroed when the radio link is dead. READONLY."
+    },
+    {
+      "symbol": "PARAM_RADIO_ROLL_MAX",
+      "id": 1318,
+      "group": "GROUP_COMMAND",
+      "name": "radio_roll_max",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 0.5,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Max roll setpoint mapped from full CH1 deflection [rad]. READONLY — copied from the active CH9 profile's roll_max. Edit profile1/2/3_roll_max instead."
+    },
+    {
+      "symbol": "PARAM_PROFILE_1_ROLL_MAX",
+      "id": 1319,
+      "group": "GROUP_COMMAND",
+      "name": "profile1_roll_max",
+      "default": 0.05,
+      "min": 0.0,
+      "max": 0.5,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 1 (slow) max roll setpoint [rad]; CH9 selects the active profile. Conservative — well inside the lateral tip angle."
+    },
+    {
+      "symbol": "PARAM_PROFILE_2_ROLL_MAX",
+      "id": 1320,
+      "group": "GROUP_COMMAND",
+      "name": "profile2_roll_max",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 0.5,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 2 (normal) max roll setpoint [rad]."
+    },
+    {
+      "symbol": "PARAM_PROFILE_3_ROLL_MAX",
+      "id": 1321,
+      "group": "GROUP_COMMAND",
+      "name": "profile3_roll_max",
+      "default": 0.17,
+      "min": 0.0,
+      "max": 0.5,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Speed profile 3 (fast/aggressive) max roll setpoint [rad] (~10°)."
     }
   ]
 }

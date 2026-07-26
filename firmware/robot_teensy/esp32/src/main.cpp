@@ -1301,6 +1301,7 @@ static const char* fault_description(uint8_t code) {
         case FAULT_WHEEL_FEEDBACK_LOST:return "Wheel encoder timeout or ODrive error during operation";
         case FAULT_WHEEL_INIT_TIMEOUT: return "No CAN reply from wheel motors within 2 s of boot";
         case FAULT_STANDUP_FAILED:     return "Standup denied or failed - pitch out of recoverable range";
+        case FAULT_ROLL_WATCHDOG:      return "|roll| > limit for > 200 ms - lateral tip guard";
         default:                       return "Unknown fault";
     }
 }

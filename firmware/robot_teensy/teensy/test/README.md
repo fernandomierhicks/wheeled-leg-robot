@@ -12,12 +12,19 @@ Hardware tests: `test_buzzer`, `test_comm_usb`, `test_hip_motor`, `test_imu`,
 
 Desktop tests: `test_commlink_robustness` (`native` or `windows_x86`),
 `test_command_validation` (`windows_command_validation`), and
-`test_param_store` (`windows_param_store`).
+`test_param_store` (`windows_param_store`), and the velocity-PI anti-windup
+math in `test_control_math` (`windows_control_math`).
 
 ## Running from the CLI
 
 ```sh
 pio test -e test_teensy -f test_imu --upload-port COM12
+```
+
+The controller-math test is desktop-only and needs no robot:
+
+```sh
+pio test -e windows_control_math
 ```
 
 This builds, uploads, then lets `pio test` itself open the serial port to

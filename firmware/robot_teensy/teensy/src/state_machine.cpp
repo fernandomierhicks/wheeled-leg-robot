@@ -262,7 +262,7 @@ static void on_running() {
     g_state.state = STATE_RUNNING;
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> RUNNING (armed)");
-        g_buzzer.play(ARMED_MELODY, sizeof(ARMED_MELODY) / sizeof(ARMED_MELODY[0]), 200);
+        g_buzzer.play(ARMED_MELODY, sizeof(ARMED_MELODY) / sizeof(ARMED_MELODY[0]));
         wheel_motors_set_mode(WheelMode::TORQUE);
         controlLoop_reset();  // C1: clear integrators/rate-limit state so each arm starts clean
         // Skip on a jump landing or a successful standup catch — the hips are
@@ -277,7 +277,7 @@ static void on_cmd_reject() {
     g_state.state = STATE_CMD_REJECT;
     if (entering) {
         comm_log(LOG_LEVEL_WARN, "-> CMD_REJECT");
-        g_buzzer.play(REJECT_MELODY, sizeof(REJECT_MELODY) / sizeof(REJECT_MELODY[0]), 200);
+        g_buzzer.play(REJECT_MELODY, sizeof(REJECT_MELODY) / sizeof(REJECT_MELODY[0]));
         s_cmd_reject_deadline_ms = millis() + 1000;
     }
 }
@@ -287,7 +287,7 @@ static void on_jumping() {
 
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> JUMPING");
-        g_buzzer.play(JUMP_MELODY, sizeof(JUMP_MELODY) / sizeof(JUMP_MELODY[0]), 200);
+        g_buzzer.play(JUMP_MELODY, sizeof(JUMP_MELODY) / sizeof(JUMP_MELODY[0]));
         s_jump_deadline_ms = millis() + 3000;
         // Snapshot hip positions and calibrated retracted target
         s_jp_phase  = JP_CROUCH;
@@ -548,7 +548,7 @@ static void on_estop() {
         // just before this transition fired.
         if (from_startup) comm_log(LOG_LEVEL_ERROR, "Startup complete with errors");
         comm_log(LOG_LEVEL_ERROR, "-> ESTOP [fault 0x%02X]", g_state.fault_code);
-        g_buzzer.play(ESTOP_MELODY, sizeof(ESTOP_MELODY) / sizeof(ESTOP_MELODY[0]), 200);
+        g_buzzer.play(ESTOP_MELODY, sizeof(ESTOP_MELODY) / sizeof(ESTOP_MELODY[0]));
 
         // Wheels: kill power immediately — no reason to keep driving a wheel
         // through an emergency stop.

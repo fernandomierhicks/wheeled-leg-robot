@@ -22,7 +22,9 @@ from PyQt6.QtWidgets import (
     QMessageBox, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 
-from .comm_commands import send_param_get_all, send_param_reset_defaults, send_param_set, send_reliable
+from .comm_commands import (
+    send_param_get, send_param_get_all, send_param_reset_defaults, send_param_set, send_reliable,
+)
 from .generated_protocol import PARAM_BY_NAME as _PARAM_BY_NAME
 from .generated_protocol import PARAM_DEFS as _PARAM_DEFS
 from .telemetry_bus import TelemetryBus
@@ -37,6 +39,22 @@ _FLAG_COMMAND         = 1 << 2
 # text) so Description gets most of the row.
 _RANGE_COL_WIDTH = 80
 
+# Missing-param retry sweep (see ParamsTab._sweep_missing_params). A refresh
+# fires a bulk PARAM_GET 0xFFFF (~131 individually-paced PARAM_REPORT
+# frames); on a lossy link (WiFi especially) a reliable fraction never
+# arrives with nothing re-requesting them. These tune how the follow-up
+# per-param retry sweep paces itself.
+_SWEEP_FIRST_DELAY_MS = 700   # let the paced bulk dump finish arriving first
+_SWEEP_RETRY_DELAY_MS = 600
+_SWEEP_MAX_ROUNDS     = 6
+# Individual re-GETs are unpaced on firmware (unlike the bulk 0xFFFF dump's
+# 4/tick cursor) -- each triggers an immediate synchronous PARAM_REPORT send.
+# Capping how many go out per round keeps a single round well under the ~11
+# reports (512 B / 45 B) firmware's own dump pacing comment says fits its
+# Serial5 TX buffer without blocking the 500 Hz loop; leftovers just roll
+# into the next round.
+_SWEEP_MAX_PER_ROUND  = 5
+
 # Direct angular quantities are presented in human-friendly degrees while the
 # protocol, firmware registry, and parameter export format remain in radians.
 # Gains whose units merely contain radians (for example N·m/rad) intentionally
@@ -48,7 +66,10 @@ _ANGLE_PARAM_NAMES = frozenset({
     "calib_max_seek_rad",
     "calib_max_rel_rad",
     "sim_pitch_rad",
-    "vel_pi_theta_max",
+    "theta_max_fwd_ret",
+    "theta_max_bwd_ret",
+    "theta_max_fwd_ext",
+    "theta_max_bwd_ext",
     "jump_ramp_down",
     "jump_hs_margin",
     "standup_pitch_fwd",
@@ -56,6 +77,10 @@ _ANGLE_PARAM_NAMES = frozenset({
     "standup_cap_pitch",
     "lqr_pitch_trim_ret",
     "lqr_pitch_trim_ext",
+    "pitch_wd_fwd_ret",
+    "pitch_wd_bwd_ret",
+    "pitch_wd_fwd_ext",
+    "pitch_wd_bwd_ext",
 })
 _ANGULAR_RATE_PARAM_NAMES = frozenset({
     "calib_seek_speed",
@@ -131,6 +156,26 @@ _SYSTEM_OVERRIDE_PARAM_IDS = frozenset({
     0x042B,  # PARAM_GUI_MOTION_CTRL_EN
 })
 
+# The roll-controller params were allocated IDs out of the 0x05xx (COMMAND)
+# block for lack of room elsewhere, but param_registry.cpp's g_params[]
+# explicitly declares their real group as CONTROL/HIP (see
+# generated_param_table.inc .group_id). _effective_group()'s default
+# (id >> 8) heuristic gets these wrong, so override them explicitly here —
+# same pattern as the other override sets in this file.
+_ROLL_CONTROL_OVERRIDE_PARAM_IDS = frozenset({
+    0x051C,  # PARAM_ROLL_CTRL_EN
+    0x051D,  # PARAM_ROLL_KP
+    0x051E,  # PARAM_ROLL_KD
+    0x051F,  # PARAM_ROLL_OFFSET_MAX
+    0x0520,  # PARAM_ROLL_RATE_LIM
+    0x0521,  # PARAM_ROLL_WATCHDOG_EN
+    0x0522,  # PARAM_ROLL_WATCHDOG_LIMIT
+})
+_ROLL_HIP_OVERRIDE_PARAM_IDS = frozenset({
+    0x0523,  # PARAM_HIP_ROLL_KP
+    0x0524,  # PARAM_HIP_ROLL_KD
+})
+
 # Dev/debug params pulled out of their native group into their own top-level
 # Diagnostics section.
 _GROUP_DIAGNOSTICS = 0x09
@@ -148,6 +193,10 @@ def _effective_group(param_id: int) -> int:
         return _GROUP_DIAGNOSTICS
     if param_id in _SYSTEM_OVERRIDE_PARAM_IDS:
         return _GROUP_SYSTEM
+    if param_id in _ROLL_CONTROL_OVERRIDE_PARAM_IDS:
+        return 0x04  # GROUP_CONTROL
+    if param_id in _ROLL_HIP_OVERRIDE_PARAM_IDS:
+        return 0x02  # GROUP_HIP
     return (param_id >> 8) & 0xFF
 
 # ── Sub-group definitions ─────────────────────────────────────────────────────
@@ -188,6 +237,8 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     (range(0x0412, 0x0415), 0x04, "Feedforward"),
     (range(0x0415, 0x0420), 0x04, "Jump"),
     (frozenset({0x0401, 0x0420, 0x0421, 0x0422}), 0x04, "Sim Injection"),
+    (_ROLL_CONTROL_OVERRIDE_PARAM_IDS, 0x04, "Roll"),
+    (range(0x043E, 0x0446), 0x04, "Pitch Envelope"),  # theta_max_*, pitch_wd_* (fwd/bwd x ret/ext)
     (range(0x0500, 0x0504), 0x05, "Radio Scale"),  # radio_hip_cmd, radio_vel_max, radio_yaw_max, live_tune_ch7_val
     (range(0x0510, 0x0513), 0x05, "Profile 1"),    # profile1_vel_max/yaw_max/torque_lim
     (range(0x0513, 0x0516), 0x05, "Profile 2"),    # profile2_vel_max/yaw_max/torque_lim
@@ -207,6 +258,8 @@ _SUBGROUP_COLORS: dict[str, str] = {
     "Feedforward":    "#ccaaff",
     "Jump":           "#ffaa44",
     "Sim Injection":  "#88ddcc",
+    "Roll":           "#55ccff",
+    "Pitch Envelope": "#ff99aa",
     "Safety":         "#ff5555",
     "Radio Scale":    "#ff88cc",
     "Profile 1":      "#ffdd88",
@@ -349,6 +402,11 @@ class _ParamRow(QWidget):
         self._edit = QLineEdit(
             f"{display_value:.6g}" if display_value is not None else ""
         )
+        if display_value is None:
+            # Placeholder, not real text: shows "?" (dimmed) while unconfirmed
+            # without landing in .text(), so parsing/current_value()/_send()
+            # never have to special-case it.
+            self._edit.setPlaceholderText("?")
         self._edit.setFixedWidth(96)
         if self._display_unit:
             self._edit.setToolTip(
@@ -536,6 +594,18 @@ class ParamsTab(QWidget):
         self._collapsed_subgroups: set[tuple[int, str]] = set()
         self._requested = False
 
+        # Missing-param retry sweep (see _start_missing_sweep): a bulk
+        # PARAM_GET 0xFFFF dump is ~131 individual PARAM_REPORT frames paced
+        # out by firmware over tens of ms — on a lossy link (WiFi especially)
+        # some fraction reliably never arrive, and nothing was re-requesting
+        # them. This timer periodically re-asks (individually) for whichever
+        # rows are still unconfirmed after a refresh, until all are confirmed
+        # or a retry cap is hit.
+        self._sweep_timer = QTimer(self)
+        self._sweep_timer.setSingleShot(True)
+        self._sweep_timer.timeout.connect(self._sweep_missing_params)
+        self._sweep_round = 0
+
         # ── Toolbar ───────────────────────────────────────────────────────────
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
@@ -659,6 +729,7 @@ class ParamsTab(QWidget):
         self._requested = True
         self._lbl_status.setText("Requesting…")
         self._lbl_status.setStyleSheet(f"color: {DIM}; font-size: 11px;")
+        self._start_missing_sweep()
 
     def _on_reset_defaults(self):
         reply = QMessageBox.question(
@@ -675,6 +746,33 @@ class ParamsTab(QWidget):
         send_param_reset_defaults()
         self._lbl_status.setText("Reset to defaults requested…")
         self._lbl_status.setStyleSheet(f"color: {ORANGE}; font-size: 11px;")
+        self._start_missing_sweep()
+
+    def _start_missing_sweep(self):
+        """(Re)start the retry sweep that chases down rows still unconfirmed
+        after a bulk PARAM_REPORT dump (PARAM_GET 0xFFFF or a defaults reset,
+        both of which trigger firmware's paced full dump). Individually
+        re-requests only the still-missing params, a few hundred ms apart,
+        until everything is confirmed or _SWEEP_MAX_ROUNDS is hit."""
+        self._sweep_round = 0
+        self._sweep_timer.start(_SWEEP_FIRST_DELAY_MS)
+
+    def _sweep_missing_params(self):
+        missing = [pid for pid, row in self._rows.items() if not row.is_confirmed()]
+        if not missing:
+            return
+        self._sweep_round += 1
+        for pid in missing[:_SWEEP_MAX_PER_ROUND]:
+            send_param_get(pid)
+        if self._sweep_round < _SWEEP_MAX_ROUNDS:
+            self._sweep_timer.start(_SWEEP_RETRY_DELAY_MS)
+        else:
+            confirmed = len(self._rows) - len(missing)
+            self._lbl_status.setText(
+                f"{confirmed}/{len(self._rows)} params confirmed — {len(missing)} "
+                f"never responded after {_SWEEP_MAX_ROUNDS} retries (link issue?)"
+            )
+            self._lbl_status.setStyleSheet(f"color: {ORANGE}; font-size: 11px;")
 
     def _on_export(self):
         data = {}

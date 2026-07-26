@@ -375,7 +375,7 @@ void calibration_start() {
     s_done_announced = false;
     s_fault_announced = false;
 
-    g_buzzer.play(START_CHIME, sizeof(START_CHIME) / sizeof(START_CHIME[0]), 200);
+    g_buzzer.play(START_CHIME, sizeof(START_CHIME) / sizeof(START_CHIME[0]));
     comm_log(LOG_LEVEL_INFO, "Calib: starting retract-switch homing");
     if (l_en && limit_switch_left_active())
         comm_log(LOG_LEVEL_INFO, "Calib L: switch already PRESSED; releasing first");
@@ -401,11 +401,11 @@ void calibration_update() {
     if (calibration_done() && !s_done_announced) {
         s_done_announced = true;
         comm_log(LOG_LEVEL_INFO, "*** CALIBRATION SUCCESSFUL ***");
-        g_buzzer.play(DONE_MELODY, sizeof(DONE_MELODY) / sizeof(DONE_MELODY[0]), 200);
+        g_buzzer.play(DONE_MELODY, sizeof(DONE_MELODY) / sizeof(DONE_MELODY[0]));
     }
     if (calibration_failed() && !s_fault_announced) {
         s_fault_announced = true;
-        g_buzzer.play(FAULT_MELODY, sizeof(FAULT_MELODY) / sizeof(FAULT_MELODY[0]), 200);
+        g_buzzer.play(FAULT_MELODY, sizeof(FAULT_MELODY) / sizeof(FAULT_MELODY[0]));
     }
 }
 

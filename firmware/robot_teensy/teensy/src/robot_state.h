@@ -24,6 +24,8 @@ typedef struct {
     float          tau_sym;           // unclamped LQR symmetric torque [N·m]
     float          tau_yaw;           // yaw PI differential torque [N·m] — Phase 4; 0 until then
     float          theta_ref;         // velocity PI lean setpoint [rad]  — Phase 3; 0 until then
+    float          theta_max_fwd;     // effective (gain-scheduled) fwd lean clamp [rad]; stale outside RUNNING/JUMPING
+    float          theta_max_bwd;     // effective (gain-scheduled) bwd lean clamp [rad]; stale outside RUNNING/JUMPING
     float          v_ref;             // velocity reference [m/s]          — Phase 3; 0 until then
     float          gain_sched_alpha;  // hip gain interpolation [0-1]      — Phase 5; 0 until then
     float          applied_pitch_trim; // balance-point pitch offset used in LQR error [rad]

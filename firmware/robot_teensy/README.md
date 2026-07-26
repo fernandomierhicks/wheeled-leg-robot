@@ -85,6 +85,41 @@ firmware/robot_teensy/
     └── src/main.cpp      ← all ESP32 logic (display, WiFi, Neopixel, ToF)
 ```
 
+## GUI control API (preferred for agents and headless inspection)
+
+The running Python GUI exposes a local-only command server on
+`127.0.0.1:8765`. It starts automatically with the GUI and is controlled with:
+
+```text
+python software/gui/tools/robot_ctl.py <command> [args...]
+```
+
+Use this API whenever a task asks to inspect or control something "in the
+GUI." Prefer it over Windows mouse/keyboard automation and over writing a
+standalone client that reimplements the robot protocol. Start with
+`capabilities`, `health`, or `service_status`; use `service_start` if the GUI
+is not running.
+
+The API includes dedicated robot commands (`telem`, `param_get`, `param_set`,
+`set_mode`, logging, connection control, and firmware flashing) plus a generic
+Qt operator bridge:
+
+- `tab_select <title>` selects a GUI tab.
+- `ui_manifest` enumerates widget IDs and supported actions.
+- `ui_snapshot [query]` returns widget values and text without screen scraping.
+- `ui_invoke <id> <action> [json_value]` invokes a real Qt widget action.
+- `ui_screenshot` captures the GUI only when visual plot inspection is useful.
+
+For an already-loaded Log Analyzer run, use
+`ui_snapshot tab/log-analyzer` to read its source, duration, metrics, limits,
+warnings, selected view, and available view choices. Change the analyzer view
+through the combo box returned by that snapshot using
+`ui_invoke <combo-id> select_text '"Vel-PI"'`, then snapshot the same group
+again. To load a specific `.wlog` or host `jsonl` first, use
+`analyzer_load <path>`. Full command and safety details are in
+`software/gui/CLAUDE.md` under **Remote control / automation** and in
+`software/gui/tools/robot_ctl.py`.
+
 ## Flashing (PlatformIO / GUI)
 
 ```
@@ -150,52 +185,77 @@ Balance-point trim (`lqr_pitch_trim_ret/ext`, same α schedule) offsets the pitc
 target so zero velocity holds at the true balance lean when the CG isn't over the
 axle. Edit via the Params tab, or repoint a live-tune slot at it for a future
 bench session (see below).  
-Outer loops: velocity PI (sets θ_ref), yaw PI (differential torque).  
+Outer loops: velocity PI (sets θ_ref), yaw PI (differential torque). The
+velocity PI uses directional conditional-integration anti-windup: its integral
+freezes when an update would push the requested lean farther past the active
+asymmetric clamp, but remains free to unwind back out of saturation.
 Feedforward: FF1 cancels hip reaction torque; FF2 adds gravity compensation.
+
+**Roll controller (active suspension)** — off by default (`roll_ctrl_en`). In
+RUNNING only, a PD loop on roll angle/rate (`roll_kp`, `roll_kd`) produces a
+differential hip position offset (`+offset` one leg, `−offset` the other,
+clamped to `roll_offset_max` and to calibrated hip travel) that levels/leans the
+body about +X. The setpoint comes from radio **CH1**, scaled by the active
+profile's `radio_roll_max` (per-profile `profileN_roll_max`, selected by CH9) and
+slew-limited (`roll_rate_lim`) so a snapped stick doesn't step-perturb pitch.
+While active the hips are held with a soft, backdrivable impedance
+(`hip_roll_kp`/`hip_roll_kd` replace `hip_running_kp`/`kd`; `hip_running_tff`
+still carries the static leg load). A steady roll shifts the CG laterally toward
+the low wheel and wheels make no lateral force, so the setpoint is hard-clamped
+and a roll watchdog (`roll_watchdog_en`, `roll_watchdog_limit`) ESTOPs with
+`FAULT_ROLL_WATCHDOG` if `|roll|` exceeds the limit for > 200 ms. FF1 uses the
+hip-current *sum*, so pure differential roll motion cancels in it.
 
 ## Live parameter tuning (`teensy/src/live_tune.h`)
 
-Lets an operator feel a gain/limit's effect live on the bench, via a radio
-knob, instead of editing the Params tab blind and re-arming to see it. Two
-independent slots — one per knob (radio CH7, CH8) — each mapped to a param +
-range in a small fixed table, `LIVE_TUNE_SLOTS` in `main.cpp`:
+Lets an operator feel a gain/limit's effect live on the bench, via two radio
+knobs (CH7, CH8), instead of editing the Params tab blind and re-arming to see
+it. CH7/CH8 each drive one slot of whichever *gain group* is currently
+selected by the CH5/CH6 switch combination — 3 groups of 2 slots, `LIVE_TUNE_SLOTS`
+in `main.cpp`:
 
 ```cpp
 static const LiveTuneSlot LIVE_TUNE_SLOTS[] = {
-    { 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_VEL_PI_KP, 0.0f, 0.5f },
-    { 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_VEL_PI_KI, 0.0f, 0.5f },
+    // Group 0: CH5 down, CH6 up -- LQR pitch/rate (retracted)
+    { 0, 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_LQR_K_PITCH_RET, -0.1f,  -0.5f },
+    { 0, 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_LQR_K_RATE_RET,  -0.01f, -0.5f },
+    // Group 1: CH5 up, CH6 down -- vel_pi KP/KI
+    { 1, 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_VEL_PI_KP, 0.05f, 1.0f  },
+    { 1, 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_VEL_PI_KI, 0.02f, 0.5f  },
+    // Group 2: CH5 down, CH6 down -- roll KP/KD
+    { 2, 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_ROLL_KP, 0.3f,  4.0f  },
+    { 2, 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_ROLL_KD, 0.02f, 0.5f  },
 };
 ```
 
-Active while `RUNNING` with the calibration switch (CH5) raised — the same
-gate an earlier, trim-only version of this mechanism used, now generalized to
-N knob→param slots. Two safety properties, independent of which params are
-currently wired:
+Active while `RUNNING` with CH5+CH6 selecting a group (CH5 down + CH6 up ->
+group 0, CH5 up + CH6 down -> group 1, both down -> group 2, both up -> no
+group / tuning inactive). Two safety properties, independent of which params
+are currently wired:
 
-- **Pickup, not snap.** A knob does nothing on entering live-tune mode until
-  it's swept through its target's *current* value; only then does it "pick
+- **Pickup, not snap.** A knob does nothing on entering a group until it's
+  swept through that slot's target *current* value; only then does it "pick
   up" and start tracking 1:1. Prevents a gain jumping instantly to wherever
-  the knob physically happens to be sitting when CH5 goes up. Resets every
-  time live-tune mode is exited (CH5 low, or leaving `RUNNING`) — re-entering
-  always requires re-sweeping.
+  the knob physically happens to be sitting when the group is selected.
+  Resets every time live-tune mode is exited or the group changes (CH5/CH6
+  combination changes, or leaving `RUNNING`) — re-entering always requires
+  re-sweeping.
 - **Explicit latch, nothing persists by accident.** While picked up, a slot's
-  live shadow value (`live_tune_ch7_val`/`live_tune_ch8_val`, both telemetry-
-  visible) is what the control loop actually uses — real, felt effect on
-  balance — but the real underlying param is untouched until
-  `PARAM_LIVE_TUNE_LATCH` (`live_tune_latch`) is written `1`. One-shot:
-  firmware commits every currently-picked-up slot and resets the flag.
-  Un-picked-up slots are skipped, not latched at a stale value.
+  live shadow value (`live_tune_ch7_val`/`live_tune_ch8_val`, telemetry-visible)
+  is what the control loop actually uses — real, felt effect on balance — but
+  the real underlying param is untouched until `PARAM_LIVE_TUNE_LATCH`
+  (`live_tune_latch`) is written `1`. One-shot: firmware commits every
+  currently-picked-up slot and resets the flag. Un-picked-up slots are
+  skipped, not latched at a stale value.
 
 **Repointing a knob at a different param** for a future bench session is a
 one-line edit to `LIVE_TUNE_SLOTS` + reflash. The only other requirement: the
 target's read site in `control_loop.cpp` must go through
 `live_tune_value(PARAM_X)` instead of a bare `param_get(PARAM_X)` — that's
-what makes the override actually take effect; two call sites do this today
-(`vel_pi_kp`, `vel_pi_ki`).
+what makes the override actually take effect.
 
-Currently wired: CH7 → `vel_pi_kp` (0..0.5), CH8 → `vel_pi_ki` (0..0.5). Full
-step-by-step operator procedure and the CH5/CH7/CH8 radio table: see "Live
-parameter tuning" in `radio_channels.md`.
+Full step-by-step operator procedure and the CH5/CH6/CH7/CH8 radio table: see
+"Live parameter tuning" in `radio_channels.md`.
 
 ## Motor direction / sign conventions
 
@@ -274,12 +334,13 @@ Set in `g_state.fault_code` before entering `STATE_ESTOP`. Non-zero only while i
 | `0x05` | `FAULT_CALIBRATION_TIMEOUT` | Retract-switch homing safety check failed | REPOSITION |
 | `0x06` | `FAULT_HUMAN_ESTOP` | ESTOP requested by GUI or radio | SOFT |
 | `0x07` | *(reserved)* | Was `FAULT_PARAM_OUT_OF_BOUNDS` — removed; out-of-range param writes always clamp | — |
-| `0x08` | `FAULT_PITCH_WATCHDOG` | `|pitch| > 50°` for > 200 ms | REPOSITION |
+| `0x08` | `FAULT_PITCH_WATCHDOG` | pitch outside `[-pitch_wd_bwd, +pitch_wd_fwd]` (asymmetric, gain-scheduled ret/ext by leg height) for > 200 ms | REPOSITION |
 | `0x09` | `FAULT_WHEEL_RUNAWAY` | Wheel velocity exceeded 2× soft governor limit | SOFT |
 | `0x0A` | `FAULT_IMU_LOST` | IMU left NOMINAL while RUNNING/JUMPING (silence or heavy packet loss) | REBOOT |
 | `0x0B` | `FAULT_WHEEL_FEEDBACK_LOST` | Wheel encoder timeout or ODrive error during operation | REBOOT |
 | `0x0C` | `FAULT_WHEEL_INIT_TIMEOUT` | No CAN reply from wheel motors within 2 s of boot | REBOOT |
 | `0x0D` | `FAULT_STANDUP_FAILED` | Standup denied (pitch out of recoverable range) or exhausted retries/diverged | REPOSITION |
+| `0x0E` | `FAULT_ROLL_WATCHDOG` | `|roll| > roll_watchdog_limit` for > 200 ms (lateral tip guard) | REPOSITION |
 
 **Severity tiers:** SOFT → ESTOP→STANDBY directly; REPOSITION → reposition robot then reset; GUI_FIX → fix param in GUI then reset; REBOOT → power-cycle required.
 

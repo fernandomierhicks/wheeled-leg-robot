@@ -510,12 +510,20 @@ class LogAnalyzerTab(QWidget):
             lean_plot = self._new_plot("Velocity-PI lean command", "Lean target", "°")
             self._curve(lean_plot, t, theta_deg, ORANGE,
                         "Lean target θref — acceleration angle requested by velocity PI (°)", 1.5)
-            theta_limit = self._param_series("vel_pi_theta_max")
-            if theta_limit is not None:
-                self._limit_pair(
-                    lean_plot, t, np.degrees(theta_limit), RED,
-                    "Velocity-PI upper angle limit — positive lean clamp (°)",
-                    "Velocity-PI lower angle limit — negative lean clamp (°)")
+            # Asymmetric, gain-scheduled clamp (theta_max_fwd/bwd_ret/ext) —
+            # these reference lines show the retracted-anchor (alpha=0) bound
+            # from the .PARAMS sidecar dump, not the live per-tick blend with
+            # the extended-leg value (that blend isn't logged).
+            theta_fwd_limit = self._param_series("theta_max_fwd_ret")
+            theta_bwd_limit = self._param_series("theta_max_bwd_ret")
+            if theta_fwd_limit is not None and np.any(np.isfinite(theta_fwd_limit)):
+                self._curve(lean_plot, t, np.degrees(theta_fwd_limit),
+                            RED, "Velocity-PI upper angle limit — forward lean clamp, retracted (°)",
+                            1.0, Qt.PenStyle.DashLine)
+            if theta_bwd_limit is not None and np.any(np.isfinite(theta_bwd_limit)):
+                self._curve(lean_plot, t, -np.degrees(theta_bwd_limit),
+                            RED, "Velocity-PI lower angle limit — backward lean clamp, retracted (°)",
+                            1.0, Qt.PenStyle.DashLine)
             self._add_regions(
                 lean_plot, t, vel_sat, RED,
                 "Velocity PI saturated — lean command reached its angle clamp")

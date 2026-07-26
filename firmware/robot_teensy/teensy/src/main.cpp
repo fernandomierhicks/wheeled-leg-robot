@@ -401,7 +401,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         // 3x every 250 ms until it sees the PARAM_REPORT echo, so a slow link can deliver
         // the same value more than once — only chirp when it actually changed.
         if (changed) {
-            g_buzzer.play(PARAM_SET_CHIRP, 1, 120);
+            g_buzzer.play(PARAM_SET_CHIRP, 1);
         }
         // Echo back actual (possibly clamped) value
         Param p; uint16_t idx = 0;
@@ -472,7 +472,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             }
             bool started = sd_logger_start(dur);
             forgive_sd_blocking_stall();  // sd_logger_start() can block the loop ~96 ms
-            if (started) g_buzzer.play(LOG_START_CHIRP, 1, 150);
+            if (started) g_buzzer.play(LOG_START_CHIRP, 1);
             if (!started) {
                 reply(CMD_RESULT_REJECTED, CMD_REASON_OPERATION_FAILED);
                 return;
@@ -507,7 +507,7 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
             if (s_log_get_via_usb) sd_logger_set_get_pacing(0, 2);  // unthrottled direct USB
             else                   sd_logger_set_get_pacing(0, 1);  // ACK provides relay backpressure
             sd_logger_begin_get(idx, start, kind);
-            if (sd_logger_transfer_active()) g_buzzer.play(LOG_GET_CHIRP, 1, 150);
+            if (sd_logger_transfer_active()) g_buzzer.play(LOG_GET_CHIRP, 1);
             else {
                 reply(CMD_RESULT_REJECTED, CMD_REASON_OPERATION_FAILED);
                 return;
@@ -600,7 +600,7 @@ void setup() {
         {76, 40, 0},  // E5
         {79, 40, 0},  // G5
     };
-    g_buzzer.play(BOOT_CHIME, sizeof(BOOT_CHIME) / sizeof(BOOT_CHIME[0]), 30);  // quiet arpeggio
+    g_buzzer.play(BOOT_CHIME, sizeof(BOOT_CHIME) / sizeof(BOOT_CHIME[0]));
     for (auto& c : BOOT_RAINBOW) {
         g_led.solid(c[0], c[1], c[2]);
         uint32_t step_start = millis();
@@ -745,8 +745,12 @@ static uint16_t build_health_flags() {
         && g_state.state == STATE_RUNNING)           f |= HEALTH_LQR_ACTIVE;
     if (fabsf(wm_L.vel_turns_s) > soft_lim)         f |= HEALTH_WM_L_VEL_LIMITED;
     if (fabsf(wm_R.vel_turns_s) > soft_lim)         f |= HEALTH_WM_R_VEL_LIMITED;
+    // Compares against the same effective (asymmetric, gain-scheduled) bounds
+    // control_loop.cpp actually clamped theta_ref to this tick, not a fixed
+    // symmetric param -- see g_state.theta_max_fwd/bwd.
     if (param_get(PARAM_VEL_PI_EN) >= 0.5f
-        && fabsf(g_state.theta_ref) >= param_get(PARAM_VEL_PI_THETA_MAX))
+        && (g_state.theta_ref >= g_state.theta_max_fwd
+            || g_state.theta_ref <= -g_state.theta_max_bwd))
         f |= HEALTH_VEL_PI_SAT;
     if (param_get(PARAM_YAW_PI_EN) >= 0.5f
         && fabsf(g_state.tau_yaw) >= param_get(PARAM_YAW_PI_TORQUE_MAX))
@@ -988,20 +992,46 @@ static const BuzzerNote RADIO_LOST_MELODY[]   = {{64, 100, 30}, {60, 150, 0}}; /
 static const BuzzerNote ARM_IGNORED_MELODY[]  = {{69, 60, 40}, {69, 60, 0}};   // A4-A4 double-tap: "not ready, try again"
 
 // ── Live parameter tuning (live_tune.h) ────────────────────────────────────────
-// CH7/CH8 knob -> param mapping for the current bench-tuning session. Repoint a
-// knob at a different param here and reflash; no other code changes needed as
-// long as the target's control-loop read site uses live_tune_value(). Range is
-// the knob's own sweep, independent of the target param's registry min/max.
+// CH7/CH8 knob -> param mapping, grouped in threes by the CH5/CH6 switch
+// combination (see "gain-group select" in radio_update()):
+//   group 0: CH5 down, CH6 up   -> LQR pitch/rate (retracted)
+//   group 1: CH5 up,   CH6 down -> vel_pi KP/KI
+//   group 2: CH5 down, CH6 down -> roll KP/KD
+//   (CH5 up, CH6 up = no group selected, tuning inactive)
+// Repoint a knob at a different param here and reflash; no other code changes
+// needed as long as the target's control-loop read site uses live_tune_value().
+//
+// range_min/range_max is the value at the knob's raw-low/raw-high end, NOT a
+// sorted (min,max) pair -- knob_val below interpolates raw-low -> range_min and
+// raw-high -> range_max, independent of the target param's registry min/max.
+// IMPORTANT: always set range_min to the value at knob-zero and range_max to
+// the value at knob-max such that turning the knob UP increases the gain's
+// MAGNITUDE (strength of action), never its raw signed value. Group 0's gains
+// are negative, so range_min there is the least-negative (weakest) value and
+// range_max is the most-negative (strongest) value, so the knob still reads
+// as "more knob = more gain" even though the number it writes is decreasing.
+// Do not flip this to make the raw value increase with the knob.
 struct LiveTuneSlot {
-    uint8_t  ibus_channel;       // 1-indexed CH number
-    uint16_t live_param_id;      // readonly+command shadow, telemetry-visible
-    uint16_t persist_param_id;   // real, persistent, control-loop-facing param
-    float    range_min;
-    float    range_max;
+    uint8_t  group;                // 0-2, selected by CH5/CH6 (see radio_update())
+    uint8_t  ibus_channel;         // 1-indexed CH number (7 or 8)
+    uint16_t live_param_id;        // readonly+command shadow, telemetry-visible
+    uint16_t persist_param_id;     // real, persistent, control-loop-facing param
+    float    range_min;            // value at knob-zero (weakest gain)
+    float    range_max;            // value at knob-max (strongest gain)
 };
 static const LiveTuneSlot LIVE_TUNE_SLOTS[] = {
-    { 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_VEL_PI_KP, 0.0f, 0.5f },
-    { 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_VEL_PI_KI, 0.0f, 0.5f },
+    // Group 0: CH5 down, CH6 up -- LQR pitch/rate (retracted)
+    // Widened 2026-07-26: the 2026-07-25 bench run pegged CH7 at the old -0.5
+    // end stop for over half the run, so k_pitch_ret was clamped by the knob,
+    // not tuned by it.
+    { 0, 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_LQR_K_PITCH_RET, -0.1f,  -2.0f },
+    { 0, 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_LQR_K_RATE_RET,  -0.01f, -1.0f },
+    // Group 1: CH5 up, CH6 down -- vel_pi KP/KI
+    { 1, 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_VEL_PI_KP, 0.05f, 1.0f  },
+    { 1, 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_VEL_PI_KI, 0.02f, 0.5f  },
+    // Group 2: CH5 down, CH6 down -- roll KP/KD
+    { 2, 7, PARAM_LIVE_TUNE_CH7_VAL, PARAM_ROLL_KP, 0.3f,  4.0f  },
+    { 2, 8, PARAM_LIVE_TUNE_CH8_VAL, PARAM_ROLL_KD, 0.02f, 0.5f  },
 };
 static constexpr uint8_t NUM_LIVE_TUNE_SLOTS = sizeof(LIVE_TUNE_SLOTS) / sizeof(LIVE_TUNE_SLOTS[0]);
 static bool s_live_tune_picked_up[NUM_LIVE_TUNE_SLOTS] = {};
@@ -1027,7 +1057,8 @@ float live_tune_value(uint16_t persist_param_id) {
 // CH5  > 1990: trigger CALIBRATION only after a live, debounced CH5-low
 //               followed by a rising edge while in STANDBY.
 // CH5 drop:    gracefully cancel a radio-triggered calibration via DISARMING.
-// CH6  > 1500: start/continue SD log (debounced). < 1500: stop log (debounced).
+// CH5/CH6 (while RUNNING): debounced switch combination selects which
+//               live-tune gain group CH7/CH8 drive -- see LIVE_TUNE_SLOTS.
 // CH3 1000–2000: maps to PARAM_RADIO_HIP_CMD as t ∈ [0,1].
 //   Left stale when radio is dead.
 
@@ -1057,7 +1088,7 @@ static void radio_update() {
         comm_log(LOG_LEVEL_INFO,
                  "Radio: signal acquired CH10=%u state=%d authority=%s",
                  (unsigned)ch10, (int)g_state.state, arm_authority_name());
-        g_buzzer.play(RADIO_ACQ_MELODY, 1, 120);
+        g_buzzer.play(RADIO_ACQ_MELODY, 1);
         if (energetic && s_arm_authority == ArmAuthority::GUI) {
             comm_log(LOG_LEVEL_WARN,
                      "DISARM reason=RADIO_TAKEOVER: radio acquired during GUI run CH10=%u -> DISARMING",
@@ -1073,7 +1104,7 @@ static void radio_update() {
         comm_log(LOG_LEVEL_WARN,
                  "Radio: signal lost state=%d authority=%s",
                  (int)g_state.state, arm_authority_name());
-        g_buzzer.play(RADIO_LOST_MELODY, 2, 120);
+        g_buzzer.play(RADIO_LOST_MELODY, 2);
         if (energetic && s_arm_authority == ArmAuthority::RADIO) {
             comm_log(LOG_LEVEL_ERROR,
                      "DISARM reason=RADIO_SIGNAL_LOST: radio-owned run lost link -> DISARMING");
@@ -1124,7 +1155,7 @@ static void radio_update() {
                 // trim mode by accident on the same flip that arms.
                 comm_log(LOG_LEVEL_WARN,
                          "Radio: arm denied — calibration switch (CH5) active; lower it before arming");
-                g_buzzer.play(ARM_IGNORED_MELODY, sizeof(ARM_IGNORED_MELODY) / sizeof(ARM_IGNORED_MELODY[0]), 120);
+                g_buzzer.play(ARM_IGNORED_MELODY, sizeof(ARM_IGNORED_MELODY) / sizeof(ARM_IGNORED_MELODY[0]));
                 s_profile_flash_rgb[0] = 255; s_profile_flash_rgb[1] = 0; s_profile_flash_rgb[2] = 255;
                 s_profile_flash_until_ms = millis() + 200;
             } else {
@@ -1140,7 +1171,7 @@ static void radio_update() {
             // that lands mid-transition (e.g. tail end of CALIBRATION, or still in
             // STARTUP) is otherwise silently dropped with no operator feedback.
             comm_log(LOG_LEVEL_WARN, "Radio: arm ignored, not in STANDBY (state=%d)", (int)g_state.state);
-            g_buzzer.play(ARM_IGNORED_MELODY, sizeof(ARM_IGNORED_MELODY) / sizeof(ARM_IGNORED_MELODY[0]), 120);
+            g_buzzer.play(ARM_IGNORED_MELODY, sizeof(ARM_IGNORED_MELODY) / sizeof(ARM_IGNORED_MELODY[0]));
             s_profile_flash_rgb[0] = 255; s_profile_flash_rgb[1] = 0; s_profile_flash_rgb[2] = 255;
             s_profile_flash_until_ms = millis() + 200;
         }
@@ -1240,37 +1271,28 @@ static void radio_update() {
         }
     }
 
-    // CH6: SD log start/stop, debounced symmetrically (LOG_DEBOUNCE_TICKS
-    // consecutive ticks on each side of the 1500 threshold) so a brief blip
-    // near the switch's midpoint can't start-then-immediately-stop a log.
-    static constexpr uint8_t LOG_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
-    static uint8_t s_log_hi_ticks = 0;
-    static uint8_t s_log_lo_ticks = 0;
-    bool log_hi = alive && (ch6 > 1500);
-    if (log_hi) {
-        if (s_log_hi_ticks < LOG_DEBOUNCE_TICKS) s_log_hi_ticks++;
-        s_log_lo_ticks = 0;
+    // CH6: debounced level, symmetric with CH5's CALIB_DEBOUNCE_TICKS pattern
+    // above. Used only to combine with CH5 for live-tune gain-group select
+    // below -- CH6 no longer drives SD logging (that's GUI/comm-triggered
+    // only now; see sd_logger_start()/sd_logger_stop() call sites elsewhere).
+    static constexpr uint8_t CH6_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
+    static uint8_t s_ch6_hi_ticks = 0;
+    static uint8_t s_ch6_lo_ticks = 0;
+    static bool s_ch6_switch_high = true;  // neutral/unknown-at-boot default: no gain group selected
+    const bool ch6_hi_raw = alive && (ch6 > 1990);
+    const bool ch6_lo_raw = alive && (ch6 <= 1990);
+    if (ch6_hi_raw) {
+        if (s_ch6_hi_ticks < CH6_DEBOUNCE_TICKS) s_ch6_hi_ticks++;
+        s_ch6_lo_ticks = 0;
+    } else if (ch6_lo_raw) {
+        if (s_ch6_lo_ticks < CH6_DEBOUNCE_TICKS) s_ch6_lo_ticks++;
+        s_ch6_hi_ticks = 0;
     } else {
-        if (s_log_lo_ticks < LOG_DEBOUNCE_TICKS) s_log_lo_ticks++;
-        s_log_hi_ticks = 0;
+        s_ch6_hi_ticks = 0;
+        s_ch6_lo_ticks = 0;
     }
-
-    static bool s_logging = false;
-    if (!s_logging && s_log_hi_ticks >= LOG_DEBOUNCE_TICKS) {
-        if (g_state.state == STATE_STANDBY || g_state.state == STATE_ESTOP) {
-            comm_log(LOG_LEVEL_INFO, "Radio: CH6 -> log start");
-            s_logging = sd_logger_start(0);
-            forgive_sd_blocking_stall();  // sd_logger_start() can block the loop ~96 ms
-        } else {
-            comm_log(LOG_LEVEL_WARN, "Radio: log start denied: enable CH6 before arming");
-            // Latch this switch position so the warning is not retried at 500 Hz.
-            s_logging = true;
-        }
-    } else if (s_logging && s_log_lo_ticks >= LOG_DEBOUNCE_TICKS) {
-        comm_log(LOG_LEVEL_INFO, "Radio: CH6 -> log stop");
-        sd_logger_stop();
-        s_logging = false;
-    }
+    if (s_ch6_hi_ticks >= CH6_DEBOUNCE_TICKS) s_ch6_switch_high = true;
+    if (s_ch6_lo_ticks >= CH6_DEBOUNCE_TICKS) s_ch6_switch_high = false;
 
     // §1d (tuning.md): while PARAM_GUI_MOTION_CTRL_EN is set, the two radio-driven
     // writes to v_cmd_ms/omega_cmd_rds below are skipped so a GUI/CLI param_set()
@@ -1293,6 +1315,11 @@ static void radio_update() {
         float t = constrain((g_ibus.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);  // CH3 (1-indexed)
         param_force_set(PARAM_RADIO_HIP_CMD, t);
 
+        // CH1: roll setpoint for the active-suspension roll controller. Ungated by
+        // gui_motion_ctrl (that override only covers v/omega). Sign bench-verified.
+        float roll_norm = constrain((g_ibus.channel(1) - 1500.0f) / 500.0f, -1.0f, 1.0f);
+        param_force_set(PARAM_ROLL_CMD_RAD, roll_norm * param_get(PARAM_RADIO_ROLL_MAX));
+
         if (!gui_motion_ctrl) {
             float vel_norm = constrain((g_ibus.channel(2) - 1500.0f) / 500.0f, -1.0f, 1.0f);
             param_force_set(PARAM_V_CMD_MS, vel_norm * param_get(PARAM_RADIO_VEL_MAX));
@@ -1305,6 +1332,7 @@ static void radio_update() {
         static const uint16_t PROFILE_VEL[]    = {PARAM_PROFILE_1_VEL_MAX,    PARAM_PROFILE_2_VEL_MAX,    PARAM_PROFILE_3_VEL_MAX};
         static const uint16_t PROFILE_YAW[]    = {PARAM_PROFILE_1_YAW_MAX,    PARAM_PROFILE_2_YAW_MAX,    PARAM_PROFILE_3_YAW_MAX};
         static const uint16_t PROFILE_TORQUE[] = {PARAM_PROFILE_1_TORQUE_LIM, PARAM_PROFILE_2_TORQUE_LIM, PARAM_PROFILE_3_TORQUE_LIM};
+        static const uint16_t PROFILE_ROLL[]   = {PARAM_PROFILE_1_ROLL_MAX,   PARAM_PROFILE_2_ROLL_MAX,   PARAM_PROFILE_3_ROLL_MAX};
         static uint8_t s_last_profile = 255;   // force apply on first packet
         static float   s_trq_target   = -1.0f; // <0 = no pending slew
         uint16_t ch9 = g_ibus.channel(9);
@@ -1314,6 +1342,7 @@ static void radio_update() {
             param_force_set(PARAM_ACTIVE_PROFILE, (float)profile);
             param_force_set(PARAM_RADIO_VEL_MAX, param_get(PROFILE_VEL[profile]));
             param_force_set(PARAM_RADIO_YAW_MAX, param_get(PROFILE_YAW[profile]));
+            param_force_set(PARAM_RADIO_ROLL_MAX, param_get(PROFILE_ROLL[profile]));
             s_trq_target = param_get(PROFILE_TORQUE[profile]); // applied via slew below
             comm_log(LOG_LEVEL_INFO, "Radio: speed profile %u", (unsigned)(profile + 1));
 
@@ -1332,7 +1361,7 @@ static void radio_update() {
                 {{72,  80, 20}, {76, 120, 0}, {0,   0,  0}},  // P2: C5→E5
                 {{72,  60, 15}, {76,  60, 15}, {79, 120, 0}}, // P3: C5→E5→G5
             };
-            g_buzzer.play(PROFILE_MELODIES[profile], profile + 1, 150);
+            g_buzzer.play(PROFILE_MELODIES[profile], profile + 1);
         }
 
         // Slew PARAM_LQR_TORQUE_LIMIT toward the profile target at 5 N·m/s.
@@ -1351,20 +1380,32 @@ static void radio_update() {
             }
         }
 
-    } else if (!gui_motion_ctrl) {
-        param_force_set(PARAM_V_CMD_MS, 0.0f);
-        param_force_set(PARAM_OMEGA_CMD_RDS, 0.0f);
+    } else {
+        // Radio link dead: never hold a lean. Roll isn't part of gui_motion_ctrl,
+        // so zero it regardless; v/omega only when the GUI isn't driving them.
+        param_force_set(PARAM_ROLL_CMD_RAD, 0.0f);
+        if (!gui_motion_ctrl) {
+            param_force_set(PARAM_V_CMD_MS, 0.0f);
+            param_force_set(PARAM_OMEGA_CMD_RDS, 0.0f);
+        }
     }
 
     // ── Live parameter tuning (CH7/CH8 knobs) ──────────────────────────────────
-    // Active while RUNNING with the calibration switch raised -- same gate the
-    // pitch-trim live-tune used, generalized to N knob->param slots. See
-    // live_tune.h for the safety rationale (pickup, explicit latch).
-    bool live_tune_active = (g_state.state == STATE_RUNNING) && s_calib_switch_high;
+    // Active while RUNNING with CH5+CH6 selecting one of 3 gain groups (see
+    // LIVE_TUNE_SLOTS above for the group table and knob-direction convention).
+    // CH5 down + CH6 up -> group 0; CH5 up + CH6 down -> group 1; both down
+    // -> group 2; both up -> no group, tuning inactive. See live_tune.h for
+    // the safety rationale (pickup, explicit latch).
+    int8_t live_tune_group = -1;
+    if (!s_calib_switch_high && s_ch6_switch_high)      live_tune_group = 0;
+    else if (s_calib_switch_high && !s_ch6_switch_high) live_tune_group = 1;
+    else if (!s_calib_switch_high && !s_ch6_switch_high) live_tune_group = 2;
+    bool live_tune_active = (g_state.state == STATE_RUNNING) && (live_tune_group >= 0);
     static constexpr float LIVE_TUNE_PICKUP_EPS = 0.01f;
     for (uint8_t i = 0; i < NUM_LIVE_TUNE_SLOTS; i++) {
         const LiveTuneSlot& slot = LIVE_TUNE_SLOTS[i];
-        if (!live_tune_active) { s_live_tune_picked_up[i] = false; continue; }
+        bool slot_active = live_tune_active && (slot.group == (uint8_t)live_tune_group);
+        if (!slot_active) { s_live_tune_picked_up[i] = false; continue; }
         uint16_t raw = g_ibus.channel(slot.ibus_channel);
         float knob_val = slot.range_min + constrain((raw - 1000.0f) / 1000.0f, 0.0f, 1.0f)
                                             * (slot.range_max - slot.range_min);
@@ -1470,11 +1511,11 @@ static void check_limit_switches() {
         {84, 50, 15}, {88, 50, 0}
     };
     if (left_pressed && right_pressed)
-        g_buzzer.play(BOTH_SWITCH_CHIRPS, 2, 120);
+        g_buzzer.play(BOTH_SWITCH_CHIRPS, 2);
     else if (left_pressed)
-        g_buzzer.midi(84, 120, 60);
+        g_buzzer.midi(84, 255, 60);
     else if (right_pressed)
-        g_buzzer.midi(88, 120, 60);
+        g_buzzer.midi(88, 255, 60);
 }
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
@@ -1524,7 +1565,7 @@ void loop() {
     {
         static bool s_xfer_was_active = false;
         bool xfer_active = sd_logger_transfer_active();
-        if (s_xfer_was_active && !xfer_active) g_buzzer.play(LOG_DONE_CHIRP, 2, 150);
+        if (s_xfer_was_active && !xfer_active) g_buzzer.play(LOG_DONE_CHIRP, 2);
         s_xfer_was_active = xfer_active;
     }
     if (prof) prof_mark(s_prof_max.sd, t0);

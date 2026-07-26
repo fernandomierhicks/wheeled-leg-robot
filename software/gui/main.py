@@ -1000,7 +1000,18 @@ class StatusBar:
             )
             if reply == QMessageBox.StandardButton.Yes:
                 _send_set_mode_reliable(STATE_STARTUP, "Reset")
-        # REBOOT: button is disabled; should not be reached
+        else:  # REBOOT
+            reply = QMessageBox.question(
+                None, "Confirm Reset",
+                "This is normally a hardware fault (IMU/CAN/encoder feedback).\n"
+                "Reset will attempt to clear it, but may fail if the underlying "
+                "hardware issue is still present — power-cycle the robot if it "
+                "recurs immediately. Click Yes to try anyway.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                _send_set_mode_reliable(STATE_STARTUP, "Reset")
 
     def _on_reboot_clicked(self):
         reply = QMessageBox.question(
@@ -1127,9 +1138,11 @@ class StatusBar:
             self._btn_reset.setToolTip("Fix the offending parameter in the Params tab before resetting")
         else:  # REBOOT
             self._btn_reset.setText("Reset")
-            self._btn_reset.setStyleSheet(self._reset_style_normal)
-            self._btn_reset.setEnabled(False)
-            self._btn_reset.setToolTip("Hardware fault — power cycle robot and reboot required")
+            self._btn_reset.setStyleSheet(self._reset_style_orange)
+            self._btn_reset.setEnabled(True)
+            self._btn_reset.setToolTip(
+                "Hardware fault — click to try a reset anyway; power-cycle if it recurs"
+            )
 
     def set_profile(self, profile: int):
         label = f"  P{profile + 1}" if isinstance(profile, int) and 0 <= profile <= 2 else ""

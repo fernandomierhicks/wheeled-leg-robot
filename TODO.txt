@@ -4,13 +4,16 @@
 
 
 ---Fernandos note dont change below
+--Standing behaviour with pitch watchdog
+--Dont allow so fast action on vel pi in one direction. If we command forward and 
+robot wants to slow down, when retractedm the command needs to be very small, 
+or maybe ist he LQR who tirps fault. 
 
-Roll controller. 
+
+Tune up to 3 group of gains with both switches and kmobs
 
 
 CAD up leg protectors ont he back and on the front below the screen. foam?
-Thin RGB strip
-
 
 
 ------------------------------------------------------firmware
