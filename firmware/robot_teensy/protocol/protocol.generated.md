@@ -67,8 +67,10 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x000A` | `PARAM_LOOP_PROFILE_ENABLE` | `loop_profile_enable` | 0 | 0 … 1 | - |
 | `0x0201` | `PARAM_HIP_RUNNING_KP` | `hip_running_kp` | 5 | 0 … 100 | persistent |
 | `0x0202` | `PARAM_HIP_RUNNING_KD` | `hip_running_kd` | 0.5 | 0 … 5 | persistent |
-| `0x0203` | `PARAM_HIP_RUNNING_TFF` | `hip_running_tff` | 0 | -5 … 5 | persistent |
+| `0x0203` | `PARAM_HIP_RUNNING_TFF_RET` | `hip_running_tff_ret` | 0 | -5 … 5 | persistent |
 | `0x0204` | `PARAM_HIP_RUNNING_RAMP_TIME_S` | `hip_running_ramp_s` | 2 | 0 … 10 | persistent |
+| `0x0205` | `PARAM_HIP_CMD_RATE_LIMIT_PER_S` | `hip_cmd_rate_lim` | 0.2 | 0 … 2 | persistent |
+| `0x0206` | `PARAM_HIP_RUNNING_TFF_EXT` | `hip_running_tff_ext` | 0 | -5 … 5 | persistent |
 | `0x0200` | `PARAM_ESTOP_HIP_DISABLE` | `estop_hip_disable` | 1 | 0 … 1 | persistent |
 | `0x0120` | `PARAM_CALIB_SEEK_SPEED` | `calib_seek_speed` | 0.17453 | 0.01 … 0.5 | persistent |
 | `0x0121` | `PARAM_CALIB_MOVE_SPEED` | `calib_move_speed` | 0.174533 | 0.01 … 0.5 | persistent |
@@ -88,6 +90,7 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x012F` | `PARAM_CALIB_RAMPDOWN_TIME_S` | `calib_rampdown_s` | 2 | 0 … 10 | persistent |
 | `0x0131` | `PARAM_CALIB_BYPASS_EN` | `calib_bypass_en` | 0 | 0 … 1 | persistent |
 | `0x0300` | `PARAM_WM_ENC_TIMEOUT_MS` | `wm_enc_timeout_ms` | 20 | 5 … 500 | persistent |
+| `0x0301` | `PARAM_WM_VEL_SLEW_MAX` | `wm_vel_slew_max` | 1500 | 0 … 20000 | persistent |
 | `0x0400` | `PARAM_LQR_ENABLE` | `lqr_enable` | 1 | 0 … 1 | persistent |
 | `0x0401` | `PARAM_SIM_PITCH_RAD` | `sim_pitch_rad` | 0 | -1.5708 … 1.5708 | - |
 | `0x0402` | `PARAM_LQR_TORQUE_LIMIT` | `lqr_torque_limit` | 0.1 | 0 … 7 | readonly, command |
@@ -134,8 +137,6 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x042C` | `PARAM_STANDUP_ENABLE` | `standup_enable` | 0 | 0 … 1 | persistent |
 | `0x042D` | `PARAM_STANDUP_MAX_PITCH_FWD_RAD` | `standup_pitch_fwd` | 0.6 | 0 … 1.4 | persistent |
 | `0x042E` | `PARAM_STANDUP_MAX_PITCH_BWD_RAD` | `standup_pitch_bwd` | 0.6 | 0 … 1.4 | persistent |
-| `0x042F` | `PARAM_STANDUP_CROUCH_KP` | `standup_crouch_kp` | 80 | 0 … 500 | persistent |
-| `0x0430` | `PARAM_STANDUP_CROUCH_KD` | `standup_crouch_kd` | 1 | 0 … 5 | persistent |
 | `0x0431` | `PARAM_STANDUP_CROUCH_TIME_S` | `standup_crouch_time` | 0.3 | 0.05 … 2 | persistent |
 | `0x0432` | `PARAM_STANDUP_K_PITCH` | `standup_k_pitch` | 0 | 0 … 60 | persistent |
 | `0x0433` | `PARAM_STANDUP_K_RATE` | `standup_k_rate` | 0 | 0 … 15 | persistent |
@@ -157,6 +158,11 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0443` | `PARAM_PITCH_WATCHDOG_BWD_RET` | `pitch_wd_bwd_ret` | 0.2617994 | 0 … 1.4 | persistent |
 | `0x0444` | `PARAM_PITCH_WATCHDOG_FWD_EXT` | `pitch_wd_fwd_ext` | 0.6981317 | 0 … 1.4 | persistent |
 | `0x0445` | `PARAM_PITCH_WATCHDOG_BWD_EXT` | `pitch_wd_bwd_ext` | 0.2617994 | 0 … 1.4 | persistent |
+| `0x0446` | `PARAM_STANDUP_DIVERGE_PITCH_FWD_RAD` | `standup_div_fwd` | 1 | 0 … 1.4 | persistent |
+| `0x0447` | `PARAM_STANDUP_DIVERGE_PITCH_BWD_RAD` | `standup_div_bwd` | 1 | 0 … 1.4 | persistent |
+| `0x0448` | `PARAM_LQR_BARRIER_K` | `lqr_barrier_k` | 0 | 0 … 60 | persistent |
+| `0x0449` | `PARAM_LQR_BARRIER_THRESH_RET` | `lqr_barrier_th_ret` | 0.20944 | 0.1 … 0.6981317 | persistent |
+| `0x044A` | `PARAM_LQR_BARRIER_THRESH_EXT` | `lqr_barrier_th_ext` | 0.20944 | 0.1 … 0.6981317 | persistent |
 | `0x0500` | `PARAM_RADIO_HIP_CMD` | `radio_hip_cmd` | 0 | 0 … 1 | readonly, command |
 | `0x0501` | `PARAM_RADIO_VEL_MAX` | `radio_vel_max` | 0.5 | 0 … 2 | readonly, command |
 | `0x0502` | `PARAM_RADIO_YAW_MAX` | `radio_yaw_max` | 1 | 0 … 4 | readonly, command |
@@ -176,6 +182,8 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x051C` | `PARAM_ROLL_CTRL_EN` | `roll_ctrl_en` | 0 | 0 … 1 | persistent |
 | `0x051D` | `PARAM_ROLL_KP` | `roll_kp` | 1 | 0 … 20 | persistent |
 | `0x051E` | `PARAM_ROLL_KD` | `roll_kd` | 0.1 | 0 … 5 | persistent |
+| `0x052A` | `PARAM_ROLL_KI` | `roll_ki` | 0 | 0 … 5 | persistent |
+| `0x052B` | `PARAM_ROLL_INT_MAX` | `roll_int_max` | 0.1 | 0 … 2 | persistent |
 | `0x051F` | `PARAM_ROLL_OFFSET_MAX` | `roll_offset_max` | 0.15 | 0 … 0.6 | persistent |
 | `0x0520` | `PARAM_ROLL_RATE_LIM` | `roll_rate_lim` | 0.5 | 0 … 5 | persistent |
 | `0x0521` | `PARAM_ROLL_WATCHDOG_EN` | `roll_watchdog_en` | 0 | 0 … 1 | persistent |

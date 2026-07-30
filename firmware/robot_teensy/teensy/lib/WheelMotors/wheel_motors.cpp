@@ -1,9 +1,15 @@
 #include "wheel_motors.h"
 #include "config.h"
 #include "param_registry.h"
+#include "wheel_safety.h"
 #include "comm_protocol.h"  // comm_log — driver messages must be visible over WiFi too (audit W7)
 #include <Arduino.h>
 #include <FlexCAN_T4.h>
+
+// Max consecutive implausible encoder samples the filter may suppress before
+// it gives up and accepts reality. 3 ticks bounds the blind window while
+// still swallowing the isolated single-sample spikes seen on the bench.
+static constexpr uint8_t WM_VEL_MAX_CONSEC_REJECT = 3;
 
 // ODrive CAN command IDs (5-bit, ORed into bits [4:0] of the 11-bit frame ID)
 #define CMD_HEARTBEAT       0x001
@@ -62,10 +68,15 @@ static void rx_callback(const CAN_message_t& msg) {
         memcpy(&vel, msg.buf + 4, 4);
         // Right motor is physically mirrored — negate so positive = robot forward.
         if (node_id == ODESC_NODE_R) { pos = -pos; vel = -vel; }
-        ax->pos_turns   = pos;
-        ax->vel_turns_s = vel;
-        ax->last_fb_ms  = millis();
-        ax->ever_heard  = true;
+        ax->pos_turns       = pos;
+        // Raw only — wheel_motors_poll() runs the plausibility filter and
+        // publishes vel_turns_s. Doing it here would mean calling param_get()
+        // from an ISR and would leave the filter running at CAN frame rate
+        // rather than at a known control-tick cadence.
+        ax->vel_raw_turns_s = vel;
+        ax->fb_seq++;
+        ax->last_fb_ms      = millis();
+        ax->ever_heard      = true;
     } else if (cmd_id == CMD_HEARTBEAT && msg.len >= 5) {
         uint32_t err;
         memcpy(&err, msg.buf + 0, 4);
@@ -94,6 +105,32 @@ bool wheel_motors_init() {
 void wheel_motors_poll() {
     // FlexCAN_T4 interrupt-driven — no polling call needed.
     uint32_t now = millis();
+
+    // ── Encoder-velocity plausibility filter ─────────────────────────────────
+    // Only evaluated when a new encoder frame actually arrived, and the
+    // allowance scales with the time since the last accepted sample, so a gap
+    // in CAN frames widens the window instead of rejecting the sample that
+    // ends the gap. See wheel_safety.h for why this exists.
+    {
+        float max_accel = param_get(PARAM_WM_VEL_SLEW_MAX);
+        WheelAxisState* axes[2] = { &wm_L, &wm_R };
+        for (WheelAxisState* ax : axes) {
+            if (ax->fb_seq == ax->fb_seq_seen) continue;  // nothing new this tick
+            ax->fb_seq_seen = ax->fb_seq;
+            float dt_s = (ax->vel_accept_ms == 0) ? 0.0f
+                                                  : (now - ax->vel_accept_ms) / 1000.0f;
+            uint8_t run_before = ax->vel_reject_run;
+            ax->vel_turns_s = wheel_vel_glitch_filter(
+                ax->vel_raw_turns_s, ax->vel_turns_s, max_accel, dt_s,
+                WM_VEL_MAX_CONSEC_REJECT, &ax->vel_reject_run);
+            if (ax->vel_reject_run > run_before) {
+                ax->vel_glitch_count++;   // held last-good: this sample was rejected
+            } else {
+                ax->vel_accept_ms = now;  // accepted (or fail-open) — restart the clock
+            }
+        }
+    }
+
     uint32_t enc_timeout = (uint32_t)param_get(PARAM_WM_ENC_TIMEOUT_MS);
     // ever_heard guard: without it, ok is spuriously true for the first
     // enc_timeout ms after boot (last_fb_ms == 0) even with no ODrive present.

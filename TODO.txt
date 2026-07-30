@@ -4,31 +4,12 @@
 
 
 ---Fernandos note dont change below
---Standing behaviour with pitch watchdog
---Dont allow so fast action on vel pi in one direction. If we command forward and 
-robot wants to slow down, when retractedm the command needs to be very small, 
-or maybe ist he LQR who tirps fault. 
 
+
+--Battery clip so CG is always the same. 
+--Standing behaviour with pitch watchdog
 
 Tune up to 3 group of gains with both switches and kmobs
-
-
-CAD up leg protectors ont he back and on the front below the screen. foam?
-
-
-------------------------------------------------------firmware
---------------------------NON-CRITICAL
-Add screen personolity selector to radio. 
-Parameter or menu options via remote?
-
-
-
-----------------------------------------------------------CAD
-Todo list in CAD folder
-
-
--------------------------------------------------------Jump
-For jump height, box mass is much less sensitive than wheel mass. Wheel mass direct penalty, box mass might help as long as motor can accelerate it fast enough
 
 
 

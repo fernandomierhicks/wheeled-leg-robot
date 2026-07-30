@@ -350,17 +350,17 @@
       "description": "MIT damping gain used for hip setpoints while RUNNING."
     },
     {
-      "symbol": "PARAM_HIP_RUNNING_TFF",
+      "symbol": "PARAM_HIP_RUNNING_TFF_RET",
       "id": 515,
       "group": "GROUP_HIP",
-      "name": "hip_running_tff",
+      "name": "hip_running_tff_ret",
       "default": 0.0,
       "min": -5.0,
       "max": 5.0,
       "flags": [
         "persistent"
       ],
-      "description": "MIT feedforward torque used for hip setpoints while RUNNING."
+      "description": "MIT feedforward torque used for hip setpoints while RUNNING, fully retracted leg (alpha=0). Interpolated toward hip_running_tff_ext by the same gain-schedule alpha as the LQR gains. The hip hold is proportional-only (no integrator), so its steady-state sag is (holding torque - tff)/kp: a single constant tff can only null that at one leg height, and the 4-bar's mechanical advantage makes the required holding torque vary with height. Measure the sag at several alpha holds and set the two anchors from that."
     },
     {
       "symbol": "PARAM_HIP_RUNNING_RAMP_TIME_S",
@@ -374,6 +374,32 @@
         "persistent"
       ],
       "description": "Seconds to ramp kp/tff from 0 to their running value after entering RUNNING, easing in instead of snapping. kd applies at full value throughout. 0 = no ramp."
+    },
+    {
+      "symbol": "PARAM_HIP_CMD_RATE_LIMIT_PER_S",
+      "id": 517,
+      "group": "GROUP_HIP",
+      "name": "hip_cmd_rate_lim",
+      "default": 0.2,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Maximum RUNNING hip-height command slew [normalized extension per second]. The CH3 target is rate-limited before conversion to hip positions; 0 disables limiting. Default 0.2 gives a five-second full-stroke transition and reduces hip reaction impulses and linkage chatter."
+    },
+    {
+      "symbol": "PARAM_HIP_RUNNING_TFF_EXT",
+      "id": 518,
+      "group": "GROUP_HIP",
+      "name": "hip_running_tff_ext",
+      "default": 0.0,
+      "min": -5.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "MIT feedforward torque used for hip setpoints while RUNNING, fully extended leg (alpha=1). Companion to hip_running_tff_ret; the two are linearly interpolated by the gain-schedule alpha. Defaults to the same value as the retracted anchor until bench-tuned separately."
     },
     {
       "symbol": "PARAM_ESTOP_HIP_DISABLE",
@@ -621,6 +647,19 @@
         "persistent"
       ],
       "description": "Wheel encoder feedback watchdog timeout [ms]; increase if CAN is flaky. ODrive PID gains aren't exposed here — tune via the ODrive USB GUI (CAN can't reach those properties on 0.5.x)."
+    },
+    {
+      "symbol": "PARAM_WM_VEL_SLEW_MAX",
+      "id": 769,
+      "group": "GROUP_WHEEL",
+      "name": "wm_vel_slew_max",
+      "default": 1500.0,
+      "min": 0.0,
+      "max": 20000.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Plausibility limit on encoder-velocity change [turns/s^2]. An encoder sample that moved further than this since the last accepted one is treated as corruption and the previous value is held instead; 0 disables the check. Default 1500 sits just above the ~1300 turns/s^2 a free-spinning wheel can reach at MOTOR_TRQ_MAX, so only physically impossible jumps are rejected. Fails open after 3 consecutive rejections so a real runaway is never masked. Defence-in-depth against CAN/encoder noise — not a substitute for fixing the wiring."
     },
     {
       "symbol": "PARAM_LQR_ENABLE",
@@ -1188,7 +1227,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Arm-time gate: max forward pitch [rad] considered recoverable. Default 0.6 (~34°)."
+      "description": "Arm-time-only gate: max forward pitch [rad] considered recoverable at the moment STANDING_UP is requested. Default 0.6 (~34°). Does not bound the catch itself once underway — see standup_div_fwd for that."
     },
     {
       "symbol": "PARAM_STANDUP_MAX_PITCH_BWD_RAD",
@@ -1201,33 +1240,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Arm-time gate: max backward pitch [rad] considered recoverable. Default 0.6 (~34°)."
-    },
-    {
-      "symbol": "PARAM_STANDUP_CROUCH_KP",
-      "id": 1071,
-      "group": "GROUP_CONTROL",
-      "name": "standup_crouch_kp",
-      "default": 80.0,
-      "min": 0.0,
-      "max": 500.0,
-      "flags": [
-        "persistent"
-      ],
-      "description": "Hip MIT position gain during the CROUCH ramp, held through RECOVER/PAUSE. Mirrors jump_kp."
-    },
-    {
-      "symbol": "PARAM_STANDUP_CROUCH_KD",
-      "id": 1072,
-      "group": "GROUP_CONTROL",
-      "name": "standup_crouch_kd",
-      "default": 1.0,
-      "min": 0.0,
-      "max": 5.0,
-      "flags": [
-        "persistent"
-      ],
-      "description": "Hip MIT damping gain, same phases. Mirrors jump_kd."
+      "description": "Arm-time-only gate: max backward pitch [rad] considered recoverable at the moment STANDING_UP is requested. Default 0.6 (~34°). Does not bound the catch itself once underway — see standup_div_bwd for that."
     },
     {
       "symbol": "PARAM_STANDUP_CROUCH_TIME_S",
@@ -1503,6 +1516,71 @@
       "description": "Pitch watchdog backward trip threshold, fully extended leg [rad, magnitude]. Companion to pitch_watchdog_bwd_ret; the two are linearly interpolated by the gain-schedule alpha. Defaults to the same value as the retracted anchor until bench-tuned separately."
     },
     {
+      "symbol": "PARAM_STANDUP_DIVERGE_PITCH_FWD_RAD",
+      "id": 1094,
+      "group": "GROUP_CONTROL",
+      "name": "standup_div_fwd",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "In-progress divergence limit: max forward pitch [rad] tolerated *during* a RECOVER attempt before declaring it diverged (FAULT_STANDUP_FAILED, no retry). Deliberately looser than standup_pitch_fwd (the arm-time-only gate) so a saturated catch has overshoot budget instead of self-tripping the instant it starts. Must stay checked with the same debounce as a normal fault (not instantaneous) to avoid a single noisy IMU sample aborting a good catch."
+    },
+    {
+      "symbol": "PARAM_STANDUP_DIVERGE_PITCH_BWD_RAD",
+      "id": 1095,
+      "group": "GROUP_CONTROL",
+      "name": "standup_div_bwd",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "In-progress divergence limit: max backward pitch [rad] tolerated *during* a RECOVER attempt before declaring it diverged (FAULT_STANDUP_FAILED, no retry). Deliberately looser than standup_pitch_bwd (the arm-time-only gate) — see standup_div_fwd."
+    },
+    {
+      "symbol": "PARAM_LQR_BARRIER_K",
+      "id": 1096,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_barrier_k",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 60.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Backward soft-limit barrier gain [N·m/rad]. Adds extra backward-recovery torque, on top of the normal LQR term, once pitch swings past -lqr_barrier_th (gain-scheduled ret/ext). Zero and exactly inert in normal operation (only engages past the threshold); starts at 0 — tune up on the bench once lqr_barrier_th is set below pitch_wd_bwd."
+    },
+    {
+      "symbol": "PARAM_LQR_BARRIER_THRESH_RET",
+      "id": 1097,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_barrier_th_ret",
+      "default": 0.20944,
+      "min": 0.1,
+      "max": 0.6981317,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Backward pitch magnitude [rad] past which the lqr_barrier_k soft limit engages, fully retracted leg. Default ~12°, between vel_pi's theta_max_bwd_ret (~10°, the normal saturated lean) and pitch_wd_bwd_ret (~15°, the hard ESTOP) so the barrier bites before the watchdog does. Gain-scheduled toward lqr_barrier_th_ext by the same alpha as the LQR gains."
+    },
+    {
+      "symbol": "PARAM_LQR_BARRIER_THRESH_EXT",
+      "id": 1098,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_barrier_th_ext",
+      "default": 0.20944,
+      "min": 0.1,
+      "max": 0.6981317,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Backward pitch magnitude [rad] past which the lqr_barrier_k soft limit engages, fully extended leg. Companion to lqr_barrier_th_ret; defaults to the same value until bench-tuned separately."
+    },
+    {
       "symbol": "PARAM_RADIO_HIP_CMD",
       "id": 1280,
       "group": "GROUP_COMMAND",
@@ -1754,6 +1832,32 @@
         "persistent"
       ],
       "description": "Roll PD derivative gain: hip position offset [rad] per rad/s of measured roll rate (damping term)."
+    },
+    {
+      "symbol": "PARAM_ROLL_KI",
+      "id": 1322,
+      "group": "GROUP_CONTROL",
+      "name": "roll_ki",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Roll PI integral gain: hip position offset [rad] per rad-second of accumulated roll error. Nulls the steady-state roll droop a P-only law leaves against a standing CG/leg-length asymmetry (measured -1.9 deg mean, 98% one-sided, on the 2026-07-28 run). Default 0 = disabled, identical to the previous PD behaviour. Note the integrator output is a persistent differential leg offset, which shifts the CG laterally toward the low wheel -- keep roll_int_max tight and watch roll_watchdog_limit. Conditional-integration anti-windup: the integral only freezes when it would push an already-saturated offset further past roll_offset_max, and always stays free to unwind."
+    },
+    {
+      "symbol": "PARAM_ROLL_INT_MAX",
+      "id": 1323,
+      "group": "GROUP_CONTROL",
+      "name": "roll_int_max",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Roll PI integrator state clamp [rad-s]. Bounds how much standing asymmetry the integral can absorb, and therefore how far it can walk the legs apart on its own: the resulting offset contribution is roll_ki * this, still clamped by roll_offset_max. Keep it small -- a wound-up roll integrator parks the CG laterally off-centre, eating margin against the lateral tip-over the roll watchdog guards."
     },
     {
       "symbol": "PARAM_ROLL_OFFSET_MAX",

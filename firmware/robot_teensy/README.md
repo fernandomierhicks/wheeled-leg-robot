@@ -185,14 +185,104 @@ Balance-point trim (`lqr_pitch_trim_ret/ext`, same α schedule) offsets the pitc
 target so zero velocity holds at the true balance lean when the CG isn't over the
 axle. Edit via the Params tab, or repoint a live-tune slot at it for a future
 bench session (see below).  
+
+**Backward soft-limit barrier** — authority is asymmetric: the leg linkage
+hits the ground on a hard backward lean well before forward pitch runs out of
+room. Rather than an asymmetric clamp on `lqr_torque_limit` (which would also
+cap the *positive* torque used to recover from that same backward lean —
+tightening the wrong direction), the LQR gets one extra term, added right
+after `tau_sym`: once pitch swings past a backward threshold
+(`lqr_barrier_th_ret/ext`, α-scheduled like everything else — default ~12°,
+between the vel-PI's saturated lean and the pitch-watchdog trip angle so it
+bites first), `lqr_barrier_k` times the overshoot is subtracted from
+`tau_sym` (sign convention: this drives more backward-recovery torque, same
+direction `k_pitch` already pushes on a backward pitch error). Continuous at
+the boundary and exactly zero inside it, so `lqr_barrier_k=0` (its default)
+leaves today's tuning byte-identical; tune it up on the bench once the
+threshold is confirmed to sit inside `pitch_wd_bwd_ret/ext`.  
 Outer loops: velocity PI (sets θ_ref), yaw PI (differential torque). The
 velocity PI uses directional conditional-integration anti-windup: its integral
 freezes when an update would push the requested lean farther past the active
 asymmetric clamp, but remains free to unwind back out of saturation.
 Feedforward: FF1 cancels hip reaction torque; FF2 adds gravity compensation.
 
+**Code-level backward target invariant** — a post-mortem on a fall found the
+velocity PI's configured `theta_max_bwd_ret/ext` clamp, combined with a
+negative (backward-leaning) `lqr_pitch_trim_ret/ext`, could ask for an
+absolute pitch target past the pitch watchdog's own trip angle — the velocity
+loop was, in effect, allowed to request a lean the watchdog would then fault
+on. `control_safety.h`'s `safe_backward_theta_limit()` now caps the
+*effective* backward clamp every tick, independent of what's persisted:
+`theta_max_bwd <= pitch_watchdog_bwd + pitch_trim − margin`, with a fixed
+`margin` of 3° (`BACKWARD_TARGET_MARGIN_RAD` in `control_loop.cpp`, not a
+runtime param — a code-level floor, not a tuning knob). This tighter of the
+two limits also feeds `g_state.theta_max_bwd` and the vel-PI anti-windup, so
+health/saturation reporting reflects what's actually enforced. A degenerate
+trim/watchdog pair that would leave zero backward authority clamps to 0
+rather than honoring a configured limit past the watchdog.
+
+**Direct velocity-term guard** — at the same fall, the direct `lqr_k_vel`
+term (the `x2 = wheel_vel − v_ref` contribution to `tau_sym`) was found
+opposing/cancelling much of the pitch and pitch-rate recovery torque right as
+the pitch watchdog was about to trip on a full-reverse command.
+`backward_velocity_term_guard()` now fades *only* the velocity term, and only
+when it opposes recovery, once pitch passes the (already α-scheduled)
+backward barrier threshold — linearly to zero at the backward pitch
+watchdog angle. It leaves the term untouched inside the barrier and
+untouched whenever it's already assisting recovery, so `pitch_term`/
+`rate_term` keep full authority to arrest the fall near the mechanical
+boundary while the tuned response elsewhere is unaffected.
+
+**RUNNING hip-height rate limit** — the raw radio hip-height target (CH3,
+`radio_hip_cmd`, normalized `t∈[0,1]`) is slewed by `hip_cmd_rate_lim`
+[normalized extension/s] *before* `hip_cmd_to_setpoints()` converts it to
+motor positions, so a snapped hip stick can't step the legs straight to a new
+height — the default `0.2` gives a 5 s full-stroke transition and cuts down
+reaction-current impulses and linkage chatter. `0` disables limiting. Only
+applies to normal RUNNING hip-height commands: calibration, MANUAL, the ESTOP
+hold ramp, JUMPING's own crouch/extend phases, and STANDING_UP's catch
+sequencing all set hip setpoints directly and bypass it. The disarm ramp
+(RUNNING → STANDBY) slews from the last *filtered* command, not the raw radio
+target, so releasing the hips doesn't also snap the target underneath the
+ramp.
+
+**Hip feedforward is α-scheduled** (`hip_running_tff_ret`/`_ext`, same α as
+the LQR gains). The hip hold is a pure MIT impedance with no integrator, so
+its steady-state sag is `(holding_torque − tff)/kp` — and because the 4-bar's
+mechanical advantage changes with leg height, the holding torque does too
+(measured 2026-07-28: ~10 A of hip current at α≈0.05 versus ~6.8 A at
+α≈0.145, i.e. *more* torque needed retracted). A single constant `tff`
+therefore can only null the sag at one height; the two anchors let it track.
+Both default to 0, so an untuned robot behaves exactly as before. Measure the
+hold error at several α plateaus and fit the anchors from that rather than
+extrapolating from one — and note `hip_running_kp` is bypassed entirely while
+the roll controller is active (`hip_roll_kp` replaces it), so tune the anchors
+in whichever mode you actually fly.
+
+**Wheel-velocity plausibility filter and debounced runaway watchdog** — the
+ODrive encoder feed can develop escalating single-sample corruption (bench
+log 2026-07-28: jumps up to 6.9 turns/s between consecutive 50 Hz samples,
+against a free-spin physical ceiling near 1300 turns/s², rising from ~0 % to
+14.6 % of samples over the last minute of a run). One such spike tripped
+`FAULT_WHEEL_RUNAWAY` while the robot was otherwise balancing normally.
+Two independent mitigations, both defence-in-depth — the real fix is
+electrical:
+1. `wheel_motors_poll()` validates each new encoder sample against the last
+   accepted one via `wheel_vel_glitch_filter()` (`teensy/src/wheel_safety.h`),
+   allowing `wm_vel_slew_max` [turns/s²] of change scaled by the time since
+   the last accepted sample (so a CAN gap widens the window rather than
+   rejecting the sample that ends it). Rejected samples hold the previous
+   value and bump `vel_glitch_count`. It **fails open after 3 consecutive
+   rejections**, so a genuine runaway can never be masked. `0` disables it.
+   Filtering happens at source, so both runaway checks (RUNNING and
+   STANDING_UP) and the balance loop's velocity term all get clean data.
+2. The RUNNING runaway watchdog is now **debounced** (`WHEEL_RUNAWAY_MS`,
+   50 ms) like the pitch/roll watchdogs, instead of ESTOPping on a single
+   over-limit sample. Much shorter than their 200 ms because a genuinely
+   runaway wheel covers ground fast.
+
 **Roll controller (active suspension)** — off by default (`roll_ctrl_en`). In
-RUNNING only, a PD loop on roll angle/rate (`roll_kp`, `roll_kd`) produces a
+RUNNING only, a PI-D loop on roll angle/rate (`roll_kp`, `roll_ki`, `roll_kd`) produces a
 differential hip position offset (`+offset` one leg, `−offset` the other,
 clamped to `roll_offset_max` and to calibrated hip travel) that levels/leans the
 body about +X. The setpoint comes from radio **CH1**, scaled by the active
@@ -205,6 +295,27 @@ the low wheel and wheels make no lateral force, so the setpoint is hard-clamped
 and a roll watchdog (`roll_watchdog_en`, `roll_watchdog_limit`) ESTOPs with
 `FAULT_ROLL_WATCHDOG` if `|roll|` exceeds the limit for > 200 ms. FF1 uses the
 hip-current *sum*, so pure differential roll motion cancels in it.
+
+The **integral term** (`roll_ki`, clamp `roll_int_max`) exists because
+differential-hip-offset → roll-angle is essentially a static gain, not an
+integrator, so a P-only law *must* leave steady-state error against any
+standing asymmetry — measured −1.9° mean roll, 98 % one-sided, on the
+2026-07-28 run. Defaults to **0** (disabled), which reproduces the previous PD
+response exactly. Anti-windup reuses the velocity PI's conditional-integration
+helper (`velocity_pi_integral_step()`, symmetric limits here): the integral
+freezes only when it would push an already-saturated offset further past
+`roll_offset_max`, and always stays free to unwind. It is cleared whenever
+roll control is disabled and on every RUNNING entry, so re-enabling can't snap
+the legs apart from a stale value.
+
+Tune it knowing what the integrator physically *is*: a persistent differential
+leg offset, i.e. a permanent lateral CG shift toward the low wheel — the exact
+quantity `roll_watchdog_limit` guards. That is why `roll_int_max` is a separate,
+deliberately small clamp (default 0.1 rad·s) rather than relying on
+`roll_offset_max` alone. It also masks rather than fixes a mechanical
+asymmetry, so it is worth confirming the bias isn't a real CG/leg-length
+problem first. There is no integrator state in telemetry, but the total
+commanded offset is observable as `(hip_l_cmd_pos_rad − hip_r_cmd_pos_rad)/2`.
 
 ## Live parameter tuning (`teensy/src/live_tune.h`)
 
@@ -301,7 +412,7 @@ Full FSM diagram: `teensy/state_machine.md`.
 | 8 | `STATE_STANDING_UP` | Arm-time recovery from a fallen pose — retract legs, energetic wheel push, then RUNNING |
 | 9 | `STATE_DISARMING` | Normal active-state or radio-calibration exit: wheel IDLE immediately, hip torque ramps safely to zero, then STANDBY |
 
-**Standing-up mode (`STATE_STANDING_UP`)**: entered on arm only when `standup_enable=1` and pitch is within the recoverable range; with `standup_enable=0` (default) arming goes straight to `RUNNING`, byte-identical to before this state existed. Two phases: **CROUCH** ramps the hips to the retracted pose and holds them there rigidly for the rest of the sequence — hips move once, to a fixed pose, and never actively right the robot. **RECOVER** does the actual catch entirely with wheel torque: a saturated P/D law on pitch and pitch-rate (`tau = K_pitch*pitch + K_rate*pitch_rate`, same sign convention as the small-angle LQR) pushes the wheelbase back under the CG until pitch settles in-band, then hands off to `RUNNING` for the tuned LQR to take over. Full spec: `standing_up.md`.
+**Standing-up mode (`STATE_STANDING_UP`)**: entered on arm only when `standup_enable=1` and pitch is within the recoverable range (`standup_pitch_fwd/bwd`, checked once at arm time only); with `standup_enable=0` (default) arming goes straight to `RUNNING`, byte-identical to before this state existed. Two phases: **CROUCH** ramps the hips to the retracted pose and holds them there rigidly for the rest of the sequence, at the same `hip_running_kp/kd` RUNNING uses (not a separate standup-only gain) so the eventual handoff is a hip *position* step only, not also a stiffness step — hips move once, to a fixed pose, and never actively right the robot. **RECOVER** does the actual catch entirely with wheel torque: a saturated P/D law on the trim-relative pitch error and pitch-rate (`tau = K_pitch*(pitch−lqr_pitch_trim_ret) + K_rate*pitch_rate`, same sign convention as the small-angle LQR, and the same trim RUNNING's LQR regulates to since legs are pinned retracted throughout) pushes the wheelbase back under the CG until pitch settles in-band around that trim, then hands off to `RUNNING` for the tuned LQR to take over. A separate, looser pitch range (`standup_div_fwd/bwd`, debounced 50 ms) aborts a catch that's diverging mid-attempt — deliberately not the same params as the arm-time gate, so a saturated catch has overshoot budget instead of self-tripping the instant it starts. Full spec: `standing_up.md`.
 
 ### Canonical state colour table
 

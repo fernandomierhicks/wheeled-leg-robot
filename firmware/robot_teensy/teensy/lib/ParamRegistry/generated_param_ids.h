@@ -21,8 +21,10 @@
 #define PARAM_LOOP_PROFILE_ENABLE                  0x000A
 #define PARAM_HIP_RUNNING_KP                       0x0201
 #define PARAM_HIP_RUNNING_KD                       0x0202
-#define PARAM_HIP_RUNNING_TFF                      0x0203
+#define PARAM_HIP_RUNNING_TFF_RET                  0x0203
 #define PARAM_HIP_RUNNING_RAMP_TIME_S              0x0204
+#define PARAM_HIP_CMD_RATE_LIMIT_PER_S             0x0205
+#define PARAM_HIP_RUNNING_TFF_EXT                  0x0206
 #define PARAM_ESTOP_HIP_DISABLE                    0x0200
 #define PARAM_CALIB_SEEK_SPEED                     0x0120
 #define PARAM_CALIB_MOVE_SPEED                     0x0121
@@ -42,6 +44,7 @@
 #define PARAM_CALIB_RAMPDOWN_TIME_S                0x012F
 #define PARAM_CALIB_BYPASS_EN                      0x0131
 #define PARAM_WM_ENC_TIMEOUT_MS                    0x0300
+#define PARAM_WM_VEL_SLEW_MAX                      0x0301
 #define PARAM_LQR_ENABLE                           0x0400
 #define PARAM_SIM_PITCH_RAD                        0x0401
 #define PARAM_LQR_TORQUE_LIMIT                     0x0402
@@ -88,8 +91,6 @@
 #define PARAM_STANDUP_ENABLE                       0x042C
 #define PARAM_STANDUP_MAX_PITCH_FWD_RAD            0x042D
 #define PARAM_STANDUP_MAX_PITCH_BWD_RAD            0x042E
-#define PARAM_STANDUP_CROUCH_KP                    0x042F
-#define PARAM_STANDUP_CROUCH_KD                    0x0430
 #define PARAM_STANDUP_CROUCH_TIME_S                0x0431
 #define PARAM_STANDUP_K_PITCH                      0x0432
 #define PARAM_STANDUP_K_RATE                       0x0433
@@ -111,6 +112,11 @@
 #define PARAM_PITCH_WATCHDOG_BWD_RET               0x0443
 #define PARAM_PITCH_WATCHDOG_FWD_EXT               0x0444
 #define PARAM_PITCH_WATCHDOG_BWD_EXT               0x0445
+#define PARAM_STANDUP_DIVERGE_PITCH_FWD_RAD        0x0446
+#define PARAM_STANDUP_DIVERGE_PITCH_BWD_RAD        0x0447
+#define PARAM_LQR_BARRIER_K                        0x0448
+#define PARAM_LQR_BARRIER_THRESH_RET               0x0449
+#define PARAM_LQR_BARRIER_THRESH_EXT               0x044A
 #define PARAM_RADIO_HIP_CMD                        0x0500
 #define PARAM_RADIO_VEL_MAX                        0x0501
 #define PARAM_RADIO_YAW_MAX                        0x0502
@@ -130,6 +136,8 @@
 #define PARAM_ROLL_CTRL_EN                         0x051C
 #define PARAM_ROLL_KP                              0x051D
 #define PARAM_ROLL_KD                              0x051E
+#define PARAM_ROLL_KI                              0x052A
+#define PARAM_ROLL_INT_MAX                         0x052B
 #define PARAM_ROLL_OFFSET_MAX                      0x051F
 #define PARAM_ROLL_RATE_LIM                        0x0520
 #define PARAM_ROLL_WATCHDOG_EN                     0x0521

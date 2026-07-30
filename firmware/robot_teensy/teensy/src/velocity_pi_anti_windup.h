@@ -2,7 +2,10 @@
 
 #include <math.h>
 
-// Conditional-integration anti-windup for the velocity PI's lean command.
+// Conditional-integration anti-windup, shared by the velocity PI's lean
+// command and the roll PI's differential hip offset. Named for its original
+// caller; the math is generic — "theta" is just the saturating output, and a
+// symmetric limit is expressed by passing the same value for fwd and bwd.
 //
 // The proportional and acceleration-feedforward terms are supplied together
 // as theta_non_integral. The candidate integral is rejected only when its

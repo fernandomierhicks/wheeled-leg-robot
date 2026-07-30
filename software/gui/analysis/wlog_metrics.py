@@ -62,7 +62,8 @@ _SCALAR_FIELDS = [
     "timestamp_ms", "pitch_rad", "pitch_rate_rads", "roll_rad", "roll_rate_rads",
     "yaw_rad", "yaw_rate_rads", "wheel_vel_avg", "wm_l_vel_turns_s", "wm_r_vel_turns_s",
     "hip_l_current_a", "hip_r_current_a", "whl_tau_l", "whl_tau_r",
-    "theta_ref", "v_ref", "omega_cmd_rds", "tau_sym", "tau_yaw",
+    "hip_l_pos_rad", "hip_r_pos_rad", "hip_l_cmd_pos_rad", "hip_r_cmd_pos_rad",
+    "theta_ref", "v_ref", "omega_cmd_rds", "tau_sym", "tau_yaw", "pitch_trim_rad",
     "health_flags", "fault_code", "robot_state", "loop_count", "active_profile",
 ]
 

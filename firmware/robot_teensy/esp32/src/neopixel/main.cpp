@@ -2,7 +2,7 @@
 #include <FastLED.h>
 
 #define PIN_NEO    13
-#define NUM_LEDS   30
+#define NUM_LEDS   100
 #define BRIGHTNESS 200
 
 static CRGB leds[NUM_LEDS];

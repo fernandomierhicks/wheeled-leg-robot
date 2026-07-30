@@ -51,6 +51,12 @@ static const BuzzerNote JUMP_MELODY[] = {
     {84, 120, 20},  // C6
     {88, 400,  0},  // E6 — hold: ~2.6 s total, state timer holds to 3 s
 };
+static const BuzzerNote STANDUP_MELODY[] = {
+    // Fallen -> recovering: low, unresolved — outcome (capture vs. fail) unknown yet
+    {48,  90, 30},  // C3
+    {50,  90, 30},  // D3
+    {53, 150,  0},  // F3
+};
 
 // ── State machine ─────────────────────────────────────────────────────────────
 
@@ -116,12 +122,16 @@ static float     s_jp_from_R       = 0.0f;
 
 // ── Standing-up FSM state ─────────────────────────────────────────────────────
 typedef enum : uint8_t { SU_CROUCH = 0, SU_RECOVER = 1, SU_PAUSE = 2 } StandupPhase;
+// Divergence debounce — fixed duration (not a tunable param), same rationale
+// as control_loop.cpp's PITCH_WATCHDOG_MS: a safety-timeout, not a tuning knob.
+static constexpr uint32_t STANDUP_DIVERGE_MS = 50;
 static StandupPhase s_su_phase             = SU_CROUCH;
 static uint32_t     s_su_phase_ms          = 0;
 static float        s_su_nom_L, s_su_nom_R;       // hip pos snapshot at entry
 static float        s_su_ret_L, s_su_ret_R;       // calibrated retracted target
 static uint8_t      s_su_attempt           = 0;   // 1-based RECOVER attempt counter
 static uint32_t     s_su_capture_since_ms  = 0;   // 0 = not currently in-band
+static uint32_t     s_su_diverge_start_ms  = 0;   // 0 = not currently past the divergence limit
 static bool         s_su_captured          = false;
 
 // ── MANUAL GUI watchdog ───────────────────────────────────────────────────────
@@ -415,11 +425,13 @@ static void on_standing_up() {
 
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> STANDING_UP");
+        g_buzzer.play(STANDUP_MELODY, sizeof(STANDUP_MELODY) / sizeof(STANDUP_MELODY[0]));
         s_su_phase            = SU_CROUCH;
         s_su_phase_ms         = millis();
         s_su_attempt          = 0;
         s_su_captured         = false;
         s_su_capture_since_ms = 0;
+        s_su_diverge_start_ms = 0;
         s_su_nom_L = hm_L.pos_rad;
         s_su_nom_R = hm_R.pos_rad;
         hip_cmd_to_setpoints(0.0f, &s_su_ret_L, &s_su_ret_R);  // t=0 → retracted
@@ -428,8 +440,52 @@ static void on_standing_up() {
 
     g_state.standup_state = (uint8_t)s_su_phase;
 
-    float kp      = param_get(PARAM_STANDUP_CROUCH_KP);
-    float kd      = param_get(PARAM_STANDUP_CROUCH_KD);
+    // Refuse to command hips without valid calibrated limits — mirrors the
+    // identical guard in on_jumping(). Without it, hip_cmd_to_setpoints(0.0f)
+    // silently returns pos=0 (span==0), not "retracted", which would snap the
+    // hip to an arbitrary pose at full stiffness. Unlike on_jumping(), there's
+    // no LQR fallback to keep running here (pitch is outside its
+    // linearization region), so an invalid-limits abort goes straight to
+    // ESTOP rather than just skipping hip commands for the tick.
+    if (!hm_limits_L.valid || !hm_limits_R.valid) {
+        comm_log(LOG_LEVEL_WARN, "STANDING_UP: limits not valid — aborting");
+        g_state.fault_code = FAULT_STANDUP_FAILED;
+        stateMachine_request_estop();
+        return;
+    }
+
+    float pitch      = g_state.pitch_rad;
+    float pitch_rate = g_state.pitch_rate_rads;
+    // Legs are pinned at the retracted target for the entire STANDING_UP
+    // sequence, so the retracted-anchor balance trim applies throughout — no
+    // need to gain-schedule by leg height the way control_loop.cpp does.
+    float trim = param_get(PARAM_LQR_PITCH_TRIM_RET);
+
+    // Divergence check (no retry): pitch grew past the recoverable range
+    // mid-attempt — a wrong-direction/unstable response, not just a slow one.
+    // Deliberately looser than the arm-time-only entry gate
+    // (standup_pitch_fwd/bwd) so a saturated catch has overshoot budget
+    // instead of self-tripping the instant it starts, and debounced
+    // (STANDUP_DIVERGE_MS) like every other fault instead of instantaneous,
+    // so one noisy IMU sample can't abort a good catch. Checked every phase,
+    // including CROUCH, not just RECOVER/PAUSE.
+    if (pitch > param_get(PARAM_STANDUP_DIVERGE_PITCH_FWD_RAD) ||
+        pitch < -param_get(PARAM_STANDUP_DIVERGE_PITCH_BWD_RAD)) {
+        if (s_su_diverge_start_ms == 0) s_su_diverge_start_ms = millis();
+        if (millis() - s_su_diverge_start_ms > STANDUP_DIVERGE_MS) {
+            g_state.fault_code = FAULT_STANDUP_FAILED;
+            stateMachine_request_estop();
+            return;
+        }
+    } else {
+        s_su_diverge_start_ms = 0;
+    }
+
+    // Same hip gains RUNNING will use — not a separate standup_crouch_kp/kd —
+    // so capture handoff to RUNNING (on_running(), from_standing_up) doesn't
+    // also have to absorb a stiffness step on top of the hip position step.
+    float kp      = param_get(PARAM_HIP_RUNNING_KP);
+    float kd      = param_get(PARAM_HIP_RUNNING_KD);
     float elapsed = (millis() - s_su_phase_ms) / 1000.0f;
 
     if (s_su_phase == SU_CROUCH) {
@@ -441,6 +497,7 @@ static void on_standing_up() {
         hip_motors_set_setpoint_L(s_su_nom_L + alpha * (s_su_ret_L - s_su_nom_L), dq_L, kp, kd, 0.0f);
         hip_motors_set_setpoint_R(s_su_nom_R + alpha * (s_su_ret_R - s_su_nom_R), dq_R, kp, kd, 0.0f);
         wheel_motors_send(0.0f, 0.0f);  // no wheel motion until legs are known-good
+        g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = 0.0f;
         if (elapsed >= crouch_t) {
             s_su_phase    = SU_RECOVER;
             s_su_phase_ms = millis();
@@ -453,18 +510,6 @@ static void on_standing_up() {
     hip_motors_set_setpoint_L(s_su_ret_L, 0.0f, kp, kd, 0.0f);
     hip_motors_set_setpoint_R(s_su_ret_R, 0.0f, kp, kd, 0.0f);
 
-    float pitch      = g_state.pitch_rad;
-    float pitch_rate = g_state.pitch_rate_rads;
-
-    // Divergence check (no retry): pitch grew past the recoverable range
-    // mid-attempt — a wrong-direction/unstable response, not just a slow one.
-    if (pitch > param_get(PARAM_STANDUP_MAX_PITCH_FWD_RAD) ||
-        pitch < -param_get(PARAM_STANDUP_MAX_PITCH_BWD_RAD)) {
-        g_state.fault_code = FAULT_STANDUP_FAILED;
-        stateMachine_request_estop();
-        return;
-    }
-
     if (s_su_phase == SU_RECOVER) {
         // Dedicated runaway hard-backup, independent of PARAM_WHEEL_VEL_LIMIT_TURNS_S
         // so tuning one doesn't loosen the other's safety margin.
@@ -475,7 +520,12 @@ static void on_standing_up() {
             return;
         }
 
-        float tau = param_get(PARAM_STANDUP_K_PITCH) * pitch + param_get(PARAM_STANDUP_K_RATE) * pitch_rate;
+        // x0 mirrors the LQR's own pitch error term (control_loop.cpp:
+        // pitch - theta_ref - pitch_trim, with theta_ref=0 here — standup
+        // isn't tracking a velocity command) so the catch regulates to the
+        // same equilibrium RUNNING will hold, instead of to pitch=0.
+        float x0  = pitch - trim;
+        float tau = param_get(PARAM_STANDUP_K_PITCH) * x0 + param_get(PARAM_STANDUP_K_RATE) * pitch_rate;
         float trq_limit = param_get(PARAM_STANDUP_TORQUE_LIMIT);
         if (tau >  trq_limit) tau =  trq_limit;
         if (tau < -trq_limit) tau = -trq_limit;
@@ -484,8 +534,12 @@ static void on_standing_up() {
         wheel_motors_send(tau, tau);  // symmetric, no yaw/differential — straight push only
         g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = tau;
 
-        // Capture check: in-band continuously for the hold time => good enough for LQR
-        bool in_band = fabsf(pitch)      < param_get(PARAM_STANDUP_CAPTURE_PITCH_RAD) &&
+        // Capture check: in-band relative to the same trim the catch is
+        // regulating to (not pitch=0), continuously for the hold time =>
+        // good enough for LQR. A trim-blind band centered on zero would
+        // capture mid-roll, since x0=0 there requires sustained forward
+        // acceleration rather than being an equilibrium.
+        bool in_band = fabsf(x0)         < param_get(PARAM_STANDUP_CAPTURE_PITCH_RAD) &&
                         fabsf(pitch_rate) < param_get(PARAM_STANDUP_CAPTURE_RATE_RADS);
         if (in_band) {
             if (s_su_capture_since_ms == 0) s_su_capture_since_ms = millis();
@@ -509,6 +563,7 @@ static void on_standing_up() {
     }
     else {  // SU_PAUSE
         wheel_motors_send(0.0f, 0.0f);
+        g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = 0.0f;
         if (elapsed >= param_get(PARAM_STANDUP_RETRY_PAUSE_S)) {
             s_su_attempt++;
             s_su_phase    = SU_RECOVER;

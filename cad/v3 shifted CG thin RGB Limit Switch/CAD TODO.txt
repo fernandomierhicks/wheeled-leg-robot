@@ -8,11 +8,7 @@ Measure battery strap
 
 
 
-
-
-Thin RGB
-
--------------------------------------------------------
+------------------------------------------------------
 NOTES
 Cant tighten ball bearings because bearings are not flush with each other, put a M4 spacer in between?
 

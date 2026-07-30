@@ -135,7 +135,11 @@ _GROUP_SAFETY = 0x07
 _WATCHDOG_PARAM_IDS = frozenset({
     0x0009,  # PARAM_WATCHDOG_ENABLE (hardware WDOG1)
     0x0300,  # PARAM_WM_ENC_TIMEOUT_MS (wheel encoder feedback watchdog)
+    0x0301,  # PARAM_WM_VEL_SLEW_MAX (encoder-velocity plausibility filter; guards the runaway trip)
+    0x0403,  # PARAM_WHEEL_VEL_LIMIT_TURNS_S (soft wheel governor; ESTOP at 2x)
     0x0423,  # PARAM_PITCH_WATCHDOG_ENABLE
+    0x0521,  # PARAM_ROLL_WATCHDOG_EN
+    0x0522,  # PARAM_ROLL_WATCHDOG_LIMIT (trips FAULT_ROLL_WATCHDOG)
     0x0131,  # PARAM_CALIB_BYPASS_EN (skip switch-calibration requirement for RUNNING)
     0x0429,  # PARAM_RUNNING_WHEEL_BYPASS_EN (skip wheel-enable requirement for RUNNING)
     0x042A,  # PARAM_ALPHA_FORCE_RETRACTED_EN (force gain-sched alpha=0, bypass calib-valid check)
@@ -161,15 +165,19 @@ _SYSTEM_OVERRIDE_PARAM_IDS = frozenset({
 # explicitly declares their real group as CONTROL/HIP (see
 # generated_param_table.inc .group_id). _effective_group()'s default
 # (id >> 8) heuristic gets these wrong, so override them explicitly here —
-# same pattern as the other override sets in this file.
+# same pattern as the other override sets in this file. The roll *watchdog*
+# pair (0x0521/0x0522) is deliberately absent — it goes to Safety via
+# _WATCHDOG_PARAM_IDS, and this set doubles as the "Roll" subgroup membership
+# below, so leaving them here would route them to a subgroup of a group they
+# no longer belong to.
 _ROLL_CONTROL_OVERRIDE_PARAM_IDS = frozenset({
     0x051C,  # PARAM_ROLL_CTRL_EN
     0x051D,  # PARAM_ROLL_KP
     0x051E,  # PARAM_ROLL_KD
     0x051F,  # PARAM_ROLL_OFFSET_MAX
     0x0520,  # PARAM_ROLL_RATE_LIM
-    0x0521,  # PARAM_ROLL_WATCHDOG_EN
-    0x0522,  # PARAM_ROLL_WATCHDOG_LIMIT
+    0x052A,  # PARAM_ROLL_KI      (0x052x block — same override/subgroup treatment)
+    0x052B,  # PARAM_ROLL_INT_MAX
 })
 _ROLL_HIP_OVERRIDE_PARAM_IDS = frozenset({
     0x0523,  # PARAM_HIP_ROLL_KP
@@ -230,7 +238,7 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     }), 0x01, "Shared"),
 
     # Balance/control tuning.
-    (frozenset({0x0400, 0x0402, 0x0403}), 0x04, "LQR Core"),
+    (frozenset({0x0400, 0x0402}), 0x04, "LQR Core"),
     (range(0x0424, 0x0429), 0x04, "LQR Gains"),
     (range(0x0404, 0x040C), 0x04, "Velocity PI"),
     (range(0x040C, 0x0412), 0x04, "Yaw PI"),

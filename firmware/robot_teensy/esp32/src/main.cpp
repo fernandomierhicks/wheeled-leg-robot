@@ -22,9 +22,25 @@
 
 // ── NeoPixel ──────────────────────────────────────────────────────────────────
 
-#define PIN_NEO    13
-#define NUM_LEDS   30
-#define BRIGHTNESS 200
+#define PIN_NEO      13
+// Total physical LEDs wired on the data line (160). The first LED_LEAD_IN
+// (47) sit ahead of the robot in the chain (not on the chassis) and are
+// always kept off; the remaining ROBOT_LEDS (113) wrap the robot.
+#define NUM_LEDS     160
+#define ROBOT_LEDS   113
+#define LED_LEAD_IN  (NUM_LEDS - ROBOT_LEDS)
+#define BRIGHTNESS   200
+
+// Original strip was 30 LEDs around the same perimeter. Several animations
+// advance a fixed LED-index step per tick; those steps are scaled by
+// ROBOT_LEDS/OLD_NUM_LEDS below so lap times/speeds stay the same in real
+// time regardless of strip density.
+#define OLD_NUM_LEDS 30
+
+// Scales a trail/dot length that was tuned by eye for the old 30-LED ring up
+// to ROBOT_LEDS, so comet tails and dots stay the same proportional size on
+// the ring instead of shrinking to a speck as the strip gets denser.
+#define SCALE_LEN(old_len) ((uint8_t)(((uint32_t)(old_len) * ROBOT_LEDS) / OLD_NUM_LEDS))
 
 // Robot state values — must match RobotStateEnum in teensy/src/robot_state.h
 enum : uint8_t {
@@ -41,22 +57,30 @@ enum : uint8_t {
 };
 
 // ── Strip geometry ────────────────────────────────────────────────────────────
-// Strip wraps clockwise around a square chassis top.  FRONT face is split:
-// LEDs 0-3 at the strip head and 27-29 at the tail.
-// Order: FRONT(0-3) → RIGHT(4-11) → REAR(12-19) → LEFT(20-26) → FRONT(27-29)
+// Strip wraps clockwise (viewed from above) around a 156mm(front/rear) x
+// 202mm(left/right) chassis top. REAR face is split across the strip seam:
+// robot-local index 0 (physical strip index LED_LEAD_IN) sits at mid-back,
+// so REAR gets the tail of the robot LEDs (local indices 101-112) and the
+// head (local indices 0-12).
+// Order: REAR(101-112,0-12) → RIGHT(13-44) → FRONT(45-68) → LEFT(69-100) → REAR seam
+// Side lengths are proportional to physical side length (156/202mm) out of
+// 113 LEDs total: front=24, right=32, rear=25, left=32.
+// Robot-local index i maps to physical strip index LED_LEAD_IN + i; the dead
+// LED_LEAD_IN LEDs (0-46) precede it and are never lit.
 
 #define SIDE_FRONT 0
 #define SIDE_RIGHT 1
 #define SIDE_REAR  2
 #define SIDE_LEFT  3
-static const uint8_t SIDE_LENS[4] = {7, 8, 8, 7};
+static const uint8_t SIDE_LENS[4] = {24, 32, 25, 32};
 
 static uint8_t side_led(uint8_t side, uint8_t i) {
-    static const uint8_t F[7] = {27, 28, 29, 0, 1, 2, 3};
-    if (side == SIDE_FRONT) return F[i];
-    if (side == SIDE_RIGHT) return  4 + i;
-    if (side == SIDE_REAR)  return 12 + i;
-    /* SIDE_LEFT */         return 20 + i;
+    static const uint8_t R[25] = {101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
+                                     0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12};
+    if (side == SIDE_REAR)  return R[i];
+    if (side == SIDE_RIGHT) return 13 + i;
+    if (side == SIDE_FRONT) return 45 + i;
+    /* SIDE_LEFT */         return 69 + i;
 }
 
 static void fill_side(CRGB* buf, uint8_t side, CRGB color) {
@@ -193,6 +217,24 @@ static CRGB dist_to_color(uint16_t d) {
     return CRGB(200, (uint8_t)(200u - (uint32_t)t * 200u / 255u), 0);
 }
 
+// Smooth quadratic brightness falloff for comet-style trails: brightest
+// (~255) at step 0, ~0 by step `len`. Used instead of small fixed brightness
+// tables so trail length can scale with ROBOT_LEDS (via SCALE_LEN) without
+// hand-tuning a lookup table for every strip density.
+static uint8_t comet_falloff(uint8_t step, uint8_t len) {
+    if (step >= len) return 0;
+    uint16_t frac = (uint16_t)(len - step) * 255u / len;  // 255..~0
+    return (uint8_t)(((uint32_t)frac * frac) / 255u);
+}
+
+// Comet/dot lengths scaled with sqrt(ROBOT_LEDS/OLD_NUM_LEDS) instead of the
+// linear SCALE_LEN ratio, so they grow more modestly as the strip gets
+// denser and keep reading as a thin bright point + short tail rather than
+// ballooning into a thick glowing block.
+static uint8_t scale_len_thin(uint8_t old_len) {
+    return (uint8_t)((float)old_len * sqrtf((float)ROBOT_LEDS / (float)OLD_NUM_LEDS));
+}
+
 // ── Animations ────────────────────────────────────────────────────────────────
 
 // DISCONNECTED (no Teensy heard) — dim red slow pulse, all LEDs. Deliberately a
@@ -201,7 +243,7 @@ static CRGB dist_to_color(uint16_t d) {
 // active fault.
 static void anim_ghost_comet(CRGB* buf, uint32_t tick) {
     uint8_t bri = map(sin8((uint8_t)tick), 0, 255, 8, 70);
-    fill_solid(buf, NUM_LEDS, CRGB(bri, 0, 0));
+    fill_solid(buf, ROBOT_LEDS, CRGB(bri, 0, 0));
 }
 
 // STARTUP — white cascade: each side breathes with 90° phase offset (CW wave)
@@ -213,49 +255,66 @@ static void anim_cascade_startup(CRGB* buf, uint32_t tick) {
     }
 }
 
-// CALIBRATION — blue scanner bar advancing around the ring
+// CALIBRATION — blue scanner bar advancing around the ring, bright near-white
+// head with a smooth blue fade-out tail scaled to the ring size.
 static void anim_scanner_calibration(CRGB* buf, uint32_t tick) {
-    fill_solid(buf, NUM_LEDS, CRGB(0, 0, 25));
-    int head = (int)((tick / 2u) % NUM_LEDS);
-    const CRGB kBar[4] = {CRGB(90, 90, 255), CRGB(0, 0, 200), CRGB(0, 0, 130), CRGB(0, 0, 60)};
-    for (int t = 0; t < 4; t++)
-        buf[(head + t) % NUM_LEDS] = kBar[t];
+    fill_solid(buf, ROBOT_LEDS, CRGB(0, 0, 25));
+    int head = (int)(((uint32_t)tick * ROBOT_LEDS) / (2u * OLD_NUM_LEDS) % ROBOT_LEDS);
+    const uint8_t barLen = scale_len_thin(4);
+    for (uint8_t t = 0; t < barLen; t++) {
+        uint8_t bri = comet_falloff(t, barLen);
+        CRGB c = (t == 0) ? CRGB(90, 90, 255) : CRGB(0, 0, bri);
+        buf[(head + t) % ROBOT_LEDS] = c;
+    }
 }
 
-// STANDBY — slow amber ripple: a bright crest sweeps the full ring every ~3 s,
-// rising from a dim baseline so the strip always glows warmly.
+// STANDBY — slow amber ripple: 3 thin bright crests, evenly spaced around
+// the ring, sweep together every 1.2 s over a dim baseline. Each crest is
+// confined to a narrow band (not spread across the whole ring) so it reads
+// as moving highlights rather than each side just dimming/brightening
+// together; 3 of them keeps the 113-LED ring from looking sparse with only
+// one crest in view at a time.
 static void anim_marquee_standby(CRGB* buf, uint32_t tick) {
-    // Crest position: one full lap every 150 ticks = 3 s
-    float crest = (float)(tick % 60u) / 60.0f * (float)NUM_LEDS;
-    for (int i = 0; i < NUM_LEDS; i++) {
-        // Angular distance from crest (0..NUM_LEDS/2)
-        float d = fabsf(fmodf((float)i - crest + (float)NUM_LEDS, (float)NUM_LEDS));
-        if (d > (float)NUM_LEDS / 2.0f) d = (float)NUM_LEDS - d;
-        // Cosine envelope: peak = 1.0 at crest, 0.0 at opposite side
-        float env = 0.5f + 0.5f * cosf(d / ((float)NUM_LEDS / 2.0f) * (float)M_PI);
-        uint8_t bri = (uint8_t)(20.0f + 235.0f * env * env);  // dim baseline → full amber
+    // Crest position: one full lap every 60 ticks = 1.2 s
+    float basePos = (float)(tick % 60u) / 60.0f * (float)ROBOT_LEDS;
+    const float halfWidth = (float)scale_len_thin(10) / 2.0f;  // band half-width in LEDs
+    const uint8_t numCrests = 3;
+    for (int i = 0; i < ROBOT_LEDS; i++) {
+        float maxEnv = 0.0f;
+        for (uint8_t c = 0; c < numCrests; c++) {
+            float crest = fmodf(basePos + (float)c * (float)ROBOT_LEDS / numCrests, (float)ROBOT_LEDS);
+            // Angular distance from crest (0..ROBOT_LEDS/2)
+            float d = fabsf(fmodf((float)i - crest + (float)ROBOT_LEDS, (float)ROBOT_LEDS));
+            if (d > (float)ROBOT_LEDS / 2.0f) d = (float)ROBOT_LEDS - d;
+            // Cosine envelope confined to the band: peak = 1.0 at crest, 0.0 past halfWidth
+            float env = (d < halfWidth) ? (0.5f + 0.5f * cosf(d / halfWidth * (float)M_PI)) : 0.0f;
+            if (env > maxEnv) maxEnv = env;
+        }
+        uint8_t bri = (uint8_t)(20.0f + 235.0f * maxEnv * maxEnv);  // dim baseline → full amber
         buf[i] = CRGB(bri, (uint8_t)(bri * 110u / 255u), 0);  // amber: full red, ~43% green
     }
 }
 
 // RUNNING — two green comets orbiting in opposite directions, meeting exactly at
-// front (LED 0) and rear (LED 15) each half-revolution, creating a bounce effect.
+// rear (LED 0, the strip seam) and front (LED ROBOT_LEDS/2) each half-revolution,
+// creating a bounce effect.
 static void anim_running_tof(CRGB* buf, uint32_t tick) {
-    fill_solid(buf, NUM_LEDS, CRGB::Black);
+    fill_solid(buf, ROBOT_LEDS, CRGB::Black);
 
-    // Advance 1 LED every 2 ticks → full lap in 60 ticks = 1.2 s.
-    // CW head at pos; CCW head at (NUM_LEDS - pos) % NUM_LEDS.
-    // They share the same LED at pos == 0 (front) and pos == 15 (rear).
-    int pos = (int)((tick / 2u) % (uint32_t)NUM_LEDS);
+    // Full lap in 60 ticks = 1.2 s (rate scaled by ROBOT_LEDS/OLD_NUM_LEDS so
+    // this stays the same regardless of strip density).
+    // CW head at pos; CCW head at (ROBOT_LEDS - pos) % ROBOT_LEDS.
+    // They share the same LED at pos == 0 (rear seam) and pos == ROBOT_LEDS/2 (front).
+    int pos = (int)(((uint32_t)tick * ROBOT_LEDS) / (2u * OLD_NUM_LEDS) % (uint32_t)ROBOT_LEDS);
     int cw  = pos;
-    int ccw = (NUM_LEDS - pos) % NUM_LEDS;
+    int ccw = (ROBOT_LEDS - pos) % ROBOT_LEDS;
 
-    const uint8_t kTail[8] = {255, 170, 105, 60, 32, 16, 7, 2};
+    const uint8_t tailLen = scale_len_thin(8);
 
-    for (int t = 0; t < 8; t++) {
-        uint8_t b   = kTail[t];
-        int cw_idx  = (cw  - t + NUM_LEDS) % NUM_LEDS;
-        int ccw_idx = (ccw + t)             % NUM_LEDS;
+    for (uint8_t t = 0; t < tailLen; t++) {
+        uint8_t b   = comet_falloff(t, tailLen);
+        int cw_idx  = (cw  - t + ROBOT_LEDS) % ROBOT_LEDS;
+        int ccw_idx = (ccw + t)             % ROBOT_LEDS;
         // Additive green (+ faint teal tint) so overlapping heads bloom bright
         buf[cw_idx].g  = qadd8(buf[cw_idx].g,  b);
         buf[cw_idx].b  = qadd8(buf[cw_idx].b,  b / 6);
@@ -272,30 +331,35 @@ static void anim_running_tof(CRGB* buf, uint32_t tick) {
         fill_side(buf, SIDE_REAR, CRGB(255, 60, 0));
 }
 
-// ESTOP — red strobe + orange racing comet overlay
+// ESTOP — red strobe + 3 evenly-spaced orange racing comets overlay
 static void anim_estop_alarm(CRGB* buf, uint32_t tick) {
-    fill_solid(buf, NUM_LEDS, (tick % 25u < 10u) ? CRGB(200, 0, 0) : CRGB::Black);
-    int head = (int)(tick % NUM_LEDS);
-    // Orange comet: R stays high, G tapers from ~140 to 10, B=0
-    const uint8_t kR[5] = {255, 230, 180, 110,  50};
-    const uint8_t kG[5] = {140, 110,  75,  40,  10};
-    for (int t = 0; t < 5; t++)
-        buf[(head - t + NUM_LEDS) % NUM_LEDS] = CRGB(kR[t], kG[t], 0);
+    fill_solid(buf, ROBOT_LEDS, (tick % 25u < 10u) ? CRGB(200, 0, 0) : CRGB::Black);
+    int baseHead = (int)(((uint32_t)tick * ROBOT_LEDS) / OLD_NUM_LEDS % ROBOT_LEDS);
+    // Orange comet: R ramps 255->50, G ramps 140->10 over the tail, B=0
+    const uint8_t tailLen = scale_len_thin(5);
+    const uint8_t numComets = 3;
+    for (uint8_t c = 0; c < numComets; c++) {
+        int head = (baseHead + (int)((uint32_t)c * ROBOT_LEDS / numComets)) % ROBOT_LEDS;
+        for (uint8_t t = 0; t < tailLen; t++) {
+            uint8_t r = 50  + (uint16_t)(255 - 50)  * (tailLen - 1 - t) / (tailLen - 1);
+            uint8_t g = 10  + (uint16_t)(140 - 10)  * (tailLen - 1 - t) / (tailLen - 1);
+            buf[(head - t + ROBOT_LEDS) % ROBOT_LEDS] = CRGB(r, g, 0);
+        }
+    }
 }
 
 // FAULT — deep red slow pulse, all LEDs
 static void anim_fault(CRGB* buf, uint32_t tick) {
     // sin8 gives 0-255; map to 60-255 so it never fully blacks out
     uint8_t bri = map(sin8((uint8_t)(tick * 3u)), 0, 255, 60, 255);
-    fill_solid(buf, NUM_LEDS, CRGB(bri, 0, 0));
+    fill_solid(buf, ROBOT_LEDS, CRGB(bri, 0, 0));
 }
 
 // MANUAL — cyan knight rider ping-pong on all four sides simultaneously
 static void anim_knight_rider_manual(CRGB* buf, uint32_t tick) {
-    fill_solid(buf, NUM_LEDS, CRGB(0, 6, 18));
-    const int DOT_W = 3;
-    const uint8_t kBri[3] = {255, 150, 60};
-    uint32_t t2 = tick / 2u;
+    fill_solid(buf, ROBOT_LEDS, CRGB(0, 6, 18));
+    const int DOT_W = scale_len_thin(3);
+    uint32_t t2 = ((uint32_t)tick * ROBOT_LEDS) / (2u * OLD_NUM_LEDS);
     for (uint8_t s = 0; s < 4; s++) {
         int L = SIDE_LENS[s];
         int travel = L - DOT_W;
@@ -305,41 +369,48 @@ static void anim_knight_rider_manual(CRGB* buf, uint32_t tick) {
         for (int d = 0; d < DOT_W; d++) {
             int local = pos + d;
             if (local >= L) continue;
-            uint8_t b = kBri[d];
+            uint8_t b = comet_falloff((uint8_t)d, (uint8_t)DOT_W);
             buf[side_led(s, (uint8_t)local)] = CRGB(0, (uint8_t)((uint16_t)b * 180u / 255u), b);
         }
     }
 }
 
-// CMD_REJECT — one-shot fast orange alternating strobe (overlay, 1 s)
+// CMD_REJECT — one-shot fast orange alternating strobe (overlay, 1 s).
+// Alternates in blocks (not single LEDs) so the flash still reads as a bold
+// pattern instead of fine dither at this LED density.
 static void anim_reject_strobe(CRGB* buf, uint32_t tick) {
+    const uint8_t blockLen = SCALE_LEN(1);
     int offset = (int)(tick % 2u);
-    for (int i = 0; i < NUM_LEDS; i++)
-        buf[i] = ((i + offset) % 2 == 0) ? CRGB(255, 80, 0) : CRGB::Black;
+    for (int i = 0; i < ROBOT_LEDS; i++)
+        buf[i] = (((i / blockLen) + offset) % 2 == 0) ? CRGB(255, 80, 0) : CRGB::Black;
 }
 
 // JUMPING — full rainbow wheel spinning fast + dual counter-rotating white comets + sparkles
 static void anim_rainbow_jump(CRGB* buf, uint32_t tick) {
     // Full-spectrum rainbow wheel: 2+ rotations/sec (10 hue units × 50 fps = 500 hue/s)
     uint8_t base_hue = (uint8_t)(tick * 10u);
-    for (int i = 0; i < NUM_LEDS; i++) {
-        uint8_t hue = base_hue + (uint8_t)((uint32_t)i * 256u / NUM_LEDS);
+    for (int i = 0; i < ROBOT_LEDS; i++) {
+        uint8_t hue = base_hue + (uint8_t)((uint32_t)i * 256u / ROBOT_LEDS);
         buf[i] = CHSV(hue, 255, 255);
     }
     // Two white comets orbiting in opposite directions at different speeds
-    const uint8_t kCW[6] = {255, 220, 170, 110, 60, 20};
-    int cw  = (int)((tick * 3u) % NUM_LEDS);
-    int ccw = (int)(NUM_LEDS - (tick * 2u) % NUM_LEDS) % NUM_LEDS;
-    for (int t = 0; t < 6; t++) {
-        buf[(cw  + t)              % NUM_LEDS] = CRGB(kCW[t], kCW[t], kCW[t]);
-        buf[(ccw - t + NUM_LEDS)   % NUM_LEDS] = CRGB(kCW[t], kCW[t], kCW[t]);
+    const uint8_t cometLen = scale_len_thin(6);
+    int cw  = (int)((((uint32_t)tick * 3u * ROBOT_LEDS) / OLD_NUM_LEDS) % ROBOT_LEDS);
+    int ccw = (int)((uint32_t)ROBOT_LEDS - (((uint32_t)tick * 2u * ROBOT_LEDS) / OLD_NUM_LEDS) % (uint32_t)ROBOT_LEDS) % ROBOT_LEDS;
+    for (uint8_t t = 0; t < cometLen; t++) {
+        uint8_t b = comet_falloff(t, cometLen);
+        buf[(cw  + t)              % ROBOT_LEDS] = CRGB(b, b, b);
+        buf[(ccw - t + ROBOT_LEDS)   % ROBOT_LEDS] = CRGB(b, b, b);
     }
-    // Sparkles: pseudo-random positions flash full white every 2 ticks
+    // Sparkles: pseudo-random positions flash full white every 2 ticks.
+    // Count scaled to keep the same sparkle density as the ring grows.
     if (tick % 2u == 0) {
-        buf[(tick * 7u  +  3u) % NUM_LEDS] = CRGB::White;
-        buf[(tick * 13u + 11u) % NUM_LEDS] = CRGB::White;
-        buf[(tick * 5u  + 17u) % NUM_LEDS] = CRGB::White;
-        buf[(tick * 11u +  7u) % NUM_LEDS] = CRGB::White;
+        const uint8_t sparkleCount = SCALE_LEN(4);
+        for (uint8_t s = 0; s < sparkleCount; s++) {
+            uint32_t mult = 7u + s * 3u;
+            uint32_t off  = 3u + s * 5u;
+            buf[(tick * mult + off) % ROBOT_LEDS] = CRGB::White;
+        }
     }
 }
 
@@ -348,11 +419,11 @@ static void anim_rainbow_jump(CRGB* buf, uint32_t tick) {
 // not dead" even at 0%. Takes over from every other animation, including the
 // "not linked" ghost-comet — see log_xfer_is_downloading()'s use in neo_task().
 static void anim_download(CRGB* buf, uint32_t tick, uint8_t pct) {
-    fill_solid(buf, NUM_LEDS, CRGB(0, 4, 16));
-    int lit = (int)((uint32_t)pct * NUM_LEDS / 100u);
+    fill_solid(buf, ROBOT_LEDS, CRGB(0, 4, 16));
+    int lit = (int)((uint32_t)pct * ROBOT_LEDS / 100u);
     for (int i = 0; i < lit; i++)
         buf[i] = CRGB(0, 120, 255);
-    if (lit < NUM_LEDS) {
+    if (lit < ROBOT_LEDS) {
         uint8_t pulse = map(sin8((uint8_t)(tick * 12u)), 0, 255, 60, 255);
         buf[lit] = CRGB(0, pulse, pulse);
     }
@@ -367,7 +438,7 @@ static void anim_download(CRGB* buf, uint32_t tick, uint8_t pct) {
 // leaves R/G untouched, reading as "the usual pattern, tinted blue".
 static void anim_recording_strobe(CRGB* buf, uint32_t tick) {
     if ((tick % 25u) >= 5u) return;  // ~200 ms flash, repeating every 500 ms
-    for (int i = 0; i < NUM_LEDS; i++)
+    for (int i = 0; i < ROBOT_LEDS; i++)
         buf[i].b = qadd8(buf[i].b, 220);
 }
 
@@ -377,20 +448,24 @@ static void neo_task(void*) {
     FastLED.addLeds<WS2812B, PIN_NEO, GRB>(leds, NUM_LEDS);
     FastLED.setBrightness(BRIGHTNESS);
 
+    // Lead-in LEDs (ahead of the robot in the chain) are never written again
+    // after this — they stay off for the life of the program.
+    fill_solid(leds, LED_LEAD_IN, CRGB::Black);
+
     // One-shot boot rainbow (~1.5 s) so a physical reboot/reflash is
     // unmistakable on the bench — distinct from every state animation and
     // from anim_ghost_comet's dim red "not linked yet" indicator, which is
     // easy to miss if you're not staring at the strip at that exact moment.
     for (uint32_t t = 0; t < 75; t++) {  // 75 * 20 ms = 1.5 s
         uint8_t base_hue = (uint8_t)(t * 10u);
-        for (int i = 0; i < NUM_LEDS; i++)
-            leds[i] = CHSV(base_hue + (uint8_t)((uint32_t)i * 256u / NUM_LEDS), 255, 255);
+        for (int i = 0; i < ROBOT_LEDS; i++)
+            leds[LED_LEAD_IN + i] = CHSV(base_hue + (uint8_t)((uint32_t)i * 256u / ROBOT_LEDS), 255, 255);
         FastLED.show();
         vTaskDelay(pdMS_TO_TICKS(20));
     }
 
-    static CRGB neo_buf[NUM_LEDS];
-    static CRGB neo_snap[NUM_LEDS];
+    static CRGB neo_buf[ROBOT_LEDS];
+    static CRGB neo_snap[ROBOT_LEDS];
 
     uint32_t tick          = 0;
     uint8_t  last_state    = 0xFF;
@@ -404,14 +479,14 @@ static void neo_task(void*) {
         bool    linked = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < TEENSY_LINK_TIMEOUT_MS);
 
         if (state != last_state || linked != last_linked) {
-            memcpy(neo_snap, leds, sizeof(leds));
+            memcpy(neo_snap, leds + LED_LEAD_IN, sizeof(neo_snap));
             trans_start   = tick;
             in_transition = true;
             last_state    = state;
             last_linked   = linked;
         }
 
-        fill_solid(neo_buf, NUM_LEDS, CRGB::Black);
+        fill_solid(neo_buf, ROBOT_LEDS, CRGB::Black);
         if (log_xfer_is_downloading()) {
             anim_download(neo_buf, tick, log_xfer_percent());
         } else if (!linked) {
@@ -430,7 +505,7 @@ static void neo_task(void*) {
                     break;
                 case RS_MANUAL:      anim_knight_rider_manual(neo_buf, tick);     break;
                 case RS_JUMPING:     anim_rainbow_jump(neo_buf, tick);            break;
-                default:             fill_solid(neo_buf, NUM_LEDS, CRGB::White);  break;
+                default:             fill_solid(neo_buf, ROBOT_LEDS, CRGB::White); break;
             }
         }
 
@@ -446,12 +521,12 @@ static void neo_task(void*) {
                 in_transition = false;
             } else {
                 uint8_t amt = (uint8_t)(age * 255u / TRANS_TICKS);
-                for (int i = 0; i < NUM_LEDS; i++)
+                for (int i = 0; i < ROBOT_LEDS; i++)
                     neo_buf[i] = blend(neo_snap[i], neo_buf[i], amt);
             }
         }
 
-        memcpy(leds, neo_buf, sizeof(leds));
+        memcpy(leds + LED_LEAD_IN, neo_buf, sizeof(neo_buf));
         FastLED.show();
         tick++;
         vTaskDelay(pdMS_TO_TICKS(20));

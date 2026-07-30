@@ -23,12 +23,13 @@ from analysis.param_sidecar import (
 from analysis.wlog_metrics import (
     HIP_CURRENT_EPS_A, SETTLE_DEG, compute_metrics, decode_run,
 )
+from .generated_protocol import STATE_NAMES
 from .log_paths import RUNS_DIR
 from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, WHITE, YELLOW
 
 pg.setConfigOptions(antialias=True, background=BG, foreground=TEXT)
 
-_FLAVORS = ["Overview", "LQR", "Vel-PI", "Yaw-PI", "Torque / Current", "Gain schedule"]
+_FLAVORS = ["Overview", "LQR", "Vel-PI", "Yaw-PI", "Hip", "Torque / Current", "Gain schedule"]
 
 _HF_VEL_PI_SAT = 1 << 7
 _HF_YAW_PI_SAT = 1 << 8
@@ -113,6 +114,32 @@ def _parameter_change_label(events: tuple, max_names: int = 2) -> str:
     return ", ".join(shown)
 
 
+def _discrete_change_events(t: np.ndarray, values: np.ndarray,
+                            label_fn) -> list[tuple[float, str, str]]:
+    """Detect transitions in a discrete-valued telemetry field (e.g. robot_state,
+    active_profile). label_fn(old, new) builds the marker text; the initial
+    value at t[0] is not itself a "change" and is not reported."""
+    values = np.asarray(values, dtype=np.int64)
+    if values.size < 2:
+        return []
+    change_idx = np.flatnonzero(np.diff(values)) + 1
+    events = []
+    for i in change_idx:
+        label = label_fn(int(values[i - 1]), int(values[i]))
+        events.append((float(t[i]), label, label))
+    return events
+
+
+def _mode_change_events(t: np.ndarray, robot_state: np.ndarray) -> list[tuple[float, str, str]]:
+    return _discrete_change_events(
+        t, robot_state,
+        lambda old, new: f"{STATE_NAMES.get(old, str(old))} → {STATE_NAMES.get(new, str(new))}")
+
+
+def _profile_change_events(t: np.ndarray, active_profile: np.ndarray) -> list[tuple[float, str, str]]:
+    return _discrete_change_events(t, active_profile, lambda old, new: f"P{old + 1} → P{new + 1}")
+
+
 def _transparent_brush(color: str, alpha: int = 34):
     qcolor = QColor(color)
     qcolor.setAlpha(alpha)
@@ -143,6 +170,9 @@ class LogAnalyzerTab(QWidget):
         self._params = None
         self._param_error = ""
         self._plots: list[pg.PlotWidget] = []
+        self._param_changes: list[tuple[float, str, str]] = []
+        self._mode_changes: list[tuple[float, str, str]] = []
+        self._profile_changes: list[tuple[float, str, str]] = []
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(8, 8, 8, 8)
@@ -257,10 +287,25 @@ class LogAnalyzerTab(QWidget):
         plot.setLabel("left", axis_text, units=units or None, color=DIM)
         plot.getAxis("left").enableAutoSIPrefix(auto_si_prefix)
         plot.addLegend(offset=(5, 5), verSpacing=-2)
+        is_first = not self._plots
         if self._plots:
             plot.setXLink(self._plots[0])
         self._plots.append(plot)
         self._charts_layout.addWidget(plot, 1)
+
+        # Change markers: drawn on every plot in every flavor so context (what
+        # mode/profile/parameter changed) is visible no matter which signal
+        # is being inspected; only the first (topmost) plot gets on-chart text
+        # labels since the x-axis is shared across the whole flavor.
+        self._add_event_markers(
+            plot, self._mode_changes, WHITE, "Mode change", "Robot mode changed",
+            style=Qt.PenStyle.DashDotLine, width=1.3, show_labels=is_first)
+        self._add_event_markers(
+            plot, self._profile_changes, ORANGE, "Profile change", "Speed profile changed",
+            style=Qt.PenStyle.DotLine, width=1.3, show_labels=is_first)
+        self._add_event_markers(
+            plot, self._param_changes, YELLOW, "Parameter change", "Firmware parameter changed",
+            style=Qt.PenStyle.DashLine, width=1.0, show_labels=is_first)
         return plot
 
     def _finish_plots(self):
@@ -305,28 +350,29 @@ class LogAnalyzerTab(QWidget):
             _set_legend_tooltip(plot.plotItem.legend, sample, tooltip)
 
     @staticmethod
-    def _add_parameter_changes(plot: pg.PlotWidget, changes: list[tuple[float, tuple]],
-                               show_labels: bool = False):
-        """Draw synchronized vertical markers without affecting auto-range."""
-        for t_s, events in changes:
-            full_label = _parameter_change_label(events, max_names=len(events))
+    def _add_event_markers(plot: pg.PlotWidget, events: list[tuple[float, str, str]],
+                           color: str, legend_name: str, tooltip_prefix: str,
+                           style: Qt.PenStyle = Qt.PenStyle.DashLine,
+                           width: float = 1.0, show_labels: bool = False):
+        """Draw synchronized vertical markers (mode/profile/parameter changes)
+        without affecting auto-range. events are (t_s, short_label, full_label)."""
+        for t_s, short_label, full_label in events:
             marker = pg.InfiniteLine(
                 pos=t_s, angle=90, movable=False,
-                pen=pg.mkPen(YELLOW, width=1.0, style=Qt.PenStyle.DashLine),
-                label=_parameter_change_label(events) if show_labels else None,
-                labelOpts={"color": YELLOW, "position": 0.92},
+                pen=pg.mkPen(color, width=width, style=style),
+                label=short_label if show_labels else None,
+                labelOpts={"color": color, "position": 0.92},
             )
-            marker.setToolTip(f"Parameter change at {t_s:.3f} s: {full_label}")
+            marker.setToolTip(f"{tooltip_prefix} at {t_s:.3f} s: {full_label}")
             marker.setZValue(30)
             plot.addItem(marker, ignoreBounds=True)
 
-        if changes and plot.plotItem.legend is not None:
-            sample = pg.PlotDataItem(
-                pen=pg.mkPen(YELLOW, width=1.5, style=Qt.PenStyle.DashLine))
-            plot.plotItem.legend.addItem(sample, "Parameter change")
+        if events and plot.plotItem.legend is not None:
+            sample = pg.PlotDataItem(pen=pg.mkPen(color, width=width + 0.5, style=style))
+            plot.plotItem.legend.addItem(sample, legend_name)
             _set_legend_tooltip(
                 plot.plotItem.legend, sample,
-                "Firmware parameter value changed at this time; hover a marker for details.")
+                f"{tooltip_prefix}; hover a marker for details.")
 
     def _param_series(self, name: str) -> np.ndarray | None:
         if self._params is None or self._run is None:
@@ -388,9 +434,16 @@ class LogAnalyzerTab(QWidget):
         health = fields["health_flags"].astype(np.int64)
         flavor = self._flavor_combo.currentText()
 
-        if flavor == "Overview":
-            changes = _parameter_change_groups(self._params, run.t_micros, t)
+        param_change_groups = _parameter_change_groups(self._params, run.t_micros, t)
+        self._param_changes = [
+            (time_s, _parameter_change_label(events),
+             _parameter_change_label(events, max_names=len(events)))
+            for time_s, events in param_change_groups
+        ]
+        self._mode_changes = _mode_change_events(t, fields["robot_state"])
+        self._profile_changes = _profile_change_events(t, fields["active_profile"])
 
+        if flavor == "Overview":
             velocity_plot = self._new_plot(
                 "Forward command and measured motion", "Velocity", "m/s",
                 auto_si_prefix=False)
@@ -398,7 +451,6 @@ class LogAnalyzerTab(QWidget):
                         "Velocity command vref — requested forward speed (m/s)", 1.6)
             self._curve(velocity_plot, t, fields["wheel_vel_avg"], BLUE,
                         "Average wheel velocity — measured forward speed (m/s)", 1.45)
-            self._add_parameter_changes(velocity_plot, changes, show_labels=True)
 
             yaw_plot = self._new_plot(
                 "Yaw command and measured turn rate", "Yaw rate", "°/s",
@@ -407,26 +459,24 @@ class LogAnalyzerTab(QWidget):
                         "Yaw command ωcmd — requested turn rate (°/s)", 1.6)
             self._curve(yaw_plot, t, np.degrees(fields["yaw_rate_rads"]), BLUE,
                         "Measured yaw rate — IMU turn rate (°/s)", 1.45)
-            self._add_parameter_changes(yaw_plot, changes)
 
             pitch_plot = self._new_plot(
                 "Pitch/roll and controller lean target", "Angle", "°",
                 auto_si_prefix=False)
             self._curve(pitch_plot, t, np.degrees(fields["pitch_rad"]), BLUE,
                         "Pitch — measured body tilt (°)", 1.6)
-            self._curve(pitch_plot, t, np.degrees(fields["theta_ref"]), ORANGE,
-                        "Lean target θref — controller target angle (°)", 1.4)
+            self._curve(pitch_plot, t, np.degrees(fields["theta_ref"] + fields["pitch_trim_rad"]), ORANGE,
+                        "Lean target θref+trim — true LQR balance point (°)", 1.4)
             self._curve(pitch_plot, t, np.degrees(fields["roll_rad"]), RED,
                         "Roll — measured body roll (°)", 1.4)
-            self._add_parameter_changes(pitch_plot, changes)
 
             change_text = "none"
-            if changes:
-                event_count = sum(len(events) for _time, events in changes)
+            if param_change_groups:
+                event_count = sum(len(events) for _time, events in param_change_groups)
                 change_text = f"{event_count} change{'s' if event_count != 1 else ''} at " + \
-                    ", ".join(f"{time_s:.2f} s" for time_s, _events in changes[:4])
-                if len(changes) > 4:
-                    change_text += f", +{len(changes) - 4} more times"
+                    ", ".join(f"{time_s:.2f} s" for time_s, _events in param_change_groups[:4])
+                if len(param_change_groups) > 4:
+                    change_text += f", +{len(param_change_groups) - 4} more times"
             self._set_meta_rows([
                 ("Source", "Host JSONL" if run.source_kind == "host" else "SD WLOG",
                  "Both sources use the same decoded-run and chart pipeline."),
@@ -448,7 +498,7 @@ class LogAnalyzerTab(QWidget):
 
         elif flavor == "LQR":
             pitch_deg = np.degrees(fields["pitch_rad"])
-            target_deg = np.degrees(fields["theta_ref"])
+            target_deg = np.degrees(fields["theta_ref"] + fields["pitch_trim_rad"])
             error_deg = pitch_deg - target_deg
             rate_dps = np.degrees(fields["pitch_rate_rads"])
 
@@ -456,11 +506,11 @@ class LogAnalyzerTab(QWidget):
             self._curve(angle_plot, t, pitch_deg, BLUE,
                         "Pitch — measured body tilt (°)", 1.6)
             self._curve(angle_plot, t, target_deg, GREEN,
-                        "Lean target θref — requested balance angle (°)", 1.4)
+                        "Lean target θref+trim — true LQR balance point (°)", 1.4)
 
             error_plot = self._new_plot("Balance tracking error", "Pitch error", "°")
             self._curve(error_plot, t, error_deg, YELLOW,
-                        "Pitch error — measured pitch minus lean target (°)", 1.5)
+                        "Pitch error — measured pitch minus trimmed lean target (°)", 1.5)
             self._limit_pair(
                 error_plot, t, SETTLE_DEG, GREEN,
                 f"Settling-band upper — +{SETTLE_DEG:g}° tracking error",
@@ -473,13 +523,14 @@ class LogAnalyzerTab(QWidget):
             ise_deg2_s = metrics["ise_pitch"] * (180.0 / np.pi) ** 2
             self._set_meta_rows([
                 ("RMS pitch error", f"{metrics['rms_pitch_deg']:.3f}°",
-                 "Typical deviation from the current lean target."),
+                 "Untrimmed θref, matching the sim's fitness formula (analysis/wlog_metrics.py) — "
+                 "the chart's error curve above is trimmed and may differ."),
                 ("Maximum pitch error", f"{metrics['max_pitch_deg']:.3f}°",
-                 "Worst measured deviation from the lean target."),
+                 "Untrimmed θref, matching the sim's fitness formula — see note above."),
                 ("Pitch-error ISE", f"{ise_deg2_s:.3f} °²·s",
-                 "Accumulated squared tracking error over the entire log."),
+                 "Accumulated squared tracking error over the entire log (untrimmed θref)."),
                 ("Settling time", f"{metrics['settle_time_s']:.3f} s",
-                 f"First continuous 0.5 s inside the ±{SETTLE_DEG:g}° error band."),
+                 f"First continuous 0.5 s inside the ±{SETTLE_DEG:g}° error band (untrimmed θref)."),
                 ("Maximum pitch rate", f"{np.max(np.abs(rate_dps)):.2f} °/s",
                  "Largest absolute body rotation rate."),
                 ("Active profile", self._profile_text(),
@@ -620,6 +671,48 @@ class LogAnalyzerTab(QWidget):
                  "Intervals where τyaw reached yaw_pi_torque_max."),
                 ("Active profile", self._profile_text(),
                  "Radio yaw lines are profile limits; GUI motion commands bypass radio scaling."),
+            ])
+
+        elif flavor == "Hip":
+            hip_l_pos_deg = np.degrees(fields["hip_l_pos_rad"])
+            hip_l_cmd_deg = np.degrees(fields["hip_l_cmd_pos_rad"])
+            hip_r_pos_deg = np.degrees(fields["hip_r_pos_rad"])
+            hip_r_cmd_deg = np.degrees(fields["hip_r_cmd_pos_rad"])
+            hip_l_err_deg = hip_l_pos_deg - hip_l_cmd_deg
+            hip_r_err_deg = hip_r_pos_deg - hip_r_cmd_deg
+
+            left_pos_plot = self._new_plot("Left hip position", "Angle", "°")
+            self._curve(left_pos_plot, t, hip_l_pos_deg, BLUE,
+                        "Left-hip angle — measured AK45 position (°)", 1.6)
+            self._curve(left_pos_plot, t, hip_l_cmd_deg, GREEN,
+                        "Left-hip target — commanded MIT position (°)", 1.4)
+
+            right_pos_plot = self._new_plot("Right hip position", "Angle", "°")
+            self._curve(right_pos_plot, t, hip_r_pos_deg, BLUE,
+                        "Right-hip angle — measured AK45 position (°)", 1.6)
+            self._curve(right_pos_plot, t, hip_r_cmd_deg, GREEN,
+                        "Right-hip target — commanded MIT position (°)", 1.4)
+
+            current_plot = self._new_plot("Hip current and limit", "Current", "A")
+            self._curve(current_plot, t, fields["hip_l_current_a"], RED,
+                        "Left-hip current — measured AK45 current (A)", 1.35)
+            self._curve(current_plot, t, fields["hip_r_current_a"], ORANGE,
+                        "Right-hip current — measured AK45 current (A)", 1.35)
+            self._limit_pair(
+                current_plot, t, HIP_CURRENT_EPS_A, YELLOW,
+                "Hip upper current limit (A)", "Hip lower current limit (A)")
+
+            self._set_meta_rows([
+                ("Maximum left-hip position error", f"{np.max(np.abs(hip_l_err_deg)):.3f}°",
+                 "Worst measured-versus-target difference for the left hip."),
+                ("Maximum right-hip position error", f"{np.max(np.abs(hip_r_err_deg)):.3f}°",
+                 "Worst measured-versus-target difference for the right hip."),
+                ("Maximum left-hip current", f"{metrics['max_hip_l_current_a']:.4f} A",
+                 f"Hip current limit is ±{HIP_CURRENT_EPS_A:g} A."),
+                ("Maximum right-hip current", f"{metrics['max_hip_r_current_a']:.4f} A",
+                 f"Hip current limit is ±{HIP_CURRENT_EPS_A:g} A."),
+                ("Active profile", self._profile_text(),
+                 "Speed profile is independent of hip motion."),
             ])
 
         elif flavor == "Torque / Current":

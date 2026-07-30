@@ -6,7 +6,21 @@ enum class WheelMode : uint8_t { IDLE = 0, VELOCITY = 1, POSITION = 2, TORQUE = 
 // Per-axis state updated from CAN callbacks.
 struct WheelAxisState {
     float    pos_turns;    // encoder position  [turns]
+    // Validated velocity — what the control loop, runaway watchdogs, health
+    // flags and telemetry all read. Updated in wheel_motors_poll() from
+    // vel_raw_turns_s through wheel_vel_glitch_filter() (see wheel_safety.h),
+    // so a corrupt encoder frame can't reach the balance loop or trip a
+    // runaway fault on its own.
     float    vel_turns_s;  // encoder velocity  [turns/s]
+    // Unfiltered value straight off CAN, written by the RX ISR. Kept separate
+    // so the filter has a stable "last good" to compare against and so the
+    // raw feed stays inspectable.
+    float    vel_raw_turns_s;
+    uint32_t fb_seq;          // increments on every encoder-estimate frame (ISR)
+    uint32_t fb_seq_seen;     // last fb_seq the filter processed (main loop)
+    uint32_t vel_accept_ms;   // millis() of the most recent ACCEPTED sample
+    uint32_t vel_glitch_count;// total samples rejected as implausible (diagnostic)
+    uint8_t  vel_reject_run;  // current consecutive-rejection run length
     float    vbus;         // bus voltage [V] — updated by wheel_motors_request_vbus()
     uint32_t error;        // ODrive Axis_Error word (0 = no fault)
     uint8_t  axis_state;   // ODrive Axis_State enum value
