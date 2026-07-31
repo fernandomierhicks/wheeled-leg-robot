@@ -384,7 +384,7 @@ class RobotGeometry:
     L_tibia: float = 0.12939        # [m] tibia downward (C→W)
     Lc: float = 0.15081             # [m] coupler link (F→E)
     F_X: float = -0.05887           # [m] coupler pivot X from body origin
-    F_Z: float = -0.01821           # [m] coupler pivot Z in body frame
+    F_Z: float = -0.0055            # [m] TEMP: coupler pivot 18 mm above hip axis (A_Z + 0.018). Original: -0.01821
     A_Z: float = -0.0235            # [m] hip motor Z offset from body centre
 
     m_box: float = 0.985            # [kg] BASELINE 0.985 — body box (210) + electronics (244) + battery (275) + motor mounts (90) + wiring (100) + fasteners (50) + XT60 (10) + MR30 (6) — body box (210) + electronics (244) + battery (275) + motor mounts (90) + wiring (100) + fasteners (50) + XT60 (10) + MR30 (6)
@@ -399,8 +399,8 @@ class RobotGeometry:
     motor_mass: float = 0.260       # [kg] BASELINE 0.260 — AK45-10 hip motor
 
     # Hip stroke angles (auto-computed by auto_stroke_angles for new geometry)
-    Q_RET: float = -0.733038         # [rad] fully retracted (crouch)
-    Q_EXT: float = -1.431694         # [rad] fully extended  (jump)
+    Q_RET: float = -0.378958         # [rad] TEMP: auto_stroke_angles for raised F_Z. Original: -0.733038
+    Q_EXT: float = -1.218537         # [rad] TEMP: auto_stroke_angles for raised F_Z. Original: -1.431694
 
     @property
     def Q_NOM(self) -> float:

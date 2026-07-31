@@ -14,6 +14,11 @@ Tune up to 3 group of gains with both switches and kmobs
 
 
 ---------------------------------------------------------SIMULATION
+TYPO on mechanical dimensions. Revisit for highest jump???
+
+
+
+
 -REtune robot with AK45 as wheel motor?
 
 -Flip?
