@@ -12,7 +12,9 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 import sys
+import time
 
 import numpy as np
 
@@ -25,23 +27,49 @@ from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
 
 from model import (LinkageSpec, baseline1, TracePoint, ALL_BODIES, MOVING_LINKS,
-                   FEMUR, TIBIA, COUPLER, MOTOR, WHEEL, pair_key)
+                   FEMUR, TIBIA, COUPLER, FEMUR_SHAFT, MOTOR, WHEEL,
+                   WHEEL_MOTOR, pair_key)
 from kinematics import solve_pose, trace_world
 from geometry import ShapeSet, collisions, body_shapes, RES_FAST, RES_DRAW
-from evaluate import find_range, evaluate
+from evaluate import find_range, evaluate, hip_torque
 
 BG = "#1e1e2e"
 FG = "lightgray"
 LINK_COLOR = {FEMUR: "#f0c040", TIBIA: "#c084f5", COUPLER: "#5ad7d7"}
 NODE_COLOR = {"A": "#ffe066", "C": "#ffffff", "E": "#aafafa",
               "F": "#5ad7d7", "W": "#40ff80"}
+SHAFT_COLOR = "#9aa8c0"
+
+# Drawn once in the right dock instead of under every canvas: an in-plot legend
+# costs a strip of height on BOTH compare panels for a key that never changes.
+# Colours must track the literals used in LinkageCanvas.draw_state.
+LEGEND_ENTRIES = (
+    ("femur", LINK_COLOR[FEMUR]),
+    ("tibia", LINK_COLOR[TIBIA]),
+    ("coupler", LINK_COLOR[COUPLER]),
+    ("knee shaft", SHAFT_COLOR),
+    ("traced path", "#ff6060"),
+    ("wheel travel box", "#40ff40"),
+    ("ride-height limit", "#ff9040"),
+    ("ground", "#8a5a2a"),
+    ("range-end ghosts", "#3a3a4a"),
+    ("dimensions", "#ffb340"),
+    ("collision", "#ff4040"),
+)
 
 WORKING_EDITED = "— working (edited) —"
+# The optimizer pushes specs into both panels that came from no preset at all.
+# Without a name of their own the combo keeps showing whatever was last picked
+# while the canvas draws something else entirely.
+OPT_SNAPSHOT = "— optimizer start snapshot —"
+OPT_BEST = "— optimizer best —"
+PLACEHOLDERS = (WORKING_EDITED, OPT_SNAPSHOT, OPT_BEST)
 
 # Spec fields the panel edits in millimetres (stored in metres).
 MM_FIELDS = ("L_femur", "L_stub", "L_tibia", "Lc", "F_X", "F_Z", "w_perp",
              "femur_r_A", "femur_r_C", "tibia_r_E", "tibia_r_C", "tibia_r_W",
-             "coupler_r_F", "coupler_r_E", "motor_r", "wheel_r")
+             "coupler_r_F", "coupler_r_E", "femur_shaft_r", "motor_r",
+             "wheel_r", "wheel_motor_r")
 
 
 # ---------------------------------------------------------------------------
@@ -105,12 +133,25 @@ class ParamPanel(QtWidgets.QWidget):
             ("coupler_r_E", "coupler @ E", _spin(spec.coupler_r_E * 1e3, 0.5, 100, 0.5)),
         ])
         group("Circular bodies", [
+            ("femur_shaft_r", "knee shaft radius",
+             _spin(spec.femur_shaft_r * 1e3, 0.5, 100, 0.5)),
             ("motor_r", "motor radius", _spin(spec.motor_r * 1e3, 1, 200, 0.5)),
             ("wheel_enabled", "wheel at traced pt",
              QtWidgets.QCheckBox("enabled")),
             ("wheel_r", "wheel radius", _spin(spec.wheel_r * 1e3, 1, 400)),
+            ("wheel_motor_r", "hub motor radius",
+             _spin(spec.wheel_motor_r * 1e3, 1, 400, 0.5)),
         ])
         self.w["wheel_enabled"].setChecked(spec.wheel_enabled)
+        self.w["femur_shaft_r"].setToolTip(
+            "The femur's knee shaft at C, Ø23 mm as built.  Its own body, not\n"
+            "part of the femur plate: the coupler passes the plate on another\n"
+            "plane, but the shaft protrudes into the coupler's plane.  Only the\n"
+            "coupler pair is on by default — see the collision-pair matrix.")
+        self.w["wheel_motor_r"].setToolTip(
+            "Hub motor, concentric with the wheel.  Always tested (it is on the\n"
+            "leg whether or not the tyre outline is drawn); which bodies it is\n"
+            "tested against is set in the collision-pair matrix.")
         group("Pose limits  (bind even with no collision)", [
             ("enforce_wheel_below_hip", "W below hip axis",
              QtWidgets.QCheckBox("enforce")),
@@ -137,6 +178,29 @@ class ParamPanel(QtWidgets.QWidget):
             "W above E means the tibia has leaned back past horizontal and\n"
             "its far end swings toward the ground.")
 
+        group("Hip torque limit  (static hold, wheel on the ground)", [
+            ("enforce_torque_limit", "torque limit",
+             QtWidgets.QCheckBox("enforce")),
+            ("leg_load_kg", "load on this leg",
+             _spin(spec.leg_load_kg, 0.0, 100.0, 0.1, 2, " kg")),
+            ("torque_limit_nm", "max hip torque",
+             _spin(spec.torque_limit_nm, 0.01, 100.0, 0.1, 2, " N·m")),
+        ])
+        self.w["enforce_torque_limit"].setChecked(spec.enforce_torque_limit)
+        self.w["enforce_torque_limit"].setToolTip(
+            "Trim the stroke to the poses the hip motor can actually hold.\n"
+            "  tau(q) = load * g * |dz_W/dq|\n"
+            "The wheel rolls, so only the VERTICAL gear ratio does work; a\n"
+            "pose can be perfectly reachable and still need more torque than\n"
+            "the motor has.  Blocks like a collision does.")
+        self.w["leg_load_kg"].setToolTip(
+            "Mass carried by THIS leg — half the body for a two-hip robot\n"
+            "(2 kg body, motors included -> 1.0 kg per leg).")
+        self.w["torque_limit_nm"].setToolTip(
+            "AK45-10 continuous rating is 2.5 N·m.  Peak is higher, but a\n"
+            "standing robot holds this torque indefinitely, so continuous is\n"
+            "the number that binds.")
+
         group("Hip sweep", [
             ("q_seed", "seed angle", _spin(math.degrees(spec.q_seed), -180, 180,
                                            1.0, 2, " °")),
@@ -159,6 +223,9 @@ class ParamPanel(QtWidgets.QWidget):
             self.w["wheel_below_hip_margin"].value() / 1000.0
         spec.enforce_W_below_E = self.w["enforce_W_below_E"].isChecked()
         spec.enforce_ground = self.w["enforce_ground"].isChecked()
+        spec.enforce_torque_limit = self.w["enforce_torque_limit"].isChecked()
+        spec.leg_load_kg = self.w["leg_load_kg"].value()
+        spec.torque_limit_nm = self.w["torque_limit_nm"].value()
         spec.sync_primary_to_W()
         return spec
 
@@ -176,6 +243,9 @@ class ParamPanel(QtWidgets.QWidget):
             spec.wheel_below_hip_margin * 1000.0)
         self.w["enforce_W_below_E"].setChecked(spec.enforce_W_below_E)
         self.w["enforce_ground"].setChecked(spec.enforce_ground)
+        self.w["enforce_torque_limit"].setChecked(spec.enforce_torque_limit)
+        self.w["leg_load_kg"].setValue(spec.leg_load_kg)
+        self.w["torque_limit_nm"].setValue(spec.torque_limit_nm)
         for w in blocked:
             w.blockSignals(False)
 
@@ -203,7 +273,10 @@ class CollisionMatrix(QtWidgets.QGroupBox):
         note = QtWidgets.QLabel(
             "Pairs sharing a pin (femur/tibia, tibia/coupler), the femur on the\n"
             "motor shaft, and the wheel on the tibia are off by default — those\n"
-            "bodies sit on different plates and cannot interfere.")
+            "bodies sit on different plates and cannot interfere.  wheel/wheel_motor\n"
+            "is off because the two are concentric and so always overlap.\n"
+            "femur_shaft is the Ø23 mm knee shaft: it is the femur's own part and\n"
+            "the tibia turns on it, so only coupler ↔ femur_shaft is on.")
         note.setStyleSheet("color: #888; font-size: 10px;")
         grid.addWidget(note, (len(self.boxes) + 1) // 2, 0, 1, 2)
 
@@ -224,7 +297,7 @@ class LinkageCanvas(FigureCanvasQTAgg):
         self.fig = Figure(figsize=(7, 7), facecolor=BG)
         super().__init__(self.fig)
         self.ax = self.fig.add_subplot(111)
-        self.fig.subplots_adjust(left=0.10, right=0.98, top=0.95, bottom=0.08)
+        self.fig.subplots_adjust(left=0.10, right=0.98, top=0.95, bottom=0.15)
 
     def _draw_F_dimensions(self, ax, spec: LinkageSpec, S: float):
         """Engineering-style dimension callouts for the coupler pivot F
@@ -314,6 +387,67 @@ class LinkageCanvas(FigureCanvasQTAgg):
                                     shrinkA=0, shrinkB=0))
         self._seg_label(ax, a, b, text, color, 0.0, fontsize)
 
+    def _dim_path_box(self, ax, box, mean_x: float, x_clear: float):
+        """Dimension the traced point's bounding box against the hip axis at
+        the origin.
+
+        `box` is (x0, x1, z0, z1) in mm and `mean_x` the best-fit vertical the
+        deviation metric is measured from.  The traced point never leaves the
+        box over the valid stroke, so its height IS the stroke; what the hip
+        needs to know on top of that is how far down the box starts and how far
+        the band sits fore or aft of the motor axis.
+        """
+        col = "#40ff40"
+        x0, x1, z0, z1 = box
+        arrow = dict(arrowstyle="<->", color=col, lw=1.1, shrinkA=0, shrinkB=0)
+        thin = dict(color=col, linewidth=0.6, linestyle=":", alpha=0.5, zorder=9)
+        bbox = dict(boxstyle="round,pad=0.18", facecolor="#1e1e2e",
+                    edgecolor="none", alpha=0.75)
+
+        # Z: origin down to the top edge, then the box height itself.  Chained
+        # rather than two measurements from the origin, so the second number is
+        # the stroke — the thing being designed for — and the bottom edge is
+        # just their sum.  The first hangs off the z = 0 line the axes already
+        # draw, and both sit clear of the F band, which owns the strip right of A.
+        xd = max(x1 + 34.0, x_clear)
+        ax.plot([x1, xd], [z1, z1], **thin)
+        ax.annotate("", xy=(xd, z1), xytext=(xd, 0.0), arrowprops=arrow,
+                    zorder=10)
+        ax.text(xd + 3.0, z1 / 2.0, f"Z top {z1:+.2f} mm", color=col,
+                fontsize=7.5, fontweight="bold", ha="center", va="bottom",
+                rotation=90, rotation_mode="anchor", zorder=11, bbox=bbox)
+
+        xs = xd + 30.0
+        for zz in (z1, z0):
+            ax.plot([x1, xs], [zz, zz], **thin)
+        ax.annotate("", xy=(xs, z0), xytext=(xs, z1), arrowprops=arrow,
+                    zorder=10)
+        ax.text(xs + 3.0, (z0 + z1) / 2.0, f"stroke {z1 - z0:.2f} mm", color=col,
+                fontsize=7.5, fontweight="bold", ha="center", va="bottom",
+                rotation=90, rotation_mode="anchor", zorder=11, bbox=bbox)
+
+        # X: how wide the wander is, then where that band sits relative to the
+        # hip.  Stacked below the box; the second hangs off the x = 0 line the
+        # axes already draw.
+        zw, zm = z0 - 20.0, z0 - 40.0
+
+        ax.plot([x0, x0], [z0, zw], **thin)
+        ax.plot([x1, x1], [z0, zw], **thin)
+        ax.annotate("", xy=(x1, zw), xytext=(x0, zw), arrowprops=arrow, zorder=10)
+        ax.text((x0 + x1) / 2.0, zw - 3.0, f"width {x1 - x0:.2f} mm", color=col,
+                fontsize=7.5, fontweight="bold", ha="center", va="top",
+                zorder=11, bbox=bbox)
+
+        ax.plot([mean_x, mean_x], [z0, zm], **thin)
+        ax.annotate("", xy=(mean_x, zm), xytext=(0.0, zm), arrowprops=arrow,
+                    zorder=10)
+        ax.text(mean_x / 2.0, zm - 3.0, f"best-fit X {mean_x:+.2f} mm", color=col,
+                fontsize=7.5, fontweight="bold", ha="center", va="top",
+                zorder=11, bbox=bbox)
+        # No W × H label on the box itself: the top edge is exactly where the
+        # femur sweeps, and both spans already follow from the dimensions —
+        # the height is the stroke.
+
     def _draw_link_dimensions(self, ax, spec: LinkageSpec, pose, S: float):
         """Length of every bar, drawn on the bar itself."""
         n = pose.nodes
@@ -372,9 +506,15 @@ class LinkageCanvas(FigureCanvasQTAgg):
 
     def draw_state(self, spec: LinkageSpec, q: float, metrics, shapes: ShapeSet,
                    show_ghosts=True, show_path=True, show_dims=True,
-                   xlim=None, ylim=None):
+                   xlim=None, ylim=None, clean=True):
+        """`clean` drops the in-plot stats box and legend — and the empty band
+        reserved for the stats box — so the mechanism gets the whole panel.
+        The same numbers and key live in the right dock either way."""
         ax = self.ax
         ax.clear()
+        # The legend sits under the axes, so its margin is only worth paying
+        # for when it is actually drawn.
+        self.fig.subplots_adjust(bottom=0.15 if not clean else 0.09)
         ax.set_facecolor(BG)
         ax.set_aspect("equal")
         ax.grid(True, color="#333", linewidth=0.4, linestyle="--")
@@ -385,7 +525,7 @@ class LinkageCanvas(FigureCanvasQTAgg):
             zl = spec.wheel_below_hip_margin * 1000.0
             ax.axhline(zl, color="#ff9040", linewidth=1.2, linestyle="-.",
                        alpha=0.75, zorder=2,
-                       label="ride-height limit (wheel top must stay below)")
+                       label="ride-height limit")
         ax.tick_params(colors=FG, labelsize=8)
         for sp in ax.spines.values():
             sp.set_edgecolor("#555")
@@ -413,13 +553,26 @@ class LinkageCanvas(FigureCanvasQTAgg):
             p = metrics.path * S
             ax.plot(p[:, 0], p[:, 1], color="#ff6060", linewidth=2.0,
                     alpha=0.55, zorder=2, label="traced path")
-            ax.axvline(metrics.mean_x_mm, color="#40ff40", linewidth=0.9,
-                       linestyle="--", alpha=0.7, zorder=2,
-                       label=f"best-fit vertical ({metrics.mean_x_mm:.1f} mm)")
-            ax.plot([metrics.mean_x_mm - metrics.max_dev_mm,
-                     metrics.mean_x_mm + metrics.max_dev_mm],
-                    [p[:, 1].mean()] * 2, color="#40ff40", linewidth=1.0,
-                    alpha=0.5, marker="|", markersize=8, zorder=2)
+            # Bounding box of the path over the valid stroke: the traced point
+            # stays inside it for every reachable pose, so its height is the
+            # travel and its width the fore/aft wander.
+            box = (float(p[:, 0].min()), float(p[:, 0].max()),
+                   float(p[:, 1].min()), float(p[:, 1].max()))
+            ax.add_patch(mpatches.Rectangle(
+                (box[0], box[2]), box[1] - box[0], box[3] - box[2],
+                facecolor="#40ff40", alpha=0.06, linewidth=0.0, zorder=1))
+            ax.add_patch(mpatches.Rectangle(
+                (box[0], box[2]), box[1] - box[0], box[3] - box[2],
+                facecolor="none", edgecolor="#40ff40", linewidth=1.1,
+                linestyle="--", alpha=0.85, zorder=3, label="wheel travel box"))
+            # Best-fit vertical, clipped to the box rather than run across the
+            # whole plot: it is the line max_dev is measured from, so it only
+            # means anything over the stroke.
+            ax.plot([metrics.mean_x_mm] * 2, [box[2], box[3]], color="#40ff40",
+                    linewidth=0.9, linestyle=":", alpha=0.8, zorder=3)
+            if show_dims:
+                self._dim_path_box(ax, box, metrics.mean_x_mm,
+                                   spec.motor_r * S + 52.0)
 
         # ── current pose ────────────────────────────────────────────────────
         # Stay on the same assembly branch the sweep used.
@@ -451,14 +604,29 @@ class LinkageCanvas(FigureCanvasQTAgg):
         ax.text(0, 0, "motor", color="white", fontsize=6.5,
                 ha="center", va="center", zorder=9)
 
-        # wheel
+        # Knee shaft on the femur at C.  Drawn on top of the plates it sits
+        # between, because what it fouls is the coupler passing over it.
+        ax.add_patch(mpatches.Circle(
+            np.array(pose.nodes["C"]) * S, spec.femur_shaft_r * S,
+            facecolor=("#ff4040" if FEMUR_SHAFT in hit_bodies else "none"),
+            edgecolor=("#ff8080" if FEMUR_SHAFT in hit_bodies else SHAFT_COLOR),
+            alpha=0.9, linewidth=1.4, zorder=7, label="knee shaft"))
+
+        # wheel + hub motor (concentric)
+        wc = np.array(trace_world(pose, spec.primary_trace())) * S
         if spec.wheel_enabled:
-            wc = np.array(trace_world(pose, spec.primary_trace())) * S
             ax.add_patch(mpatches.Circle(
                 wc, spec.wheel_r * S,
                 facecolor="none",
                 edgecolor=("#ff4040" if WHEEL in hit_bodies else "#40ff80"),
                 linewidth=1.6, alpha=0.8, zorder=3))
+        bad_hub = WHEEL_MOTOR in hit_bodies
+        ax.add_patch(mpatches.Circle(
+            wc, spec.wheel_motor_r * S,
+            facecolor=("#ff4040" if bad_hub else "#e05c5c"),
+            edgecolor="#ddd", alpha=0.5, linewidth=1.4, zorder=3))
+        ax.text(wc[0], wc[1], "hub", color="white", fontsize=6.5,
+                ha="center", va="center", zorder=9)
 
         # nodes
         for name, (x, z) in pose.nodes.items():
@@ -507,25 +675,45 @@ class LinkageCanvas(FigureCanvasQTAgg):
             self._draw_link_dimensions(ax, spec, pose, S)
 
         # ── on-plot statistics ──────────────────────────────────────────────
+        # Whether a config is any good comes down to stroke, deviation and how
+        # much torque headroom is left, so those stay ON the diagram in both
+        # modes.  Clean mode shrinks them into the empty top-left corner rather
+        # than holding a band open below the mechanism for a full-size box.
         if metrics is not None and metrics.valid:
-            stats = (f"max vertical deviation   {metrics.max_dev_mm:7.2f} mm\n"
-                     f"vertical travel ret→ext  {metrics.travel_mm:7.2f} mm")
-            sub = (f"stroke {metrics.stroke_deg:.2f}°   "
-                   f"rms dev {metrics.rms_dev_mm:.2f} mm")
+            tau = hip_torque(spec, pose)
+            if clean:
+                stats = "\n".join((
+                    f"stroke  {metrics.travel_mm:7.2f} mm  ({metrics.stroke_deg:.2f}°)",
+                    f"max dev {metrics.max_dev_mm:7.2f} mm",
+                    f"τ peak  {metrics.max_torque_nm:7.2f} / {spec.torque_limit_nm:.2f} N·m",
+                ))
+            else:
+                stats = "\n".join((
+                    f"max vertical deviation {metrics.max_dev_mm:7.2f} mm",
+                    f"vertical travel ret→ext{metrics.travel_mm:7.2f} mm",
+                    f"stroke {metrics.stroke_deg:6.2f}°  rms dev {metrics.rms_dev_mm:5.2f} mm",
+                    f"τ here {tau:5.2f}   peak {metrics.max_torque_nm:5.2f} N·m",
+                    f"τ limit {spec.torque_limit_nm:.2f} @ {spec.leg_load_kg:.2f} kg/leg",
+                ))
         else:
-            stats = "INVALID"
-            sub = metrics.reason if metrics is not None else ""
+            stats = "INVALID\n" + (metrics.reason if metrics is not None else "")
 
-        # Bottom-right: the dimension band owns the top, the legend bottom-left.
-        ax.text(0.985, 0.055, stats, transform=ax.transAxes,
-                color="#ffffff", fontsize=9.5, family="monospace",
-                fontweight="bold", va="bottom", ha="right", zorder=12,
-                bbox=dict(boxstyle="round,pad=0.45", facecolor="#2a2a3e",
-                          edgecolor="#6a6a85", alpha=0.92))
-        if sub:
-            ax.text(0.985, 0.018, sub, transform=ax.transAxes,
-                    color="#a8a8c0", fontsize=8, family="monospace",
-                    va="bottom", ha="right", zorder=12)
+        # Clean: top-left, the one corner nothing else claims — the F dimension
+        # band starts at the origin and runs right, and the mechanism hangs
+        # below it.  Full: bottom-left, inside the band reserved for it, where
+        # the far left of the ground strip is reliably empty.
+        if clean:
+            ax.text(0.012, 0.988, stats, transform=ax.transAxes,
+                    color="#e8e8f4", fontsize=7.5, family="monospace",
+                    fontweight="bold", va="top", ha="left", zorder=12,
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="#2a2a3e",
+                              edgecolor="#6a6a85", alpha=0.85))
+        else:
+            ax.text(0.015, 0.022, stats, transform=ax.transAxes,
+                    color="#ffffff", fontsize=9.0, family="monospace",
+                    fontweight="bold", va="bottom", ha="left", zorder=12,
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor="#2a2a3e",
+                              edgecolor="#6a6a85", alpha=0.92))
 
         title = f"hip {math.degrees(q):+.2f}°"
         if hits:
@@ -547,17 +735,151 @@ class LinkageCanvas(FigureCanvasQTAgg):
             pad = 20.0
             top_pad = 58.0 if show_dims else pad
             right_pad = 95.0 if show_dims else pad
+            band = 0.0 if clean else STATS_BAND * (hi_z - lo_z)
             ax.set_xlim(lo_x - pad, hi_x + right_pad)
-            ax.set_ylim(lo_z - pad, hi_z + top_pad)
-        ax.legend(loc="lower left", fontsize=6.5, facecolor="#2a2a3e",
-                  edgecolor="#555", labelcolor="white", framealpha=0.85,
-                  borderpad=0.4, labelspacing=0.3)
+            ax.set_ylim(lo_z - band - pad, hi_z + top_pad)
+        # Outside the axes, under the x-label.  Anywhere inside the data area
+        # eventually collides: the mechanism sweeps the lower-left, the F
+        # dimension band owns the top, and the stats box the lower-right.
+        if not clean:
+            ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.085), ncol=6,
+                      fontsize=6.5, facecolor="#2a2a3e", edgecolor="#555",
+                      labelcolor="white", framealpha=0.9, borderpad=0.4,
+                      labelspacing=0.3, columnspacing=1.1, handlelength=1.6)
         self.draw_idle()
 
 
 # Let the slider run this far past each collision/singularity limit, so the
 # interfering pose can actually be seen (drawn with solid red fills).
 OVERSHOOT = math.radians(1.0)
+
+# Fraction of the mechanism's own height reserved as empty band below it, so
+# the stats box always has somewhere to sit.  At full extension the leg spans
+# the whole width of the plot, so no in-axes corner is free by luck — the room
+# has to be made deliberately.
+STATS_BAND = 0.22
+
+REF_COLOR = "#5ad7d7"
+WORK_COLOR = "#f0c040"
+
+
+class TorqueCanvas(FigureCanvasQTAgg):
+    """Static hold torque across the stroke, with a cursor at the slider pose.
+
+    x is % of each config's OWN reachable range — the same convention the
+    slider uses — so two mechanisms with different strokes overlay directly.
+    The cursor can sit outside 0-100%: the slider is allowed to run OVERSHOOT
+    past each end so the blocking pose is visible, and torque out there is
+    exactly what the motor cannot deliver.
+    """
+
+    def __init__(self):
+        self.fig = Figure(figsize=(7, 2.2), facecolor=BG)
+        super().__init__(self.fig)
+        self.ax = self.fig.add_subplot(111)
+        self.fig.subplots_adjust(left=0.085, right=0.985, top=0.97, bottom=0.30)
+        self.setMinimumHeight(200)
+        self.setMaximumHeight(270)
+
+    def _cursor(self, panel, frac: float):
+        """(stroke_pct, q, tau) for this panel at the slider position."""
+        m = panel.metrics
+        span = m.q_hi - m.q_lo
+        if span < 1e-9:
+            return None
+        q = (m.q_lo - OVERSHOOT) + (span + 2.0 * OVERSHOOT) * frac
+        pose = solve_pose(panel.spec, q, m.alpha_at(q))
+        if pose is None:
+            return None
+        return (q - m.q_lo) / span * 100.0, q, hip_torque(panel.spec, pose)
+
+    def draw_curves(self, entries, frac: float):
+        """entries = [(label, color, ComparePanel), ...]"""
+        ax = self.ax
+        ax.clear()
+        ax.set_facecolor(BG)
+        ax.grid(True, color="#333", linewidth=0.4, linestyle="--")
+        ax.tick_params(colors=FG, labelsize=8)
+        for sp in ax.spines.values():
+            sp.set_edgecolor("#555")
+        ax.set_ylabel("hip torque\n[N·m]", color=FG, fontsize=8)
+
+        live = [(lab, col, p) for lab, col, p in entries
+                if p.spec is not None and p.metrics is not None
+                and p.metrics.valid and p.metrics.torques is not None]
+        if not live:
+            ax.set_xlabel("% of reachable stroke", color=FG, fontsize=8)
+            ax.text(0.5, 0.5, "no valid configuration", color="#ff6060",
+                    fontsize=10, ha="center", va="center",
+                    transform=ax.transAxes)
+            self.draw_idle()
+            return
+
+        # Which end is which is a property of the mechanism, not a convention:
+        # read it off the traced path rather than assuming q_lo is extended.
+        z = live[0][2].metrics.path[:, 1]
+        lo_lab, hi_lab = (("extended", "retracted") if z[0] < z[-1]
+                          else ("retracted", "extended"))
+        ax.set_xlabel(f"% of reachable stroke   (0 = {lo_lab}  →  "
+                      f"100 = {hi_lab})", color=FG, fontsize=8)
+
+        # One dashed line per distinct limit — the two sides may differ.
+        for lim in sorted({p.spec.torque_limit_nm for _, _, p in live}):
+            ax.axhline(lim, color="#ff5050", linewidth=1.3, linestyle="--",
+                       alpha=0.9, zorder=3)
+            # Mid-span: the note box owns the top-left and the cursor label the
+            # end the slider is nearest, so both edges are contested.
+            ax.text(0.42, lim, f"limit {lim:.2f}", color="#ff5050",
+                    fontsize=7.5, fontweight="bold", ha="left", va="bottom",
+                    transform=ax.get_yaxis_transform(), zorder=6)
+
+        note = []
+        for label, color, p in live:
+            m = p.metrics
+            span = m.q_hi - m.q_lo
+            x = (m.q_samples - m.q_lo) / span * 100.0
+            ax.plot(x, m.torques, color=color, linewidth=1.8, zorder=4,
+                    label=f"{label}  peak {m.max_torque_nm:.2f} N·m "
+                          f"@ {math.degrees(m.q_max_torque):+.1f}°")
+            xp = (m.q_max_torque - m.q_lo) / span * 100.0
+            ax.plot([xp], [m.max_torque_nm], "v", color=color, markersize=5,
+                    alpha=0.8, zorder=5)
+
+            cur = self._cursor(p, frac)
+            if cur is None:
+                note.append(f"{label:9s}  — singular at this pose")
+                continue
+            cx, cq, ctau = cur
+            ax.axvline(cx, color=color, linewidth=1.0, linestyle=":",
+                       alpha=0.65, zorder=3)
+            ax.plot([cx], [ctau], "o", color=color, markersize=7,
+                    markeredgecolor="white", markeredgewidth=0.8, zorder=7)
+            # Flip the callout inboard near the right end, or it is clipped.
+            side = 1 if cx <= 55.0 else -1
+            ax.annotate(f"{ctau:.2f} N·m", (cx, ctau),
+                        textcoords="offset points", xytext=(8 * side, 6),
+                        ha="left" if side > 0 else "right",
+                        color=color, fontsize=9, fontweight="bold", zorder=8,
+                        bbox=dict(boxstyle="round,pad=0.22", facecolor="#1e1e2e",
+                                  edgecolor=color, alpha=0.85))
+            pct = ctau / p.spec.torque_limit_nm * 100.0
+            over = "  OVER LIMIT" if ctau > p.spec.torque_limit_nm else ""
+            note.append(f"{label:9s} {ctau:6.2f} N·m  @ hip {math.degrees(cq):+7.2f}°"
+                        f"   {pct:5.1f}% of limit{over}")
+
+        ax.text(0.008, 0.97, "\n".join(note), transform=ax.transAxes,
+                color="#e0e0f0", fontsize=8.5, family="monospace",
+                va="top", ha="left", zorder=9,
+                bbox=dict(boxstyle="round,pad=0.35", facecolor="#2a2a3e",
+                          edgecolor="#6a6a85", alpha=0.92))
+
+        ax.set_xlim(-6, 106)
+        lo, hi = ax.get_ylim()
+        ax.set_ylim(min(0.0, lo), hi * 1.28)      # headroom for the labels
+        ax.legend(loc="lower right", fontsize=7, facecolor="#2a2a3e",
+                  edgecolor="#555", labelcolor="white", framealpha=0.85,
+                  borderpad=0.35, labelspacing=0.25)
+        self.draw_idle()
 
 
 def config_bounds(spec: LinkageSpec, metrics, shapes: ShapeSet,
@@ -579,10 +901,10 @@ def config_bounds(spec: LinkageSpec, metrics, shapes: ShapeSet,
             poly = shapes.world(p, link)
             xs += [poly[:, 0].min(), poly[:, 0].max()]
             zs += [poly[:, 1].min(), poly[:, 1].max()]
-        if spec.wheel_enabled:
-            wx, wz = trace_world(p, spec.primary_trace())
-            xs += [wx - spec.wheel_r, wx + spec.wheel_r]
-            zs += [wz - spec.wheel_r, wz + spec.wheel_r]
+        wx, wz = trace_world(p, spec.primary_trace())
+        r = max(spec.wheel_motor_r, spec.wheel_r if spec.wheel_enabled else 0.0)
+        xs += [wx - r, wx + r]
+        zs += [wz - r, wz + r]
 
     xs += [-spec.motor_r, spec.motor_r]
     zs += [-spec.motor_r, spec.motor_r]
@@ -648,10 +970,14 @@ def spec_report(spec: LinkageSpec, metrics=None) -> str:
             L.append(f"  {link:8s} @ {node}  {mm(r)}")
     L.append("")
     L.append("CIRCULAR BODIES")
+    L.append(f"  knee shaft     r = {spec.femur_shaft_r*1000:.2f} mm"
+             f"  (Ø{spec.femur_shaft_r*2000:.0f} mm) on the femur at C")
     L.append(f"  motor radius   {mm(spec.motor_r)}")
     L.append(f"  wheel          {'enabled' if spec.wheel_enabled else 'disabled'}"
              f"   r = {spec.wheel_r*1000:.2f} mm"
              f"  (Ø{spec.wheel_r*2000:.0f} mm)")
+    L.append(f"  hub motor      r = {spec.wheel_motor_r*1000:.2f} mm"
+             f"  (Ø{spec.wheel_motor_r*2000:.0f} mm), concentric with the wheel")
     L.append("")
     L.append("POSE LIMITS")
     L.append(f"  wheel top      {'ON ' if spec.enforce_wheel_below_hip else 'off'}"
@@ -663,6 +989,12 @@ def spec_report(spec: LinkageSpec, metrics=None) -> str:
     L.append(f"  ground plane   {'ON ' if spec.enforce_ground else 'off'}"
              f"   tangent to wheel bottom, {spec.wheel_r*1000:.1f} mm below W")
     L.append("                     no link and not the motor may reach it")
+    L.append(f"  hip torque     {'ON ' if spec.enforce_torque_limit else 'off'}"
+             f"   tau ≤ {spec.torque_limit_nm:.2f} N·m"
+             f"   at {spec.leg_load_kg:.2f} kg on this leg")
+    L.append("                     tau = load * g * |dz_W/dq|, static hold with")
+    L.append("                     the wheel on the ground.  Only the vertical")
+    L.append("                     gear ratio does work — the wheel rolls.")
     L.append("")
     L.append("HIP SWEEP")
     L.append(f"  seed           {math.degrees(spec.q_seed):+9.2f} °")
@@ -693,6 +1025,10 @@ def spec_report(spec: LinkageSpec, metrics=None) -> str:
             L.append(f"  range   [{math.degrees(metrics.q_lo):+.2f},"
                      f" {math.degrees(metrics.q_hi):+.2f}] °")
             L.append(f"  best-fit vertical at x   {metrics.mean_x_mm:9.2f} mm")
+            L.append(f"  peak hip torque          {metrics.max_torque_nm:9.2f} N·m"
+                     f"  at {math.degrees(metrics.q_max_torque):+.2f} °")
+            L.append(f"  torque headroom          "
+                     f"{spec.torque_limit_nm - metrics.max_torque_nm:9.2f} N·m")
             L.append(f"  blocked lo   {metrics.stop_lo}")
             L.append(f"  blocked hi   {metrics.stop_hi}")
     return "\n".join(L)
@@ -752,24 +1088,59 @@ class ComparePanel(QtWidgets.QWidget):
             head.addWidget(self.combo, 1)
         else:
             head.addStretch(1)
+
+        self.b_export = QtWidgets.QPushButton("Export…")
+        self.b_export.setToolTip(
+            "Save this diagram exactly as drawn — PDF or SVG for print,\n"
+            "PNG for a quick paste")
+        self.b_export.setMaximumWidth(80)
+        self.b_export.clicked.connect(self.export_diagram)
+        head.addWidget(self.b_export)
         lay.addLayout(head)
 
         self.canvas = LinkageCanvas()
         lay.addWidget(self.canvas, 1)
 
+        # Metrics text and the details button are built here — this panel owns
+        # them — but MainWindow parents them into the right dock.  Every row
+        # under the canvas costs height on both panels at once, and the diagram
+        # is what needs the room.
+        self.info = QtWidgets.QWidget()
+        ilay = QtWidgets.QVBoxLayout(self.info)
+        ilay.setContentsMargins(0, 0, 0, 0)
+        ilay.setSpacing(3)
+
         self.metrics_lbl = QtWidgets.QLabel("—")
         self.metrics_lbl.setStyleSheet(
             "font-family: Consolas, monospace; font-size: 11px; color: #c0c0d0;")
         self.metrics_lbl.setWordWrap(True)
-        lay.addWidget(self.metrics_lbl)
+        ilay.addWidget(self.metrics_lbl)
 
         self.b_details = QtWidgets.QPushButton("Show details…")
         self.b_details.setToolTip(
             "Every dimension of this configuration, plus its results")
         self.b_details.clicked.connect(self.show_details)
-        lay.addWidget(self.b_details)
+        ilay.addWidget(self.b_details)
 
         self._title = title
+
+    def export_diagram(self):
+        """Write the canvas as it stands, so what you see is what prints."""
+        if self.spec is None:
+            return
+        name = self.combo.currentText() if self.combo else self._title
+        stem = "".join(c if (c.isalnum() or c in "-_.") else "_"
+                       for c in name).strip("_") or "diagram"
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export diagram", f"{stem}.pdf",
+            "PDF (*.pdf);;SVG (*.svg);;PNG (*.png)")
+        if not path:
+            return
+        fig = self.canvas.fig
+        try:
+            fig.savefig(path, dpi=200, facecolor=fig.get_facecolor())
+        except Exception as e:                       # bad path, locked file…
+            QtWidgets.QMessageBox.warning(self, "Export failed", str(e))
 
     def show_details(self):
         if self.spec is None:
@@ -778,7 +1149,26 @@ class ComparePanel(QtWidgets.QWidget):
         DetailsDialog(f"{self._title} — {name}",
                       spec_report(self.spec, self.metrics), self).exec()
 
-    def set_spec(self, spec: LinkageSpec, use_collisions: bool):
+    def _set_combo_label(self, label: str):
+        """Point the dropdown at `label`, inserting it if it is a placeholder.
+
+        Signals stay blocked: this reports what is already being shown, and
+        must never be mistaken for the user picking an entry.
+        """
+        if self.combo is None:
+            return
+        self.combo.blockSignals(True)
+        if self.combo.findText(label) < 0:
+            self.combo.insertItem(0, label)
+        self.combo.setCurrentText(label)
+        self.combo.blockSignals(False)
+
+    def set_spec(self, spec: LinkageSpec, use_collisions: bool,
+                 label: str | None = None):
+        """`label` names what is being shown.  Pass it whenever the spec did
+        NOT come from the dropdown, or the two silently drift apart."""
+        if label is not None:
+            self._set_combo_label(label)
         self.spec = spec
         self.shapes = ShapeSet(spec, RES_DRAW)
         self.metrics = evaluate(spec, ShapeSet(spec, RES_FAST), use_collisions)
@@ -786,12 +1176,15 @@ class ComparePanel(QtWidgets.QWidget):
         if m.valid:
             self.metrics_lbl.setText(
                 f"stroke {m.stroke_deg:6.2f}°   travel {m.travel_mm:7.2f} mm   "
-                f"dev {m.max_dev_mm:6.2f} mm\nlo: {m.stop_lo}\nhi: {m.stop_hi}")
+                f"dev {m.max_dev_mm:6.2f} mm\n"
+                f"peak τ {m.max_torque_nm:5.2f} / {spec.torque_limit_nm:.2f} N·m"
+                f"   @ {spec.leg_load_kg:.2f} kg/leg\n"
+                f"lo: {m.stop_lo}\nhi: {m.stop_hi}")
         else:
             self.metrics_lbl.setText(f"INVALID — {m.reason}")
 
     def draw_at_fraction(self, frac: float, ghosts: bool, path: bool, dims: bool,
-                         xlim=None, ylim=None):
+                         xlim=None, ylim=None, clean: bool = True):
         """frac in [0,1] across this config's OWN reachable range, so two
         mechanisms with different strokes stay comparable.  The range is
         extended by OVERSHOOT at each end so the blocking pose is reachable and
@@ -805,7 +1198,7 @@ class ComparePanel(QtWidgets.QWidget):
             q0, q1 = self.spec.q_min, self.spec.q_max
         q = q0 + (q1 - q0) * frac
         self.canvas.draw_state(self.spec, q, m, self.shapes, ghosts, path, dims,
-                               xlim, ylim)
+                               xlim, ylim, clean)
         return q
 
 
@@ -813,11 +1206,15 @@ class OptWorker(QtCore.QThread):
     """Runs the search off the UI thread so the window stays responsive."""
 
     progress = QtCore.pyqtSignal(int, float, object, object)
+    restarted = QtCore.pyqtSignal(int, object)
     done = QtCore.pyqtSignal(object)
 
-    def __init__(self, spec: LinkageSpec, cfg, restarts: int = 1):
+    def __init__(self, spec: LinkageSpec, cfg, restarts: int = 1,
+                 time_limit_s: float | None = None,
+                 converge_pct: float | None = None):
         super().__init__()
         self.spec, self.cfg, self.restarts = spec, cfg, restarts
+        self.time_limit_s, self.converge_pct = time_limit_s, converge_pct
         self._stop = False
 
     def stop(self):
@@ -828,7 +1225,9 @@ class OptWorker(QtCore.QThread):
         mr = optimize_multi(
             self.spec, self.cfg, restarts=self.restarts,
             callback=lambda n, f, s, m: self.progress.emit(n, f, s, m),
-            should_stop=lambda: self._stop)
+            should_stop=lambda: self._stop,
+            time_limit_s=self.time_limit_s, converge_pct=self.converge_pct,
+            on_restart=lambda i, r, partial: self.restarted.emit(i, partial))
         self.done.emit(mr)
 
 
@@ -876,6 +1275,33 @@ class OptimizerPanel(QtWidgets.QWidget):
         grid.addWidget(self.max_link, r, 1, 1, 2)
         lay.addWidget(box)
 
+        # ── torque constraint ───────────────────────────────────────────────
+        tb = QtWidgets.QGroupBox("Hip torque constraint")
+        tform = QtWidgets.QFormLayout(tb)
+        self.tq_override = QtWidgets.QCheckBox("override for this run")
+        self.tq_override.setToolTip(
+            "Off: the search uses whatever the working config carries, so a\n"
+            "preset's own load and limit are never silently replaced.\n"
+            "On: these values are stamped onto every candidate instead.")
+        self.tq_enforce = QtWidgets.QCheckBox("enforce")
+        self.tq_enforce.setChecked(True)
+        self.tq_enforce.setToolTip(
+            "Untick to search blind to torque.  Useful only as a control —\n"
+            "a torque-blind winner can need well over twice what the motor\n"
+            "can hold, and loses most of its travel once trimmed.")
+        self.tq_load = _spin(1.0, 0.0, 100.0, 0.1, 2, " kg")
+        self.tq_load.setToolTip("Mass carried by ONE leg.")
+        self.tq_limit = _spin(2.5, 0.01, 100.0, 0.1, 2, " N·m")
+        self.tq_limit.setToolTip("AK45-10 continuous is 2.5 N·m.")
+        tform.addRow(self.tq_override)
+        tform.addRow("enforce", self.tq_enforce)
+        tform.addRow("load / leg", self.tq_load)
+        tform.addRow("max torque", self.tq_limit)
+        lay.addWidget(tb)
+
+        self.tq_override.toggled.connect(self._sync_torque_enabled)
+        self._sync_torque_enabled(False)
+
         # ── objective ───────────────────────────────────────────────────────
         ob = QtWidgets.QGroupBox("Objective — maximise vertical travel")
         form = QtWidgets.QFormLayout(ob)
@@ -896,29 +1322,82 @@ class OptimizerPanel(QtWidgets.QWidget):
         # ── run ─────────────────────────────────────────────────────────────
         rb = QtWidgets.QGroupBox("Run")
         rform = QtWidgets.QFormLayout(rb)
+        # The item TEXT is prose; the item DATA is the value optimize.py wants.
         self.algo = QtWidgets.QComboBox()
-        self.algo.addItems(["de", "es"])
-        self.algo.setToolTip("de = scipy differential evolution\n"
-                             "es = (1+lambda) evolution strategy, as used for baseline-1")
+        self.algo.addItem("de — differential evolution (global search)", "de")
+        self.algo.addItem("es — (1+λ) evolution strategy (refines current)", "es")
+        self.algo.setToolTip(
+            "de — differential evolution (scipy, best1bin, Sobol init).\n"
+            "     A POPULATION searching the whole bounds box.  It ignores your\n"
+            "     working geometry, so it can land on a different family of\n"
+            "     mechanism entirely.  Needs the larger budget: measured, DE\n"
+            "     scatters 24% across restarts at 2000 evals and agrees within\n"
+            "     2.7% at 6000.\n"
+            "\n"
+            "es — (1+λ) evolution strategy, λ=8, 1/5-success step adaptation.\n"
+            "     A LOCAL search that starts FROM the working geometry and\n"
+            "     mutates it, shrinking the step as it stops winning.  This is\n"
+            "     the scheme that produced baseline-1.  Cheaper per unit of\n"
+            "     progress, but it only refines the basin it starts in — and\n"
+            "     every restart starts from that same parent, so ES restarts\n"
+            "     agreeing proves less than DE restarts agreeing.")
         self.budget = QtWidgets.QSpinBox()
         self.budget.setRange(100, 2_000_000)
         self.budget.setSingleStep(1000)
         self.budget.setValue(6000)
+        # budget/restarts tooltips are mode-dependent — set in _sync_run_mode.
         self.seed = QtWidgets.QSpinBox()
         self.seed.setRange(0, 10_000)
+        self.seed.setToolTip(
+            "Seed of restart 0; restart i uses seed+i.  With 'randomise' on\n"
+            "this is overwritten at every start and left showing the seed the\n"
+            "last run actually used, so any result can be reproduced by\n"
+            "unticking and typing it back.")
+        self.run_mode = QtWidgets.QComboBox()
+        self.run_mode.addItem("budget × restarts", "evals")
+        self.run_mode.addItem("time limit", "time")
+        self.run_mode.setToolTip(
+            "budget × restarts — run exactly N restarts of N evals each.\n"
+            "time limit      — you give minutes; the session keeps restarting\n"
+            "                  until the clock runs out, dividing the time by\n"
+            "                  'restarts' to size each one.  The eval budget\n"
+            "                  stays on as a ceiling, so a run that settles\n"
+            "                  early hands its remaining time to the next.")
+        self.minutes = _spin(10.0, 0.1, 600.0, 1.0, 1, " min")
+        self.minutes.setToolTip(
+            "Total wall clock for the whole session, all restarts included.")
+        self.auto_stop = QtWidgets.QCheckBox("stop early when restarts agree")
+        self.auto_stop.setChecked(True)
+        self.auto_stop.setToolTip(
+            "End the session as soon as the spread across restarts drops under\n"
+            "2% — the same threshold verdict() calls CONVERGED.  Needs at least\n"
+            "3 completed restarts before it will trigger, since two runs can\n"
+            "agree by luck.  Applies in both modes.")
+        self.seed_random = QtWidgets.QCheckBox("randomise each run")
+        self.seed_random.setChecked(True)
+        self.seed_random.setToolTip(
+            "Draw a fresh seed on every Start.  Repeating a run with a fixed\n"
+            "seed re-walks the identical search, which hides scatter that is\n"
+            "really there — the restart spread only means something when the\n"
+            "runs are independent.")
         self.restarts = QtWidgets.QSpinBox()
         self.restarts.setRange(1, 50)
         self.restarts.setValue(5)
-        self.restarts.setToolTip(
-            "Independent runs from different seeds.  Agreement between them is\n"
-            "the only convergence evidence a stochastic search can give.\n"
-            "Measured: DE at 2000 evals scatters 24% across restarts;\n"
-            "at 6000 it agrees within 2.7%.")
+        srow = QtWidgets.QHBoxLayout()
+        srow.addWidget(self.seed, 1)
+        srow.addWidget(self.seed_random)
         rform.addRow("algorithm", self.algo)
+        rform.addRow("stop after", self.run_mode)
+        rform.addRow("time limit", self.minutes)
         rform.addRow("budget (evals)", self.budget)
-        rform.addRow("restarts", self.restarts)
-        rform.addRow("random seed", self.seed)
+        self.lbl_restarts = QtWidgets.QLabel("restarts")
+        rform.addRow(self.lbl_restarts, self.restarts)
+        rform.addRow("", self.auto_stop)
+        rform.addRow("seed", srow)
         lay.addWidget(rb)
+
+        self.run_mode.currentIndexChanged.connect(self._sync_run_mode)
+        self._sync_run_mode()
 
         brow = QtWidgets.QHBoxLayout()
         self.b_start = QtWidgets.QPushButton("▶ Start")
@@ -951,6 +1430,46 @@ class OptimizerPanel(QtWidgets.QWidget):
         self.load_settings()
         self._connect_autosave()
 
+    def is_timed(self) -> bool:
+        return self.run_mode.currentData() == "time"
+
+    def roll_seed(self):
+        """Draw the seed for a run about to start.  Deliberately NOT part of
+        config(), which is also called after a run to read back the free-
+        variable list — a getter that moved the seed would rewrite history.
+        The spinner keeps the value, so the run stays reproducible."""
+        if self.seed_random.isChecked():
+            self.seed.setValue(random.randint(0, self.seed.maximum()))
+
+    def _sync_run_mode(self):
+        """Grey out what the chosen mode does not use, and say what 'restarts'
+        means in each — it is a count in one mode and a divisor in the other."""
+        timed = self.is_timed()
+        self.minutes.setEnabled(timed)
+        self.lbl_restarts.setText("restarts ÷ time" if timed else "restarts")
+        self.restarts.setToolTip(
+            ("The time limit is divided by this to size each run, so it sets\n"
+             "how many restarts the session aims for rather than how many it\n"
+             "will do — a run that hits its eval ceiling early leaves time for\n"
+             "more."
+             if timed else
+             "Independent runs from different seeds.  Agreement between them is\n"
+             "the only convergence evidence a stochastic search can give.\n"
+             "Measured: DE at 2000 evals scatters 24% across restarts;\n"
+             "at 6000 it agrees within 2.7%."))
+        self.budget.setToolTip(
+            ("Per-run eval ceiling.  In timed mode the clock usually binds\n"
+             "first; this stops one run from spending the whole slice if it\n"
+             "somehow evaluates very fast."
+             if timed else
+             "Evaluations per restart, so total work is budget × restarts.\n"
+             "The run reports whether it was still improving when it hit this\n"
+             "cutoff — if it says STILL IMPROVING, the number is too low."))
+
+    def _sync_torque_enabled(self, on: bool):
+        for w in (self.tq_enforce, self.tq_load, self.tq_limit):
+            w.setEnabled(on)
+
     # ── settings persistence ────────────────────────────────────────────────
     @staticmethod
     def settings_path():
@@ -961,7 +1480,11 @@ class OptimizerPanel(QtWidgets.QWidget):
         w = {"max_link": self.max_link, "mode": self.mode, "tol": self.tol,
              "w_travel": self.w_travel, "w_vert": self.w_vert,
              "algo": self.algo, "budget": self.budget,
-             "restarts": self.restarts, "seed": self.seed}
+             "restarts": self.restarts, "seed": self.seed,
+             "seed_random": self.seed_random, "run_mode": self.run_mode,
+             "minutes": self.minutes, "auto_stop": self.auto_stop,
+             "tq_override": self.tq_override, "tq_enforce": self.tq_enforce,
+             "tq_load": self.tq_load, "tq_limit": self.tq_limit}
         for k, (cb, lo, hi) in self.var_rows.items():
             w[f"{k}.free"] = cb
             w[f"{k}.min"] = lo
@@ -983,7 +1506,10 @@ class OptimizerPanel(QtWidgets.QWidget):
             if isinstance(widget, QtWidgets.QCheckBox):
                 data[key] = widget.isChecked()
             elif isinstance(widget, QtWidgets.QComboBox):
-                data[key] = widget.currentText()
+                # Store the value, never the label — labels are prose and may
+                # be reworded, and the value is what optimize.py reads.
+                d = widget.currentData()
+                data[key] = widget.currentText() if d is None else d
             else:
                 data[key] = widget.value()
         try:
@@ -1008,13 +1534,21 @@ class OptimizerPanel(QtWidgets.QWidget):
                 if isinstance(widget, QtWidgets.QCheckBox):
                     widget.setChecked(bool(data[key]))
                 elif isinstance(widget, QtWidgets.QComboBox):
-                    if widget.findText(str(data[key])) >= 0:
-                        widget.setCurrentText(str(data[key]))
+                    # By value first, by label second: settings written before
+                    # the labels became prose still resolve.
+                    v = str(data[key])
+                    i = widget.findData(v)
+                    if i < 0:
+                        i = widget.findText(v)
+                    if i >= 0:
+                        widget.setCurrentIndex(i)
                 else:
                     widget.setValue(type(widget.value())(data[key]))
             except (TypeError, ValueError):
                 pass
             widget.blockSignals(False)
+        self._sync_torque_enabled(self.tq_override.isChecked())
+        self._sync_run_mode()
 
     def config(self):
         from optimize import OptConfig
@@ -1023,12 +1557,16 @@ class OptimizerPanel(QtWidgets.QWidget):
             if cb.isChecked():
                 free.append(k)
             bounds[k] = (lo.value() / 1000.0, hi.value() / 1000.0)
+        ovr = self.tq_override.isChecked()
         return OptConfig(
             free=tuple(free) or self.VARS, bounds=bounds,
             mode=self.mode.currentText(), tol_mm=self.tol.value(),
             w_travel=self.w_travel.value(), w_vert=self.w_vert.value(),
-            algo=self.algo.currentText(), budget=self.budget.value(),
+            algo=self.algo.currentData(), budget=self.budget.value(),
             seed=self.seed.value(), max_link_mm=self.max_link.value(),
+            enforce_torque_limit=self.tq_enforce.isChecked() if ovr else None,
+            leg_load_kg=self.tq_load.value() if ovr else None,
+            torque_limit_nm=self.tq_limit.value() if ovr else None,
         )
 
 
@@ -1048,6 +1586,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._opt_last_n = 0
         self._opt_base_evals = 0
         self._opt_restart = 0
+        self._opt_timed = False
+        self._opt_limit_s = None
+        self._opt_t0 = 0.0
+        # What the working panel is actually showing, so its combo can be
+        # re-asserted after the optimizer has borrowed the panel.
+        self._work_label = WORKING_EDITED
 
         self.params = ParamPanel(self.spec)
         self.matrix = CollisionMatrix(self.spec)
@@ -1090,8 +1634,38 @@ class MainWindow(QtWidgets.QMainWindow):
         self.chk_dims = QtWidgets.QCheckBox("Show F offset dimensions")
         self.chk_dims.setChecked(True)
         self.chk_dims.toggled.connect(self.redraw)
-        for c in (self.chk_collide, self.chk_ghost, self.chk_path, self.chk_dims):
+        self.chk_clean = QtWidgets.QCheckBox("Clean diagram (print-ready)")
+        self.chk_clean.setChecked(True)
+        self.chk_clean.setToolTip(
+            "Drops the legend strip, shrinks the stats to stroke / deviation /\n"
+            "torque in the top-left corner, and reclaims the empty band held\n"
+            "below the mechanism for the full-size box — the diagram gets the\n"
+            "whole panel.  The rest of the numbers are in this dock either way.")
+        self.chk_clean.toggled.connect(self.redraw)
+        for c in (self.chk_collide, self.chk_ghost, self.chk_path,
+                  self.chk_dims, self.chk_clean):
             rlay.addWidget(c)
+
+        # Per-panel metrics, moved off the canvas so no row of text competes
+        # with the mechanism for height.
+        for name, panel in (("Reference", self.ref_panel),
+                            ("Working", self.work_panel)):
+            gb = QtWidgets.QGroupBox(name)
+            gl = QtWidgets.QVBoxLayout(gb)
+            gl.setContentsMargins(6, 4, 6, 4)
+            gl.addWidget(panel.info)
+            rlay.addWidget(gb)
+
+        key = QtWidgets.QGroupBox("Diagram key")
+        klay = QtWidgets.QVBoxLayout(key)
+        klay.setContentsMargins(6, 4, 6, 4)
+        key_lbl = QtWidgets.QLabel(
+            "&nbsp;&nbsp;".join(f'<span style="color:{c}">■</span>&nbsp;{n}'
+                                for n, c in LEGEND_ENTRIES))
+        key_lbl.setWordWrap(True)
+        key_lbl.setStyleSheet("font-size: 10px; color: #c0c0d0;")
+        klay.addWidget(key_lbl)
+        rlay.addWidget(key)
 
         rlay.addWidget(QtWidgets.QLabel("Reference vs working"))
         self.delta = QtWidgets.QPlainTextEdit()
@@ -1175,6 +1749,18 @@ class MainWindow(QtWidgets.QMainWindow):
         hint.setStyleSheet("color: #888; font-size: 10px;")
         clay.addWidget(hint)
 
+        self.torque_canvas = TorqueCanvas()
+        self.chk_torque = QtWidgets.QCheckBox(
+            "Show hip torque across the stroke")
+        self.chk_torque.setChecked(True)
+        self.chk_torque.setToolTip(
+            "Static hold torque with the wheel on the ground:\n"
+            "  tau = load * g * |dz_W/dq|\n"
+            "The marker is the torque required at the current slider pose.")
+        self.chk_torque.toggled.connect(self.on_torque_toggled)
+        clay.addWidget(self.chk_torque)
+        clay.addWidget(self.torque_canvas)
+
         split = QtWidgets.QSplitter()
         split.addWidget(left)
         split.addWidget(centre)
@@ -1206,7 +1792,11 @@ class MainWindow(QtWidgets.QMainWindow):
         current = select or ref.currentText()
         ref.clear()
         ref.addItems(names)
-        if current in names:
+        # A rebuild must not silently rename what the panel is showing: if the
+        # reference is an optimizer snapshot, keep that entry alive.
+        if current in PLACEHOLDERS and self.ref_panel.spec is not None:
+            ref.insertItem(0, current)
+        if current in names or current in PLACEHOLDERS:
             ref.setCurrentText(current)
         ref.blockSignals(False)
 
@@ -1218,7 +1808,10 @@ class MainWindow(QtWidgets.QMainWindow):
         work.clear()
         work.addItem(WORKING_EDITED)
         work.addItems(names)
-        work.setCurrentText(keep if keep in names else WORKING_EDITED)
+        if keep in PLACEHOLDERS and keep != WORKING_EDITED:
+            work.insertItem(1, keep)
+        work.setCurrentText(
+            keep if (keep in names or keep in PLACEHOLDERS) else WORKING_EDITED)
         work.blockSignals(False)
 
         if ref.count():
@@ -1226,6 +1819,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def mark_working_edited(self):
         """Parameters diverged from whatever favorite was loaded."""
+        self._work_label = WORKING_EDITED
         work = self.work_panel.combo
         if work.currentText() != WORKING_EDITED:
             work.blockSignals(True)
@@ -1239,6 +1833,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not path.exists():
             return
         self.spec = LinkageSpec.load(path)
+        self._work_label = name
         self.params.load_from(self.spec)
         self.matrix.load_from(self.spec)
         self.recompute()
@@ -1268,7 +1863,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.metrics = evaluate(self.spec, fast, use_coll)
         self.metrics_free = evaluate(self.spec, fast, False)
 
-        self.work_panel.set_spec(self.spec, use_coll)
+        # Re-label every time: the optimizer may have left the combo reading
+        # "optimizer best" while this panel is about to show the working spec.
+        self.work_panel.set_spec(self.spec, use_coll, label=self._work_label)
         if self.ref_panel.spec is not None:
             self.ref_panel.set_spec(self.ref_panel.spec, use_coll)
 
@@ -1294,21 +1891,36 @@ class MainWindow(QtWidgets.QMainWindow):
         pad = 22.0
         top = 60.0 if self.chk_dims.isChecked() else pad
         right = 100.0 if self.chk_dims.isChecked() else pad
+        # No stats box in clean mode, so nothing needs the band held below it.
+        band = 0.0 if self.chk_clean.isChecked() else STATS_BAND * (z1 - z0)
         self._xlim = (x0 - pad, x1 + right)
-        self._ylim = (z0 - pad, z1 + top)
+        self._ylim = (z0 - band - pad, z1 + top)
 
     def on_slider(self, v: int):
         frac = v / 1000.0
         g, p, d = (self.chk_ghost.isChecked(), self.chk_path.isChecked(),
                    self.chk_dims.isChecked())
-        qr = self.ref_panel.draw_at_fraction(frac, g, p, d, self._xlim, self._ylim)
-        qw = self.work_panel.draw_at_fraction(frac, g, p, d, self._xlim, self._ylim)
+        c = self.chk_clean.isChecked()
+        qr = self.ref_panel.draw_at_fraction(frac, g, p, d, self._xlim,
+                                             self._ylim, c)
+        qw = self.work_panel.draw_at_fraction(frac, g, p, d, self._xlim,
+                                              self._ylim, c)
         txt = f"{frac*100:5.1f}%   "
         if qr is not None:
             txt += f"ref {math.degrees(qr):+7.2f}°   "
         if qw is not None:
             txt += f"work {math.degrees(qw):+7.2f}°"
         self.lbl_q.setText(txt)
+
+        if self.chk_torque.isChecked():
+            self.torque_canvas.draw_curves(
+                [("reference", REF_COLOR, self.ref_panel),
+                 ("working", WORK_COLOR, self.work_panel)], frac)
+
+    def on_torque_toggled(self, on: bool):
+        self.torque_canvas.setVisible(on)
+        if on:
+            self.on_slider(self.slider.value())
 
     def redraw(self):
         self.update_bounds()
@@ -1322,7 +1934,8 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         rows = [("stroke °", r.stroke_deg, w.stroke_deg, "+"),
                 ("travel mm", r.travel_mm, w.travel_mm, "+"),
-                ("max dev mm", r.max_dev_mm, w.max_dev_mm, "-")]
+                ("max dev mm", r.max_dev_mm, w.max_dev_mm, "-"),
+                ("peak τ N·m", r.max_torque_nm, w.max_torque_nm, "-")]
         L = [f"{'':11s}{'ref':>9s}{'work':>9s}{'delta':>10s}"]
         for name, a, b, better in rows:
             d = b - a
@@ -1350,6 +1963,12 @@ class MainWindow(QtWidgets.QMainWindow):
                          if qb is not None and stop.startswith("collision") else "")
                 L.append(f"  blocked {tag}  {stop}{extra}")
             L.append(f"  best-fit x        {m.mean_x_mm:9.2f} mm")
+            L.append(f"  peak hip torque   {m.max_torque_nm:9.2f} N·m"
+                     f"  at {math.degrees(m.q_max_torque):+7.2f} °")
+            L.append(f"  torque headroom   "
+                     f"{self.spec.torque_limit_nm - m.max_torque_nm:9.2f} N·m"
+                     f"   (limit {self.spec.torque_limit_nm:.2f} @ "
+                     f"{self.spec.leg_load_kg:.2f} kg/leg)")
         if f is not None and f.valid and m is not None and m.valid:
             L.append("")
             L.append("── without collisions ──────────────────")
@@ -1366,6 +1985,7 @@ class MainWindow(QtWidgets.QMainWindow):
     # -----------------------------------------------------------------------
     def reset_baseline(self):
         self.spec = baseline1()
+        self._work_label = WORKING_EDITED
         self.params.load_from(self.spec)
         self.matrix.load_from(self.spec)
         self.recompute()
@@ -1376,6 +1996,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not path:
             return
         self.spec = LinkageSpec.load(path)
+        self._work_label = WORKING_EDITED
         self.params.load_from(self.spec)
         self.matrix.load_from(self.spec)
         self.recompute()
@@ -1406,12 +2027,32 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.opt_panel.worker is not None:
             return
         self.sync_spec()
-        cfg = self.opt_panel.config()
+        p = self.opt_panel
+        p.roll_seed()
+        cfg = p.config()
+        timed = p.is_timed()
+        limit_s = p.minutes.value() * 60.0 if timed else None
+        converge = 2.0 if p.auto_stop.isChecked() else None
+        self._opt_timed = timed
+        self._opt_limit_s = limit_s
+        self._opt_t0 = time.perf_counter()
         self.opt_panel.log.clear()
         self.opt_panel.log.appendPlainText(
             f"{cfg.algo.upper()}  budget {cfg.budget}  mode {cfg.mode}"
             + (f"  tol {cfg.tol_mm} mm" if cfg.mode == "constrained" else
                f"  w={cfg.w_travel}/{cfg.w_vert}")
+            + (f"\ntime limit {p.minutes.value():.1f} min, sliced "
+               f"{limit_s / max(1, p.restarts.value()):.0f} s per restart"
+               if timed else "")
+            + ("\nauto-stop when restarts agree within 2%"
+               if converge is not None else "")
+            # Logged every run: with a random seed this line is the only record
+            # of what to type back to reproduce the result.
+            + f"\nseed {cfg.seed}"
+            + ("  (random)" if self.opt_panel.seed_random.isChecked() else "")
+            + f", restarts use {cfg.seed}..{cfg.seed + self.opt_panel.restarts.value() - 1}"
+            + f"\n{cfg.torque_note()}"
+            + f"\nmax link span: {cfg.max_link_mm:.0f} mm"
             + f"\nfree: {', '.join(cfg.free)}\n")
         self.opt_panel.bar.setValue(0)
         self.opt_panel.b_start.setEnabled(False)
@@ -1423,11 +2064,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Snapshot the reference side so you can watch the search pull away
         # from where you started.
-        self.ref_panel.set_spec(self.spec.copy(), self.chk_collide.isChecked())
+        self.ref_panel.set_spec(self.spec.copy(), self.chk_collide.isChecked(),
+                                label=OPT_SNAPSHOT)
         self.update_delta()
 
-        w = OptWorker(self.spec.copy(), cfg, self.opt_panel.restarts.value())
+        w = OptWorker(self.spec.copy(), cfg, self.opt_panel.restarts.value(),
+                      time_limit_s=limit_s, converge_pct=converge)
         w.progress.connect(self.on_opt_progress)
+        w.restarted.connect(self.on_opt_restarted)
         w.done.connect(self.on_opt_done)
         self.opt_panel.worker = w
         w.start()
@@ -1446,14 +2090,20 @@ class MainWindow(QtWidgets.QMainWindow):
         if n < self._opt_last_n:                     # eval counter reset => new restart
             self._opt_base_evals += self._opt_last_n
             self._opt_restart += 1
+            # In timed mode the restart count is not known ahead of time — the
+            # session runs as many as fit — so do not pretend to a total.
+            of = "" if self._opt_timed else f"/{p.restarts.value()}"
             p.log.appendPlainText(
-                f"--- restart {self._opt_restart + 1}/{p.restarts.value()} "
+                f"--- restart {self._opt_restart + 1}{of} "
                 f"(holding best {self._opt_best_f:.2f}) ---")
         self._opt_last_n = n
 
         total = self._opt_base_evals + n
-        p.bar.setValue(min(100, int(
-            100 * total / max(1, p.budget.value() * p.restarts.value()))))
+        if self._opt_timed and self._opt_limit_s:
+            frac = (time.perf_counter() - self._opt_t0) / self._opt_limit_s
+        else:
+            frac = total / max(1, p.budget.value() * p.restarts.value())
+        p.bar.setValue(min(100, int(100 * frac)))
 
         if m is None or not m.valid or f <= self._opt_best_f:
             return                                   # not a new winner: leave the view alone
@@ -1464,10 +2114,24 @@ class MainWindow(QtWidgets.QMainWindow):
             f"dev {m.max_dev_mm:6.2f}  stroke {m.stroke_deg:6.2f}")
         p.best_spec = spec
         p.b_apply.setEnabled(True)
-        self.work_panel.set_spec(spec, self.chk_collide.isChecked())
+        self.work_panel.set_spec(spec, self.chk_collide.isChecked(),
+                                 label=OPT_BEST)
         self.update_bounds()
         self.update_delta()
         self.on_slider(self.slider.value())
+
+    def on_opt_restarted(self, i, partial):
+        """One restart finished — report the spread so far.  This is the number
+        the auto-stop is watching, so it should be visible while it decides."""
+        p = self.opt_panel
+        s = partial.spread_pct()
+        left = ""
+        if self._opt_timed and self._opt_limit_s:
+            left = f"   {max(0.0, self._opt_limit_s - (time.perf_counter() - self._opt_t0)):.0f}s left"
+        p.log.appendPlainText(
+            f"    restart {i} done   best {partial.best.best_fitness:.2f}"
+            + (f"   spread {s:.1f}%" if not math.isnan(s) else "   spread n/a")
+            + left)
 
     def on_opt_done(self, mr):
         p = self.opt_panel
@@ -1482,9 +2146,11 @@ class MainWindow(QtWidgets.QMainWindow):
             p.log.appendPlainText(
                 "\n── convergence across restarts ──\n"
                 + "  " + "  ".join(f"{f:.1f}" for f in mr.fitnesses())
-                + f"\n  spread {mr.spread_pct():.1f}%\n  {mr.verdict()}")
+                + f"\n  spread {mr.spread_pct():.1f}%\n  {mr.verdict()}"
+                + f"\n  {mr.session_note()}")
         else:
-            p.log.appendPlainText(f"\n  {res.convergence_note()}")
+            p.log.appendPlainText(f"\n  {res.convergence_note()}"
+                                  f"\n  {mr.session_note()}")
 
         p.log.appendPlainText(
             f"\n{'stopped' if res.stopped_early else 'finished'}: "
@@ -1500,13 +2166,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # Make certain the view ends on the overall winner, whichever restart
         # produced it.
         if res.best_metrics is not None and res.best_metrics.valid:
-            self.work_panel.set_spec(res.best_spec, self.chk_collide.isChecked())
+            self.work_panel.set_spec(res.best_spec, self.chk_collide.isChecked(),
+                                     label=OPT_BEST)
             self.update_bounds()
             self.update_delta()
             self.on_slider(self.slider.value())
 
     def apply_optimized(self, spec: LinkageSpec):
         self.spec = spec.copy()
+        self._work_label = WORKING_EDITED
         self.params.load_from(self.spec)
         self.matrix.load_from(self.spec)
         self.recompute()

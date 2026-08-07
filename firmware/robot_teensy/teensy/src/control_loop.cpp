@@ -46,7 +46,19 @@ static constexpr float BACKWARD_TARGET_MARGIN_RAD = 0.0523599f;  // 3 deg
 
 // ── Phase 5: LQR gain table (computed by lqr.py self-test, Q_pitch=0.01,
 //    Q_pitch_rate=0.1884, Q_vel=0.00508442, R=100.0) ─────────────────────────
-// alpha=0 → retracted (Q_RET=-0.733 rad), alpha=1 → extended (Q_EXT=-1.432 rad)
+// alpha=0 → retracted, alpha=1 → extended. NOTE: alpha is NOT anchored to any
+// fixed q_hip pair — it is the fraction of the *calibrated* hip span, which
+// define_limits() sets to (calib_range_*_rad - calib_backoff_rad), currently
+// 85° - 5° = 80°. The old "(Q_RET=-0.733, Q_EXT=-1.432)" annotation here was
+// doubly wrong: those angles are for the superseded 5.29 mm F_Z geometry (see
+// CLAUDE.md), and their 0.699 rad span is a nominal stance stroke, not the
+// calibrated range. Reading them as the alpha endpoints understates the hip
+// scale by ~2x.
+//
+// The mechanism's real travel is 66° (hard-stopped), so the configured 80°
+// overruns the extended stop by 14°: alpha only reaches ~0.825 in practice and
+// the extended end of this gain table is never actually used. Fix by setting
+// calib_range_l/r_rad = 66° + backoff 5° = 71° (1.239 rad).
 // Runtime-tunable — see PARAM_LQR_K_* in param_ids.h/param_registry.cpp for defaults.
 
 // ── Phase 5: Effective pendulum length (IK at Q_RET and Q_EXT) ───────────────
@@ -632,7 +644,7 @@ void controlLoop_run() {
     float ff1_alpha = param_get(PARAM_FF1_ALPHA);
     if (ff1_alpha > 0.0f) {
         float kt             = param_get(PARAM_FF1_KT_HIP);
-        float tau_hip_total  = (hm_L.current_A + hm_R.current_A) * kt;
+        float tau_hip_total  = (hm_L.torque_nm + hm_R.torque_nm) * kt;
         tau_ff1 = -ff1_alpha * tau_hip_total * (WHEEL_R / l_eff);
     }
 

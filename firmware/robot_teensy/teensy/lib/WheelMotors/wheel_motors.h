@@ -27,7 +27,11 @@ struct WheelAxisState {
     uint32_t last_fb_ms;   // millis() of most recent encoder estimate callback
     uint32_t last_hb_ms;   // millis() of most recent heartbeat
     bool     ever_heard;   // true once any encoder estimate has been received
-    bool     ok;           // true when encoder feedback is fresh (< CAN_TIMEOUT_MS)
+    bool     hb_ever_heard;// true once any heartbeat has been received
+    // true when the axis is usable: fresh encoder feedback, no latched CAN TX
+    // stall, and — once heartbeats have been seen at all — a fresh heartbeat
+    // reporting the axis state we asked for. See wheel_motors_poll().
+    bool     ok;
 };
 
 extern WheelAxisState wm_L, wm_R;
@@ -74,3 +78,9 @@ bool wheel_motors_ok();
 // Request bus voltage from both axes (ODrive replies asynchronously via CAN).
 // Call this, then read wm_L.vbus / wm_R.vbus a few ms later.
 void wheel_motors_request_vbus();
+
+// Lifetime count of CAN3 frames that could not be placed directly into a
+// hardware mailbox and were deferred to the software TX queue. Diagnostic only
+// — a nonzero value is normal under burst load; see wheel_motors.cpp for when a
+// sustained run of these latches a TX stall and clears wm_*.ok.
+uint32_t wheel_motors_tx_defer_count();

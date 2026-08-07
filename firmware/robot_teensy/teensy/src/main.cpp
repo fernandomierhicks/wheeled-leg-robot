@@ -779,8 +779,8 @@ static void fill_telemetry(TelemetryPayload& t) {
     t.robot_state      = (uint8_t)g_state.state;
     t.fault_code       = g_state.fault_code;
     t.test_val         = sinf(2.0f * (float)M_PI * 2.0f * millis() / 1000.0f);
-    t.hip_l_current_a  = g_state.hip_l_current_a;
-    t.hip_r_current_a  = g_state.hip_r_current_a;
+    t.hip_l_torque_nm  = g_state.hip_l_torque_nm;
+    t.hip_r_torque_nm  = g_state.hip_r_torque_nm;
     for (uint8_t i = 1; i <= IBUS_NUM_CH; i++) t.ibus_ch[i - 1] = g_ibus.channel(i);
     t.ibus_alive       = g_ibus.alive() ? 1 : 0;
     t.wm_l_vel_turns_s = wm_L.vel_turns_s;
@@ -970,8 +970,8 @@ static void read_sensors(bool prof) {
         if (prof) prof_mark(s_prof_max.hip, t0);
         g_state.hip_l_pos_rad   = hm_L.pos_rad;
         g_state.hip_r_pos_rad   = hm_R.pos_rad;
-        g_state.hip_l_current_a = hm_L.current_A;
-        g_state.hip_r_current_a = hm_R.current_A;
+        g_state.hip_l_torque_nm = hm_L.torque_nm;
+        g_state.hip_r_torque_nm = hm_R.torque_nm;
     }
 
     if (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f || param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) {
@@ -1522,6 +1522,12 @@ static void check_limit_switches() {
 
 void loop() {
     uint32_t t_start = micros();
+    // One increment per 500 Hz tick, before any early-out below can skip it.
+    // Telemetry ships this so the GUI can (a) spot dropped telemetry frames
+    // from a delta != 10 between consecutive 50 Hz packets, and (b) confirm a
+    // reflash actually landed by seeing it restart near 0. It was declared and
+    // sent from the start but never incremented anywhere, so it always read 0.
+    g_state.loop_count++;
     watchdog_pet();
 
     bool prof = param_get(PARAM_LOOP_PROFILE_ENABLE) >= 0.5f;

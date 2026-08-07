@@ -20,6 +20,9 @@ static const char* PARAM_SLOT_B = "/params_b.bin";
 static const char* PARAM_LEGACY = "/params.bin";
 static const uint16_t LEGACY_MAGIC = 0xB0B1;
 static const uint8_t LEGACY_VERSION = 1;
+// params.bin predates the versioned CRC slots; treat it as older than the
+// oldest slot version so every unit migration applies to it.
+static const uint16_t LEGACY_STORE_VERSION = PARAM_STORE_VERSION_MIN - 1;
 static uint32_t s_store_generation = 0;
 static uint8_t s_store_active_slot = 0xFF;
 static ParamPersistenceStatus s_store_status{};
@@ -54,6 +57,8 @@ static const uint16_t PARAM_COUNT = sizeof(g_params) / sizeof(g_params[0]);
 static float s_defaults[PARAM_COUNT];
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
+
+static float migration_scale(uint16_t id, uint16_t from_version);
 
 static Param* find(uint16_t id) {
     for (uint16_t i = 0; i < PARAM_COUNT; i++) {
@@ -90,6 +95,10 @@ static void load_legacy_from_flash() {
         if (f.read(&val, 4) != 4) break;
         Param* p = find(id);
         if (p && !(p->flags & PARAM_FLAG_READONLY)) {
+            // params.bin predates the CRC slots entirely, so it is always in
+            // the pre-v3 hip units — convert before clamping (see
+            // migration_scale()).
+            val *= migration_scale(p->id, LEGACY_STORE_VERSION);
             // clamp to current bounds before restoring
             if (val < p->min_val) val = p->min_val;
             if (val > p->max_val) val = p->max_val;
@@ -106,6 +115,7 @@ struct SlotInfo {
     bool valid;
     uint32_t generation;
     uint16_t count;
+    uint16_t version;
 };
 
 static SlotInfo inspect_slot(const char* path, ParamStoreEntry* entries = nullptr) {
@@ -130,15 +140,65 @@ static SlotInfo inspect_slot(const char* path, ParamStoreEntry* entries = nullpt
     info.valid = true;
     info.generation = header.generation;
     info.count = header.count;
+    info.version = header.version;
     return info;
 }
 
-static uint16_t apply_entries(const ParamStoreEntry* entries, uint16_t count) {
+// ── v2 → v3 unit migration ───────────────────────────────────────────────────
+//
+// The AK45-10's MIT torque/velocity full-scale constants were wrong (see the
+// T_MIN/T_MAX note in hip_motors.cpp), so a handful of persisted params were
+// tuned in units that no longer mean the same thing. Rescale exactly those,
+// once, preserving the PHYSICAL behaviour the operator originally tuned:
+//
+//   * feedforward torques were packed over ±18 and decoded by the motor over
+//     ±8, so only 8/18 of the commanded value was ever delivered. Multiply by
+//     8/18 so the same torque still comes out now that packing is correct.
+//   * calibration stall limits were compared against a reply field decoded
+//     over ±20 that is really ±8, i.e. 2.5× too large. Multiply by 8/20.
+//   * jump_omega_max is compared against reported hip velocity, which was
+//     3.25× too large. Multiply by 20/65.
+//
+// Anything not listed keeps its stored value. The scale is applied to the RAW
+// stored value, before the min/max clamp — several of these params also got
+// tighter bounds in the same change, so clamping first would silently truncate
+// the value being converted.
+struct HipScaleMigration {
+    uint16_t id;
+    float    scale;
+};
+static const HipScaleMigration HIP_SCALE_V2_TO_V3[] = {
+    {PARAM_HIP_RUNNING_TFF_RET,        8.0f / 18.0f},
+    {PARAM_HIP_RUNNING_TFF_EXT,        8.0f / 18.0f},
+    {PARAM_JUMP_TORQUE_MAX,            8.0f / 18.0f},
+    {PARAM_CALIB_SEEK_TORQUE_LIMIT_NM, 8.0f / 20.0f},
+    {PARAM_CALIB_MOVE_TORQUE_LIMIT_NM, 8.0f / 20.0f},
+    {PARAM_JUMP_OMEGA_MAX,            20.0f / 65.0f},
+};
+
+// Multiplier to bring one param from `from_version` up to PARAM_STORE_VERSION.
+static float migration_scale(uint16_t id, uint16_t from_version) {
+    if (from_version >= PARAM_STORE_VERSION) return 1.0f;
+    for (const HipScaleMigration& m : HIP_SCALE_V2_TO_V3) {
+        if (m.id == id) return m.scale;
+    }
+    return 1.0f;
+}
+
+static uint16_t apply_entries(const ParamStoreEntry* entries, uint16_t count,
+                              uint16_t store_version) {
     uint16_t restored = 0;
     for (uint16_t i = 0; i < count; ++i) {
         Param* p = find(entries[i].id);
         float value = entries[i].value;
         if (!p || !(p->flags & PARAM_FLAG_PERSISTENT) || !isfinite(value)) continue;
+        const float scale = migration_scale(p->id, store_version);
+        if (scale != 1.0f) {
+            const float before = value;
+            value *= scale;
+            comm_log(LOG_LEVEL_WARN, "Param migrate v%u->v%u: %s %.4f -> %.4f",
+                     store_version, PARAM_STORE_VERSION, p->name, before, value);
+        }
         if (value < p->min_val) value = p->min_val;
         if (value > p->max_val) value = p->max_val;
         p->value = value;
@@ -213,7 +273,7 @@ static void load_from_flash() {
     const char* path = chosen == 0 ? PARAM_SLOT_A : PARAM_SLOT_B;
     ParamStoreEntry entries[PARAM_COUNT];
     SlotInfo selected = inspect_slot(path, entries);
-    uint16_t restored = apply_entries(entries, selected.count);
+    uint16_t restored = apply_entries(entries, selected.count, selected.version);
     s_store_active_slot = chosen;
     s_store_generation = selected.generation;
     s_store_status.active_slot = chosen;
@@ -225,6 +285,14 @@ static void load_from_flash() {
              "Param flash: loaded slot %c gen=%lu restored=%u/%u valid_mask=0x%02X",
              chosen == 0 ? 'A' : 'B', (unsigned long)selected.generation,
              restored, selected.count, s_store_status.valid_slot_mask);
+
+    // apply_entries() already converted units for an older store. Persist the
+    // result so the conversion runs exactly once.
+    if (selected.version < PARAM_STORE_VERSION) {
+        comm_log(LOG_LEVEL_WARN, "Param flash: migrated store v%u -> v%u, re-saving",
+                 selected.version, PARAM_STORE_VERSION);
+        save_to_flash();
+    }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -232,11 +300,15 @@ static void load_from_flash() {
 void param_init() {
     for (uint16_t i = 0; i < PARAM_COUNT; i++) s_defaults[i] = g_params[i].value;
 
+    // Deliberately no format-on-failure retry here. LittleFS_Program::begin()
+    // already does mount -> format -> mount internally (framework LittleFS.cpp),
+    // so a virgin chip is formatted for us on first boot and this call would
+    // only ever fire after that internal format had *also* failed — i.e. real
+    // hardware trouble, where reformatting cannot help. All it would achieve is
+    // erasing both CRC-protected generations, defeating the entire two-slot
+    // recovery design from inside its own init path. Mount failure now means
+    // "run on compiled defaults and say so"; a wipe must be deliberate.
     bool mounted = s_fs.begin(FS_SIZE_BYTES);
-    if (!mounted) {
-        s_fs.format();
-        mounted = s_fs.begin(FS_SIZE_BYTES);
-    }
     if (mounted) {
         comm_log(LOG_LEVEL_INFO, "Param flash: mounted (%s)", s_fs.getMediaName());
     } else {

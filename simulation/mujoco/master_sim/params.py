@@ -20,8 +20,15 @@ class RobotGeometry:
     L_stub: float = 0.03513         # [m] tibia stub upward (C→E)
     L_tibia: float = 0.12939        # [m] tibia downward (C→W)
     Lc: float = 0.15081             # [m] coupler link (F→E)
-    F_X: float = -0.05887           # [m] coupler pivot X from body origin
-    F_Z: float = -0.01821           # [m] coupler pivot Z in body frame
+    F_X: float = -0.05887           # [m] coupler pivot X from body origin (as built: 59 mm)
+    # AS BUILT (measured 2026-08-03): the hip-to-coupler HEIGHT offset is 18 mm,
+    # i.e. F sits 18 mm above the hip axis A, so F_Z = A_Z + 0.018 = -0.0055.
+    # The old -0.01821 was a transcription error: -18.21 mm is F's coordinate in
+    # the BODY-CENTRE frame, and it was reused as if it were the A->F offset
+    # (the true offset in the original design was A_Z - F_Z = -5.29 mm). The
+    # mistake propagated into CAD and the robot was built to it, so 18 mm is now
+    # the physical truth, not a bug to correct. See model.py's header note.
+    F_Z: float = -0.0055            # [m] coupler pivot Z in body frame (18 mm above A)
     A_Z: float = -0.0235            # [m] hip motor Z offset from body centre
 
     m_box: float = 0.477            # [kg] body box + electronics
@@ -35,9 +42,18 @@ class RobotGeometry:
     leg_y: float = 0.1430           # [m] Y-offset of leg plane from body centre
     motor_mass: float = 0.260       # [kg] AK45-10 hip motor
 
-    # Hip stroke angles (verified against run_id 51167)
-    Q_RET: float = -0.78705         # [rad] fully retracted (crouch), 25° closer to Q_EXT
-    Q_EXT: float = -1.43161         # [rad] fully extended  (jump)
+    # Hip stroke angles — recomputed by auto_stroke_angles for the as-built
+    # F_Z above. Previous values (-0.78705 / -1.43161) were for the erroneous
+    # -0.01821 and are invalid: with F 18 mm up, q = -1.43 is past the 4-bar
+    # singularity (non-singular range is about -1.301 .. +0.023).
+    #
+    # UNRESOLVED — do not treat the absolute placement as measured. The CAD's
+    # deliberate hard stops give 66 deg (1.152 rad) of total hip travel, but the
+    # band below is only 48.1 deg, and 66 deg does not fit below Q_RET here
+    # (it would need Q_RET >= -0.149). Needs the CAD's absolute retracted angle
+    # to pin down; the STROKE (66 deg) is the measured quantity, not these two.
+    Q_RET: float = -0.378958        # [rad] fully retracted (crouch)
+    Q_EXT: float = -1.218537        # [rad] fully extended  (jump)
 
     @property
     def Q_NOM(self) -> float:

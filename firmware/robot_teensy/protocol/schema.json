@@ -122,6 +122,11 @@
       "symbol": "FAULT_ROLL_WATCHDOG",
       "id": 14,
       "description": "|roll| > roll_watchdog_limit for > 200 ms (lateral tip guard)"
+    },
+    {
+      "symbol": "FAULT_JUMP_TIMEOUT",
+      "id": 15,
+      "description": "jump sequence overran its computed phase budget without reaching JP_DONE"
     }
   ],
   "commands": [
@@ -355,12 +360,12 @@
       "group": "GROUP_HIP",
       "name": "hip_running_tff_ret",
       "default": 0.0,
-      "min": -5.0,
-      "max": 5.0,
+      "min": -8.0,
+      "max": 8.0,
       "flags": [
         "persistent"
       ],
-      "description": "MIT feedforward torque used for hip setpoints while RUNNING, fully retracted leg (alpha=0). Interpolated toward hip_running_tff_ext by the same gain-schedule alpha as the LQR gains. The hip hold is proportional-only (no integrator), so its steady-state sag is (holding torque - tff)/kp: a single constant tff can only null that at one leg height, and the 4-bar's mechanical advantage makes the required holding torque vary with height. Measure the sag at several alpha holds and set the two anchors from that."
+      "description": "MIT feedforward torque used for hip setpoints while RUNNING, fully retracted leg (alpha=0). Interpolated toward hip_running_tff_ext by the same gain-schedule alpha as the LQR gains. The hip hold is proportional-only (no integrator), so its steady-state sag is (holding torque - tff)/kp: a single constant tff can only null that at one leg height, and the 4-bar's mechanical advantage makes the required holding torque vary with height. Measure the sag at several alpha holds and set the two anchors from that. Units are true N·m at the hip output (AK45-10 MIT torque full scale ±8). Values tuned before the torque-scale fix were 18/8 too large; the v2->v3 param-store migration rescales them once."
     },
     {
       "symbol": "PARAM_HIP_RUNNING_RAMP_TIME_S",
@@ -394,8 +399,8 @@
       "group": "GROUP_HIP",
       "name": "hip_running_tff_ext",
       "default": 0.0,
-      "min": -5.0,
-      "max": 5.0,
+      "min": -8.0,
+      "max": 8.0,
       "flags": [
         "persistent"
       ],
@@ -467,30 +472,30 @@
       "description": "MIT damping gain used for all switch-homing motion."
     },
     {
-      "symbol": "PARAM_CALIB_SEEK_CURRENT_LIMIT_A",
+      "symbol": "PARAM_CALIB_SEEK_TORQUE_LIMIT_NM",
       "id": 292,
       "group": "GROUP_CALIB",
-      "name": "calib_seek_cur_lim",
-      "default": 0.75,
-      "min": 0.2,
-      "max": 5.0,
+      "name": "calib_seek_trq_lim",
+      "default": 0.3,
+      "min": 0.05,
+      "max": 2.0,
       "flags": [
         "persistent"
       ],
-      "description": "Measured motor-current safety threshold while seeking toward the retract switch [A]; it must be exceeded continuously for calib_cur_trip_ms before calibration fails."
+      "description": "Motor-torque safety threshold while seeking toward the retract switch [N·m]; it must be exceeded continuously for calib_trq_trip_ms before calibration fails. The AK45 MIT reply field is shaft torque, not amps."
     },
     {
-      "symbol": "PARAM_CALIB_MOVE_CURRENT_LIMIT_A",
+      "symbol": "PARAM_CALIB_MOVE_TORQUE_LIMIT_NM",
       "id": 293,
       "group": "GROUP_CALIB",
-      "name": "calib_move_cur_lim",
-      "default": 1.5,
-      "min": 0.2,
-      "max": 10.0,
+      "name": "calib_move_trq_lim",
+      "default": 0.6,
+      "min": 0.05,
+      "max": 4.0,
       "flags": [
         "persistent"
       ],
-      "description": "Measured motor-current safety threshold while moving away from an initially pressed retract switch or backing off after zeroing [A]; it must be exceeded continuously for calib_cur_trip_ms before calibration fails."
+      "description": "Motor-torque safety threshold while moving away from an initially pressed retract switch or backing off after zeroing [N·m]; it must be exceeded continuously for calib_trq_trip_ms before calibration fails. The AK45 MIT reply field is shaft torque, not amps."
     },
     {
       "symbol": "PARAM_CALIB_BACKOFF_RAD",
@@ -584,17 +589,17 @@
       "description": "Maximum commanded travel allowed while moving away from a retract switch; must be at least calib_backoff_rad [rad]."
     },
     {
-      "symbol": "PARAM_CALIB_CURRENT_TRIP_MS",
+      "symbol": "PARAM_CALIB_TORQUE_TRIP_MS",
       "id": 301,
       "group": "GROUP_CALIB",
-      "name": "calib_cur_trip_ms",
+      "name": "calib_trq_trip_ms",
       "default": 50.0,
       "min": 0.0,
       "max": 500.0,
       "flags": [
         "persistent"
       ],
-      "description": "Continuous time motor current must remain above the active calibration current limit before faulting [ms]; 0 restores immediate trips."
+      "description": "How long a hip must stay above its calibration torque limit before calibration faults [ms]. 0 trips immediately."
     },
     {
       "symbol": "PARAM_CALIB_MOVE_KP",
@@ -908,13 +913,13 @@
       "id": 1044,
       "group": "GROUP_CONTROL",
       "name": "ff1_kt_hip",
-      "default": 1.2732,
+      "default": 1.0,
       "min": 0.0,
       "max": 5.0,
       "flags": [
         "readonly"
       ],
-      "description": "AK45-10 hip motor output torque constant [N·m/A]; hardware characteristic, not a tuning knob. READONLY, edit + reflash to change."
+      "description": "Scale from reported hip torque to hip output torque. The AK45 MIT reply field is already shaft torque in N·m, so this is 1.0 and remains only as an FF1 trim. READONLY, edit + reflash to change."
     },
     {
       "symbol": "PARAM_JUMP_ENABLE",
@@ -936,11 +941,11 @@
       "name": "jump_torque_max",
       "default": 0.0,
       "min": 0.0,
-      "max": 18.0,
+      "max": 8.0,
       "flags": [
         "persistent"
       ],
-      "description": "Max hip feedforward torque during EXTEND [N·m]; ramp up from 0."
+      "description": "Max hip feedforward torque during EXTEND [N·m]; ramp up from 0. Full scale is the AK45-10 MIT torque range (±8 N·m); larger values cannot be encoded."
     },
     {
       "symbol": "PARAM_JUMP_CROUCH_TIME_S",
@@ -986,13 +991,13 @@
       "id": 1050,
       "group": "GROUP_CONTROL",
       "name": "jump_omega_max",
-      "default": 40.0,
-      "min": 5.0,
-      "max": 200.0,
+      "default": 12.3077,
+      "min": 2.0,
+      "max": 20.0,
       "flags": [
         "persistent"
       ],
-      "description": "Hip velocity above which feedforward torque → 0 [rad/s]."
+      "description": "Hip velocity above which feedforward torque fades to 0 [rad/s]. Compared against reported hip velocity, whose full scale is the AK45-10 MIT speed range (±20 rad/s)."
     },
     {
       "symbol": "PARAM_JUMP_HARDSTOP_MARGIN",
@@ -1187,10 +1192,8 @@
       "default": 0.0,
       "min": 0.0,
       "max": 1.0,
-      "flags": [
-        "persistent"
-      ],
-      "description": "1 = force the hip gain-schedule blend to alpha=0.0 (fully-retracted LQR gains), bypassing the hm_limits valid-calibration check entirely. For hardware tuning at the retracted anchor without needing a completed calibration. Persistent — survives reboot, so a bench session left with this on stays on until explicitly cleared."
+      "flags": [],
+      "description": "1 = force the hip gain-schedule blend to alpha=0.0 (fully-retracted LQR gains), bypassing the hm_limits valid-calibration check entirely. For hardware tuning at the retracted anchor without needing a completed calibration. Not persisted — always boots to 0, like run_wheel_bypass_en: a bench override that silently survives a power cycle would leave the robot flying retracted gains at full extension with nothing on screen to say why."
     },
     {
       "symbol": "PARAM_GUI_MOTION_CTRL_EN",

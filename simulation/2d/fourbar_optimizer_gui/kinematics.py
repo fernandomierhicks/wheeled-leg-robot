@@ -122,6 +122,42 @@ def solve_pose(spec: LinkageSpec, q_hip: float,
                 nodes=nodes, frames=frames)
 
 
+def wheel_jacobian(spec: LinkageSpec, pose: Pose) -> tuple[float, float] | None:
+    """d(W)/d(q_hip) in world axes, [m/rad].  None at a singularity.
+
+    Closed form, not a finite difference: the loop constraint |E - F| = Lc is
+    differentiated directly, so there is no step-size to tune and no extra IK
+    solve per pose.
+
+        C  = (-Lf cos q, Lf sin q)            dC/dq = (Lf sin q, Lf cos q)
+        E  = C + L_stub (sin a, cos a)        u = E - F,  |u| = Lc
+        u . dE/dq = 0   ->   a' = -(u . dC/dq) / (L_stub (u_x cos a - u_z sin a))
+
+    W rides on the tibia, whose frame angle is t = pi/2 - a, so dt/dq = -a'.
+    The denominator vanishing IS the 4-bar singularity — the same event
+    SINGULARITY_LIM guards — so it returns None rather than a huge number.
+    """
+    q, a = pose.q_hip, pose.alpha
+    dC_x = spec.L_femur * math.sin(q)
+    dC_z = spec.L_femur * math.cos(q)
+
+    u_x = pose.nodes["E"][0] - spec.F_X
+    u_z = pose.nodes["E"][1] - spec.F_Z
+    ca, sa = math.cos(a), math.sin(a)
+
+    den = spec.L_stub * (u_x * ca - u_z * sa)
+    if abs(den) < 1e-12:
+        return None
+    da = -(u_x * dC_x + u_z * dC_z) / den
+
+    t = math.atan2(ca, sa)                    # tibia frame angle = pi/2 - a
+    st, ct = math.sin(t), math.cos(t)
+    p_x, p_z = -spec.L_tibia, spec.w_perp     # W in the tibia's local frame
+    dt = -da
+    return (dC_x + dt * (-st * p_x - ct * p_z),
+            dC_z + dt * (ct * p_x - st * p_z))
+
+
 def local_to_world(pt, angle: float, origin) -> tuple[float, float]:
     c, s = math.cos(angle), math.sin(angle)
     x, z = pt

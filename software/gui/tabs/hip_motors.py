@@ -10,7 +10,7 @@ Controls: Enable / Disable / Zero per-motor and both,
 Telemetry fields used (from TelemetryPayload / comm_protocol.h):
     hip_l_pos_rad, hip_r_pos_rad           — hip encoder position [rad]
     hip_l_cmd_pos_rad, hip_r_cmd_pos_rad   — hip position command [rad]
-    hip_l_current_a, hip_r_current_a       — hip phase current [A]
+    hip_l_torque_nm, hip_r_torque_nm       — hip shaft torque [N·m]
 
 Commands are framed via the CommLink protocol (shared/comm_protocol.h) and
 written to the Teensy serial port through SerialPortManager.
@@ -180,7 +180,7 @@ class _MotorPanel(QWidget):
         self._cur_buf: deque = deque([0.0] * _BUF, maxlen=_BUF)
         self._latest_pos_deg = 0.0
         self._latest_cmd_rad = 0.0
-        self._latest_current_a = 0.0
+        self._latest_torque_nm = 0.0
         self._latest_cmd_pos_deg = 0.0
         self._in_manual = False
         self._in_calibration = False
@@ -211,7 +211,7 @@ class _MotorPanel(QWidget):
         # Live readouts
         self._lbl_pos    = _readout(lay, "Position", BLUE)
         self._lbl_cmd    = _readout(lay, "Command", ORANGE)
-        self._lbl_cur    = _readout(lay, "Current", GREEN)
+        self._lbl_cur    = _readout(lay, "Torque", GREEN)
         self._lbl_limits = _readout(lay, "Limits", DIM)
         lay.addWidget(_hline())
 
@@ -230,7 +230,7 @@ class _MotorPanel(QWidget):
             list(self._cmd_buf), pen=pg.mkPen(ORANGE, width=1.2), name="cmd")
         lay.addWidget(self._chart)
 
-        # Mini chart — current (green), separate scale, below the pos/cmd chart
+        # Mini chart — torque (green), separate scale, below the pos/cmd chart
         self._chart_cur = pg.PlotWidget()
         self._chart_cur.setBackground(BG)
         self._chart_cur.setMaximumHeight(70)
@@ -241,7 +241,7 @@ class _MotorPanel(QWidget):
         self._chart_cur.setXLink(self._chart)
         self._chart_cur.addLegend(offset=(4, 4), verSpacing=-4)
         self._crv_cur = self._chart_cur.plot(
-            list(self._cur_buf), pen=pg.mkPen(GREEN, width=1.2), name="current (A)")
+            list(self._cur_buf), pen=pg.mkPen(GREEN, width=1.2), name="torque (N·m)")
         lay.addWidget(self._chart_cur)
         lay.addWidget(_hline())
 
@@ -535,14 +535,14 @@ class _MotorPanel(QWidget):
 
     # ── data update (called from HipMotorsTab._on_packet) ────────────────────
 
-    def update_data(self, pos_rad: float, cmd_rad: float, current_a: float):
+    def update_data(self, pos_rad: float, cmd_rad: float, torque_nm: float):
         pos_deg = math.degrees(pos_rad)
         self._latest_pos_deg = pos_deg
         self._latest_cmd_rad = cmd_rad
-        self._latest_current_a = current_a
+        self._latest_torque_nm = torque_nm
 
         self._pos_buf.append(pos_deg)
-        self._cur_buf.append(current_a)
+        self._cur_buf.append(torque_nm)
         if self._in_manual:
             self._cmd_buf.append(self._latest_cmd_pos_deg)
         else:
@@ -552,7 +552,7 @@ class _MotorPanel(QWidget):
     def _redraw_chart(self):
         self._lbl_pos.setText(f"{self._latest_pos_deg:+.1f}°")
         self._lbl_cmd.setText(f"{self._latest_cmd_pos_deg:+.1f}°")
-        self._lbl_cur.setText(f"{self._latest_current_a:+.2f} A")
+        self._lbl_cur.setText(f"{self._latest_torque_nm:+.2f} N·m")
 
         self._crv_pos.setData(list(self._pos_buf))
         self._crv_cmd.setData(list(self._cmd_buf))
@@ -765,8 +765,8 @@ class HipMotorsTab(QWidget):
         pos_r = info.get("hip_r_pos_rad", 0.0)
         cmd_l = info.get("hip_l_cmd_pos_rad", 0.0)
         cmd_r = info.get("hip_r_cmd_pos_rad", 0.0)
-        cur_l = info.get("hip_l_current_a", 0.0)
-        cur_r = info.get("hip_r_current_a", 0.0)
+        cur_l = info.get("hip_l_torque_nm", 0.0)
+        cur_r = info.get("hip_r_torque_nm", 0.0)
 
         # Update per-motor panels
         self._panel_L.update_data(pos_l, cmd_l, cur_l)

@@ -131,6 +131,26 @@ class IrregularMetricTests(unittest.TestCase):
         self.assertAlmostEqual(metrics["rms_pitch_deg"], 57.2958, places=4)
         self.assertAlmostEqual(metrics["health_fractions"]["vel_pi_sat_frac"], 0.8333, places=4)
 
+    def test_pitch_error_subtracts_trim(self):
+        # The regulated quantity is control_loop.cpp's LQR x0:
+        # pitch - theta_ref - pitch_trim. Holding exactly at the trimmed balance
+        # point is zero error, however large the trim is.
+        t = np.asarray([0.0, 1.0, 2.0])
+        fields = {name: np.zeros(3) for name in _SCALAR_FIELDS}
+        fields["pitch_rad"] = np.full(3, -0.14)      # measured balance lean
+        fields["theta_ref"] = np.zeros(3)
+        fields["pitch_trim_rad"] = np.full(3, -0.14)  # ...which is exactly the trim
+        run = DecodedRun(
+            path=Path("synthetic.jsonl"), telem_version=TELEM_VERSION,
+            sample_rate_hz=1, count=3,
+            t_micros=np.asarray([0, 1_000_000, 2_000_000], dtype=np.uint32),
+            t_s=t, fields=fields, has_gain_sched_alpha=False, source_kind="host",
+        )
+        metrics = compute_metrics(run)
+        self.assertAlmostEqual(metrics["rms_pitch_deg"], 0.0, places=9)
+        self.assertAlmostEqual(metrics["max_pitch_deg"], 0.0, places=9)
+        self.assertAlmostEqual(metrics["ise_pitch"], 0.0, places=12)
+
 
 if __name__ == "__main__":
     unittest.main()

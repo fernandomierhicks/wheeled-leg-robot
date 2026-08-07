@@ -246,18 +246,144 @@ sequencing all set hip setpoints directly and bypass it. The disarm ramp
 target, so releasing the hips doesn't also snap the target underneath the
 ramp.
 
+**The calibrated hip span is configured, not measured — and it is currently
+14° too large.** `define_limits()` (`Calibration/calibration.cpp`) only *finds*
+the retract switch; the extended end is simply `calib_range_*_rad` away from it:
+
+```cpp
+const float retracted = away_dir * param_get(PARAM_CALIB_BACKOFF_RAD);
+const float extended  = away_dir * range_rad;      // calib_range_l/r_rad
+```
+
+So the span is `calib_range - calib_backoff` = 85° − 5° = **80°**, never checked
+against the hardware. The mechanism has deliberate hard stops at **66°** of hip
+travel (CAD, 2026-08-03), so:
+
+- `t = 1` from `hip_cmd_to_setpoints()` commands the leg **14° past the extended
+  stop** — the motor pushes into the stop and holds there.
+- `gain_sched_alpha` saturates near **0.825**, never 1.0, so the extended anchor
+  of every α-scheduled pair (`lqr_*_ext`, `hip_running_tff_ext`,
+  `lqr_pitch_trim_ext`, `lqr_barrier_th_ext`) is never reached and the schedule
+  is compressed by ~21% across its whole range.
+- Any hip angle read from telemetry is in this same 80°-normalised frame.
+
+Fix: set `calib_range_l_rad` = `calib_range_r_rad` = **1.239 rad (71°)**
+(66° travel + 5° backoff). This rescales α, so re-check the α-scheduled gains
+afterwards — they were tuned against the compressed schedule. Note the AK45
+position scale itself is fine: 1 firmware-rad = 1 rad at the femur, no
+reduction between the output shaft and pivot A.
+
 **Hip feedforward is α-scheduled** (`hip_running_tff_ret`/`_ext`, same α as
 the LQR gains). The hip hold is a pure MIT impedance with no integrator, so
 its steady-state sag is `(holding_torque − tff)/kp` — and because the 4-bar's
 mechanical advantage changes with leg height, the holding torque does too
-(measured 2026-07-28: ~10 A of hip current at α≈0.05 versus ~6.8 A at
-α≈0.145, i.e. *more* torque needed retracted). A single constant `tff`
+(measured 2026-07-28: ~4.0 N·m of hip torque at α≈0.05 versus ~2.7 N·m at
+α≈0.145, i.e. *more* torque needed retracted — those readings were logged as
+"10 A" and "6.8 A" before the MIT scale fix below). A single constant `tff`
 therefore can only null the sag at one height; the two anchors let it track.
 Both default to 0, so an untuned robot behaves exactly as before. Measure the
 hold error at several α plateaus and fit the anchors from that rather than
 extrapolating from one — and note `hip_running_kp` is bypassed entirely while
 the roll controller is active (`hip_roll_kp` replaces it), so tune the anchors
 in whichever mode you actually fly.
+
+**AK45-10 MIT scale factors are per motor model** (`hip_motors.cpp`) — position,
+Kp and Kd are common to the AK family, but **speed and torque are not**. The
+AK45-10 is ±20 rad/s and ±8 N·m (§5.3 of the driver manual, v1.0.18 — whose
+changelog specifically notes "Corrected the AK45-10 motor parameters"). This
+driver previously used another model's ±65 / ±18, plus an invented ±20 "current"
+range for the reply field, with three consequences, all silent:
+
+1. The reply's third field is **shaft torque in N·m, not amps** — the manual's
+   byte table says "current" but its own decoder scales it by the model's
+   *torque* range. It was reported 20/8 = 2.5× too large, which is why hip
+   telemetry used to plateau near "10 A" (really 4.0 N·m).
+2. Every commanded feedforward torque was packed over ±18 and decoded by the
+   motor over ±8, so only 8/18 = 44 % of it was delivered.
+3. Reported hip velocity was 65/20 = 3.25× too large.
+
+Both were confirmed against bench log `20260728T053232` before the change:
+reconstructing the MIT impedance law from telemetry fit the reported torque at
+0.400 = 8/20, and position-derivative versus reported velocity fit
+0.308 = 20/65.
+
+Telemetry renamed `hip_l/r_current_a` → `hip_l/r_torque_nm` (`TELEM_VERSION`
+12 — same byte layout as 11, bumped so a stale ESP32/GUI rejects rather than
+mislabels). Params tuned against the old scale are converted **once, on load**
+by the param-store v2→v3 migration (`param_registry.cpp`): `hip_running_tff_*`
+and `jump_torque_max` ×8/18, `calib_*_trq_lim` ×8/20, `jump_omega_max` ×20/65.
+The migration runs before the min/max clamp, since several of those params also
+got tighter bounds in the same change. `ff1_kt_hip` is now 1.0 — FF1's input is
+already torque, so there is no Kt to apply. The GUI's log analyzer still reads
+`TELEM_VERSION` 11 captures, rescaling them on load so old runs stay comparable.
+
+**Validated against a physical standard (2026-08-02).** Hip torque telemetry
+was checked end-to-end with a lever arm and a scale — the only way to catch
+this class of bug, for the reason in the last paragraph below. Setup: hip L in
+`MANUAL`, `kp = kd = 0` so the commanded `tff` is the entire torque, 100 mm
+lever (1 N·m = 1020 g), log `20260802T022757`.
+
+| Commanded `tff` | Old-scale firmware would give | This firmware should give | Measured |
+|---|---|---|---|
+| 0.3 N·m | 136 g | 306 g | **300 g** |
+| 0.5 N·m | 227 g | 510 g | **400 g** |
+
+Command → telemetry agreement is exact: `tff = 0.500` read back as
+`hip_l_torque_nm` = 0.5025 N·m mean (sd 0.021, n = 250, ratio **1.005**), i.e.
+inside the 0.0039 N·m quantisation step of the 12-bit field.
+
+Scope of the claim — the scale was **hand-held**, so its repeatability is only
+about ±20 % (the two points come out at 98 % and 78 % of prediction; ~22° of
+unnoticed lever tilt accounts for the low one on its own). That is ample to
+confirm the corrected scaling and to exclude the old one by a wide margin, and
+**not** enough to resolve gearbox efficiency, which is expected to be a 10–20 %
+effect in the same direction. Treat reported hip torque as motor-side: it is
+derived from q-axis current and cannot see planetary losses, so true output
+torque is somewhat lower. Quantifying that needs a clamped, horizontal,
+bench-mounted rig.
+
+**Electrical cross-check (2026-08-02): holding 3 N·m draws 0.4 A from the 24 V
+supply** (9.6 W). At stall there is no mechanical output, so essentially all of
+that is winding copper loss — which makes it an independent check on the torque
+scale, arrived at without a lever or a scale.
+
+Predicted from the datasheet constants alone: Kt 0.127 N·m/A motor-side × 10:1
+= 1.27 N·m/A at the output, so 3 N·m needs 2.36 A of phase current; the motor
+constant km = 0.0858 N·m/√W implies phase-to-phase R = (0.127/0.0858)² = 2.19 Ω;
+copper loss = 1.5·I²·R_phase = 0.75·I²·R_pp = **9.2 W = 0.38 A at 24 V**.
+Measured 0.4 A — **5 % agreement**, from a completely different direction than
+the lever test.
+
+Extrapolating the same relation (P ∝ τ²) gives the thermal picture, and it is
+the reason hip holding torque is worth watching:
+
+| Hold torque | Phase current | Copper loss | 24 V draw | Winding rise |
+|---|---|---|---|---|
+| 2.5 N·m (rated continuous) | 1.97 A | 6.4 W | 0.27 A | ~45 °C |
+| **3.0 N·m (measured)** | 2.36 A | 9.2 W | **0.40 A** | ~64 °C |
+| 4.07 N·m (log hold B) | 3.21 A | 16.9 W | 0.70 A | ~118 °C |
+| 4.67 N·m (log peak) | 3.68 A | 22.2 W | 0.93 A | ~156 °C |
+
+That 2.5 N·m rated continuous corresponds to a ~45 °C rise is self-consistent
+with how CubeMars would set the rating, which is a good sign the model is
+sound. It also means the 4.07 N·m holds seen in `20260728T053232` would settle
+at roughly 143 °C winding — **past the 130 °C Class B limit** — if sustained.
+They were not sustained (11.9 s, far under the ~30 s winding time constant), so
+nothing was damaged, but it is not a pose to park in.
+
+Two caveats on that table. The temperature column uses R_th = 7 °C/W
+(`R_th_wc 1.0 + R_th_ca 6.0` from `simulation/mujoco/*/params.py`), which is an
+estimate and has never been measured — treat the °C values as indicative, the W
+column as solid. And it is not recorded whether the 0.4 A was total bus current
+or the increase on applying torque; if it includes quiescent electronics draw,
+the motor's true share is lower and the 5 % agreement is partly luck. Worth
+pinning down with a before/after reading.
+
+Note why a firmware-only round trip could never have caught the original bug:
+the TX and RX errors partially cancelled. Commanding 0.5 N·m packed over ±18
+delivered 8/18 of it, and the reply decoded over ±20 reported that back as
+0.556 — an 11 % discrepancy that reads as noise, while the actual shaft torque
+was 2.25× too small. Only an external physical reference separates the two.
 
 **Wheel-velocity plausibility filter and debounced runaway watchdog** — the
 ODrive encoder feed can develop escalating single-sample corruption (bench
@@ -280,6 +406,58 @@ electrical:
    50 ms) like the pitch/roll watchdogs, instead of ESTOPping on a single
    over-limit sample. Much shorter than their 200 ms because a genuinely
    runaway wheel covers ground fast.
+
+**Jump phase budget and overrun fault** — `JUMPING` used to exit on a flat
+3000 ms timer regardless of what the phase machine was doing. That was safe
+only by arithmetic coincidence: the three phase budgets at their schema maxima
+(`jump_crouch_time` 1.0 + `jump_ext_timeout` 1.0 + retract 0.2 = 2.2 s) happened
+to fit inside 3 s, so raising one bound or adding a phase would have silently
+started handing off to `RUNNING` mid-extension with the hips still under a
+torque command. The two concerns are now separate: `jump_done()` requires the
+phase machine to actually reach `JP_DONE` and hold the nominal pose stiffly for
+`JUMP_SETTLE_MS` (300 ms), while `s_jump_deadline_ms` is derived at entry from
+the same live params it guards (+ `JUMP_OVERRUN_MARGIN_S` 0.5 s) and is a pure
+safety net — overrunning it raises `FAULT_JUMP_TIMEOUT` instead of quietly
+succeeding. Its transition is registered *before* `jump_done` so an overrun can
+never lose the race. With `jump_enable=0` (the default) or invalid calibration
+limits, the sequence retires straight to `JP_DONE` and exits normally, exactly
+as before — an unarmed jump is a no-op, not a fault.
+
+**CAN TX is no longer write-and-hope** — `FlexCAN_T4::write()` returns 1 for
+"placed in a hardware mailbox" and -1 for "all mailboxes busy, queued to the
+bounded software TX queue", which drops silently once full. Both drivers
+discarded that return entirely, so a saturated bus lost torque setpoints and
+mode changes invisibly. `hip_motors.cpp` and `wheel_motors.cpp` now count
+deferrals; a run of 200 consecutive (~200 ms of a bus that has stopped
+draining) latches a TX stall, logs once, and clears `hm_*.ok` / `wm_*.ok` — a
+motor you cannot command is not one you can balance on. A single deferral is
+normal under burst load and never faults. The wheel latch clears with
+`wheel_motors_clear_errors()`; the hip latch is REBOOT-severity like the other
+hip feedback faults. Lifetime counts are available via
+`{hip,wheel}_motors_tx_defer_count()` but are **not** in telemetry yet.
+
+**Wheel readiness confirms the ODrive axis state** — `wm_*.ok` previously meant
+only "encoder feedback is fresh". An axis that dropped out of
+`CLOSED_LOOP_CONTROL` keeps streaming perfectly good encoder estimates while
+ignoring every torque command, which read as a healthy wheel right up until the
+robot fell over. `axis_confirmed()` now also requires a fresh heartbeat
+(`WM_HB_TIMEOUT_MS` 500) reporting `AXIS_CLOSED_LOOP` whenever `wm_mode` isn't
+IDLE. Two deliberate escape hatches so a diagnostic can't brick the robot: the
+check is inert until a heartbeat has actually been seen (`hb_ever_heard` — if
+ODrive heartbeat transmission is off, behaviour is unchanged plus a one-time
+warning), and it is suspended for `WM_MODE_SETTLE_MS` (500 ms) after a mode
+change so the ODrive has time to reach closed loop. **Confirm on the bench that
+heartbeats are actually arriving** — if the one-time "no ODrive heartbeat seen"
+warning appears, this check and the pre-existing `wm_*.error` check are both
+inert.
+
+**Param store never self-formats** — `param_init()` used to call
+`s_fs.format()` on a mount failure, erasing both CRC-protected generations from
+inside the init path of the recovery design meant to protect them. The
+framework's own `LittleFS_Program::begin()` already does mount → format → mount,
+so a virgin chip is still handled on first boot; the removed retry could only
+ever fire after that had *also* failed. Mount failure now means "run on
+compiled defaults and say so".
 
 **Roll controller (active suspension)** — off by default (`roll_ctrl_en`). In
 RUNNING only, a PI-D loop on roll angle/rate (`roll_kp`, `roll_ki`, `roll_kd`) produces a
@@ -376,13 +554,13 @@ Every place a sign flip or direction constant is applied between a "positive mea
 
 | # | Name | Type | Location | Current value |
 |---|---|---|---|---|
-| 1 | Wheel L TX (no flip — reference side) | hardcoded | `teensy/lib/WheelMotors/wheel_motors.cpp:144` (`L_hw = L`) | identity (+1) |
-| 2 | Wheel R TX flip | hardcoded | `wheel_motors.cpp:145` (`R_hw = -R`) | −1, unconditional |
-| 3 | Wheel R RX flip (encoder feedback) | hardcoded | `wheel_motors.cpp:64` (`pos = -pos; vel = -vel;`) | −1, unconditional |
-| 4 | Yaw→per-wheel torque split | hardcoded (structural) | `teensy/src/control_loop.cpp:242-243` | `tau_L = tau_sym + tau_yaw`, `tau_R = tau_sym − tau_yaw` |
-| 5 | Hip L TX flip (commanded pos/vel/torque) | hardcoded | `teensy/lib/HipMotors/hip_motors.cpp:95-100` (`pack_and_send`) | −1, unconditional, applied when `id == AK45_ID_L` |
-| 6 | Hip L RX flip (pos/vel/current feedback) | hardcoded | `hip_motors.cpp:137-140` (`rx_callback`) | −1, unconditional, applied when `msg.id == AK45_ID_L` |
-| 7 | Hip L/R retract-switch seek direction | runtime param, `PARAM_FLAG_READONLY` | generated parameter table | L `-1.0`, R `+1.0`; each points toward its retract switch |
+| 1 | Wheel L TX (no flip — reference side) | hardcoded | `teensy/lib/WheelMotors/wheel_motors.cpp` (`L_hw = L`) | identity (+1) |
+| 2 | Wheel R TX flip | hardcoded | `wheel_motors.cpp` (`R_hw = -R`) | −1, unconditional |
+| 3 | Wheel R RX flip (encoder feedback) | hardcoded | `wheel_motors.cpp` (`pos = -pos; vel = -vel;`) | −1, unconditional |
+| 4 | Yaw→per-wheel torque split | hardcoded (structural) | `teensy/src/control_loop.cpp` (wheel-torque output) | `tau_L = tau_sym − tau_yaw`, `tau_R = tau_sym + tau_yaw` |
+| 5 | Hip L TX flip (commanded pos/vel/torque) | hardcoded | `teensy/lib/HipMotors/hip_motors.cpp` (`pack_and_send`) | −1, unconditional, applied when `id == AK45_ID_L` |
+| 6 | Hip L RX flip (pos/vel/torque feedback) | hardcoded | `hip_motors.cpp` (`rx_callback`) | −1, unconditional, applied when `msg.id == AK45_ID_L` |
+| 7 | Hip L/R retract-switch seek direction | compile-time hardware constants | `teensy/src/config.h` (`CALIB_L_SEEK_DIR`, `CALIB_R_SEEK_DIR`) | L `+1.0`, R `+1.0`; each points toward its retract switch in the normalized firmware frame |
 | 8 | Hip normalized-command mapping | hardcoded (structural) | `teensy/lib/HipMotors/hip_motors.cpp` (`hip_cmd_to_setpoints`) | `t∈[0,1]`: 0 = switch-zero backoff limit, 1 = configured extended limit; endpoint selection follows each axis's seek direction |
 | 9 | GUI hip jog slider → raw degrees | GUI-side, not firmware | `software/gui/tabs/hip_motors.py:493-501` | slider low end → `lo_deg` (≈ `min_rad`), slider high end → `hi_deg` (≈ `max_rad`) — **raw degrees, not the normalized `t`**; now the same physical sense on both sides since #5/#6 unify the frame |
 
@@ -390,8 +568,8 @@ Every place a sign flip or direction constant is applied between a "positive mea
 
 | Motor | Applicable entities | Positive command means |
 |---|---|---|
-| **wheel_left** | #1 (no flip), #4 (`+tau_yaw` term) | Positive torque/velocity → wheel drives robot **forward (+X)**. This is the reference side; should stay unflipped. |
-| **wheel_right** | #2, #3 (−1 flip both ways), #4 (`−tau_yaw` term) | Positive torque/velocity, in the *firmware-frame* value (same value the control loop and GUI use, before the internal CAN flip) → wheel also drives robot **forward (+X)** — same convention as left, because the −1 flip compensates for the physically mirrored mounting. Flip should stay in place; do not "fix" it by changing sign elsewhere. |
+| **wheel_left** | #1 (no flip), #4 (`−tau_yaw` term) | Positive torque/velocity → wheel drives robot **forward (+X)**. This is the reference side; should stay unflipped. |
+| **wheel_right** | #2, #3 (−1 flip both ways), #4 (`+tau_yaw` term) | Positive torque/velocity, in the *firmware-frame* value (same value the control loop and GUI use, before the internal CAN flip) → wheel also drives robot **forward (+X)** — same convention as left, because the −1 flip compensates for the physically mirrored mounting. Flip should stay in place; do not "fix" it by changing sign elsewhere. |
 | **hip_right** | #7 (`dir_R=+1`), #8 | Reference side, no CAN-level flip. Raw MIT position: **more negative = leg extends**, near `max_rad` (≈0) = **retracted**. Increasing position retracts the leg. Via GUI jog slider (#9): dragging toward the **low** end extends, toward the **high** end retracts. |
 | **hip_left** | #5, #6 (−1 flip both ways), #7 (`dir_L=+1`, same as R), #8 | Positive command/position, in the *firmware-frame* value (same value calibration, jump FSM, GUI, and radio all use, before the internal CAN flip) → behaves identically to hip_right: more negative = extend, increasing = retract. The −1 flip at the CAN boundary compensates for the physically mirrored mounting, so nothing above `hip_motors.cpp` needs to know left and right are wired differently. **Requires recalibration** after this fix — the previous calibration's zero point and limits were established in the old (unflipped, backwards) frame. |
 
@@ -452,6 +630,7 @@ Set in `g_state.fault_code` before entering `STATE_ESTOP`. Non-zero only while i
 | `0x0C` | `FAULT_WHEEL_INIT_TIMEOUT` | No CAN reply from wheel motors within 2 s of boot | REBOOT |
 | `0x0D` | `FAULT_STANDUP_FAILED` | Standup denied (pitch out of recoverable range) or exhausted retries/diverged | REPOSITION |
 | `0x0E` | `FAULT_ROLL_WATCHDOG` | `|roll| > roll_watchdog_limit` for > 200 ms (lateral tip guard) | REPOSITION |
+| `0x0F` | `FAULT_JUMP_TIMEOUT` | JUMPING overran its computed phase budget without reaching `JP_DONE` | REPOSITION |
 
 **Severity tiers:** SOFT → ESTOP→STANDBY directly; REPOSITION → reposition robot then reset; GUI_FIX → fix param in GUI then reset; REBOOT → power-cycle required.
 
@@ -461,10 +640,10 @@ Mirror `_FAULT_NAMES` / `_FAULT_DESCRIPTIONS` in `software/gui/tabs/telem_format
 
 ```
 Teensy main.cpp  send_telemetry()
-    │  packs RobotState + sensor data into TelemetryPayload (242 bytes, TELEM_VERSION 9,
+    │  packs RobotState + sensor data into TelemetryPayload (247 bytes, TELEM_VERSION 12,
     │  see comm_protocol.h) — includes ESP32<->Teensy link-supervision fields (esp32_link_ok,
     │  esp32_status_age_ms, uart_rx_drops, uart_seq_gaps)
-    │  splits into TELEM_A (118 bytes, offset 0) + TELEM_B (124 bytes, offset 118)
+    │  splits into TELEM_A (118 bytes, offset 0) + TELEM_B (129 bytes, offset 118)
     │  sends both framed packets via CommLink at 50 Hz
     ▼
 ESP32 on_teensy_packet()  (core 1, inside g_teensy.update()'s parse loop)
@@ -492,6 +671,13 @@ TCP command connection are supervised independently: losing telemetry marks
 only the WiFi source stale, while a still-readable TCP connection remains
 available for recovery. The GUI renews discovery/session ownership separately
 and will rediscover an address after restart or DHCP change.
+
+`COMM_TYPE_ESP32_STATUS` moved from `0x16` to `0x17` on 2026-08-02: it shared
+`0x16` with `COMM_TYPE_COMMAND_RESULT`, distinguished by direction alone. Since
+the ESP32 relays GUI frames to the Teensy verbatim, any `0x16` arriving from the
+host side would have been accepted as a status heartbeat. **Flash Teensy and
+ESP32 together** — a skewed pair reports `esp32_link_ok = false` (already
+supervised) but the heartbeat stays down until both sides match.
 
 Independently, the ESP32 sends its own COMM_TYPE_ESP32_STATUS heartbeat to the
 Teensy at 5 Hz (ESP32<->Teensy link supervision, telemetry-only), and its own

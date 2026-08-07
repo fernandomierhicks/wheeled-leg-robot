@@ -26,6 +26,7 @@
   "collide": {
     "femur|tibia": false,
     "coupler|femur": false,
+    "coupler|femur_shaft": false,
     "femur|motor": false,
     "femur|wheel": false,
     "coupler|tibia": false,

@@ -3,7 +3,19 @@
 #include <stdint.h>
 
 static constexpr uint32_t PARAM_STORE_MAGIC = 0x32505257u;  // "WRP2" little-endian
-static constexpr uint16_t PARAM_STORE_VERSION = 2;
+// v3: no format change — the *units* of a few hip params changed when the
+// AK45-10 MIT torque/velocity scale factors were corrected (see
+// hip_motors.cpp). A v2 slot is still readable, and param_registry's
+// migrate_hip_scale_v2_to_v3() rescales exactly those params once on load and
+// re-saves as v3, so the rest of a tuned setup survives untouched.
+static constexpr uint16_t PARAM_STORE_VERSION = 3;
+static constexpr uint16_t PARAM_STORE_VERSION_MIN = 2;
+
+// A stored slot is readable if its version is one we still know how to migrate
+// forward from. Anything older/newer is rejected and falls back to defaults.
+inline bool param_store_version_supported(uint16_t version) {
+    return version >= PARAM_STORE_VERSION_MIN && version <= PARAM_STORE_VERSION;
+}
 
 struct __attribute__((packed)) ParamStoreEntry {
     uint16_t id;
@@ -41,7 +53,8 @@ inline uint32_t param_store_header_crc(ParamStoreHeader header) {
 }
 
 inline bool param_store_header_valid(const ParamStoreHeader& header) {
-    if (header.magic != PARAM_STORE_MAGIC || header.version != PARAM_STORE_VERSION ||
+    if (header.magic != PARAM_STORE_MAGIC ||
+        !param_store_version_supported(header.version) ||
         header.header_bytes != sizeof(ParamStoreHeader) ||
         header.payload_bytes != (uint16_t)(header.count * sizeof(ParamStoreEntry)))
         return false;

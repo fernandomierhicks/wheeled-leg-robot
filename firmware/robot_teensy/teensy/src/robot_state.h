@@ -12,8 +12,8 @@ typedef struct {
     float          wheel_vel_avg_ms;
     float          hip_l_pos_rad;
     float          hip_r_pos_rad;
-    float          hip_l_current_a;
-    float          hip_r_current_a;
+    float          hip_l_torque_nm;   // AK45 MIT reply field: shaft torque [N·m], not amps
+    float          hip_r_torque_nm;
     // ── Robot meta ────────────────────────────────────────────────────────────
     RobotStateEnum state;
     uint8_t        fault_code;        // FAULT_* from comm_protocol.h; set before entering ESTOP

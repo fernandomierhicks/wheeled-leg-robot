@@ -100,8 +100,26 @@ static volatile bool s_req_jump          = false;
 // ── CMD_REJECT auto-exit timer ────────────────────────────────────────────────
 static uint32_t s_cmd_reject_deadline_ms = 0;
 
-// ── JUMPING auto-exit timer ───────────────────────────────────────────────────
+// ── JUMPING timing ────────────────────────────────────────────────────────────
+// Two separate things, which used to be one hardcoded 3000 ms timer:
+//
+//   * the normal exit — the phase machine reaching JP_DONE and holding the
+//     nominal pose stiffly for JUMP_SETTLE_MS, and
+//   * s_jump_deadline_ms, a safety net for the phase machine failing to get
+//     there at all.
+//
+// Conflating them meant the wall clock, not the phases, decided when to hand
+// back to RUNNING. That happened to be safe only because the three phase
+// budgets at their schema maxima (jump_crouch_time 1.0 + jump_ext_timeout 1.0 +
+// retract 0.2 = 2.2 s) summed to less than 3 s — an undocumented coupling that
+// would have broken silently the moment a bound was raised or a phase added,
+// handing off to RUNNING mid-extension with the hips still under a torque
+// command. The deadline is now derived from the same budgets it is guarding,
+// and overrunning it is a fault rather than a normal exit.
 static uint32_t s_jump_deadline_ms = 0;
+static constexpr float    JUMP_RETRACT_TIME_S  = 0.20f;
+static constexpr uint32_t JUMP_SETTLE_MS       = 300;   // stiff hold at nominal before RUNNING
+static constexpr float    JUMP_OVERRUN_MARGIN_S = 0.5f; // slack over the phase budget
 
 // ── Jump FSM state (Phase 7) ──────────────────────────────────────────────────
 typedef enum : uint8_t {
@@ -298,7 +316,13 @@ static void on_jumping() {
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> JUMPING");
         g_buzzer.play(JUMP_MELODY, sizeof(JUMP_MELODY) / sizeof(JUMP_MELODY[0]));
-        s_jump_deadline_ms = millis() + 3000;
+        // Derived from the live phase params, so retuning them moves the safety
+        // net with them instead of silently eating into a fixed allowance.
+        float budget_s = param_get(PARAM_JUMP_CROUCH_TIME_S)
+                       + param_get(PARAM_JUMP_EXTEND_TIMEOUT_S)
+                       + JUMP_RETRACT_TIME_S
+                       + JUMP_OVERRUN_MARGIN_S;
+        s_jump_deadline_ms = millis() + (uint32_t)(budget_s * 1000.0f);
         // Snapshot hip positions and calibrated retracted target
         s_jp_phase  = JP_CROUCH;
         s_jp_phase_ms = millis();
@@ -312,12 +336,25 @@ static void on_jumping() {
 
     g_state.jump_state = (uint8_t)s_jp_phase;
 
+    // Both gates below skip the phase machine entirely, so the phase would sit
+    // at JP_CROUCH forever and jump_overrun() would ESTOP a jump that simply
+    // isn't armed. Retire straight to JP_DONE instead: no hip command was ever
+    // issued, so there is nothing to unwind, and the sequence exits through the
+    // normal jump_done() path exactly as it did before the overrun guard.
+    auto retire_unstarted = [] {
+        if (s_jp_phase != JP_DONE) {
+            s_jp_phase    = JP_DONE;
+            s_jp_phase_ms = millis();
+        }
+    };
+
     // ── Master gate: leave at 0 until ready to test ───────────────────────────
-    if (param_get(PARAM_JUMP_ENABLE) < 0.5f) return;
+    if (param_get(PARAM_JUMP_ENABLE) < 0.5f) { retire_unstarted(); return; }
 
     // Require valid calibration limits before any hip torque is applied
     if (!hm_limits_L.valid || !hm_limits_R.valid) {
         comm_log(LOG_LEVEL_WARN, "JUMP: limits not valid — skipping hip cmds");
+        retire_unstarted();
         return;
     }
 
@@ -398,19 +435,19 @@ static void on_jumping() {
         }
     }
     else if (s_jp_phase == JP_RETRACT) {
-        static constexpr float RETRACT_TIME_S = 0.20f;
-        float alpha = elapsed / RETRACT_TIME_S;
+        float alpha = elapsed / JUMP_RETRACT_TIME_S;
         if (alpha > 1.0f) alpha = 1.0f;
-        float dq_L = (s_jp_nom_L - s_jp_from_L) / RETRACT_TIME_S;
-        float dq_R = (s_jp_nom_R - s_jp_from_R) / RETRACT_TIME_S;
+        float dq_L = (s_jp_nom_L - s_jp_from_L) / JUMP_RETRACT_TIME_S;
+        float dq_R = (s_jp_nom_R - s_jp_from_R) / JUMP_RETRACT_TIME_S;
         hip_motors_set_setpoint_L(s_jp_from_L + alpha * (s_jp_nom_L - s_jp_from_L), dq_L, kp, kd, 0.0f);
         hip_motors_set_setpoint_R(s_jp_from_R + alpha * (s_jp_nom_R - s_jp_from_R), dq_R, kp, kd, 0.0f);
-        if (elapsed >= RETRACT_TIME_S) {
-            s_jp_phase = JP_DONE;
+        if (elapsed >= JUMP_RETRACT_TIME_S) {
+            s_jp_phase    = JP_DONE;
+            s_jp_phase_ms = millis();   // starts the JUMP_SETTLE_MS hold jump_done() waits on
         }
     }
     else {
-        // JP_DONE: hold at Q_NOM with stiff position hold until jump_done() timer fires → RUNNING
+        // JP_DONE: hold at Q_NOM with stiff position hold until jump_done() → RUNNING
         hip_motors_set_setpoint_L(s_jp_nom_L, 0.0f, kp, kd, 0.0f);
         hip_motors_set_setpoint_R(s_jp_nom_R, 0.0f, kp, kd, 0.0f);
     }
@@ -738,7 +775,27 @@ static bool req_disarm_calibration() {
 }
 static bool disarm_done()        { return s_disarm_done; }
 static bool req_jump()           { bool v = s_req_jump;           s_req_jump           = false; return v; }
-static bool jump_done()          { return (millis() >= s_jump_deadline_ms); }
+// Normal exit: the phase machine actually finished and the stiff hold at the
+// nominal pose has settled. No longer a bare wall-clock expiry, so a jump can
+// never hand back to RUNNING part-way through a phase.
+static bool jump_done() {
+    return s_jp_phase == JP_DONE &&
+           (millis() - s_jp_phase_ms) >= JUMP_SETTLE_MS;
+}
+
+// Safety net: the budget computed at entry elapsed without reaching JP_DONE.
+// Registered ahead of jump_done() so an overrun always resolves as a fault
+// rather than racing the normal exit. Reaching this means a phase failed to
+// terminate, which its own internal timeout should have prevented — hence a
+// fault, not a quiet handoff.
+static bool jump_overrun() {
+    if (s_jp_phase == JP_DONE) return false;
+    if ((int32_t)(millis() - s_jump_deadline_ms) < 0) return false;
+    comm_log(LOG_LEVEL_ERROR, "FAULT: jump overran phase budget in phase %u",
+             (unsigned)s_jp_phase);
+    g_state.fault_code = FAULT_JUMP_TIMEOUT;
+    return true;
+}
 static bool req_estop() {
     if (!s_req_estop) return false;
     s_req_estop = false;
@@ -813,6 +870,7 @@ void stateMachine_init() {
     S_JUMPING->addTransition(motor_feedback_fault, S_ESTOP);
     S_JUMPING->addTransition(running_imu_fault,    S_ESTOP);
     S_JUMPING->addTransition(req_disarm_running,   S_DISARMING);
+    S_JUMPING->addTransition(jump_overrun,         S_ESTOP);   // before jump_done: overrun wins
     S_JUMPING->addTransition(jump_done,            S_RUNNING);
 
     S_STANDING_UP->addTransition(req_estop,            S_ESTOP);

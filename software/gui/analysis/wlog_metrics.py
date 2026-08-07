@@ -47,12 +47,16 @@ FAULT_NONE = 0x00
 
 # Safety-maxima defaults. wheel_vel_limit mirrors PARAM_WHEEL_VEL_LIMIT_TURNS_S's
 # firmware compile-time default (param_registry.cpp) — pass the live value to
-# evaluate()/check_safety() if it's been changed on the device. Hip current
-# limit matches PARAM_CALIB_MOVE_CUR_LIM (10 A) — hips are free-running now,
-# so holding/dynamic current is expected; this is a real overcurrent ceiling,
-# not a "should be idle" epsilon.
+# evaluate()/check_safety() if it's been changed on the device. The hip ceiling
+# is a real overtorque limit, not a "should be idle" epsilon — hips are
+# free-running and holding/dynamic torque is expected. AK45-10 ratings: 2.5 N·m
+# rated continuous, 7 N·m mechanical peak (the MIT protocol encodes ±8). 4 N·m
+# sits between them and is the same physical level the old 10 "A" limit meant
+# before the MIT torque scale was corrected — a peak-excursion ceiling. It says
+# nothing about *continuous* duty: compare the RMS against the 2.5 N·m rating
+# for that, since a run can stay under 4 N·m and still cook the motor.
 DEFAULT_WHEEL_VEL_LIMIT_TURNS_S = 3.0
-HIP_CURRENT_EPS_A = 10.0
+HIP_TORQUE_LIMIT_NM = 4.0
 
 REJECT_PENALTY = 200.0  # matches sim's FALL_PENALTY / W_FALL magnitude
 
@@ -61,7 +65,7 @@ REJECT_PENALTY = 200.0  # matches sim's FALL_PENALTY / W_FALL magnitude
 _SCALAR_FIELDS = [
     "timestamp_ms", "pitch_rad", "pitch_rate_rads", "roll_rad", "roll_rate_rads",
     "yaw_rad", "yaw_rate_rads", "wheel_vel_avg", "wm_l_vel_turns_s", "wm_r_vel_turns_s",
-    "hip_l_current_a", "hip_r_current_a", "whl_tau_l", "whl_tau_r",
+    "hip_l_torque_nm", "hip_r_torque_nm", "whl_tau_l", "whl_tau_r",
     "hip_l_pos_rad", "hip_r_pos_rad", "hip_l_cmd_pos_rad", "hip_r_cmd_pos_rad",
     "theta_ref", "v_ref", "omega_cmd_rds", "tau_sym", "tau_yaw", "pitch_trim_rad",
     "health_flags", "fault_code", "robot_state", "loop_count", "active_profile",
@@ -73,6 +77,39 @@ _SCALAR_FIELDS = [
 # rather than an error, so §4 works today and picks up the real values the
 # moment §1a ships, with no code change needed here.
 _ALPHA_KEY = "gain_sched_alpha"
+
+# ── TELEM_VERSION 11 back-compatibility ──────────────────────────────────────
+# V11 and V12 have byte-identical layouts; only the two hip feedback fields
+# changed meaning. They were decoded as "current in amps" over a ±20 full scale
+# when the AK45-10 MIT reply is really shaft torque over ±8 N·m, so a V11
+# capture holds the same physical quantity at 20/8 = 2.5× the true value.
+# Rescale and rename it rather than rejecting the file, so runs captured before
+# the fix stay comparable with runs captured after it.
+_COMPAT_TELEM_VERSION = 11
+_V11_TORQUE_SCALE = 8.0 / 20.0
+_V11_RENAMES = {
+    "hip_l_current_a": "hip_l_torque_nm",
+    "hip_r_current_a": "hip_r_torque_nm",
+}
+
+
+def _telem_version_supported(version: int) -> bool:
+    return version in (TELEM_VERSION, _COMPAT_TELEM_VERSION)
+
+
+def _upgrade_v11_record(record: dict) -> dict:
+    """Convert a V11 record's hip fields in place to V12 names and units.
+
+    Two shapes reach this: a `.wlog` record, already decoded by the current
+    decoder so it carries the V12 *names* with V11 *values*; and a host `.jsonl`
+    record, written verbatim by an older GUI so it still carries the V11 names.
+    """
+    for old, new in _V11_RENAMES.items():
+        if old in record:
+            record[new] = record.pop(old) * _V11_TORQUE_SCALE
+        elif new in record:
+            record[new] = record[new] * _V11_TORQUE_SCALE
+    return record
 
 
 @dataclass
@@ -100,7 +137,7 @@ def decode_wlog(path) -> DecodedRun:
         magic = magic.split(b"\x00", 1)[0].decode("ascii", errors="replace")
         if magic != "WLRLOG":
             raise ValueError(f"{path}: bad magic {magic!r} — not a .wlog file")
-        if telem_ver != TELEM_VERSION:
+        if not _telem_version_supported(telem_ver):
             raise ValueError(
                 f"{path}: captured with TELEM_VERSION {telem_ver}, this decoder is "
                 f"TELEM_VERSION {TELEM_VERSION} — recapture after reflashing, "
@@ -119,6 +156,10 @@ def decode_wlog(path) -> DecodedRun:
                 break
             t_micros = struct.unpack_from("<I", rec, 0)[0]
             telem = decode_telem_full(rec[_T_MICROS_SIZE:_T_MICROS_SIZE + telem_size])
+            if telem_ver == _COMPAT_TELEM_VERSION:
+                # Layout is identical, so the V12 decoder reads a V11 record
+                # correctly; only the hip fields' units need converting.
+                _upgrade_v11_record(telem)
             if has_alpha is None:
                 has_alpha = _ALPHA_KEY in telem
             t_micros_list.append(t_micros)
@@ -189,7 +230,7 @@ def decode_hostlog(path) -> DecodedRun:
         version = record.get("version")
         if version is None:
             raise ValueError(f"{path}: line {line_number}: TELEM record has no version")
-        if int(version) != TELEM_VERSION:
+        if not _telem_version_supported(int(version)):
             raise ValueError(
                 f"{path}: captured with TELEM_VERSION {version}, this decoder is "
                 f"TELEM_VERSION {TELEM_VERSION}"
@@ -198,6 +239,8 @@ def decode_hostlog(path) -> DecodedRun:
             telem_version = int(version)
         elif int(version) != telem_version:
             raise ValueError(f"{path}: line {line_number}: mixed TELEM versions")
+        if int(version) == _COMPAT_TELEM_VERSION:
+            _upgrade_v11_record(record)
 
         try:
             timestamp = int(record["timestamp_ms"]) & 0xFFFFFFFF
@@ -345,12 +388,18 @@ def compute_metrics(run: DecodedRun) -> dict:
     pitch_rad = f["pitch_rad"]
     pitch_rate_rads = f["pitch_rate_rads"]
     theta_ref = f["theta_ref"]
+    pitch_trim_rad = f["pitch_trim_rad"]
 
-    # Hardware only exposes theta_ref (the controller's current lean setpoint
-    # — LQR balance point or vel-PI outer-loop output), not the sim's separate
-    # pitch_ff feedforward term, so tracking error is simply measured pitch
-    # minus that one setpoint (formulas otherwise ported from sim_loop.py).
-    pitch_err_rad = pitch_rad - theta_ref
+    # Must match control_loop.cpp's LQR x0 exactly: the regulated quantity is
+    # pitch - theta_ref - pitch_trim, not pitch - theta_ref. pitch_trim
+    # (lqr_pitch_trim_ret/ext, alpha-scheduled) offsets the pitch target so zero
+    # velocity holds at the true balance lean when the CG isn't over the axle,
+    # and it is NOT small: the measured retracted trim is about -8 deg. Omitting
+    # it put a near-constant bias into every error metric below, which swamped
+    # the differences between candidate gain sets these metrics exist to rank.
+    # Hardware exposes no equivalent of the sim's separate pitch_ff term, so
+    # this is the whole setpoint (formulas otherwise ported from sim_loop.py).
+    pitch_err_rad = pitch_rad - theta_ref - pitch_trim_rad
     pitch_err_deg = np.degrees(np.abs(pitch_err_rad))
 
     rms_pitch_deg = float(np.sqrt(time_mean(pitch_err_deg ** 2)))
@@ -372,8 +421,8 @@ def compute_metrics(run: DecodedRun) -> dict:
     fault_fired = bool(np.any(fault_code != FAULT_NONE))
     faults_seen = sorted(int(c) for c in np.unique(fault_code) if c != FAULT_NONE)
 
-    max_hip_l_current_a = float(np.max(np.abs(f["hip_l_current_a"])))
-    max_hip_r_current_a = float(np.max(np.abs(f["hip_r_current_a"])))
+    max_hip_l_torque_nm = float(np.max(np.abs(f["hip_l_torque_nm"])))
+    max_hip_r_torque_nm = float(np.max(np.abs(f["hip_r_torque_nm"])))
     max_wm_l_vel_turns_s = float(np.max(np.abs(f["wm_l_vel_turns_s"])))
     max_wm_r_vel_turns_s = float(np.max(np.abs(f["wm_r_vel_turns_s"])))
 
@@ -402,8 +451,8 @@ def compute_metrics(run: DecodedRun) -> dict:
         "vel_track_rms_ms":    round(vel_track_rms_ms, 4),
         "yaw_track_rms_rads":  round(yaw_track_rms_rads, 4),
         "health_fractions":    {k: round(v, 4) for k, v in health_fractions.items()},
-        "max_hip_l_current_a": round(max_hip_l_current_a, 4),
-        "max_hip_r_current_a": round(max_hip_r_current_a, 4),
+        "max_hip_l_torque_nm": round(max_hip_l_torque_nm, 4),
+        "max_hip_r_torque_nm": round(max_hip_r_torque_nm, 4),
         "max_wm_l_vel_turns_s": round(max_wm_l_vel_turns_s, 4),
         "max_wm_r_vel_turns_s": round(max_wm_r_vel_turns_s, 4),
         "fault_fired":         fault_fired,
@@ -423,12 +472,12 @@ def check_safety(m: dict, wheel_vel_limit_turns_s: float = DEFAULT_WHEEL_VEL_LIM
     reasons = []
     if m["fault_fired"]:
         reasons.append(f"fault fired mid-run: codes {m['faults_seen']}")
-    if m["max_hip_l_current_a"] > HIP_CURRENT_EPS_A:
+    if m["max_hip_l_torque_nm"] > HIP_TORQUE_LIMIT_NM:
         reasons.append(
-            f"hip_l_current_a max {m['max_hip_l_current_a']:.3f} A > {HIP_CURRENT_EPS_A} A limit")
-    if m["max_hip_r_current_a"] > HIP_CURRENT_EPS_A:
+            f"hip_l_torque_nm max {m['max_hip_l_torque_nm']:.3f} N·m > {HIP_TORQUE_LIMIT_NM} N·m limit")
+    if m["max_hip_r_torque_nm"] > HIP_TORQUE_LIMIT_NM:
         reasons.append(
-            f"hip_r_current_a max {m['max_hip_r_current_a']:.3f} A > {HIP_CURRENT_EPS_A} A limit")
+            f"hip_r_torque_nm max {m['max_hip_r_torque_nm']:.3f} N·m > {HIP_TORQUE_LIMIT_NM} N·m limit")
     if m["max_wm_l_vel_turns_s"] > wheel_vel_limit_turns_s:
         reasons.append(
             f"wm_l_vel_turns_s max {m['max_wm_l_vel_turns_s']:.3f} > limit {wheel_vel_limit_turns_s}")

@@ -21,8 +21,8 @@ import math
 import numpy as np
 from scipy.spatial import ConvexHull
 
-from model import (LinkageSpec, FEMUR, TIBIA, COUPLER, MOTOR, WHEEL,
-                   MOVING_LINKS, pair_key)
+from model import (LinkageSpec, FEMUR, TIBIA, COUPLER, FEMUR_SHAFT, MOTOR,
+                   WHEEL, WHEEL_MOTOR, MOVING_LINKS, pair_key)
 from kinematics import local_nodes, trace_world
 
 # Polygon resolution: coarse for optimization, fine for drawing.
@@ -139,13 +139,21 @@ def circles_overlap(c1, r1: float, c2, r2: float) -> bool:
 def body_shapes(spec: LinkageSpec, pose, shapes: ShapeSet) -> dict:
     """World-space shape for every body present at this pose.
 
-    Links map to ('poly', vertices); motor/wheel map to ('circle', centre, r).
+    Links map to ('poly', vertices); motor/wheel/wheel_motor map to
+    ('circle', centre, r).
     """
     out = {k: ("poly", shapes.world(pose, k)) for k in MOVING_LINKS}
     out[MOTOR] = ("circle", np.array([0.0, 0.0]), spec.motor_r)
+    # Knee shaft: rides with the femur at C, so it needs no local hull of its
+    # own — the node already tracks the pose.
+    out[FEMUR_SHAFT] = ("circle", np.asarray(pose.nodes["C"], dtype=float),
+                        spec.femur_shaft_r)
+    wc = np.asarray(trace_world(pose, spec.primary_trace()), dtype=float)
     if spec.wheel_enabled:
-        wc = trace_world(pose, spec.primary_trace())
-        out[WHEEL] = ("circle", np.asarray(wc, dtype=float), spec.wheel_r)
+        out[WHEEL] = ("circle", wc, spec.wheel_r)
+    # The hub motor is always present — it is bolted to the leg whether or not
+    # the tyre outline is being drawn.
+    out[WHEEL_MOTOR] = ("circle", wc, spec.wheel_motor_r)
     return out
 
 

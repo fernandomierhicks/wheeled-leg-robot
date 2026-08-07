@@ -69,8 +69,20 @@ class OptConfig:
     min_stroke_deg: float = 10.0
     max_link_mm: float = MAX_LINK_M * 1000.0   # hard cap on any link span
 
+    # ── Hip torque constraint, overridden for this run ───────────────────────
+    # None means "leave whatever the base spec carries".  Presets store their
+    # own load and limit, so a plain default here would silently replace them
+    # the moment anyone ran a search — the override has to be opt-in.
+    enforce_torque_limit: bool | None = None
+    leg_load_kg: float | None = None
+    torque_limit_nm: float | None = None
+
     algo: str = "de"              # 'de' | 'es'
     budget: int = 6000            # max evaluations
+    # Wall-clock cap for ONE run.  None means the eval budget is the only
+    # limit.  When set, `budget` stays on as a ceiling — whichever binds first
+    # ends the run, which is what lets a time-limited session size itself.
+    time_limit_s: float | None = None
     seed: int = 0
 
     popsize: int = 12             # DE population multiplier
@@ -81,6 +93,25 @@ class OptConfig:
 
     def bounds_list(self):
         return [self.bounds.get(k, DEFAULT_BOUNDS[k]) for k in self.free]
+
+    def apply_torque(self, spec: LinkageSpec) -> LinkageSpec:
+        """Stamp this run's torque settings onto a candidate.  In place."""
+        if self.enforce_torque_limit is not None:
+            spec.enforce_torque_limit = self.enforce_torque_limit
+        if self.leg_load_kg is not None:
+            spec.leg_load_kg = self.leg_load_kg
+        if self.torque_limit_nm is not None:
+            spec.torque_limit_nm = self.torque_limit_nm
+        return spec
+
+    def torque_note(self) -> str:
+        if self.enforce_torque_limit is None and self.torque_limit_nm is None \
+                and self.leg_load_kg is None:
+            return "torque: from working config"
+        if self.enforce_torque_limit is False:
+            return "torque: OFF (override)"
+        return (f"torque: {self.torque_limit_nm or '—'} N·m @ "
+                f"{self.leg_load_kg or '—'} kg/leg (override)")
 
 
 @dataclass
@@ -94,6 +125,7 @@ class OptResult:
     csv_path: str | None = None
     stopped_early: bool = False
     stall_evals: int = 0    # evaluations since the last improvement
+    out_of_time: bool = False   # ended on the clock, not on the eval budget
 
     @property
     def stall_frac(self) -> float:
@@ -117,6 +149,11 @@ class MultiResult:
     agreement between runs started from different seeds is what you get."""
     runs: list
     best: OptResult
+    elapsed_s: float = 0.0
+    time_limit_s: float | None = None
+    # Set when the session ended because the restarts agreed, rather than
+    # because it ran out of restarts or clock.
+    stopped_converged: bool = False
 
     def fitnesses(self) -> list:
         return [r.best_fitness for r in self.runs]
@@ -138,6 +175,20 @@ class MultiResult:
         return (f"NOT CONVERGED — restarts spread {s:.1f}%; "
                 f"raise budget or restarts")
 
+    def session_note(self) -> str:
+        """Why the session ended, and what that says about the answer."""
+        n, ev = len(self.runs), sum(r.n_evals for r in self.runs)
+        head = (f"{n} restart{'s' if n != 1 else ''}, {ev} evals, "
+                f"{self.elapsed_s:.1f} s")
+        if self.stopped_converged:
+            return (f"{head} — stopped early: restarts agreed before the "
+                    f"limit was reached")
+        if self.time_limit_s is not None:
+            over = self.elapsed_s >= self.time_limit_s * 0.98
+            return (f"{head} — {'time limit reached' if over else 'ended'} "
+                    f"({self.time_limit_s:.0f} s allowed)")
+        return f"{head} — restart count reached"
+
 
 # ---------------------------------------------------------------------------
 def apply_vector(base: LinkageSpec, free, x) -> LinkageSpec:
@@ -154,13 +205,18 @@ def vector_of(spec: LinkageSpec, free) -> list:
 
 def score(spec: LinkageSpec, cfg: OptConfig) -> tuple[float, Metrics]:
     """Fitness (higher is better) plus the metrics behind it."""
+    # Before anything is measured: the candidate must be judged against THIS
+    # run's motor, not whatever the base spec happened to carry.
+    cfg.apply_torque(spec)
+
     # Manufacturing cap, checked before the (more expensive) sweep.  Graded
     # rather than flat so the search is pushed back inside the feasible region
     # instead of wandering on a plateau.
-    over_mm = (spec.max_link_span() * 1000.0) - cfg.max_link_mm
+    span_mm, worst = max((v * 1000.0, k) for k, v in spec.link_spans().items())
+    over_mm = span_mm - cfg.max_link_mm
     if over_mm > 0.0:
         return -1e7 - over_mm, Metrics(
-            False, reason=f"link span {spec.max_link_span()*1000:.1f} mm "
+            False, reason=f"{worst} span {span_mm:.1f} mm "
                           f"> {cfg.max_link_mm:.0f} mm cap")
 
     m = evaluate(spec, ShapeSet(spec, RES_FAST), check_collisions=True,
@@ -198,6 +254,8 @@ class _Run:
         self.best_m = None
         self.history = []
         self.stopped = False
+        self.t0 = time.perf_counter()
+        self.out_of_time = False
         self._w = None
         self._fh = None
         if cfg.csv_path:
@@ -215,6 +273,14 @@ class _Run:
         if self.should_stop and self.should_stop():
             self.stopped = True
             # Return a neutral-bad value; the driver checks .stopped to exit.
+            return 1e9
+        # Same trick for the clock.  DE only consults budget_left() between
+        # generations, so without this a run overshoots its slice by up to a
+        # whole generation; short-circuiting here costs no real evaluations and
+        # the counter stays honest because self.n is not incremented.
+        if self.cfg.time_limit_s is not None and \
+                time.perf_counter() - self.t0 >= self.cfg.time_limit_s:
+            self.out_of_time = True
             return 1e9
         spec = apply_vector(self.base, self.cfg.free, x)
         f, m = score(spec, self.cfg)
@@ -237,7 +303,13 @@ class _Run:
         return -f            # scipy minimises
 
     def budget_left(self) -> bool:
-        return self.n < self.cfg.budget and not self.stopped
+        if self.stopped or self.n >= self.cfg.budget:
+            return False
+        if self.cfg.time_limit_s is not None and \
+                time.perf_counter() - self.t0 >= self.cfg.time_limit_s:
+            self.out_of_time = True
+            return False
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -317,30 +389,86 @@ def optimize(spec: LinkageSpec, cfg: OptConfig | None = None,
         best_fitness=run.best_f, n_evals=run.n, history=run.history,
         elapsed_s=time.perf_counter() - t0, csv_path=cfg.csv_path,
         stopped_early=run.stopped, stall_evals=run.n - run.last_gain,
+        out_of_time=run.out_of_time,
     )
 
 
 def optimize_multi(spec: LinkageSpec, cfg: OptConfig | None = None,
-                   restarts: int = 4, callback=None,
-                   should_stop=None) -> MultiResult:
+                   restarts: int = 4, callback=None, should_stop=None,
+                   time_limit_s: float | None = None,
+                   converge_pct: float | None = None,
+                   min_restarts: int = 3,
+                   on_restart=None) -> MultiResult:
     """Independent runs from different seeds.
 
     Neither DE nor the ES can prove optimality — they are stochastic global
     searches.  Running several and comparing the results is the practical
     convergence test: tight agreement means the budget is sufficient, wide
     scatter means it is not.
+
+    Two ways to size the session:
+
+      restarts        run exactly this many, each capped by cfg.budget.
+      time_limit_s    keep restarting until the clock runs out, giving each
+                      run a slice of time_limit_s/restarts.  `restarts` stops
+                      being a count and becomes "how finely to divide the
+                      time"; cfg.budget stays on as a per-run eval ceiling, so
+                      a run that settles early just hands its time back.
+
+    `converge_pct` stops the session as soon as the spread across at least
+    `min_restarts` completed runs falls below it — there is nothing to learn
+    from further restarts that already agree.  `on_restart(i, result, multi)`
+    is called after each one, for progress reporting.
     """
     import copy as _copy
     cfg = cfg or OptConfig()
     runs = []
-    for i in range(max(1, restarts)):
+    t0 = time.perf_counter()
+    target = max(1, restarts)
+    slice_s = (time_limit_s / target) if time_limit_s else None
+    converged = False
+
+    i = 0
+    while True:
+        if should_stop and should_stop():
+            break
+        remaining = None
+        if time_limit_s is None:
+            if i >= target:
+                break
+        else:
+            remaining = time_limit_s - (time.perf_counter() - t0)
+            # Not worth STARTING a run that cannot get a useful slice — but
+            # always run the first one, or a short limit returns nothing at all.
+            if i > 0 and remaining <= max(0.5, slice_s * 0.1):
+                break
+
         c = _copy.copy(cfg)
         c.seed = cfg.seed + i
+        if slice_s is not None:
+            c.time_limit_s = max(1.0, min(slice_s, remaining))
         if cfg.csv_path:
             root, ext = os.path.splitext(cfg.csv_path)
             c.csv_path = f"{root}_r{i}{ext}"
-        runs.append(optimize(spec, c, callback=callback, should_stop=should_stop))
-        if should_stop and should_stop():
-            break
+
+        r = optimize(spec, c, callback=callback, should_stop=should_stop)
+        runs.append(r)
+        i += 1
+
+        partial = MultiResult(runs=runs, best=max(runs, key=lambda x: x.best_fitness))
+        if on_restart:
+            on_restart(i, r, partial)
+
+        if converge_pct is not None and len(runs) >= max(2, min_restarts):
+            s = partial.spread_pct()
+            if not math.isnan(s) and s < converge_pct:
+                converged = True
+                break
+
+    if not runs:            # cancelled before the first run started
+        runs = [optimize(spec, cfg, callback=callback, should_stop=should_stop)]
     best = max(runs, key=lambda r: r.best_fitness)
-    return MultiResult(runs=runs, best=best)
+    return MultiResult(runs=runs, best=best,
+                       elapsed_s=time.perf_counter() - t0,
+                       time_limit_s=time_limit_s,
+                       stopped_converged=converged)

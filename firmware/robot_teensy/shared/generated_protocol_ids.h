@@ -17,6 +17,7 @@
 #define FAULT_WHEEL_INIT_TIMEOUT             0x0C
 #define FAULT_STANDUP_FAILED                 0x0D
 #define FAULT_ROLL_WATCHDOG                  0x0E
+#define FAULT_JUMP_TIMEOUT                   0x0F
 
 // Commands
 #define CMD_ID_SET_MODE                      0x01

@@ -30,8 +30,8 @@
 #define PARAM_CALIB_MOVE_SPEED                     0x0121
 #define PARAM_CALIB_SEEK_KP                        0x0122
 #define PARAM_CALIB_KD                             0x0123
-#define PARAM_CALIB_SEEK_CURRENT_LIMIT_A           0x0124
-#define PARAM_CALIB_MOVE_CURRENT_LIMIT_A           0x0125
+#define PARAM_CALIB_SEEK_TORQUE_LIMIT_NM           0x0124
+#define PARAM_CALIB_MOVE_TORQUE_LIMIT_NM           0x0125
 #define PARAM_CALIB_BACKOFF_RAD                    0x0126
 #define PARAM_CALIB_RANGE_L_RAD                    0x0127
 #define PARAM_CALIB_RANGE_R_RAD                    0x0128
@@ -39,7 +39,7 @@
 #define PARAM_CALIB_RELEASE_TIMEOUT_S              0x012A
 #define PARAM_CALIB_MAX_SEEK_TRAVEL_RAD            0x012B
 #define PARAM_CALIB_MAX_RELEASE_TRAVEL_RAD         0x012C
-#define PARAM_CALIB_CURRENT_TRIP_MS                0x012D
+#define PARAM_CALIB_TORQUE_TRIP_MS                 0x012D
 #define PARAM_CALIB_MOVE_KP                        0x012E
 #define PARAM_CALIB_RAMPDOWN_TIME_S                0x012F
 #define PARAM_CALIB_BYPASS_EN                      0x0131

@@ -121,8 +121,8 @@ void loop() {
 
         const char* state_str = (move_state == MOVING) ? "MOVING" : "hold";
         Serial.printf("%+9.4f   %+9.4f  %+7.3f  | %+9.4f   %+9.4f  %+7.3f  | %s\n",
-                      hm_L.pos_rad, hm_L.vel_rad_s, hm_L.current_A,
-                      hm_R.pos_rad, hm_R.vel_rad_s, hm_R.current_A,
+                      hm_L.pos_rad, hm_L.vel_rad_s, hm_L.torque_nm,
+                      hm_R.pos_rad, hm_R.vel_rad_s, hm_R.torque_nm,
                       state_str);
     }
 }

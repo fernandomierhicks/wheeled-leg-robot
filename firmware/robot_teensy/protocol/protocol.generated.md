@@ -35,6 +35,7 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0C` | `FAULT_WHEEL_INIT_TIMEOUT` | no CAN reply from wheel motors within 2 s of boot |
 | `0x0D` | `FAULT_STANDUP_FAILED` | standup denied (pitch out of recoverable range) or exhausted retries/diverged |
 | `0x0E` | `FAULT_ROLL_WATCHDOG` | |roll| > roll_watchdog_limit for > 200 ms (lateral tip guard) |
+| `0x0F` | `FAULT_JUMP_TIMEOUT` | jump sequence overran its computed phase budget without reaching JP_DONE |
 
 ## Commands
 
@@ -67,17 +68,17 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x000A` | `PARAM_LOOP_PROFILE_ENABLE` | `loop_profile_enable` | 0 | 0 … 1 | - |
 | `0x0201` | `PARAM_HIP_RUNNING_KP` | `hip_running_kp` | 5 | 0 … 100 | persistent |
 | `0x0202` | `PARAM_HIP_RUNNING_KD` | `hip_running_kd` | 0.5 | 0 … 5 | persistent |
-| `0x0203` | `PARAM_HIP_RUNNING_TFF_RET` | `hip_running_tff_ret` | 0 | -5 … 5 | persistent |
+| `0x0203` | `PARAM_HIP_RUNNING_TFF_RET` | `hip_running_tff_ret` | 0 | -8 … 8 | persistent |
 | `0x0204` | `PARAM_HIP_RUNNING_RAMP_TIME_S` | `hip_running_ramp_s` | 2 | 0 … 10 | persistent |
 | `0x0205` | `PARAM_HIP_CMD_RATE_LIMIT_PER_S` | `hip_cmd_rate_lim` | 0.2 | 0 … 2 | persistent |
-| `0x0206` | `PARAM_HIP_RUNNING_TFF_EXT` | `hip_running_tff_ext` | 0 | -5 … 5 | persistent |
+| `0x0206` | `PARAM_HIP_RUNNING_TFF_EXT` | `hip_running_tff_ext` | 0 | -8 … 8 | persistent |
 | `0x0200` | `PARAM_ESTOP_HIP_DISABLE` | `estop_hip_disable` | 1 | 0 … 1 | persistent |
 | `0x0120` | `PARAM_CALIB_SEEK_SPEED` | `calib_seek_speed` | 0.17453 | 0.01 … 0.5 | persistent |
 | `0x0121` | `PARAM_CALIB_MOVE_SPEED` | `calib_move_speed` | 0.174533 | 0.01 … 0.5 | persistent |
 | `0x0122` | `PARAM_CALIB_SEEK_KP` | `calib_seek_kp` | 16 | 0.1 … 100 | persistent |
 | `0x0123` | `PARAM_CALIB_KD` | `calib_kd` | 0.05 | 0 … 5 | persistent |
-| `0x0124` | `PARAM_CALIB_SEEK_CURRENT_LIMIT_A` | `calib_seek_cur_lim` | 0.75 | 0.2 … 5 | persistent |
-| `0x0125` | `PARAM_CALIB_MOVE_CURRENT_LIMIT_A` | `calib_move_cur_lim` | 1.5 | 0.2 … 10 | persistent |
+| `0x0124` | `PARAM_CALIB_SEEK_TORQUE_LIMIT_NM` | `calib_seek_trq_lim` | 0.3 | 0.05 … 2 | persistent |
+| `0x0125` | `PARAM_CALIB_MOVE_TORQUE_LIMIT_NM` | `calib_move_trq_lim` | 0.6 | 0.05 … 4 | persistent |
 | `0x0126` | `PARAM_CALIB_BACKOFF_RAD` | `calib_backoff_rad` | 0.0872665 | 0.01 … 0.35 | persistent |
 | `0x0127` | `PARAM_CALIB_RANGE_L_RAD` | `calib_range_l_rad` | 1.5708 | 0.1 … 3.14159 | persistent |
 | `0x0128` | `PARAM_CALIB_RANGE_R_RAD` | `calib_range_r_rad` | 1.5708 | 0.1 … 3.14159 | persistent |
@@ -85,7 +86,7 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x012A` | `PARAM_CALIB_RELEASE_TIMEOUT_S` | `calib_release_to` | 5 | 0.5 … 30 | persistent |
 | `0x012B` | `PARAM_CALIB_MAX_SEEK_TRAVEL_RAD` | `calib_max_seek_rad` | 2 | 0.1 … 6.28319 | persistent |
 | `0x012C` | `PARAM_CALIB_MAX_RELEASE_TRAVEL_RAD` | `calib_max_rel_rad` | 0.5 | 0.05 … 1.5708 | persistent |
-| `0x012D` | `PARAM_CALIB_CURRENT_TRIP_MS` | `calib_cur_trip_ms` | 50 | 0 … 500 | persistent |
+| `0x012D` | `PARAM_CALIB_TORQUE_TRIP_MS` | `calib_trq_trip_ms` | 50 | 0 … 500 | persistent |
 | `0x012E` | `PARAM_CALIB_MOVE_KP` | `calib_move_kp` | 32 | 0.1 … 100 | persistent |
 | `0x012F` | `PARAM_CALIB_RAMPDOWN_TIME_S` | `calib_rampdown_s` | 2 | 0 … 10 | persistent |
 | `0x0131` | `PARAM_CALIB_BYPASS_EN` | `calib_bypass_en` | 0 | 0 … 1 | persistent |
@@ -110,13 +111,13 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0411` | `PARAM_OMEGA_CMD_RDS` | `omega_cmd_rds` | 0 | -4 … 4 | command |
 | `0x0412` | `PARAM_FF1_ALPHA` | `ff1_alpha` | 0 | 0 … 1 | - |
 | `0x0413` | `PARAM_FF2_ALPHA` | `ff2_alpha` | 0 | 0 … 1 | - |
-| `0x0414` | `PARAM_FF1_KT_HIP` | `ff1_kt_hip` | 1.2732 | 0 … 5 | readonly |
+| `0x0414` | `PARAM_FF1_KT_HIP` | `ff1_kt_hip` | 1 | 0 … 5 | readonly |
 | `0x0415` | `PARAM_JUMP_ENABLE` | `jump_enable` | 0 | 0 … 1 | persistent |
-| `0x0416` | `PARAM_JUMP_TORQUE_MAX` | `jump_torque_max` | 0 | 0 … 18 | persistent |
+| `0x0416` | `PARAM_JUMP_TORQUE_MAX` | `jump_torque_max` | 0 | 0 … 8 | persistent |
 | `0x0417` | `PARAM_JUMP_CROUCH_TIME_S` | `jump_crouch_time` | 0.3 | 0.05 … 1 | persistent |
 | `0x0418` | `PARAM_JUMP_RAMP_UP_S` | `jump_ramp_up` | 0.05 | 0.005 … 0.5 | persistent |
 | `0x0419` | `PARAM_JUMP_RAMP_DOWN_RAD` | `jump_ramp_down` | 0.08 | 0.01 … 0.5 | persistent |
-| `0x041A` | `PARAM_JUMP_OMEGA_MAX` | `jump_omega_max` | 40 | 5 … 200 | persistent |
+| `0x041A` | `PARAM_JUMP_OMEGA_MAX` | `jump_omega_max` | 12.3077 | 2 … 20 | persistent |
 | `0x041B` | `PARAM_JUMP_HARDSTOP_MARGIN` | `jump_hs_margin` | 0.06 | 0.01 … 0.5 | persistent |
 | `0x041C` | `PARAM_JUMP_KP` | `jump_kp` | 80 | 0 … 500 | persistent |
 | `0x041D` | `PARAM_JUMP_KD` | `jump_kd` | 1 | 0 … 5 | persistent |
@@ -132,7 +133,7 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0427` | `PARAM_LQR_K_RATE_EXT` | `lqr_k_rate_ext` | -0.1 | -5 … 0 | persistent |
 | `0x0428` | `PARAM_LQR_K_VEL` | `lqr_k_vel` | -0.007 | -1 … 0 | persistent |
 | `0x0429` | `PARAM_RUNNING_WHEEL_BYPASS_EN` | `run_wheel_bypass_en` | 0 | 0 … 1 | - |
-| `0x042A` | `PARAM_ALPHA_FORCE_RETRACTED_EN` | `alpha_force_ret_en` | 0 | 0 … 1 | persistent |
+| `0x042A` | `PARAM_ALPHA_FORCE_RETRACTED_EN` | `alpha_force_ret_en` | 0 | 0 … 1 | - |
 | `0x042B` | `PARAM_GUI_MOTION_CTRL_EN` | `gui_motion_ctrl_en` | 0 | 0 … 1 | - |
 | `0x042C` | `PARAM_STANDUP_ENABLE` | `standup_enable` | 0 | 0 … 1 | persistent |
 | `0x042D` | `PARAM_STANDUP_MAX_PITCH_FWD_RAD` | `standup_pitch_fwd` | 0.6 | 0 … 1.4 | persistent |

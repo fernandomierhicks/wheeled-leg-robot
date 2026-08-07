@@ -41,15 +41,41 @@ WheelMode      wm_mode = WheelMode::IDLE;
 // CAN3 on Teensy 4.1 uses pins 30 (RX) and 31 (TX) — matches config.h PIN_CAN3_*.
 static FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_16> can3;
 
+// ── CAN TX health ────────────────────────────────────────────────────────────
+// FlexCAN_T4::write() returns 1 when the frame went straight into a hardware
+// mailbox and -1 when every mailbox was busy and it was pushed onto the bounded
+// software TX queue instead (TX_SIZE_16 here). A single -1 is therefore NOT a
+// lost frame and must not fault on its own — the queue drains normally. What is
+// dangerous is a sustained run of them: the queue is then the only thing moving
+// frames, and struct2queueTx() drops silently once it fills, so torque setpoints
+// and mode changes disappear with nothing anywhere to say so. Until this change
+// the return value was discarded entirely and that failure was invisible.
+//
+// Threshold is a consecutive-deferral run, not a rate: ~200 deferrals is ~100
+// control ticks (wheel_motors_send() emits 2 frames/tick in TORQUE), i.e. about
+// 200 ms of a bus that has stopped draining.
+static constexpr uint32_t WM_TX_DEFER_FAULT_RUN = 200;
+static uint32_t s_tx_defer_total = 0;  // lifetime count, diagnostic
+static uint32_t s_tx_defer_run   = 0;  // current consecutive run
+static bool     s_tx_stalled     = false;
+
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+static void note_tx(int rc) {
+    if (rc == 1) { s_tx_defer_run = 0; return; }
+    s_tx_defer_total++;
+    if (s_tx_defer_run < UINT32_MAX) s_tx_defer_run++;
+}
 
 static void send_frame(uint8_t node_id, uint8_t cmd_id, const void* data, uint8_t len) {
     CAN_message_t msg = {};
     msg.id  = ((uint32_t)node_id << 5) | cmd_id;
     msg.len = len;
     memcpy(msg.buf, data, len);
-    can3.write(msg);
+    note_tx(can3.write(msg));
 }
+
+uint32_t wheel_motors_tx_defer_count() { return s_tx_defer_total; }
 
 // ── CAN RX callback (called from FlexCAN_T4 ISR) ─────────────────────────────
 
@@ -80,9 +106,10 @@ static void rx_callback(const CAN_message_t& msg) {
     } else if (cmd_id == CMD_HEARTBEAT && msg.len >= 5) {
         uint32_t err;
         memcpy(&err, msg.buf + 0, 4);
-        ax->error      = err;
-        ax->axis_state = msg.buf[4];
-        ax->last_hb_ms = millis();
+        ax->error         = err;
+        ax->axis_state    = msg.buf[4];
+        ax->last_hb_ms    = millis();
+        ax->hb_ever_heard = true;
     } else if (cmd_id == CMD_GET_VBUS && msg.len >= 4) {
         memcpy(&ax->vbus, msg.buf + 0, 4);
     }
@@ -102,9 +129,48 @@ bool wheel_motors_init() {
     return true;
 }
 
+// ── ODrive axis-state confirmation ───────────────────────────────────────────
+// Encoder freshness alone says the ODrive is powered and talking; it says
+// nothing about whether the axis is still in the mode we commanded. An axis
+// that has dropped out of CLOSED_LOOP_CONTROL keeps streaming perfectly good
+// encoder estimates while ignoring every torque command, which used to read as
+// a healthy wheel right up until the robot fell over.
+//
+// Two deliberate escape hatches, both to avoid turning a diagnostic into a
+// brick:
+//   * Only enforced once a heartbeat has actually been seen (hb_ever_heard).
+//     Heartbeat transmission is an ODrive-side config item; if it is off, this
+//     degrades to exactly the old behaviour plus a one-time warning, rather
+//     than failing every axis permanently.
+//   * Suspended for WM_MODE_SETTLE_MS after a mode change. The ODrive needs a
+//     few heartbeat periods to actually reach CLOSED_LOOP, and faulting during
+//     that window would bounce us straight back to IDLE and oscillate.
+static constexpr uint32_t WM_HB_TIMEOUT_MS    = 500;  // ODrive default heartbeat is 100 ms
+static constexpr uint32_t WM_MODE_SETTLE_MS   = 500;
+static uint32_t s_mode_change_ms = 0;
+
+static bool axis_confirmed(const WheelAxisState& ax, uint32_t now) {
+    if (!ax.hb_ever_heard) return true;                       // heartbeats not configured
+    if ((now - ax.last_hb_ms) >= WM_HB_TIMEOUT_MS) return false;
+    if (wm_mode == WheelMode::IDLE) return true;              // nothing to confirm
+    if ((now - s_mode_change_ms) < WM_MODE_SETTLE_MS) return true;
+    return ax.axis_state == AXIS_CLOSED_LOOP;
+}
+
 void wheel_motors_poll() {
     // FlexCAN_T4 interrupt-driven — no polling call needed.
     uint32_t now = millis();
+
+    // One-time notice if the ODrives never sent a heartbeat: the axis-state and
+    // ODrive-error checks are both inert in that case, and that is worth
+    // knowing before trusting either of them on the bench.
+    static bool s_hb_warned = false;
+    if (!s_hb_warned && now > 5000 && !wm_L.hb_ever_heard && !wm_R.hb_ever_heard) {
+        s_hb_warned = true;
+        comm_log(LOG_LEVEL_WARN,
+                 "WheelMotors: no ODrive heartbeat seen — axis-state and error "
+                 "checks are inactive (enable heartbeat in ODrive CAN config)");
+    }
 
     // ── Encoder-velocity plausibility filter ─────────────────────────────────
     // Only evaluated when a new encoder frame actually arrived, and the
@@ -131,11 +197,29 @@ void wheel_motors_poll() {
         }
     }
 
+    // ── CAN TX stall ─────────────────────────────────────────────────────────
+    // Latches once the deferral run crosses the threshold; cleared only by
+    // wheel_motors_clear_errors(), like a latched ODrive fault. Reported once
+    // per latch rather than per tick — a stalled bus would otherwise emit a
+    // log line at 500 Hz and starve the loop it is trying to warn about.
+    if (!s_tx_stalled && s_tx_defer_run >= WM_TX_DEFER_FAULT_RUN) {
+        s_tx_stalled = true;
+        comm_log(LOG_LEVEL_ERROR,
+                 "WheelMotors: CAN3 TX stalled — %lu consecutive deferrals (%lu total); "
+                 "torque commands are no longer reaching the bus",
+                 (unsigned long)s_tx_defer_run, (unsigned long)s_tx_defer_total);
+    }
+
     uint32_t enc_timeout = (uint32_t)param_get(PARAM_WM_ENC_TIMEOUT_MS);
     // ever_heard guard: without it, ok is spuriously true for the first
     // enc_timeout ms after boot (last_fb_ms == 0) even with no ODrive present.
-    wm_L.ok = wm_L.ever_heard && (now - wm_L.last_fb_ms) < enc_timeout;
-    wm_R.ok = wm_R.ever_heard && (now - wm_R.last_fb_ms) < enc_timeout;
+    // A latched TX stall clears ok on both axes: feedback can still be arriving
+    // perfectly while nothing we send gets out, and an axis we cannot command
+    // is not an axis we can balance on.
+    wm_L.ok = wm_L.ever_heard && !s_tx_stalled && (now - wm_L.last_fb_ms) < enc_timeout
+              && axis_confirmed(wm_L, now);
+    wm_R.ok = wm_R.ever_heard && !s_tx_stalled && (now - wm_R.last_fb_ms) < enc_timeout
+              && axis_confirmed(wm_R, now);
 
     bool l_bad = (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f) && (!wm_L.ok || wm_L.error);
     bool r_bad = (param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) && (!wm_R.ok || wm_R.error);
@@ -156,6 +240,11 @@ void wheel_motors_forgive_feedback_stall() {
     uint32_t now = millis();
     wm_L.last_fb_ms = now;
     wm_R.last_fb_ms = now;
+    // Heartbeat freshness feeds ok too (axis_confirmed), and a frozen tick
+    // ages it exactly the same way, so forgive both clocks or the stall just
+    // reappears as a heartbeat timeout instead of an encoder one.
+    wm_L.last_hb_ms = now;
+    wm_R.last_hb_ms = now;
 }
 
 void wheel_motors_set_mode(WheelMode mode) {
@@ -185,6 +274,7 @@ void wheel_motors_set_mode(WheelMode mode) {
         if (r_en) send_frame(ODESC_NODE_R, CMD_SET_AXIS_STATE, &s, 4);
     }
     wm_mode = mode;
+    s_mode_change_ms = millis();  // opens the axis-state settle window
 }
 
 void wheel_motors_send(float L, float R) {
@@ -260,12 +350,12 @@ void wheel_motors_request_vbus() {
     msg.len = 8;
     if (param_get(PARAM_WHEEL_L_ENABLE) >= 0.5f) {
         msg.id = ((uint32_t)ODESC_NODE_L << 5) | CMD_GET_VBUS;
-        can3.write(msg);
+        note_tx(can3.write(msg));
     }
     delayMicroseconds(CAN_INTER_FRAME_US);
     if (param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) {
         msg.id = ((uint32_t)ODESC_NODE_R << 5) | CMD_GET_VBUS;
-        can3.write(msg);
+        note_tx(can3.write(msg));
     }
 }
 
@@ -276,6 +366,8 @@ void wheel_motors_clear_errors() {
     if (param_get(PARAM_WHEEL_R_ENABLE) >= 0.5f) send_frame(ODESC_NODE_R, CMD_CLEAR_ERRORS, &ident, 4);
     wm_L.error = 0;
     wm_R.error = 0;
+    s_tx_stalled   = false;   // latched TX stall clears with the ODrive faults
+    s_tx_defer_run = 0;
     comm_log(LOG_LEVEL_INFO, "WheelMotors: clear_errors sent");
 }
 

@@ -16,12 +16,14 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from model import LinkageSpec, MOVING_LINKS
-from kinematics import solve_pose, trace_world
+from kinematics import solve_pose, trace_world, wheel_jacobian
 from geometry import ShapeSet, collisions, RES_FAST, RES_DRAW
 
 DQ_COARSE = math.radians(1.0)     # march step
 BISECT_TOL = math.radians(0.05)   # boundary resolution
 N_METRIC_SAMPLES = 240
+
+GRAVITY = 9.80665                 # m/s^2
 
 
 @dataclass
@@ -60,9 +62,12 @@ class Metrics:
     q_block_lo: float | None = None
     q_block_hi: float | None = None
     q_seed_used: float = 0.0     # differs from spec.q_seed when auto_seed moved it
+    max_torque_nm: float = 0.0   # peak static hip torque over the kept range
+    q_max_torque: float = 0.0    # where that peak sits [rad]
     path: np.ndarray = field(default=None, repr=False)   # (N,2) traced path
     q_samples: np.ndarray = field(default=None, repr=False)
     alphas: np.ndarray = field(default=None, repr=False)  # branch at each sample
+    torques: np.ndarray = field(default=None, repr=False)  # N·m at each sample
 
     def alpha_at(self, q: float):
         """Assembly-branch alpha nearest to q — pass as alpha_prev when solving
@@ -76,7 +81,30 @@ class Metrics:
             return f"INVALID — {self.reason}"
         return (f"travel {self.travel_mm:.1f} mm | dev {self.max_dev_mm:.2f} mm | "
                 f"stroke {self.stroke_deg:.2f}deg | "
+                f"peak tau {self.max_torque_nm:.2f} Nm | "
                 f"[{math.degrees(self.q_lo):.2f}, {math.degrees(self.q_hi):.2f}]deg")
+
+
+def hip_torque(spec: LinkageSpec, pose) -> float:
+    """Hip torque needed to hold the body up at this pose [N·m].
+
+    Static equilibrium with the wheel on the ground.  Let h be the body height
+    above the contact patch; because A is the origin of this frame, h = -z_W.
+    Virtual work against the leg's share of the weight gives
+
+        tau * dq  =  m g * dh  =  -m g * dz_W        ->  |tau| = m g |dz_W/dq|
+
+    So the torque is the load times the leg's vertical gear ratio, and it says
+    nothing about how far the leg travels — a pose can be perfectly reachable
+    and still be one the motor cannot hold.
+
+    Returns inf at a singularity: there dz_W/dq is unbounded, which is exactly
+    the pose that demands infinite torque.
+    """
+    j = wheel_jacobian(spec, pose)
+    if j is None:
+        return float("inf")
+    return spec.leg_load_kg * GRAVITY * abs(j[1])
 
 
 def _blocked(spec, q, alpha_prev, shapes, check_collisions):
@@ -84,6 +112,13 @@ def _blocked(spec, q, alpha_prev, shapes, check_collisions):
     p = solve_pose(spec, q, alpha_prev)
     if p is None:
         return None, "singularity"
+    if spec.enforce_torque_limit:
+        # Cheap (closed form, no extra IK) so it is tested before the polygon
+        # work, which is by far the most expensive check here.
+        tau = hip_torque(spec, p)
+        if tau > spec.torque_limit_nm:
+            return p, (f"hip torque {tau:.2f} > {spec.torque_limit_nm:.2f} N·m"
+                       f" @ {spec.leg_load_kg:.2f} kg/leg")
     if check_collisions:
         hits = collisions(spec, p, shapes)
         if hits:
@@ -230,6 +265,7 @@ def evaluate(spec: LinkageSpec, shapes: ShapeSet | None = None,
     i_seed = int(np.searchsorted(qs, rng.q_seed_used))
     pts: list[tuple[float, float] | None] = [None] * n_samples
     als: list[float | None] = [None] * n_samples
+    tqs: list[float | None] = [None] * n_samples
 
     alpha = seed.alpha
     for i in range(min(i_seed, n_samples - 1), n_samples):
@@ -238,6 +274,7 @@ def evaluate(spec: LinkageSpec, shapes: ShapeSet | None = None,
             break
         alpha = p.alpha
         pts[i], als[i] = trace_world(p, tp), p.alpha
+        tqs[i] = hip_torque(spec, p)
 
     alpha = seed.alpha
     for i in range(min(i_seed, n_samples - 1) - 1, -1, -1):
@@ -246,6 +283,7 @@ def evaluate(spec: LinkageSpec, shapes: ShapeSet | None = None,
             break
         alpha = p.alpha
         pts[i], als[i] = trace_world(p, tp), p.alpha
+        tqs[i] = hip_torque(spec, p)
 
     keep = [i for i, v in enumerate(pts) if v is not None]
     if len(keep) < 3:
@@ -254,6 +292,8 @@ def evaluate(spec: LinkageSpec, shapes: ShapeSet | None = None,
     path = np.array([pts[i] for i in keep], dtype=float)
     q_kept = qs[keep]
     a_kept = np.array([als[i] for i in keep], dtype=float)
+    t_kept = np.array([tqs[i] for i in keep], dtype=float)
+    i_peak = int(np.argmax(t_kept))
 
     x, z = path[:, 0], path[:, 1]
     mean_x = float(x.mean())
@@ -270,5 +310,7 @@ def evaluate(spec: LinkageSpec, shapes: ShapeSet | None = None,
         stop_lo=rng.stop_lo, stop_hi=rng.stop_hi,
         q_block_lo=rng.q_block_lo, q_block_hi=rng.q_block_hi,
         q_seed_used=rng.q_seed_used,
-        path=path, q_samples=q_kept, alphas=a_kept,
+        max_torque_nm=float(t_kept[i_peak]),
+        q_max_torque=float(q_kept[i_peak]),
+        path=path, q_samples=q_kept, alphas=a_kept, torques=t_kept,
     )

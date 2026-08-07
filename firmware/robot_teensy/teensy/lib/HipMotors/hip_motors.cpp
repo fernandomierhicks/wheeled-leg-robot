@@ -10,19 +10,33 @@
 // Maximum allowed position step per command (rad). Larger jumps trigger ESTOP.
 #define MAX_HIP_DELTA_RAD  1.5708f  // 90 deg
 
-// AK45-10 MIT Cheetah protocol parameter limits
+// AK45-10 MIT Cheetah protocol parameter limits.
+//
+// These are PER MOTOR MODEL. Position, Kp and Kd are common to the whole AK
+// family, but speed and torque come from the model table in section 5.3 of the
+// AK series driver manual (v1.0.18 — whose changelog specifically notes
+// "Corrected the AK45-10 motor parameters", so older copies of that table are
+// wrong for this motor). For the AK45-10: speed ±20 rad/s, torque ±8 N·m.
+//
+// Getting these wrong is silent and expensive in both directions: the motor
+// decodes a command with its own constants (so a mismatched T_MAX scales every
+// feedforward torque we send), and we decode its reply with ours (so the same
+// mismatch scales everything we report). A previous set of values here (V ±65,
+// T ±18, plus a separate I ±20 for the reply) came from another AK model and
+// made reported hip torque read 2.5× high while delivering 44 % of commanded
+// feedforward. Confirmed against bench log 20260728T053232: reconstructing the
+// MIT impedance law from telemetry fit the reported value at 0.400 = 8/20, and
+// position-derivative vs reported velocity fit 0.308 = 20/65.
 #define P_MIN   -12.5f
 #define P_MAX    12.5f
-#define V_MIN   -65.0f
-#define V_MAX    65.0f
+#define V_MIN   -20.0f
+#define V_MAX    20.0f
 #define KP_MIN    0.0f
 #define KP_MAX  500.0f
 #define KD_MIN    0.0f
 #define KD_MAX    5.0f
-#define T_MIN   -18.0f
-#define T_MAX    18.0f
-#define I_MIN   -20.0f
-#define I_MAX    20.0f
+#define T_MIN    -8.0f
+#define T_MAX     8.0f
 
 // Motor silently drops out of MIT mode after ~4 s without re-entry; use 3 s margin.
 #define MIT_REENTER_MS  3000u
@@ -64,12 +78,31 @@ static float clamp_to_limits(float pos, const HipLimits& lim) {
     return pos;
 }
 
+// ── CAN TX health ────────────────────────────────────────────────────────────
+// Same contract and reasoning as CAN3 in wheel_motors.cpp: FlexCAN_T4::write()
+// returns 1 for "into a hardware mailbox" and -1 for "mailboxes all busy,
+// queued to the bounded software TX queue", which drops silently once full.
+// One deferral is normal, a long run means MIT setpoints have stopped reaching
+// the hips. Threshold matches CAN3's (~200 ms of a bus that isn't draining).
+static constexpr uint32_t HM_TX_DEFER_FAULT_RUN = 200;
+static uint32_t s_tx_defer_total = 0;
+static uint32_t s_tx_defer_run   = 0;
+static bool     s_tx_stalled     = false;
+
+static void note_tx(int rc) {
+    if (rc == 1) { s_tx_defer_run = 0; return; }
+    s_tx_defer_total++;
+    if (s_tx_defer_run < UINT32_MAX) s_tx_defer_run++;
+}
+
+uint32_t hip_motors_tx_defer_count() { return s_tx_defer_total; }
+
 static void send_raw(uint32_t id, const uint8_t data[8]) {
     CAN_message_t msg = {};
     msg.id  = id;
     msg.len = 8;
     memcpy(msg.buf, data, 8);
-    can2.write(msg);
+    note_tx(can2.write(msg));
 }
 
 static void pack_and_send(uint32_t id, float pos, float vel, float kp, float kd, float torque) {
@@ -129,18 +162,22 @@ static void rx_callback(const CAN_message_t& msg) {
 
     uint16_t raw_pos = ((uint16_t)msg.buf[1] << 8) | msg.buf[2];
     uint16_t raw_vel = ((uint16_t)msg.buf[3] << 4) | (msg.buf[4] >> 4);
-    uint16_t raw_cur = ((uint16_t)(msg.buf[4] & 0xF) << 8) | msg.buf[5];
+    uint16_t raw_trq = ((uint16_t)(msg.buf[4] & 0xF) << 8) | msg.buf[5];
 
     float pos = uint_to_float(raw_pos, P_MIN, P_MAX, 16);
     float vel = uint_to_float(raw_vel, V_MIN, V_MAX, 12);
-    float cur = uint_to_float(raw_cur, I_MIN, I_MAX, 12);
+    // The manual's byte table labels this third field "current", but its own
+    // reference decoder (section 5.3, unpack_reply) scales it by the model's
+    // TORQUE range and names the result `torque`. It is shaft torque in N·m,
+    // not amps — see the T_MIN/T_MAX note above.
+    float trq = uint_to_float(raw_trq, T_MIN, T_MAX, 12);
     // Left hip is physically mirrored relative to right — negate feedback here
-    // so downstream code (gain scheduling, FF1 current sum, telemetry, GUI)
+    // so downstream code (gain scheduling, FF1 torque sum, telemetry, GUI)
     // sees a consistent frame; must match the TX-side flip in pack_and_send().
-    if (msg.id == AK45_ID_L) { pos = -pos; vel = -vel; cur = -cur; }
+    if (msg.id == AK45_ID_L) { pos = -pos; vel = -vel; trq = -trq; }
     ax->pos_rad    = pos;
     ax->vel_rad_s  = vel;
-    ax->current_A  = cur;
+    ax->torque_nm  = trq;
     ax->last_fb_ms = millis();
     ax->feedback_seq++;
     ax->ever_heard = true;
@@ -166,8 +203,20 @@ bool hip_motors_init() {
 
 void hip_motors_poll() {
     uint32_t now = millis();
-    hm_L.ok = hm_L.ever_heard && (now - hm_L.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
-    hm_R.ok = hm_R.ever_heard && (now - hm_R.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
+
+    // Latched CAN2 TX stall — reported once, not every tick. Clears ok on both
+    // axes: feedback can keep arriving while nothing we send gets out, and a
+    // hip we cannot command is not a hip we can hold a pose with.
+    if (!s_tx_stalled && s_tx_defer_run >= HM_TX_DEFER_FAULT_RUN) {
+        s_tx_stalled = true;
+        comm_log(LOG_LEVEL_ERROR,
+                 "HipMotors: CAN2 TX stalled — %lu consecutive deferrals (%lu total); "
+                 "MIT setpoints are no longer reaching the bus",
+                 (unsigned long)s_tx_defer_run, (unsigned long)s_tx_defer_total);
+    }
+
+    hm_L.ok = hm_L.ever_heard && !s_tx_stalled && (now - hm_L.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
+    hm_R.ok = hm_R.ever_heard && !s_tx_stalled && (now - hm_R.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
 
     if ((hm_L.mit_active || hm_R.mit_active) && (now - last_enter_ms) >= MIT_REENTER_MS) {
         hip_motors_enter_mit();

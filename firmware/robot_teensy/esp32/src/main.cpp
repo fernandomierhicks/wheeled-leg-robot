@@ -112,8 +112,8 @@ static volatile float    g_telem_pitch_rate = 0.0f;
 static volatile float    g_telem_wheel_vel  = 0.0f;
 static volatile float    g_telem_hip_l_rad  = 0.0f;
 static volatile float    g_telem_hip_r_rad  = 0.0f;
-static volatile float    g_telem_hip_l_curr = 0.0f;
-static volatile float    g_telem_hip_r_curr = 0.0f;
+static volatile float    g_telem_hip_l_trq  = 0.0f;
+static volatile float    g_telem_hip_r_trq  = 0.0f;
 static volatile uint8_t  g_telem_ibus_alive = 0;
 static volatile uint8_t  g_fault_code       = FAULT_NONE;
 static volatile float    g_telem_wm_l_vel   = 0.0f;
@@ -1377,6 +1377,7 @@ static const char* fault_description(uint8_t code) {
         case FAULT_WHEEL_INIT_TIMEOUT: return "No CAN reply from wheel motors within 2 s of boot";
         case FAULT_STANDUP_FAILED:     return "Standup denied or failed - pitch out of recoverable range";
         case FAULT_ROLL_WATCHDOG:      return "|roll| > limit for > 200 ms - lateral tip guard";
+        case FAULT_JUMP_TIMEOUT:       return "Jump overran its phase budget without completing";
         default:                       return "Unknown fault";
     }
 }
@@ -1860,7 +1861,7 @@ static void drawArtificialHorizon(float pitch_rad, float roll_rad) {
 // ── Hip Panel (panel_sprite, 80×148, pushed to HIP_X,HIP_Y) ─────────────────
 // panel_sprite is shared with drawWheelMotors — draw hip first, then wm.
 
-static void drawHipPanel(float hip_l, float hip_r, float curr_l, float curr_r,
+static void drawHipPanel(float hip_l, float hip_r, float trq_l, float trq_r,
                           float cmd_l, float cmd_r, uint16_t health_flags) {
     panel_sprite.fillSprite(COL_GRAPH_BG);
 
@@ -1880,24 +1881,31 @@ static void drawHipPanel(float hip_l, float hip_r, float curr_l, float curr_r,
     panel_sprite.setCursor(57, cy + 4);
     panel_sprite.print("R");
 
+    // Full scale is the AK45-10's 7 N·m mechanical peak (the MIT protocol
+    // encodes a slightly wider ±8). Green below the 2.5 N·m *rated continuous*
+    // torque, yellow above it — sustained yellow is a thermal-duty warning, not
+    // a limit — red approaching the 5 A / ~6.4 N·m peak-current region.
+    // Bar shows magnitude: hip hold torque is normally negative in the
+    // firmware frame, which used to leave this bar permanently empty.
     const int bar_y = 88, bar_h = 8, bar_w = 34;
-    const float CURR_MAX = 8.0f;
-    auto curr_col = [&](float c) -> uint16_t {
-        if (c < 3.0f) return TFT_GREEN;
-        if (c < 6.0f) return TFT_YELLOW;
+    const float TRQ_MAX = 7.0f;
+    auto trq_col = [&](float t) -> uint16_t {
+        if (t < 2.5f) return TFT_GREEN;
+        if (t < 5.0f) return TFT_YELLOW;
         return TFT_RED;
     };
-    auto drawCurrBar = [&](int bx, float curr) {
-        int fill = (int)(constrain(curr / CURR_MAX, 0.0f, 1.0f) * bar_w);
+    auto drawTrqBar = [&](int bx, float trq) {
+        float mag  = fabsf(trq);
+        int   fill = (int)(constrain(mag / TRQ_MAX, 0.0f, 1.0f) * bar_w);
         panel_sprite.fillRect(bx, bar_y, bar_w, bar_h, panel_sprite.color565(15, 15, 20));
-        if (fill > 0) panel_sprite.fillRect(bx, bar_y, fill, bar_h, curr_col(curr));
+        if (fill > 0) panel_sprite.fillRect(bx, bar_y, fill, bar_h, trq_col(mag));
         panel_sprite.drawRect(bx - 1, bar_y - 1, bar_w + 2, bar_h + 2, panel_sprite.color565(45, 45, 55));
         panel_sprite.setTextColor(panel_sprite.color565(190, 190, 190));
         panel_sprite.setCursor(bx, bar_y + bar_h + 3);
-        panel_sprite.printf("%.1fA", curr);
+        panel_sprite.printf("%.1fNm", mag);
     };
-    drawCurrBar(3,  curr_l);
-    drawCurrBar(43, curr_r);
+    drawTrqBar(3,  trq_l);
+    drawTrqBar(43, trq_r);
 
     const int dot_y = 116;
     panel_sprite.fillCircle(20, dot_y, 4, (health_flags & HEALTH_HIP_L_OK) ? TFT_GREEN : TFT_RED);
@@ -2465,8 +2473,8 @@ static void update_display() {
     float    roll      = g_telem_roll_rad;
     float    hip_l     = g_telem_hip_l_rad;
     float    hip_r     = g_telem_hip_r_rad;
-    float    curr_l    = g_telem_hip_l_curr;
-    float    curr_r    = g_telem_hip_r_curr;
+    float    trq_l     = g_telem_hip_l_trq;
+    float    trq_r     = g_telem_hip_r_trq;
     float    wheel_vel = g_telem_wheel_vel;
     uint8_t  rc_alive  = g_telem_ibus_alive;
     uint32_t pkt_age   = millis() - g_last_teensy_ms;
@@ -2501,7 +2509,7 @@ static void update_display() {
     float vbus_avg = (vbus_n > 0) ? (vbus_sum / vbus_n) : 0.0f;
     drawModeBanner(state, active, fault, g_version_mismatch, active ? vbus_avg : 0.0f, active ? profile : 0);
     drawArtificialHorizon(active ? pitch : 0.0f, active ? roll : 0.0f);
-    drawHipPanel(hip_l, hip_r, curr_l, curr_r,
+    drawHipPanel(hip_l, hip_r, trq_l, trq_r,
                  active ? hip_l_cmd : 0.0f, active ? hip_r_cmd : 0.0f,
                  active ? health : 0);
     drawWheelMotors(active ? wm_l_vel : 0.0f, active ? wm_r_vel : 0.0f,
@@ -2798,8 +2806,8 @@ void loop() {
         g_telem_wheel_vel   = pkt.wheel_vel_avg_ms;
         g_telem_hip_l_rad   = pkt.hip_l_pos_rad;
         g_telem_hip_r_rad   = pkt.hip_r_pos_rad;
-        g_telem_hip_l_curr  = pkt.hip_l_current_a;
-        g_telem_hip_r_curr  = pkt.hip_r_current_a;
+        g_telem_hip_l_trq   = pkt.hip_l_torque_nm;
+        g_telem_hip_r_trq   = pkt.hip_r_torque_nm;
         g_telem_ibus_alive  = pkt.ibus_alive;
         g_telem_wm_l_vel    = pkt.wm_l_vel_turns_s;
         g_telem_wm_r_vel    = pkt.wm_r_vel_turns_s;

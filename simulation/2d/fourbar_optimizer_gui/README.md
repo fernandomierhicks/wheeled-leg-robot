@@ -84,7 +84,7 @@ is drawn.
 
 ### Collision pairs
 
-All 10 pairs are individually checkable in the GUI. Off by default:
+All 15 pairs are individually checkable in the GUI. Off by default:
 
 | Pair | Why off |
 |---|---|
@@ -92,9 +92,15 @@ All 10 pairs are individually checkable in the GUI. Off by default:
 | tibia / coupler | share pin E |
 | femur / motor | the femur rotates on the motor's own output shaft |
 | tibia / wheel | the wheel is bolted to the tibia |
-| femur / wheel, coupler / wheel | per the build, the wheel is checked against the hip motor only |
+| femur / wheel | per the build, the tyre runs clear of the femur plate in Y |
+| tibia / wheel_motor | the hub motor is bolted to the tibia at W as well |
+| wheel / wheel_motor | concentric by construction, so always overlapping |
 
-Left on: **femur/coupler**, **coupler/motor**, **tibia/motor**, **wheel/motor**.
+Left on: **femur/coupler**, **coupler/motor**, **tibia/motor**, **wheel/motor**,
+**coupler/wheel**, and the hub motor against **femur**, **coupler** and the hip
+**motor**. The Ø52 mm hub motor is wider in Y than the tyre, so unlike the wheel
+it does foul the femur plate — that is why femur/wheel is off but
+femur/wheel_motor is on.
 
 ### Range of motion
 
@@ -104,6 +110,44 @@ beyond an interference is unreachable. March outward from the seed, stop at the
 first singularity / collision / user limit, bisect to 0.05°.
 
 Verticality is max |x - mean x| over that range (best-fit vertical).
+
+### Hip torque limit
+
+A pose can be perfectly reachable and still be one the motor cannot hold, so
+the range is also trimmed by static hip torque. With the wheel on the ground
+and this leg carrying `leg_load_kg` of the body:
+
+```
+tau(q) = leg_load_kg * g * |dz_W/dq|
+```
+
+Only the **vertical** Jacobian appears: the wheel rolls, so W's horizontal
+motion does no work against a vertical ground reaction. The torque is therefore
+the load times the leg's vertical gear ratio, and says nothing about how far
+the leg travels.
+
+`dz_W/dq` is closed form (`kinematics.wheel_jacobian` — the loop constraint
+|E-F| = Lc differentiated directly), so there is no step size to tune and no
+extra IK solve; the existing 1° march plus 0.05° bisection does the
+discretisation. Poses over `torque_limit_nm` block exactly like a collision,
+so the trim flows straight into `stroke_deg`/`travel_mm` and hence into the
+optimizer's fitness.
+
+Defaults: 1.0 kg/leg (2 kg body, motors included, on two hips) against the
+AK45-10's 2.5 N·m **continuous** rating — a standing robot holds this torque
+indefinitely, so continuous is the number that binds, not peak.
+
+This constraint is not cosmetic. The previous optimizer winners in `presets/`
+need **4.9-5.9 N·m**, over twice what the motor can hold, and lose more than
+half their travel once it is enforced:
+
+| preset | stroke off→on | travel off→on | peak tau |
+|---|---|---|---|
+| archive baseline_18mm | 62.34° → 60.13° | 219.4 → 209.3 mm | 2.61 |
+| archive_baseline1 | 67.41° → 67.41° | 209.4 → 209.4 mm | 2.34 |
+| optimized_5mm_dev | 51.41° → 28.09° | 235.5 → 98.4 mm | 4.93 |
+| optimized_5mm_nocollision motor_hip | 51.97° → 29.06° | 237.0 → 97.5 mm | 5.29 |
+| optimized_all_links_200 | 55.50° → 30.00° | 260.5 → 101.5 mm | 5.88 |
 
 ## Verified
 
@@ -127,7 +171,8 @@ Verticality is max |x - mean x| over that range (best-fit vertical).
 | femur A→C | 174 mm | 20 mm at A, tapering to 15 mm at C |
 | tibia | 130 mm C→W, 35 mm C→E | 20 mm throughout |
 | coupler F→E | 150 mm | 20 mm at F, 15 mm at E |
-| wheel | Ø112 mm at W | checked against the hip motor only |
+| wheel | Ø112 mm at W | checked against the hip motor and the coupler |
+| wheel_motor | Ø52 mm at W, concentric with the wheel | checked against every link except the tibia, plus the hip motor |
 | motor | Ø53 mm at A | |
 
 Radii are **per link per end**: two links meeting at one pin are separate parts,

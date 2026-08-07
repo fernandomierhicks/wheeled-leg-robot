@@ -65,7 +65,20 @@ See `components/COMPONENTS.md` for full geometry table, BOM, and mass breakdown.
 ```
 
 - A = hip motor output shaft (femur origin)
-- F = fixed body pivot at (−58.87 mm X, −18.21 mm Z) from body origin
+- F = fixed body pivot at (−58.87 mm X, **−5.5 mm Z**) from body origin —
+  i.e. **F sits 18 mm above the hip axis A** (A_Z = −23.5 mm). **As built.**
+
+> **Do not use −18.21 mm for F_Z.** That was the value here until 2026-08-03 and
+> it is the single most common source of wrong leg kinematics in this repo.
+> −18.21 mm is F's body-centre Z from the baseline-1 optimisation, in which the
+> hip-to-coupler *height* offset (A→F) was **5.29 mm**. The two were conflated,
+> the wrong one went into CAD, and **the robot was physically built with an
+> 18 mm A→F offset**. The build is the reference; the old numbers are not.
+>
+> Everything derived from the 5.29 mm geometry is invalid — the baseline-1
+> optimisation result, `Q_RET`/`Q_EXT`, and `L_EFF_RET`/`L_EFF_EXT` in
+> `control_loop.cpp`. Total hip travel is limited to **66°** by deliberate hard
+> stops (the 4-bar goes singular at ~75.9° with the as-built geometry).
 - C = knee pivot (femur tip)
 - E = tibia stub end (35.13 mm above C), connects to coupler at F
 

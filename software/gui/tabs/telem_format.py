@@ -1,6 +1,6 @@
 """telem_format.py — TelemetryPayload struct format + decoders (shared/comm_protocol.h).
 
-Single source of truth for the TELEM_VERSION 11 wire layout, shared between
+Single source of truth for the TELEM_VERSION 12 wire layout, shared between
 flash_monitor.py (live GUI decode, Qt) and wlog_to_csv.py / log_playback.py
 (offline .wlog decode, no Qt). Keep in sync with the PROPAGATION CHECKLIST
 in shared/comm_protocol.h whenever TelemetryPayload changes.
@@ -8,7 +8,7 @@ in shared/comm_protocol.h whenever TelemetryPayload changes.
 
 import struct
 
-TELEM_VERSION = 11  # must match TELEM_VERSION in shared/comm_protocol.h
+TELEM_VERSION = 12  # must match TELEM_VERSION in shared/comm_protocol.h
 
 # ── Frame checksum — CRC-8 (poly 0x07, init 0x00, MSB-first — CRC-8/SMBus) ────
 # MIRROR: crc8_table()/crc8_step() in shared/CommLink/CommLink.cpp. Replaced the
@@ -64,7 +64,7 @@ def decode_telem_a(payload: bytes) -> dict:
     (ts,
      pitch, pitch_rate, wheel_vel, hip_l, hip_r, whl_tau_l, whl_tau_r, roll, yaw,
      state, fault,
-     test_val, hip_l_curr, hip_r_curr,
+     test_val, hip_l_trq, hip_r_trq,
      *ibus_and_alive,
      wm_l_vel, wm_r_vel, wm_l_pos, wm_r_pos, wm_l_vbus, wm_r_vbus,
      wm_l_err, wm_r_err,
@@ -88,8 +88,8 @@ def decode_telem_a(payload: bytes) -> dict:
         "fault_name":      _FAULT_NAMES.get(fault, f"0x{fault:02X}"),
         "fault_description": _FAULT_DESCRIPTIONS.get(fault, "Unknown fault"),
         "test_val":        test_val,
-        "hip_l_current_a": hip_l_curr,
-        "hip_r_current_a": hip_r_curr,
+        "hip_l_torque_nm": hip_l_trq,
+        "hip_r_torque_nm": hip_r_trq,
         "ibus_ch":         ibus_ch,
         "ibus_alive":      ibus_alive,
         "wm_l_vel_turns_s": wm_l_vel,

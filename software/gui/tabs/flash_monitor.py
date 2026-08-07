@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 from .port_manager import SerialPortManager
 from .log_paths import DIAGNOSTICS_DIR
 from .telem_format import (
+    TELEM_VERSION as _TELEM_VERSION,
     crc8 as _crc8, decode_telem_a as _decode_telem_a, decode_telem_b as _decode_telem_b,
     decode_telem_full as _decode_telem_full,
 )
@@ -203,7 +204,9 @@ _COMM_MAX_PAYLOAD = 512  # mirrors firmware CommLink.h COMM_MAX_PAYLOAD — a co
                           # arrive, swallowing subsequent legitimate datagrams into the search
                           # (Fix 2 equivalent; found via WiFi corruption-injection testing,
                           # Phase 9, UARTplat.md)
-_TELEM_VERSION = 11  # must match TELEM_VERSION in shared/comm_protocol.h
+# _TELEM_VERSION is imported from telem_format.py, not re-declared here — a local
+# copy silently went stale at 11 while telem_format/firmware moved to 12, and the
+# live decoder then rejected every packet as a version mismatch.
 _TELEM_A_LEN   = 118
 _TELEM_B_LEN   = 129
 

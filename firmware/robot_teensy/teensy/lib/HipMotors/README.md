@@ -28,17 +28,22 @@ hip_motors_send(pos_L, vel_L, kp_L, kd_L, trq_L,
 hip_motors_exit_mit();
 ```
 
-Feedback is interrupt-driven (`FlexCAN_T4::onReceive`). `hm_L` / `hm_R` globals hold the latest `{pos_rad, vel_rad_s, current_A, last_fb_ms, ok, mit_active}`.
+Feedback is interrupt-driven (`FlexCAN_T4::onReceive`). `hm_L` / `hm_R` globals hold the latest `{pos_rad, vel_rad_s, torque_nm, last_fb_ms, ok, mit_active}`.
 
 ## Parameter limits (hardware-enforced by driver)
+
+Position, Kp and Kd are common to the whole AK family; **speed and torque are
+per motor model**, from the table in §5.3 of the AK series driver manual
+(v1.0.18 — its changelog notes "Corrected the AK45-10 motor parameters", so
+older copies of that table are wrong for this motor).
 
 | Field | Min | Max |
 |---|---|---|
 | pos | −12.5 rad | +12.5 rad |
-| vel | −65 rad/s | +65 rad/s |
+| vel | −20 rad/s | +20 rad/s |
 | kp | 0 N·m/rad | 500 N·m/rad |
 | kd | 0 N·m·s/rad | 5 N·m·s/rad |
-| torque | −18 N·m | +18 N·m |
+| torque | −8 N·m | +8 N·m |
 
 ## Gotchas
 
@@ -47,5 +52,20 @@ Feedback is interrupt-driven (`FlexCAN_T4::onReceive`). `hm_L` / `hm_R` globals 
 **Inter-frame delay** — a 500 µs gap (`CAN_INTER_FRAME_US`) is inserted between every back-to-back pair of CAN TX frames. Removing it causes the second motor to miss the frame intermittently.
 
 **Zeroing persists across power cycles** — `hip_motors_zero()` writes the zero to flash inside the motor. Call it only once at calibration, not in normal startup.
+
+**The reply's third field is torque, not current** — the manual's byte table
+labels it "current", but its own reference decoder scales it by the model's
+*torque* range and names the result `torque`. It is shaft torque in N·m.
+`hm_L/R.torque_nm` and the `hip_l/r_torque_nm` telemetry fields are that value.
+
+**Getting the model constants wrong is silent** — the motor decodes commands
+with its own constants and we decode replies with ours, so a mismatch scales
+both directions with no error anywhere. Before 2026-07-31 this driver used
+V ±65 / T ±18 (plus a bogus separate I ±20 for the reply), which reported hip
+torque 2.5× high while delivering only 8/18 of every commanded feedforward
+torque. Confirmed against bench log `20260728T053232`: reconstructing the MIT
+impedance law from telemetry fit the reported value at 0.400 = 8/20, and
+position-derivative versus reported velocity fit 0.308 = 20/65. If you ever
+change motor model, re-check this table first.
 
 **Feedback is only sent in response to a command** — `hm_L/R.ok` goes false if no `hip_motors_send()` calls are made (e.g. while MIT mode is still being established).

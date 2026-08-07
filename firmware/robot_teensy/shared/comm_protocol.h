@@ -37,7 +37,14 @@
 #define COMM_TYPE_WIFI_DIAG    0x14  // ESP32→PC only: link/loop diagnostics (WifiDiagPayload)
 #define COMM_TYPE_TELEM_FULL_WIFI 0x15  // ESP32→PC, WiFi-only: full TelemetryPayload as one datagram (WIFI_TELEM_COMBINED)
 #define COMM_TYPE_COMMAND_RESULT  0x16  // Teensy→PC: correlated ACK/NACK for a v2 command request
-#define COMM_TYPE_ESP32_STATUS 0x16  // ESP32→Teensy: 5 Hz link heartbeat + ESP32 health (Esp32StatusPayload)
+#define COMM_TYPE_ESP32_STATUS 0x17  // ESP32→Teensy: 5 Hz link heartbeat + ESP32 health (Esp32StatusPayload)
+// ESP32_STATUS was also 0x16 until 2026-08-02, distinguished from COMMAND_RESULT
+// by direction alone. That held only by convention: the ESP32 relays GUI frames
+// to the Teensy verbatim, so any 0x16 arriving from the host side would have been
+// accepted as a status heartbeat. Packet types are now unique regardless of
+// direction. Flash Teensy and ESP32 together — a skewed pair just reports
+// esp32_link_ok = false, which is already supervised, but the heartbeat is down
+// until both sides match.
 
 // ── Calibration event sub-types ───────────────────────────────────────────────
 #define CALIB_EVENT_PAYLOAD_V1   1
@@ -101,7 +108,8 @@ inline fault_severity_t fault_severity(uint8_t code) {
         case FAULT_WHEEL_RUNAWAY:         return FAULT_SEVERITY_SOFT;
         case FAULT_PITCH_WATCHDOG:
         case FAULT_CALIBRATION_TIMEOUT:
-        case FAULT_STANDUP_FAILED:        return FAULT_SEVERITY_REPOSITION;
+        case FAULT_STANDUP_FAILED:
+        case FAULT_JUMP_TIMEOUT:          return FAULT_SEVERITY_REPOSITION;
         case FAULT_HIP_LARGE_POS_CMD:     return FAULT_SEVERITY_GUI_FIX;
         default:                          return FAULT_SEVERITY_REBOOT;
     }
@@ -176,7 +184,7 @@ static_assert(sizeof(Esp32StatusPayload) == 14, "Esp32StatusPayload must be 14 b
 //   [4]    float×9 pitch_rad … yaw_rad
 //   [40]   uint8   robot_state
 //   [41]   uint8   fault_code
-//   [42]   float×3 test_val, hip_l_current_a, hip_r_current_a
+//   [42]   float×3 test_val, hip_l_torque_nm, hip_r_torque_nm
 //   [54]   uint16×14 ibus_ch[14]
 //   [82]   uint8   ibus_alive
 //   [83]   float×6 wm_l_vel … wm_r_vbus    ← V3 start
@@ -203,7 +211,13 @@ static_assert(sizeof(Esp32StatusPayload) == 14, "Esp32StatusPayload must be 14 b
 //   [246]  uint8    standup_state                                             ← V11 start
 //   [247]  ← end, sizeof = 247 bytes
 //
-#define TELEM_VERSION  11  // bump when adding/removing struct fields; triggers mismatch errors
+// V12: layout is byte-identical to V11, but hip_l/r_current_a became
+// hip_l/r_torque_nm — same offsets, different UNITS (the AK45-10 MIT reply
+// field is shaft torque in N·m, and was previously decoded 2.5× too large).
+// Bumped anyway so a stale ESP32 or GUI rejects the packet outright instead of
+// silently plotting the old scale, and so captured logs record which scale
+// they were taken under.
+#define TELEM_VERSION  12  // bump when adding/removing struct fields; triggers mismatch errors
 
 typedef struct __attribute__((packed)) {
     uint32_t timestamp_ms;
@@ -219,8 +233,8 @@ typedef struct __attribute__((packed)) {
     uint8_t  robot_state;        // matches RobotStateEnum
     uint8_t  fault_code;         // FAULT_* — non-zero only when robot_state == STATE_ESTOP
     float    test_val;           // dummy 2 Hz sine wave for pipeline testing
-    float    hip_l_current_a;    // hip L phase current [A]
-    float    hip_r_current_a;    // hip R phase current [A]
+    float    hip_l_torque_nm;    // hip L shaft torque [N·m] (MIT reply field — not amps)
+    float    hip_r_torque_nm;    // hip R shaft torque [N·m] (MIT reply field — not amps)
     uint16_t ibus_ch[14];        // RC channels 0–13, 1000–2000 µs (1500 = center)
     uint8_t  ibus_alive;         // 1 = packet received within 500 ms, 0 = link lost
     // V3 additions — wheel motor telemetry (35 bytes, total 118)

@@ -31,7 +31,9 @@ _L_STUB  = 0.03513   # tibia stub C→E  [m]
 _L_TIBIA = 0.12939   # tibia C→W       [m]
 _LC      = 0.15081   # coupler F→E     [m]
 _F_X     = -0.05887  # fixed pivot X   [m]
-_F_Z     = -0.01821  # fixed pivot Z   [m]
+_F_Z     = -0.0055   # fixed pivot Z   [m]  AS BUILT: F is 18 mm above A
+                     # (= _A_Z + 0.018). Was -0.01821, a transcription error
+                     # that treated F's body-centre Z as the A->F offset.
 _A_Z     = -0.0235   # hip motor Z     [m]
 _LEG_Y   =  0.1430   # leg-plane Y (±) [m]
 _WHEEL_R =  0.075    # wheel radius    [m]
@@ -1387,8 +1389,8 @@ class RobotVisualizerTab(QWidget):
 
         hip_l_cmd = info.get("hip_l_cmd_pos_rad", q_l)
         hip_r_cmd = info.get("hip_r_cmd_pos_rad", q_r)
-        hip_l_cur = info.get("hip_l_current_a",   0.0)
-        hip_r_cur = info.get("hip_r_current_a",   0.0)
+        hip_l_cur = info.get("hip_l_torque_nm",   0.0)
+        hip_r_cur = info.get("hip_r_torque_nm",   0.0)
 
         wm_l_vel = info.get("wm_l_vel_turns_s", 0.0)
         wm_r_vel = info.get("wm_r_vel_turns_s", 0.0)

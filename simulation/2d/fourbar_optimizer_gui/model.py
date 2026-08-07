@@ -16,8 +16,25 @@ With A at the origin the coupler pivot becomes
     F_X = -0.05887              (unchanged, A was already at x = 0)
     F_Z = -0.01821 - (-0.0235) = +0.00529      <-- NOT -0.01821
 
-That +5.29 mm is the true hip-to-coupler *height* offset.  Everything in this
-package uses the A-at-origin frame; `to_body_frame_fz()` converts back.
+That +5.29 mm was the *design intent* for the hip-to-coupler height offset.
+
+AS BUILT (measured 2026-08-03): the robot has +18 mm, not +5.29 mm
+--------------------------------------------------------------------
+The frame-shift above is exactly the trap that got the robot built wrong: the
+-18.21 mm body-centre coordinate was reused as if it were the A->F offset, and
+that error propagated into CAD.  The physical robot therefore has
+
+    F_Z = +0.018   (A-at-origin frame)   =   -0.0055 in the body-centre frame
+
+which is now the default below.  It is physical truth, not a bug to correct.
+Consequences: the 4-bar's non-singular range shrinks to about 75.9 deg (q from
+-1.301 to +0.023 in the body frame), the leg Jacobian dW_z/dq rises ~5-10%, and
+any optimiser result or preset generated against +0.00529 is invalid.
+`presets/archive_baseline1.json` keeps the old value for reference;
+`presets/archive baseline_18mm.json` is the as-built one.
+
+Everything in this package uses the A-at-origin frame; `to_body_frame_fz()`
+converts back.
 """
 
 from __future__ import annotations
@@ -33,9 +50,14 @@ TIBIA = "tibia"
 COUPLER = "coupler"
 MOTOR = "motor"
 WHEEL = "wheel"
+WHEEL_MOTOR = "wheel_motor"     # hub motor body, concentric with the wheel
+# The femur's knee shaft: a circle at C, carried by the femur.  It is a body of
+# its own rather than part of the femur hull because it sticks out in Y — the
+# coupler clears the femur PLATE on a different plane but cannot clear this.
+FEMUR_SHAFT = "femur_shaft"
 
 MOVING_LINKS = (FEMUR, TIBIA, COUPLER)
-ALL_BODIES = (FEMUR, TIBIA, COUPLER, MOTOR, WHEEL)
+ALL_BODIES = (FEMUR, TIBIA, COUPLER, FEMUR_SHAFT, MOTOR, WHEEL, WHEEL_MOTOR)
 
 # A_Z used by the archive; kept only for frame conversion + cross-checking.
 ARCHIVE_A_Z = -0.0235
@@ -52,14 +74,28 @@ def pair_key(a: str, b: str) -> tuple[str, str]:
 #   tibia/coupler share the pivot E
 #   femur/motor   the femur rotates on the motor's own output shaft at A
 #   tibia/wheel   the wheel is bolted to the tibia at W
+#   tibia/wheel_motor   the hub motor is bolted to the tibia at W too
+#   wheel/wheel_motor   concentric by construction, so always overlapping
 # Plus, per the build: the wheel is checked against the hip motor and the
-# coupler.  It still runs clear of the femur plate in Y.
+# coupler.  It still runs clear of the femur plate in Y.  The hub motor,
+# however, is wide enough to foul the femur, so that pair stays ON.
+# The knee shaft is the femur's own part and the tibia turns on it, so both of
+# those pairs are meaningless; the motor and the wheel bodies sit a whole link
+# length away from C and cannot reach it.  Coupler ↔ knee shaft is the one that
+# matters and is ON by default — that is the whole reason the shaft is modelled.
 _DEFAULT_OFF = {
     pair_key(FEMUR, TIBIA),
     pair_key(TIBIA, COUPLER),
     pair_key(FEMUR, MOTOR),
     pair_key(TIBIA, WHEEL),
     pair_key(FEMUR, WHEEL),
+    pair_key(TIBIA, WHEEL_MOTOR),
+    pair_key(WHEEL, WHEEL_MOTOR),
+    pair_key(FEMUR, FEMUR_SHAFT),
+    pair_key(TIBIA, FEMUR_SHAFT),
+    pair_key(MOTOR, FEMUR_SHAFT),
+    pair_key(WHEEL, FEMUR_SHAFT),
+    pair_key(WHEEL_MOTOR, FEMUR_SHAFT),
 }
 
 
@@ -94,8 +130,10 @@ class LinkageSpec:
     Lc: float = 0.150            # F -> E   (coupler)
 
     # ── Body-fixed passive pivot F, relative to A at origin ──────────────────
-    F_X: float = -0.05887
-    F_Z: float = +0.00529        # = archive -0.01821 - A_Z(-0.0235)
+    F_X: float = -0.05887        # as built: 59 mm
+    F_Z: float = +0.018          # AS BUILT (18 mm above A). Design intent was
+                                 # +0.00529; see the header note for why they
+                                 # differ and why 18 mm is the real robot.
 
     # ── Tibia dogleg: W offset perpendicular to the E-C axis ─────────────────
     w_perp: float = 0.0
@@ -112,10 +150,20 @@ class LinkageSpec:
     coupler_r_F: float = 0.020   # body side
     coupler_r_E: float = 0.015   # tibia side
 
+    # Knee shaft on the femur at C, tested against the coupler.  Separate from
+    # femur_r_C because the plate and the shaft are different obstacles: the
+    # coupler runs past the plate on its own plane, but the shaft protrudes
+    # into that plane and must be kept clear.
+    femur_shaft_r: float = 0.0115   # 23 mm diameter
+
     # ── Circular bodies ──────────────────────────────────────────────────────
     motor_r: float = 0.0265      # AK45-10 housing, dia 53 mm
     wheel_enabled: bool = True
     wheel_r: float = 0.056       # 112 mm diameter wheel
+    # Hub motor, concentric with the wheel.  Smaller than the tyre, so it never
+    # reaches the ground, but it sticks out sideways far enough to hit the
+    # links and the hip motor where the tyre alone would clear them.
+    wheel_motor_r: float = 0.026  # 52 mm diameter
 
     # ── Ride-height constraint ───────────────────────────────────────────────
     # The wheel's UPPER horizontal tangent (W_z + wheel_r) may never rise above
@@ -135,6 +183,22 @@ class LinkageSpec:
     # tracks the wheel as the leg moves.  Nothing — no link, not the motor —
     # may reach it.  A fixed z would be wrong: the chassis rides up and down.
     enforce_ground: bool = True
+
+    # ── Hip torque limit ─────────────────────────────────────────────────────
+    # Static hold: the wheel sits on the ground and this leg carries its share
+    # of the body.  The hip torque needed is set purely by the leg's vertical
+    # "gear ratio" dz_W/dq — how far the body rises per radian of hip rotation:
+    #
+    #     tau(q) = leg_load_kg * g * |dz_W/dq|
+    #
+    # Only the VERTICAL Jacobian enters: the wheel rolls, so the horizontal
+    # component of W's motion does no work against a vertical ground reaction.
+    # Poses needing more than torque_limit_nm are trimmed off the stroke the
+    # same way a collision is — the motor cannot hold them, so they are not
+    # usable range.
+    enforce_torque_limit: bool = True
+    leg_load_kg: float = 1.0      # mass on THIS leg (2 kg body / 2 hips)
+    torque_limit_nm: float = 2.5  # AK45-10 continuous
 
     # ── Hip sweep ────────────────────────────────────────────────────────────
     q_seed: float = -0.67498     # neutral stance (30% ret->ext), rad
@@ -238,7 +302,11 @@ class LinkageSpec:
         tps = d.pop("trace_points", None)
         spec = LinkageSpec(**d)
         if col is not None:
-            spec.collide = {pair_key(*k.split("|")): bool(v) for k, v in col.items()}
+            # Merge onto the defaults rather than replacing them: a preset saved
+            # before a body existed has no entry for its pairs, and a missing
+            # key reads as "not tested" — silently disabling the new checks.
+            spec.collide.update(
+                {pair_key(*k.split("|")): bool(v) for k, v in col.items()})
         if tps is not None:
             spec.trace_points = [TracePoint(**t) for t in tps]
         return spec

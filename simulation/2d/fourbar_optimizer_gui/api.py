@@ -25,12 +25,12 @@ if __package__ in (None, ""):
 from model import LinkageSpec, baseline1
 from kinematics import solve_pose, sweep as sweep_poses, trace_world
 from geometry import ShapeSet, collisions, RES_FAST, RES_DRAW
-from evaluate import find_range, evaluate, Metrics, RangeResult
+from evaluate import find_range, evaluate, hip_torque, Metrics, RangeResult
 
 __all__ = [
     "LinkageSpec", "baseline1", "solve_pose", "find_range", "evaluate",
     "ShapeSet", "collisions", "load_spec", "save_spec", "metrics_dict",
-    "sweep_table",
+    "sweep_table", "hip_torque",
 ]
 
 
@@ -52,6 +52,8 @@ def metrics_dict(m: Metrics) -> dict:
         "mean_x_mm": round(m.mean_x_mm, 4),
         "q_lo_deg": round(math.degrees(m.q_lo), 4),
         "q_hi_deg": round(math.degrees(m.q_hi), 4),
+        "max_torque_nm": round(m.max_torque_nm, 4),
+        "q_max_torque_deg": round(math.degrees(m.q_max_torque), 4),
         "stop_lo": m.stop_lo, "stop_hi": m.stop_hi,
     }
 
@@ -79,6 +81,7 @@ def sweep_table(spec: LinkageSpec, n: int = 200, check_collisions: bool = True):
             C_x_mm=p.nodes["C"][0] * 1000, C_z_mm=p.nodes["C"][1] * 1000,
             E_x_mm=p.nodes["E"][0] * 1000, E_z_mm=p.nodes["E"][1] * 1000,
             trace_x_mm=wx * 1000, trace_z_mm=wz * 1000,
+            hip_torque_nm=hip_torque(spec, p),
             collisions="|".join(f"{a}/{b}" for a, b in hits),
         ))
     return rng, rows
@@ -121,7 +124,12 @@ def _cmd_opt(args):
     cfg = OptConfig(free=free, mode=args.mode, tol_mm=args.tol,
                     w_travel=args.w_travel, w_vert=args.w_vert,
                     algo=args.algo, budget=args.budget, seed=args.seed,
-                    max_link_mm=args.max_link, csv_path=args.csv)
+                    max_link_mm=args.max_link,
+                    enforce_torque_limit=(False if args.no_torque_limit
+                                          else None),
+                    leg_load_kg=args.leg_load,
+                    torque_limit_nm=args.torque_limit,
+                    csv_path=args.csv)
 
     last = [0.0]
 
@@ -199,6 +207,13 @@ def build_parser():
     po.add_argument("--seed", type=int, default=0)
     po.add_argument("--max-link", type=float, default=200.0,
                     help="cap on any link span, radius-centre to radius-centre [mm]")
+    po.add_argument("--torque-limit", type=float,
+                    help="max hip torque [N.m]; defaults to the preset's value")
+    po.add_argument("--leg-load", type=float,
+                    help="mass carried by one leg [kg]; "
+                         "defaults to the preset's value")
+    po.add_argument("--no-torque-limit", action="store_true",
+                    help="search blind to hip torque (control runs only)")
     po.add_argument("--restarts", type=int, default=1,
                     help="independent runs from different seeds; the spread "
                          "across them is the convergence evidence")

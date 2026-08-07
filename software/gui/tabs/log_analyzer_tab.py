@@ -21,7 +21,7 @@ from analysis.param_sidecar import (
     ParamSidecar, active_profile_series, load_host_param_sidecar, load_matching_sidecar,
 )
 from analysis.wlog_metrics import (
-    HIP_CURRENT_EPS_A, SETTLE_DEG, compute_metrics, decode_run,
+    HIP_TORQUE_LIMIT_NM, SETTLE_DEG, compute_metrics, decode_run,
 )
 from .generated_protocol import STATE_NAMES
 from .log_paths import RUNS_DIR
@@ -693,24 +693,24 @@ class LogAnalyzerTab(QWidget):
             self._curve(right_pos_plot, t, hip_r_cmd_deg, GREEN,
                         "Right-hip target — commanded MIT position (°)", 1.4)
 
-            current_plot = self._new_plot("Hip current and limit", "Current", "A")
-            self._curve(current_plot, t, fields["hip_l_current_a"], RED,
-                        "Left-hip current — measured AK45 current (A)", 1.35)
-            self._curve(current_plot, t, fields["hip_r_current_a"], ORANGE,
-                        "Right-hip current — measured AK45 current (A)", 1.35)
+            torque_plot = self._new_plot("Hip torque and limit", "Torque", "N·m")
+            self._curve(torque_plot, t, fields["hip_l_torque_nm"], RED,
+                        "Left-hip torque — measured AK45 shaft torque (N·m)", 1.35)
+            self._curve(torque_plot, t, fields["hip_r_torque_nm"], ORANGE,
+                        "Right-hip torque — measured AK45 shaft torque (N·m)", 1.35)
             self._limit_pair(
-                current_plot, t, HIP_CURRENT_EPS_A, YELLOW,
-                "Hip upper current limit (A)", "Hip lower current limit (A)")
+                torque_plot, t, HIP_TORQUE_LIMIT_NM, YELLOW,
+                "Hip upper torque limit (N·m)", "Hip lower torque limit (N·m)")
 
             self._set_meta_rows([
                 ("Maximum left-hip position error", f"{np.max(np.abs(hip_l_err_deg)):.3f}°",
                  "Worst measured-versus-target difference for the left hip."),
                 ("Maximum right-hip position error", f"{np.max(np.abs(hip_r_err_deg)):.3f}°",
                  "Worst measured-versus-target difference for the right hip."),
-                ("Maximum left-hip current", f"{metrics['max_hip_l_current_a']:.4f} A",
-                 f"Hip current limit is ±{HIP_CURRENT_EPS_A:g} A."),
-                ("Maximum right-hip current", f"{metrics['max_hip_r_current_a']:.4f} A",
-                 f"Hip current limit is ±{HIP_CURRENT_EPS_A:g} A."),
+                ("Maximum left-hip torque", f"{metrics['max_hip_l_torque_nm']:.4f} N·m",
+                 f"Hip torque limit is ±{HIP_TORQUE_LIMIT_NM:g} N·m."),
+                ("Maximum right-hip torque", f"{metrics['max_hip_r_torque_nm']:.4f} N·m",
+                 f"Hip torque limit is ±{HIP_TORQUE_LIMIT_NM:g} N·m."),
                 ("Active profile", self._profile_text(),
                  "Speed profile is independent of hip motion."),
             ])
@@ -740,15 +740,15 @@ class LogAnalyzerTab(QWidget):
             else:
                 torque_sat = np.zeros(t.size, dtype=bool)
 
-            current_plot = self._new_plot("Hip current during Phase-1 tuning", "Current", "A")
-            self._curve(current_plot, t, fields["hip_l_current_a"], RED,
-                        "Left-hip current — measured AK45 current (A)", 1.35)
-            self._curve(current_plot, t, fields["hip_r_current_a"], ORANGE,
-                        "Right-hip current — measured AK45 current (A)", 1.35)
+            hip_trq_plot = self._new_plot("Hip torque during Phase-1 tuning", "Torque", "N·m")
+            self._curve(hip_trq_plot, t, fields["hip_l_torque_nm"], RED,
+                        "Left-hip torque — measured AK45 shaft torque (N·m)", 1.35)
+            self._curve(hip_trq_plot, t, fields["hip_r_torque_nm"], ORANGE,
+                        "Right-hip torque — measured AK45 shaft torque (N·m)", 1.35)
             self._limit_pair(
-                current_plot, t, HIP_CURRENT_EPS_A, YELLOW,
-                "Phase-1 upper idle-current threshold — tuning safety check (A)",
-                "Phase-1 lower idle-current threshold — tuning safety check (A)")
+                hip_trq_plot, t, HIP_TORQUE_LIMIT_NM, YELLOW,
+                "Phase-1 upper idle-torque threshold — tuning safety check (N·m)",
+                "Phase-1 lower idle-torque threshold — tuning safety check (N·m)")
 
             torque_limit_text = "unavailable"
             if torque_limit is not None:
@@ -763,10 +763,10 @@ class LogAnalyzerTab(QWidget):
                  "Reconstructed from active_profile and profile torque settings."),
                 ("Wheel-torque saturation", _event_summary(t, torque_sat),
                  "Intervals within 2% of the active profile torque clamp."),
-                ("Maximum left-hip current", f"{metrics['max_hip_l_current_a']:.4f} A",
-                 "Phase-1 hips should remain close to zero current."),
-                ("Maximum right-hip current", f"{metrics['max_hip_r_current_a']:.4f} A",
-                 "Phase-1 hips should remain close to zero current."),
+                ("Maximum left-hip torque", f"{metrics['max_hip_l_torque_nm']:.4f} N·m",
+                 "Phase-1 hips should remain close to zero torque."),
+                ("Maximum right-hip torque", f"{metrics['max_hip_r_torque_nm']:.4f} N·m",
+                 "Phase-1 hips should remain close to zero torque."),
                 ("Active profile", self._profile_text(),
                  "Profile changes also change the wheel-torque limit."),
             ])

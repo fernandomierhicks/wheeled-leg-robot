@@ -217,13 +217,13 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     (frozenset({
         0x0120,  # calib_seek_speed
         0x0122,  # calib_seek_kp
-        0x0124,  # calib_seek_cur_lim
+        0x0124,  # calib_seek_trq_lim
         0x0129,  # calib_seek_timeout
         0x012B,  # calib_max_seek_rad
     }), 0x01, "Retracting"),
     (frozenset({
         0x0121,  # calib_move_speed
-        0x0125,  # calib_move_cur_lim
+        0x0125,  # calib_move_trq_lim
         0x0126,  # calib_backoff_rad
         0x0127,  # calib_range_l_rad
         0x0128,  # calib_range_r_rad
@@ -233,7 +233,7 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     }), 0x01, "Extending"),
     (frozenset({
         0x0123,  # calib_kd
-        0x012D,  # calib_cur_trip_ms
+        0x012D,  # calib_trq_trip_ms
         0x012F,  # calib_rampdown_s
     }), 0x01, "Shared"),
 

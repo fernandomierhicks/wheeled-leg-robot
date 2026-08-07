@@ -34,10 +34,10 @@ struct CalibAxis {
     float kd0_rampdown;
     uint32_t phase_start_ms;
     uint32_t rampdown_start_ms;
-    uint32_t overcurrent_since_ms;
+    uint32_t overtorque_since_ms;
     uint32_t zero_feedback_seq;
     bool release_seen;
-    bool overcurrent_active;
+    bool overtorque_active;
 };
 
 static CalibAxis ax_L;
@@ -80,7 +80,7 @@ static void set_phase(CalibAxis& ax, CalibAxisState state,
     ax.ramp_target = position;
     ax.phase_start_pos = position;
     ax.phase_start_ms = now_ms;
-    ax.overcurrent_active = false;
+    ax.overtorque_active = false;
 }
 
 static void fault_axis(CalibAxis& ax, SendFn send, const char* tag,
@@ -93,36 +93,38 @@ static void fault_axis(CalibAxis& ax, SendFn send, const char* tag,
 
 static bool command_motion(CalibAxis& ax, HipAxisState& hm, SendFn send,
                            const char* tag, uint8_t axis_id, float target,
-                           uint16_t current_limit_param, uint16_t kp_param) {
-    const float current_limit = param_get(current_limit_param);
-    const float current = fabsf(hm.current_A);
+                           uint16_t torque_limit_param, uint16_t kp_param) {
+    // Stall detection: the AK45 MIT reply field is shaft torque [N·m], not
+    // amps (see hip_motors.cpp). The limit params are in the same units.
+    const float torque_limit = param_get(torque_limit_param);
+    const float torque = fabsf(hm.torque_nm);
 
     if (!hm.ok) {
         fault_axis(ax, send, tag, axis_id, hm.pos_rad, "hip feedback lost");
         return false;
     }
 
-    if (current > current_limit) {
+    if (torque > torque_limit) {
         const uint32_t now_ms = millis();
         const uint32_t trip_ms = (uint32_t)(
-            param_get(PARAM_CALIB_CURRENT_TRIP_MS) + 0.5f);
-        if (!ax.overcurrent_active) {
-            ax.overcurrent_active = true;
-            ax.overcurrent_since_ms = now_ms;
+            param_get(PARAM_CALIB_TORQUE_TRIP_MS) + 0.5f);
+        if (!ax.overtorque_active) {
+            ax.overtorque_active = true;
+            ax.overtorque_since_ms = now_ms;
         }
-        const uint32_t overcurrent_ms =
-            (uint32_t)(now_ms - ax.overcurrent_since_ms);
-        if (trip_ms == 0 || overcurrent_ms >= trip_ms) {
+        const uint32_t overtorque_ms =
+            (uint32_t)(now_ms - ax.overtorque_since_ms);
+        if (trip_ms == 0 || overtorque_ms >= trip_ms) {
             comm_log(LOG_LEVEL_ERROR,
-                     "Calib %s: current %.2f A exceeded %.2f A for %lu ms",
-                     tag, current, current_limit,
-                     (unsigned long)overcurrent_ms);
+                     "Calib %s: torque %.2f Nm exceeded %.2f Nm for %lu ms",
+                     tag, torque, torque_limit,
+                     (unsigned long)overtorque_ms);
             fault_axis(ax, send, tag, axis_id, hm.pos_rad,
-                       "calibration current safety limit exceeded");
+                       "calibration torque safety limit exceeded");
             return false;
         }
     } else {
-        ax.overcurrent_active = false;
+        ax.overtorque_active = false;
     }
 
     const float kp_target = param_get(kp_param);
@@ -194,7 +196,7 @@ static void update_axis(CalibAxis& ax, HipAxisState& hm, HipLimits& limits,
             }
 
             if (!command_motion(ax, hm, send, tag, axis_id, ax.ramp_target,
-                                PARAM_CALIB_MOVE_CURRENT_LIMIT_A,
+                                PARAM_CALIB_MOVE_TORQUE_LIMIT_NM,
                                 PARAM_CALIB_MOVE_KP)) return;
 
             const float actual_travel =
@@ -245,7 +247,7 @@ static void update_axis(CalibAxis& ax, HipAxisState& hm, HipLimits& limits,
                 return;
             }
             command_motion(ax, hm, send, tag, axis_id, ax.ramp_target,
-                           PARAM_CALIB_SEEK_CURRENT_LIMIT_A,
+                           PARAM_CALIB_SEEK_TORQUE_LIMIT_NM,
                            PARAM_CALIB_SEEK_KP);
             break;
 
@@ -256,7 +258,7 @@ static void update_axis(CalibAxis& ax, HipAxisState& hm, HipLimits& limits,
                 return;
             }
             if (!command_motion(ax, hm, send, tag, axis_id, 0.0f,
-                                PARAM_CALIB_SEEK_CURRENT_LIMIT_A,
+                                PARAM_CALIB_SEEK_TORQUE_LIMIT_NM,
                                 PARAM_CALIB_SEEK_KP)) return;
             if (hm.feedback_seq != ax.zero_feedback_seq &&
                 fabsf(hm.pos_rad) <= ZERO_SYNC_TOL_RAD) {
@@ -286,7 +288,7 @@ static void update_axis(CalibAxis& ax, HipAxisState& hm, HipLimits& limits,
             }
 
             if (!command_motion(ax, hm, send, tag, axis_id, ax.ramp_target,
-                                PARAM_CALIB_MOVE_CURRENT_LIMIT_A,
+                                PARAM_CALIB_MOVE_TORQUE_LIMIT_NM,
                                 PARAM_CALIB_MOVE_KP)) return;
 
             const float actual_travel =

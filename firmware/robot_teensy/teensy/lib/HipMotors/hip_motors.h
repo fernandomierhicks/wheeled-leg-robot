@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-// pos_rad/vel_rad_s/current_A are in the firmware-frame convention: L's raw
+// pos_rad/vel_rad_s/torque_nm are in the firmware-frame convention: L's raw
 // CAN feedback is negated in rx_callback() so positive means the same
 // physical direction on both L and R (they're physically mirrored motors).
 // Commands (pos/vel/torque args below) use the same firmware-frame
@@ -9,7 +9,7 @@
 struct HipAxisState {
     float    pos_rad;      // rotor position [rad]
     float    vel_rad_s;    // rotor velocity [rad/s]
-    float    current_A;    // phase current  [A]
+    float    torque_nm;    // shaft torque   [N·m]  (NOT amps — see hip_motors.cpp)
     uint32_t last_fb_ms;   // millis() of most recent reply
     uint32_t feedback_seq; // increments for every decoded CAN feedback frame
     bool     ever_heard;   // true once any CAN reply has been received
@@ -47,6 +47,11 @@ void hip_motors_poll();
 // Returns true when both motors have replied at least once and feedback is fresh.
 bool hip_motors_ok();
 
+// Lifetime count of CAN2 frames deferred to the software TX queue instead of
+// going straight into a hardware mailbox. Diagnostic only — see hip_motors.cpp
+// for when a sustained run of these latches a TX stall and clears hm_*.ok.
+uint32_t hip_motors_tx_defer_count();
+
 // Reset the feedback-freshness clock on both axes after a deliberate,
 // known-blocking main-loop operation (e.g. SD-log open/finalize) that froze
 // the tick long enough for last_fb_ms to go stale. Prevents a self-inflicted
@@ -72,10 +77,10 @@ void hip_motor_zero_R();
 
 // Send a MIT Cheetah torque-control command to both motors.
 //   pos    : target position   [rad]    (-12.5 … +12.5)
-//   vel    : feedforward vel   [rad/s]  (-65 … +65)
+//   vel    : feedforward vel   [rad/s]  (-20 … +20)
 //   kp     : position gain     [N·m/rad] (0 … 500)
 //   kd     : damping gain      [N·m·s/rad] (0 … 5)
-//   torque : feedforward torque [N·m]   (-18 … +18)
+//   torque : feedforward torque [N·m]   (-8 … +8)
 // No-op if MIT mode is not active on either axis.
 void hip_motors_send(float pos_L, float vel_L, float kp_L, float kd_L, float trq_L,
                      float pos_R, float vel_R, float kp_R, float kd_R, float trq_R);

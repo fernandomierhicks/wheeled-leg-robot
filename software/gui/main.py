@@ -1091,6 +1091,9 @@ class StatusBar:
     def set_dt(self, dt_ms: float):
         self._dt.setText(f"dt: {dt_ms:.1f} ms")
 
+    def clear_dt(self):
+        self._dt.setText("dt: —")
+
     def set_mode(self, state: str, fault: str = "", fault_description: str = "", fault_code: int = 0):
         self._current_state      = state
         self._current_fault_code = fault_code
@@ -1258,7 +1261,15 @@ class MainWindow(QMainWindow):
         # SourceManager must already exist to catch those signals.
         self.status = StatusBar(self.statusBar())
 
+        # Telemetry-cadence readout. Measured on TelemetryBus.live_packet, NOT
+        # `packet`: `packet` is coalesced to 20 Hz for the UI (telemetry_bus.py
+        # _flush_live), so differencing firmware timestamps there measures the
+        # coalescer's own period (~60 ms) instead of the robot's 50 Hz telemetry
+        # rate. That regressed the "dt" readout from 20 ms to 60 ms when the
+        # coalescer landed in 5859123. The label is repainted from the 250 ms
+        # _link_timer rather than per packet.
         self._last_ts_ms: float | None = None
+        self._last_dt_ms: float | None = None
 
         # Tri-state connection header (UARTplat.md Phase 4, §5.1): telemetry
         # and WIFI_DIAG go stale independently (WIFI_DIAG now flows from the
@@ -1276,6 +1287,7 @@ class MainWindow(QMainWindow):
         self._link_timer.start()
 
         TelemetryBus.instance().packet.connect(self._on_packet)
+        TelemetryBus.instance().live_packet.connect(self._on_live_packet)
 
         sm = SourceManager.instance()
         sm.source_changed.connect(self._on_source_changed)
@@ -1550,6 +1562,9 @@ class MainWindow(QMainWindow):
         # so the tri-state header shouldn't coast on it (UARTplat.md Phase 4).
         self._last_telem_ms     = None
         self._last_wifi_diag_ms = None
+        self._last_ts_ms        = None
+        self._last_dt_ms        = None
+        self.status.clear_dt()
         if device:
             self.status.set_source(device.upper())
             self.status.set_transport(TRANSPORT_LABEL.get(device, "Unknown"))
@@ -1558,7 +1573,6 @@ class MainWindow(QMainWindow):
             self.status.set_source("—")
             self.status.set_transport("—")
             self.status.set_mode("—")
-            self._last_ts_ms = None
 
         # Tell the ESP32 which link the GUI is now reading so it can suppress
         # WiFi UDP telemetry sends when USB is active (§2b transport gating;
@@ -1588,11 +1602,6 @@ class MainWindow(QMainWindow):
             return
         if info.get("ptype") == 0x01:
             self.status.clear_version_mismatch()
-        ts = info.get("timestamp_ms")
-        if ts is not None and self._last_ts_ms is not None:
-            self.status.set_dt(ts - self._last_ts_ms)
-        if ts is not None:
-            self._last_ts_ms = ts
         state = info.get("state_name")
         if state:
             self.status.set_mode(state, info.get("fault_name", ""), info.get("fault_description", ""),
@@ -1600,6 +1609,18 @@ class MainWindow(QMainWindow):
         profile = info.get("active_profile")
         if profile is not None:
             self.status.set_profile(profile)
+
+    def _on_live_packet(self, info: dict):
+        """Measure the robot's real telemetry cadence off the uncoalesced
+        stream. Deliberately does no UI work — see the note in __init__."""
+        if info.get("ptype") != 0x01 or info.get("version_mismatch"):
+            return
+        ts = info.get("timestamp_ms")
+        if ts is None:
+            return
+        if self._last_ts_ms is not None:
+            self._last_dt_ms = ts - self._last_ts_ms
+        self._last_ts_ms = ts
 
     def _update_link_state(self):
         """Re-evaluate the tri-state connection header. Runs on a fixed
@@ -1609,6 +1630,16 @@ class MainWindow(QMainWindow):
         now = time.monotonic() * 1000.0
         telem_age = (now - self._last_telem_ms) if self._last_telem_ms is not None else float("inf")
         diag_age  = (now - self._last_wifi_diag_ms) if self._last_wifi_diag_ms is not None else float("inf")
+
+        # Repaint the cadence readout here rather than per packet, so sampling
+        # the true 50 Hz stream doesn't cost 50 label repaints a second.
+        if telem_age >= self._TELEM_FRESH_MS:
+            self.status.clear_dt()
+            self._last_ts_ms = None
+            self._last_dt_ms = None
+        elif self._last_dt_ms is not None:
+            self.status.set_dt(self._last_dt_ms)
+
         if telem_age < self._TELEM_FRESH_MS:
             self.status.set_link_state("connected")
         elif diag_age < self._WIFI_DIAG_FRESH_MS:
