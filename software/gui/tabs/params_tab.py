@@ -601,6 +601,10 @@ class ParamsTab(QWidget):
         self._collapsed_groups:    set[int]            = set()
         self._collapsed_subgroups: set[tuple[int, str]] = set()
         self._requested = False
+        # Live search query (lowercased). While non-empty it overrides collapse
+        # state so a match is never hidden inside a collapsed section — see
+        # _reapply_visibility.
+        self._search_q = ""
 
         # Missing-param retry sweep (see _start_missing_sweep): a bulk
         # PARAM_GET 0xFFFF dump is ~131 individual PARAM_REPORT frames paced
@@ -636,6 +640,19 @@ class ParamsTab(QWidget):
         self._grp_combo.setFixedWidth(160)
         self._grp_combo.currentIndexChanged.connect(self._apply_filter)
         toolbar.addWidget(self._grp_combo)
+
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("Search name, description, or id…")
+        self._search.setClearButtonEnabled(True)
+        self._search.setFixedWidth(240)
+        self._search.setStyleSheet(
+            f"QLineEdit {{ background: {SURFACE}; color: {TEXT}; "
+            f"border: 1px solid {BORDER}; border-radius: 3px; "
+            f"padding: 2px 6px; font-size: 11px; }}"
+            f"QLineEdit:focus {{ border: 1px solid {BLUE}; }}"
+        )
+        self._search.textChanged.connect(self._on_search_changed)
+        toolbar.addWidget(self._search)
 
         btn_refresh = QPushButton("Refresh")
         btn_refresh.setFixedWidth(72)
@@ -895,12 +912,42 @@ class ParamsTab(QWidget):
     def _update_status(self):
         total     = len(self._rows)
         confirmed = sum(1 for r in self._rows.values() if r.is_confirmed())
+        if self._search_q:
+            hits = sum(1 for pid in self._rows if self._search_match(pid))
+            self._lbl_status.setText(
+                f"{hits} of {total} params match “{self._search_q}”"
+                if hits else f"no params match “{self._search_q}”")
+            self._lbl_status.setStyleSheet(
+                f"color: {TEXT if hits else ORANGE}; font-size: 11px;")
+            return
         if confirmed == 0:
             self._lbl_status.setText(f"{total} params known — connect and click Refresh to read live values")
             self._lbl_status.setStyleSheet(f"color: {DIM}; font-size: 11px;")
         else:
             self._lbl_status.setText(f"{confirmed}/{total} params confirmed")
             self._lbl_status.setStyleSheet(f"color: {TEXT}; font-size: 11px;")
+
+    def _on_search_changed(self, text: str):
+        self._search_q = text.strip().lower()
+        self._reapply_visibility()
+        self._update_status()
+
+    def _search_match(self, param_id: int) -> bool:
+        """True if this param matches the live query. Matches on name,
+        description, the id in both hex and decimal, and the group/sub-group
+        labels — so "extending" finds the calibration extend-phase params and
+        "0x0125" or "125" finds one by id."""
+        q = self._search_q
+        if not q:
+            return True
+        name, description = _PARAM_DEFS.get(param_id, ("", ""))
+        subgroup = _get_subgroup(param_id) or ""
+        group = _GROUP_NAMES.get(_effective_group(param_id), "")
+        haystack = (f"{name}\n{description}\n{subgroup}\n{group}\n"
+                    f"0x{param_id:04x}\n{param_id}").lower()
+        # Every whitespace-separated term must appear (AND), so "calib trq"
+        # narrows rather than widening.
+        return all(term in haystack for term in q.split())
 
     def _apply_filter(self):
         flt = self._grp_combo.currentData()
@@ -1020,6 +1067,12 @@ class ParamsTab(QWidget):
         if flt == "separator":
             flt = None
 
+        searching = bool(self._search_q)
+        # Which groups / sub-groups still have a visible row, so empty headers
+        # can be hidden while searching instead of leaving bare section titles.
+        live_groups: set[int] = set()
+        live_subgroups: set[tuple[int, str]] = set()
+
         for param_id, row in self._rows.items():
             group    = _effective_group(param_id)
             subgroup = _get_subgroup(param_id)
@@ -1031,20 +1084,37 @@ class ParamsTab(QWidget):
             else:
                 filter_ok = (group == flt)
 
-            group_collapsed = group in self._collapsed_groups
-            sub_collapsed   = (subgroup is not None and
-                               (group, subgroup) in self._collapsed_subgroups)
+            filter_ok = filter_ok and self._search_match(param_id)
 
-            row.setVisible(filter_ok and not group_collapsed and not sub_collapsed)
+            if searching:
+                # A search deliberately ignores collapse state: a hit must never
+                # be hidden inside a collapsed section the user can't see.
+                visible = filter_ok
+            else:
+                group_collapsed = group in self._collapsed_groups
+                sub_collapsed   = (subgroup is not None and
+                                   (group, subgroup) in self._collapsed_subgroups)
+                visible = filter_ok and not group_collapsed and not sub_collapsed
+
+            row.setVisible(visible)
+            if filter_ok:
+                live_groups.add(group)
+                if subgroup is not None:
+                    live_subgroups.add((group, subgroup))
 
         for gid, hdr in self._headers.items():
             if flt is None:
-                hdr.setVisible(True)
+                visible = True
             elif isinstance(flt, tuple):
-                hdr.setVisible(flt[0] == gid)
+                visible = (flt[0] == gid)
             else:
-                hdr.setVisible(gid == flt)
-            hdr.set_collapsed(gid in self._collapsed_groups)
+                visible = (gid == flt)
+            if searching:
+                visible = visible and gid in live_groups
+            hdr.setVisible(visible)
+            # While searching every section reads as expanded, because that is
+            # what the rows below it are actually doing.
+            hdr.set_collapsed(not searching and gid in self._collapsed_groups)
 
         for (gid, sgname), subhdr in self._subheaders.items():
             if flt is None:
@@ -1054,6 +1124,10 @@ class ParamsTab(QWidget):
             else:
                 filter_ok = (gid == flt)
 
-            group_collapsed = gid in self._collapsed_groups
-            subhdr.setVisible(filter_ok and not group_collapsed)
-            subhdr.set_collapsed((gid, sgname) in self._collapsed_subgroups)
+            if searching:
+                visible = filter_ok and (gid, sgname) in live_subgroups
+            else:
+                visible = filter_ok and gid not in self._collapsed_groups
+            subhdr.setVisible(visible)
+            subhdr.set_collapsed(not searching and
+                                 (gid, sgname) in self._collapsed_subgroups)
