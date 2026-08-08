@@ -38,8 +38,39 @@
 #define T_MIN    -8.0f
 #define T_MAX     8.0f
 
-// Motor silently drops out of MIT mode after ~4 s without re-entry; use 3 s margin.
-#define MIT_REENTER_MS  3000u
+// ── No periodic MIT re-entry. Measured, not assumed (2026-08-07) ─────────────
+// There used to be an unconditional `enter_mit()` every MIT_REENTER_MS (3000u)
+// here, justified by "motor silently drops out of MIT mode after ~4 s without
+// re-entry". That observation dates from f4e143c (2026-05-08), when
+// hip_motors_poll() sent NO periodic frames at all — it only checked feedback
+// timeouts and re-entered MIT, so the re-entry was the only CAN traffic the
+// hips ever saw. The always-send setpoint/ping path landed a month later
+// (6f1a515, 2026-06-09), making poll() emit a frame every tick at 500 Hz in
+// every state where mit_active is set. Nobody re-tested the re-entry against
+// that, so it survived as vestigial.
+//
+// It was not free: enter-motor-mode is a state transition, not an idempotent
+// refresh, and it landed ~100 us before the next stiff setpoint frame — a
+// periodic disturbance in every state, RUNNING included. Paired with a
+// duplicate 4 s re-entry the GUI used to run in MANUAL (removed from
+// hip_motors.py), the two beat into a double glitch every 4 s, which is how
+// this was first noticed as an audible repetitive jerk.
+//
+// Bench measurement, right hip on a stand, USB transport, re-entry disabled,
+// log data/logs/runs/20260808T034429_031257Z_HOST: 120 s of continuous 0.125 Hz
+// sine commanding, MANUAL, no faults. Longest span where commanded position
+// moved while actual position did not: 40 ms (sine turning points + the 16-bit
+// 0.00038 rad/LSB quantisation). Zero of 6015 samples had |torque| < 0.05 N.m,
+// mean 1.348 N.m — a motor out of MIT mode makes no torque at all. So MIT
+// survived 30x the claimed 4 s dropout window, under load, on the 500 Hz
+// stream alone.
+//
+// If MIT ever does drop out, the existing feedback watchdog is the correct
+// response: the motor stops replying, hm_*.ok goes false after
+// HIP_CAN_TIMEOUT_MS, and the state machine ESTOPs on FAULT_HIP_FEEDBACK_LOST.
+// That surfaces the fault instead of papering over it on a timer. Do not
+// reintroduce a blind periodic re-entry; enter_mit() still has its explicit
+// call sites (boot, ESTOP recovery, GUI ENABLE).
 
 // A cached setpoint not refreshed within this window is considered stale and
 // poll() reverts to the safe zero-torque ping.
@@ -54,7 +85,6 @@ HipLimits    hm_limits_R = {};
 
 // CAN2 on Teensy 4.1 uses pins 1 (TX) and 0 (RX) — matches config.h PIN_CAN2_*.
 static FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> can2;
-static uint32_t last_enter_ms = 0;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -218,9 +248,8 @@ void hip_motors_poll() {
     hm_L.ok = hm_L.ever_heard && !s_tx_stalled && (now - hm_L.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
     hm_R.ok = hm_R.ever_heard && !s_tx_stalled && (now - hm_R.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
 
-    if ((hm_L.mit_active || hm_R.mit_active) && (now - last_enter_ms) >= MIT_REENTER_MS) {
-        hip_motors_enter_mit();
-    }
+    // (No periodic enter_mit() here — see the note above MIT_REENTER_MS's
+    // former home at the top of this file.)
 
     // ESTOP or a stale (unrefreshed) setpoint both fall back to the safe ping —
     // except during the brief, time-bounded gentle-cutoff ramp (see
@@ -264,7 +293,6 @@ void hip_motors_enter_mit() {
     if (r_en) send_raw(AK45_ID_R, cmd);
     hm_L.mit_active = l_en;
     hm_R.mit_active = r_en;
-    last_enter_ms   = millis();
 }
 
 void hip_motors_exit_mit() {

@@ -672,11 +672,21 @@ class HipMotorsTab(QWidget):
 
         self._last_state_id: int | None = None
 
-        # AK45 MIT mode drops out silently without periodic re-entry — while
-        # in MANUAL, re-send "enter MIT" to both hips every 4 s.
-        self._mit_reinforce_timer = QTimer(self)
-        self._mit_reinforce_timer.timeout.connect(
-            lambda: self._both_cmd(_HIP_CMD_ENABLE))
+        # NOTE: there is deliberately no MIT re-entry timer here. The AK45 does
+        # drop out of MIT mode silently without periodic re-entry, but the
+        # firmware already handles that itself for every state:
+        # hip_motors_poll() re-sends "enter MIT" every MIT_REENTER_MS (3 s,
+        # hip_motors.cpp). This tab used to reinforce it again on its own 4 s
+        # timer while in MANUAL, which made things worse rather than safer —
+        # the GUI's re-entry routes through on_manual() -> hip_motors_enter_mit(),
+        # which resets the firmware's last_enter_ms. The two timers then beat
+        # against each other into a double re-entry ~1 s apart every 4 s, and
+        # since enter-motor-mode is a mode transition rather than an idempotent
+        # refresh, each one re-initialises the controller a few hundred µs
+        # before the next stiff setpoint frame lands. That was audible/palpable
+        # as a repetitive jerk in MANUAL only — MANUAL being the only state
+        # this timer ran in. Don't reintroduce it; fix the firmware keepalive
+        # instead if 3 s proves too slow.
 
     # ── commands ──────────────────────────────────────────────────────────────
 
@@ -752,14 +762,13 @@ class HipMotorsTab(QWidget):
             self._both.setEnabled(in_manual)
             self._btn_calibrate.setEnabled(state_id == _STATE_STANDBY)
 
-            # Entering MANUAL: arm both hips into MIT mode and keep
-            # reinforcing it. Leaving MANUAL: just stop the reinforcement —
-            # do not send an explicit "exit MIT" / disable command.
+            # Entering MANUAL: arm both hips into MIT mode, once. Firmware's
+            # own 3 s keepalive holds it from there (see the note in __init__
+            # for why this tab must not reinforce it on a second timer).
+            # Leaving MANUAL: send nothing — in particular no explicit
+            # "exit MIT" / disable command.
             if in_manual:
                 self._both_cmd(_HIP_CMD_ENABLE)
-                self._mit_reinforce_timer.start(4000)
-            else:
-                self._mit_reinforce_timer.stop()
 
         pos_l = info.get("hip_l_pos_rad", 0.0)
         pos_r = info.get("hip_r_pos_rad", 0.0)

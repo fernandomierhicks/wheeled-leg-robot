@@ -21,7 +21,7 @@ Both motors share the same bus; the ID in the reply frame identifies which axis.
 hip_motors_init();         // call once in setup()
 hip_motors_enter_mit();    // enable MIT mode on both motors
 // control loop:
-hip_motors_poll();         // refresh hm_L/hm_R.ok, re-enter MIT if due
+hip_motors_poll();         // refresh hm_L/hm_R.ok, send this tick's MIT frame
 hip_motors_send(pos_L, vel_L, kp_L, kd_L, trq_L,
                 pos_R, vel_R, kp_R, kd_R, trq_R);
 // shutdown:
@@ -47,7 +47,11 @@ older copies of that table are wrong for this motor).
 
 ## Gotchas
 
-**MIT mode silently drops out** — the AK45-10 exits MIT mode after ~4 s without a re-entry frame. `hip_motors_poll()` re-sends `enter_mit` every 3 s automatically, but you must also call it explicitly on startup before the first `hip_motors_send()` or the command will be silently ignored (each motor's frame is skipped while its `mit_active == false` — gating is per motor, so a single-leg bench setup still drives the active side).
+**Call `enter_mit()` explicitly before the first `hip_motors_send()`**, or the command is silently ignored — each motor's frame is skipped while its `mit_active == false`. Gating is per motor, so a single-leg bench setup still drives the active side.
+
+**There is no periodic MIT re-entry, and there should not be one.** This README used to claim "the AK45-10 exits MIT mode after ~4 s without a re-entry frame", and `poll()` re-sent `enter_mit` every 3 s on that basis. Both are gone as of 2026-08-07. The claim came from a time when `poll()` sent *no* periodic frames at all (`f4e143c`); once the 500 Hz setpoint/ping stream was added (`6f1a515`) it was never re-tested. Measured on the bench with the re-entry disabled — 120 s of continuous loaded sine commanding, zero of 6015 samples below 0.05 N·m, longest command-moved-but-position-frozen span 40 ms (sine turning points + encoder quantisation). MIT survives on the 500 Hz stream alone.
+
+Re-entry was not harmless: `enter_mit` is a mode transition, not an idempotent refresh, and it landed ~100 µs before the next stiff setpoint frame — a periodic disturbance in every state including `RUNNING`, audible as a repetitive hip jerk. If MIT ever does drop out, the right response is the existing feedback watchdog (`hm_*.ok` → `FAULT_HIP_FEEDBACK_LOST` → ESTOP), which surfaces the fault instead of hiding it behind a timer. See the block comment at the top of `hip_motors.cpp`.
 
 **Inter-frame delay** — a 500 µs gap (`CAN_INTER_FRAME_US`) is inserted between every back-to-back pair of CAN TX frames. Removing it causes the second motor to miss the frame intermittently.
 

@@ -40,7 +40,8 @@ extern HipLimits    hm_limits_L, hm_limits_R;
 // Call once in setup(). Starts CAN1 at 1 Mbps and registers the RX callback.
 bool hip_motors_init();
 
-// Check feedback timeouts; re-enter MIT mode on both axes if due (every 3 s).
+// Check feedback timeouts, then send this tick's frame to each MIT-active axis
+// (the cached setpoint, or a zero-torque ping when none is active).
 // Call once per control tick before reading hip feedback.
 void hip_motors_poll();
 
