@@ -213,9 +213,17 @@ Derived, in `teensy/src/control_loop.cpp`:
 
 | Constant | Value | Meaning |
 |---|---|---|
-| `L_EFF_RET` | 0.086777 | \|W_z\| body-centre frame at +28° |
-| `L_EFF_EXT` | 0.363396 | \|W_z\| body-centre frame at −57° |
+| `L_EFF_RET` | 0.098915 | \|W_z\| body-centre frame at **α = 0, q = +23°** |
+| `L_EFF_EXT` | 0.363396 | \|W_z\| body-centre frame at **α = 1, q = −57°** |
 | `WHEEL_R` | 0.056 | wheel radius [m] |
+
+**The α endpoints are not the hard stops.** α is the fraction of the
+*calibrated* span, and `define_limits()` puts its zero one `calib_backoff_rad`
+in from the retract switch — so α = 0 is **q = +23°**, not the +28° stop
+(α = 1 and the −57° stop do coincide). Evaluating the retracted end at the stop
+gives 0.086777, which is **12.3% low**. Same trap `AngleRetractedExt.md` flags
+for the hip scale: stance angles are not α endpoints. Both constants assume
+`calib_backoff_rad` is at its 0.0872665 default.
 
 `l_eff` is the body origin's height above the wheel axle, *not* CG-to-axle —
 the same definition the previous 0.183117/0.295390 pair used (recomputing the

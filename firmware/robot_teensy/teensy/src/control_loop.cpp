@@ -69,10 +69,21 @@ static constexpr float BACKWARD_TARGET_MARGIN_RAD = 0.0523599f;  // 3 deg
 // the wheel axle — same definition the shipped 0.183117/0.295390 pair used
 // (reproduced to 5 µm), so the LQR gains keep meaning what they meant.
 //
+// !! These are evaluated at the ALPHA endpoints, which are NOT the hard stops.
+// alpha is the fraction of the *calibrated* span, and define_limits() puts its
+// zero one calib_backoff_rad in from the retract switch:
+//     alpha=0  ->  q = Q_RET - backoff = +28° - 5° = +23°   (NOT +28°)
+//     alpha=1  ->  q = Q_EXT           = -57°               (== the stop)
+// Evaluating the retracted end at the stop instead of the backoff position
+// gives 0.086777, which is 12.3% low. This is the same trap AngleRetractedExt.md
+// flags for the hip scale: the stance angles are not the alpha endpoints.
+// The +23° figure assumes calib_backoff_rad is at its 0.0872665 default; a
+// different backoff moves alpha=0 and these want recomputing.
+//
 // !! A_Z = -23.5 mm (hip axis below body centre) is inherited from baseline-1
 // and has NOT been re-measured on the v4 box. Both constants shift 1:1 with it.
-static constexpr float L_EFF_RET    = 0.086777f;  // [m] fully retracted
-static constexpr float L_EFF_EXT    = 0.363396f;  // [m] fully extended
+static constexpr float L_EFF_RET    = 0.098915f;  // [m] alpha=0, q=+23°
+static constexpr float L_EFF_EXT    = 0.363396f;  // [m] alpha=1, q=-57°
 
 // ── Phase 6: Body mass and gravity ───────────────────────────────────────────
 // m_b = m_box + 2*(m_femur+m_tibia+m_coupler+m_bearing) + 2*motor_mass
