@@ -43,44 +43,67 @@ with 4-bar linkage legs for terrain clearance and jumping.
 
 ---
 
-## Architecture — Baseline 1
+## Architecture — v4 leg (2026-08-07)
 
-Geometry from evolutionary optimisation (
-See `components/COMPONENTS.md` for full geometry table, BOM, and mass breakdown.
+Mechanical baseline drawing: **`components/2N_10mm_279mm.pdf`**. Machine-readable
+form of the same geometry (agrees to 0.01 mm):
+`simulation/2d/fourbar_optimizer_gui/presets/2N_10mm_279mm.json`.
+See `components/COMPONENTS.md` for the full geometry table, BOM, and mass
+breakdown, and `firmware/robot_teensy/README.md` → "Leg geometry" for the
+firmware constants derived from it.
 
 ### 4-bar Leg Topology
 
 ```
   [  body box  ]
-  F────────────A  ← AK45-10 hip motor
-  |  coupler   |
-  |  link      | femur (173.78 mm)
-  |            |
-  E────────────C  ← knee pivot
-  (red pin)  (white pin)
-               |
-               | tibia (129.39 mm down to W, 35.13 mm stub up to E)
-               |
-               W  ← wheel centre (Ø150 mm, Maytech MTO5065-70-HA-C direct drive)
+     F─────────A  ← AK45-10 hip motor
+     |         |
+     | coupler | femur (187.58 mm)
+     | 169.54  |
+     E─────────C  ← knee pivot
+      (red)  (white)
+              \
+               \  tibia: |C→W| 185.91 mm, |E→W| 224.49 mm.
+                \        NOT straight — C sits 5.28 mm off the E–W line,
+                 \       away from the hip motor (C_offset).
+                  W  ← wheel centre (Ø112 mm direct drive)
 ```
 
-- A = hip motor output shaft (femur origin)
-- F = fixed body pivot at (−58.87 mm X, **−5.5 mm Z**) from body origin —
-  i.e. **F sits 18 mm above the hip axis A** (A_Z = −23.5 mm). **As built.**
+**All coordinates below are relative to A**, the hip motor output shaft.
++X forward, +Z up.
 
-> **Do not use −18.21 mm for F_Z.** That was the value here until 2026-08-03 and
-> it is the single most common source of wrong leg kinematics in this repo.
-> −18.21 mm is F's body-centre Z from the baseline-1 optimisation, in which the
-> hip-to-coupler *height* offset (A→F) was **5.29 mm**. The two were conflated,
-> the wrong one went into CAD, and **the robot was physically built with an
-> 18 mm A→F offset**. The build is the reference; the old numbers are not.
+- A = hip motor output shaft (femur origin), the frame origin
+- F = fixed body pivot at **(−36.42 mm X, +37.54 mm Z) from A** — `|AF|` = 52.30 mm
+- C = knee pivot (femur tip), 187.58 mm from A
+- E = tibia stub end, **39.01 mm** from C (`EC`), connects to the coupler at F
+- W = wheel centre, on the tibia body, 224.49 mm from E, 185.91 mm from C
+- `C_offset` = **5.28 mm** — C's perpendicular offset from the E–W line. The
+  preset stores the equivalent kink in the tibia's local frame instead (W at
+  183.41 mm along C→E, 30.35 mm perpendicular; a 9.4° bend at C).
+
+**Hard stops: `Q_RET` = +28°, `Q_EXT` = −57°** (0° = femur horizontal, positive
+retracts) — **85° of stop-to-stop travel**. The extended stop sits essentially
+on the 4-bar singularity, so there is no travel to recover past it.
+
+**Vertical wheel stroke: 276.62 mm over the hard stops.** The drawing's headline
+**279.95 mm** is over the optimizer's evaluated band (86.29°), which runs
+slightly past both stops — a design-envelope figure, not a commandable one.
+
+> **Express F relative to A, and say so.** The single most expensive mistake in
+> this repo's history was conflating F's *body-centre* Z coordinate with the
+> A→F height offset: the wrong one went into CAD and a whole robot was built to
+> it (see `AngleRetractedExt.md`). The two differ by `A_Z`, the hip-axis height
+> below body centre. `A_Z = −23.5 mm` is inherited from baseline-1 and **has not
+> been re-measured on the v4 box** — so any body-centre F_Z quoted for v4 is
+> provisional, while the A-relative numbers above are the measured ones.
 >
-> Everything derived from the 5.29 mm geometry is invalid — the baseline-1
-> optimisation result, `Q_RET`/`Q_EXT`, and `L_EFF_RET`/`L_EFF_EXT` in
-> `control_loop.cpp`. Total hip travel is limited to **66°** by deliberate hard
-> stops (the 4-bar goes singular at ~75.9° with the as-built geometry).
-- C = knee pivot (femur tip)
-- E = tibia stub end (35.13 mm above C), connects to coupler at F
+> Everything derived from the pre-v4 geometry is invalid: link lengths, the
+> baseline-1 optimisation result, and the old `Q_RET`/`Q_EXT`. `L_EFF_RET`/
+> `L_EFF_EXT` in `control_loop.cpp` have been recomputed for v4; `M_BODY` has
+> not.
+
+**The wheel is now Ø112 mm, not Ø150.** `WHEEL_R` = 0.056 m. This rescales every
+speed in m/s by 0.747×, so velocity-loop tuning predating the change is stale.
 
 ---
 

@@ -80,8 +80,8 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0124` | `PARAM_CALIB_SEEK_TORQUE_LIMIT_NM` | `calib_seek_trq_lim` | 0.3 | 0.05 … 2 | persistent |
 | `0x0125` | `PARAM_CALIB_MOVE_TORQUE_LIMIT_NM` | `calib_move_trq_lim` | 0.6 | 0.05 … 4 | persistent |
 | `0x0126` | `PARAM_CALIB_BACKOFF_RAD` | `calib_backoff_rad` | 0.0872665 | 0.01 … 0.35 | persistent |
-| `0x0127` | `PARAM_CALIB_RANGE_L_RAD` | `calib_range_l_rad` | 1.5708 | 0.1 … 3.14159 | persistent |
-| `0x0128` | `PARAM_CALIB_RANGE_R_RAD` | `calib_range_r_rad` | 1.5708 | 0.1 … 3.14159 | persistent |
+| `0x0127` | `PARAM_CALIB_RANGE_L_RAD` | `calib_range_l_rad` | 1.48353 | 0.1 … 3.14159 | persistent |
+| `0x0128` | `PARAM_CALIB_RANGE_R_RAD` | `calib_range_r_rad` | 1.48353 | 0.1 … 3.14159 | persistent |
 | `0x0129` | `PARAM_CALIB_SEEK_TIMEOUT_S` | `calib_seek_timeout` | 30 | 1 … 60 | persistent |
 | `0x012A` | `PARAM_CALIB_RELEASE_TIMEOUT_S` | `calib_release_to` | 5 | 0.5 … 30 | persistent |
 | `0x012B` | `PARAM_CALIB_MAX_SEEK_TRAVEL_RAD` | `calib_max_seek_rad` | 2 | 0.1 … 6.28319 | persistent |

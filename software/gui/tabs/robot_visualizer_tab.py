@@ -25,19 +25,29 @@ from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, YEL
 # indicators here; toggle via the Parameters tab's param browser.
 pg.setConfigOptions(antialias=True, background=BG, foreground=TEXT)
 
-# ── Baseline-1 geometry (params.py RobotGeometry, run_id 51167) ───────────────
-_L_FEMUR = 0.17378   # hip → knee A→C  [m]
-_L_STUB  = 0.03513   # tibia stub C→E  [m]
-_L_TIBIA = 0.12939   # tibia C→W       [m]
-_LC      = 0.15081   # coupler F→E     [m]
-_F_X     = -0.05887  # fixed pivot X   [m]
-_F_Z     = -0.0055   # fixed pivot Z   [m]  AS BUILT: F is 18 mm above A
-                     # (= _A_Z + 0.018). Was -0.01821, a transcription error
-                     # that treated F's body-centre Z as the A->F offset.
-_A_Z     = -0.0235   # hip motor Z     [m]
+# ── v4 leg geometry (2026-08-07) ──────────────────────────────────────────────
+# Mechanical baseline: components/2N_10mm_279mm.pdf; machine-readable twin:
+# simulation/2d/fourbar_optimizer_gui/presets/2N_10mm_279mm.json.
+# Hard stops: Q_RET = +28 deg, Q_EXT = -57 deg (0 deg = femur horizontal).
+_L_FEMUR = 0.187577  # hip → knee A→C  [m]
+_L_STUB  = 0.039013  # tibia stub C→E  [m]
+_L_TIBIA = 0.183411  # tibia C→W, ALONG the C→E axis [m] — not |C→W|, see below
+_W_PERP  = -0.030354 # W's perpendicular offset off that axis [m]  (v4 dogleg)
+                     # |C→W| = 185.91 mm, |E→W| = 224.49 mm, and the knee C sits
+                     # 5.28 mm off the E–W line (the drawing's "C_offset").
+                     # 0.0 here would render the pre-v4 straight tibia.
+_LC      = 0.169536  # coupler F→E     [m]
+_F_X     = -0.036425 # fixed pivot X   [m]  (body-centre frame; = A-relative,
+                     # since A is at x = 0)
+_F_Z     =  0.014037 # fixed pivot Z   [m]  = _A_Z + 0.037537, i.e. F sits
+                     # 37.54 mm ABOVE the hip axis A. Quote A-relative offsets,
+                     # not this body-centre value — conflating the two is what
+                     # got the previous robot built wrong (see AngleRetractedExt.md).
+_A_Z     = -0.0235   # hip motor Z     [m]  — inherited from baseline-1, NOT
+                     # re-measured on the v4 box.
 _LEG_Y   =  0.1430   # leg-plane Y (±) [m]
-_WHEEL_R =  0.075    # wheel radius    [m]
-_Q_NOM   = -1.082366 # (Q_RET+Q_EXT)/2 [rad]
+_WHEEL_R =  0.056    # wheel radius    [m]  (Ø112 mm; was Ø150 before v4)
+_Q_NOM   = -0.253073 # (Q_RET+Q_EXT)/2 [rad]
 
 _R_FEMUR   = 0.007
 _R_TIBIA   = 0.008
@@ -177,8 +187,11 @@ def _solve_ik(q_hip: float) -> dict | None:
     alpha = a1 if abs(a1 - q_hip) <= abs(a2 - q_hip) else a2
     E_x = C_x + _L_STUB * math.sin(alpha)
     E_z = C_z + _L_STUB * math.cos(alpha)
-    W_x = C_x - _L_TIBIA * math.sin(alpha)
-    W_z = C_z - _L_TIBIA * math.cos(alpha)
+    # W rides on the tibia body. The _W_PERP terms are the v4 dogleg: with
+    # _W_PERP = 0 this collapses to the old straight-tibia form. Matches
+    # kinematics.py's local_to_world((-L_tibia, w_perp), t) in the optimizer.
+    W_x = C_x - _L_TIBIA * math.sin(alpha) - _W_PERP * math.cos(alpha)
+    W_z = C_z - _L_TIBIA * math.cos(alpha) + _W_PERP * math.sin(alpha)
     return dict(
         A=(0.0, _A_Z), C=(C_x, C_z), E=(E_x, E_z),
         F=(_F_X, _F_Z), W=(W_x, W_z), alpha=alpha,

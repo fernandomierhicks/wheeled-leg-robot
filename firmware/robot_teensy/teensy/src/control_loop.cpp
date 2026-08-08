@@ -48,28 +48,39 @@ static constexpr float BACKWARD_TARGET_MARGIN_RAD = 0.0523599f;  // 3 deg
 //    Q_pitch_rate=0.1884, Q_vel=0.00508442, R=100.0) ─────────────────────────
 // alpha=0 → retracted, alpha=1 → extended. NOTE: alpha is NOT anchored to any
 // fixed q_hip pair — it is the fraction of the *calibrated* hip span, which
-// define_limits() sets to (calib_range_*_rad - calib_backoff_rad), currently
-// 85° - 5° = 80°. The old "(Q_RET=-0.733, Q_EXT=-1.432)" annotation here was
-// doubly wrong: those angles are for the superseded 5.29 mm F_Z geometry (see
-// CLAUDE.md), and their 0.699 rad span is a nominal stance stroke, not the
-// calibrated range. Reading them as the alpha endpoints understates the hip
-// scale by ~2x.
-//
-// The mechanism's real travel is 66° (hard-stopped), so the configured 80°
-// overruns the extended stop by 14°: alpha only reaches ~0.825 in practice and
-// the extended end of this gain table is never actually used. Fix by setting
-// calib_range_l/r_rad = 66° + backoff 5° = 71° (1.239 rad).
+// define_limits() sets to (calib_range_*_rad - calib_backoff_rad). With the
+// v4 geometry below that is 85° - 5° = 80° of the mechanism's 85° stop-to-stop
+// travel, the 5° being the retract-switch backoff. Do NOT read the Q_RET/Q_EXT
+// angles below as the alpha endpoints: alpha's zero is the *backoff* position,
+// 5° extended of the retract stop, not the retract stop itself.
 // Runtime-tunable — see PARAM_LQR_K_* in param_ids.h/param_registry.cpp for defaults.
 
 // ── Phase 5: Effective pendulum length (IK at Q_RET and Q_EXT) ───────────────
-static constexpr float L_EFF_RET    = 0.183117f;  // [m] fully retracted
-static constexpr float L_EFF_EXT    = 0.295390f;  // [m] fully extended
+// v4 geometry (2026-08-07). Mechanical baseline: components/2N_10mm_279mm.pdf;
+// machine-readable twin: simulation/2d/fourbar_optimizer_gui/presets/2N_10mm_279mm.json
+//   femur A→C 187.58, coupler F→E 169.54, stub C→E 39.01,
+//   tibia |C→W| 185.91, |E→W| 224.49, knee C offset 5.28 off the E–W line
+//     (preset's equivalent local form: W 183.41 along C→E, 30.35 perpendicular),
+//   F = (-36.42, +37.54) mm relative to A.   [all mm]
+// Vertical wheel stroke 276.62 mm over the stops (the drawing's 279.95 mm is
+// over the optimizer's wider 86.29° evaluation band, not commandable).
+// Hard stops (CAD): Q_RET = +28°, Q_EXT = -57°, 0° = femur horizontal.
+// l_eff is |W_z| in the BODY-CENTRE frame, i.e. the body origin's height above
+// the wheel axle — same definition the shipped 0.183117/0.295390 pair used
+// (reproduced to 5 µm), so the LQR gains keep meaning what they meant.
+//
+// !! A_Z = -23.5 mm (hip axis below body centre) is inherited from baseline-1
+// and has NOT been re-measured on the v4 box. Both constants shift 1:1 with it.
+static constexpr float L_EFF_RET    = 0.086777f;  // [m] fully retracted
+static constexpr float L_EFF_EXT    = 0.363396f;  // [m] fully extended
 
 // ── Phase 6: Body mass and gravity ───────────────────────────────────────────
 // m_b = m_box + 2*(m_femur+m_tibia+m_coupler+m_bearing) + 2*motor_mass
+// !! Not re-derived for the v4 links (longer femur/tibia/coupler) — stale, and
+// only FF2 depends on it.
 static constexpr float M_BODY       = 1.6380f;    // [kg] body (excl. wheels)
 static constexpr float GRAVITY      = 9.81f;      // [m/s²]
-static constexpr float WHEEL_R      = 0.075f;     // [m] wheel radius (150 mm OD)
+static constexpr float WHEEL_R      = 0.056f;     // [m] wheel radius (112 mm OD)
 // MOTOR_TRQ_MAX now lives in control_loop.h — shared with state_machine.cpp's standup recovery law
 
 // ── Controller state ──────────────────────────────────────────────────────────

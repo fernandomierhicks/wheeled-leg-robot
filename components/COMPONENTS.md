@@ -72,7 +72,7 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 |---|---|---|---|---|---|---|
 | BODY | Body box + electronics tray | PLA | 1 set | 210 | 210 | Houses MCU, IMU, ODESC, battery |
 | MTR_MNT | Motor mounts | PLA | 2 | 45 | 90 | AK45-10 to body interface |
-| WHEEL | Wheel (150 mm OD) | PLA hub + TPU tread | 2 | 70 | 140 | PLA spoked hub ~45g + TPU tread band ~25g; D-shaft mount to 5065 motor |
+| WHEEL | Wheel (**112 mm OD**, v4) | PLA hub + TPU tread | 2 | 70 | 140 | Was 150 mm OD before v4 (2026-08-07) — `WHEEL_R` = 0.056 m in `control_loop.cpp`. PLA spoked hub ~45g + TPU tread band ~25g; D-shaft mount to 5065 motor. Mass not re-estimated for the smaller wheel. |
 
 **Subtotal printed:** 440 g / filament cost only
 
@@ -148,32 +148,38 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 
 ---
 
-## Winning Geometry (baseline1 optimisation)
+## Leg Geometry — v4 (2026-08-07)
 
-| Parameter | Value | Notes |
-|---|---|---|
-| L_femur | 173.78 mm | A → C |
-| L_tibia | 129.39 mm | C → W |
-| L_stub | 35.13 mm | C → E (upward) |
-| L_coupler | 150.81 mm | F → E |
-| F_X offset | −58.87 mm | Coupler pivot X from body origin (as built ≈ 59 mm) |
-| F_Z offset | **−5.5 mm** | Coupler pivot Z from body origin — **as built**, i.e. F sits **18 mm above** the hip axis A (A_Z = −23.5 mm) |
+Mechanical baseline drawing: **`components/2N_10mm_279mm.pdf`**. Machine-readable
+form of the same geometry (agrees to 0.01 mm):
+`simulation/2d/fourbar_optimizer_gui/presets/2N_10mm_279mm.json`.
+**All coordinates are relative to A** (hip motor output shaft), +X forward, +Z up.
 
-> **As-built correction (2026-08-03).** This row used to read −18.21 mm. That
-> number is F's Z coordinate in the *body-centre* frame from the original
-> optimisation, where the hip-to-coupler *height* offset (A→F) was only
-> **5.29 mm**. The two got conflated, the −18.21 was carried into CAD as if it
-> were the A→F offset, and the robot was **built with an 18 mm offset**.
-> Measured on the physical robot: 18 mm. This is now the reference geometry —
-> the build is not going to be changed to match the old numbers.
+| Parameter | v4 | Previous (18 mm as-built) | Notes |
+|---|---|---|---|
+| L_femur | **187.58 mm** | 173.78 mm | A → C |
+| L_coupler | **169.54 mm** | 150.81 mm | F → E |
+| L_stub (EC) | **39.01 mm** | 35.13 mm | C → E (upward) |
+| Tibia \|C→W\| | **185.91 mm** | 129.39 mm | Knee to wheel |
+| E → W | **224.49 mm** | — | |
+| C_offset | **5.28 mm** | 0 (straight) | Knee C's perpendicular offset from the E–W line, **away from the hip motor**. Equivalent preset form: W at 183.41 mm along the C→E axis + 30.35 mm perpendicular (9.4° bend at C) |
+| F_X from A | **−36.42 mm** | −58.87 mm | |
+| F_Z from A | **+37.54 mm** | +18.00 mm | \|AF\| = 52.30 mm; motor clearance +25.80 mm |
+| A_Z offset | −23.5 mm | −23.5 mm | Hip axis below body centre — **inherited from baseline-1, NOT re-measured on the v4 box** |
+| Q_retracted | **+0.4887 rad (+28°)** | — | Retract hard stop; 0° = femur horizontal, positive retracts |
+| Q_extended | **−0.9948 rad (−57°)** | — | Extended hard stop, essentially on the 4-bar singularity |
+| Stroke | **85.0°** | 66° | Stop to stop |
+| Vertical wheel travel | **276.62 mm** over the stops; **279.95 mm** on the drawing | 209 mm | The drawing's 279.95 is over the optimizer's evaluated band (−57.64°…+28.65° = 86.29°), which runs slightly past both stops. 276.62 is what the firmware can actually command. |
+| Ride height (A above ground) | **119.3 → 395.9 mm** | — | Retracted → extended |
+| Peak static hip torque | **2.00 N·m** @ −12.4° | 2.5 N·m | At 1.0 kg/leg |
+
+> **Express F relative to A.** The −18.21 mm figure that used to sit in this
+> table is F's Z in the *body-centre* frame; it was mistaken for the A→F offset
+> and a robot was built to it (`AngleRetractedExt.md`). The two differ by `A_Z`,
+> which is itself unverified for v4 — so the A-relative numbers above are the
+> measured ones and any body-centre F_Z for v4 is provisional.
 >
-> Anything derived from the 5.29 mm geometry is invalid, including the
-> baseline-1 optimisation result itself, the `Q_RET`/`Q_EXT` stroke angles, and
-> the effective pendulum lengths in `control_loop.cpp`. The 4-bar's usable
-> (non-singular) hip range drops from ~83.6° to ~75.9°; deliberate hard stops
-> in the mechanism limit actual travel to **66°**.
-| A_Z offset | −23.5 mm | Hip motor Z from body centre |
-| Q_retracted | −0.351 rad | Full retraction |
-| Q_extended | −1.432 rad | Full extension |
-| Stroke | 61.93 ° | |
-| Jump height | 282.65 mm | run_id 51167 |
+> Everything derived from the pre-v4 geometry is invalid: the baseline-1
+> optimisation result, the old stroke angles, and the old jump-height figure
+> (282.65 mm, run_id 51167). `L_EFF_RET`/`L_EFF_EXT` in `control_loop.cpp` have
+> been recomputed for v4; `M_BODY` has not.

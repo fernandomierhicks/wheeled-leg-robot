@@ -169,13 +169,79 @@ reported in the robot log.
 | `CONTROL_HZ` | 500 | Teensy main loop rate |
 | `ESP32_BAUD` | 4 000 000 | Teensy↔ESP32 UART baud |
 | `CAN_BAUD` | 1 000 000 | Both CAN buses |
-| `CAN_INTER_FRAME_US` | 500 | Gap inserted between back-to-back CAN TX frames |
+| `CAN_INTER_FRAME_US` | 100 | Gap inserted between back-to-back CAN TX frames (was 500 — an 8-byte frame at 1 Mbps takes ~110–130 µs bit-stuffed, so 500 was ~4× over; under re-characterization) |
 | `ODESC_NODE_L/R` | 0 / 1 | Wheel motor ODrive node IDs |
 | `AK45_ID_L/R` | 11 / 12 | Hip motor CAN IDs |
 
 ## Coordinate system
 
 +X forward, +Y left, +Z up (matches MuJoCo world frame).
+
+## Leg geometry (v4 — 2026-08-07)
+
+**The linkage was redesigned. Every link length changed, the tibia became a
+dogleg, and the wheel shrank from Ø150 to Ø112.** Mechanical baseline drawing:
+`components/2N_10mm_279mm.pdf`; the machine-readable form of the same geometry
+is `simulation/2d/fourbar_optimizer_gui/presets/2N_10mm_279mm.json` (the two
+agree to 0.01 mm). All lengths in the A-at-origin frame (A = hip motor output
+shaft), +X forward, +Z up.
+
+| Link | Old (18 mm as-built) | **v4** |
+|---|---|---|
+| femur A→C | 173.78 mm | **187.58 mm** |
+| coupler F→E | 150.81 mm | **169.54 mm** |
+| stub C→E | 35.13 mm | **39.01 mm** |
+| tibia \|C→W\| | 129.39 mm (straight) | **185.91 mm (dogleg)** |
+| F relative to A | (−58.87, +18.00) mm | **(−36.42, +37.54) mm**, \|AF\| = 52.30 mm |
+| wheel | Ø150 (r = 75 mm) | **Ø112 (r = 56 mm)** |
+
+The tibia is no longer straight. The drawing states the kink as
+**`C_offset` = 5.28 mm** — the knee C's perpendicular offset from the E–W line,
+away from the hip motor — with `|EC|` = 39.01, `|CW|` = 185.91, `|EW|` =
+224.49 mm. The preset stores the same kink in the tibia's local frame instead
+(W at 183.41 mm along the C→E axis, 30.35 mm perpendicular; a 9.4° bend at C).
+The two agree — Heron on the 39.01/185.91/224.49 triangle gives 5.26 mm. Note
+`|C→W|` ≠ the preset's `L_tibia` field because of this.
+
+**Hard stops (CAD): `Q_RET` = +28°, `Q_EXT` = −57°, with 0° = femur
+horizontal — 85° of stop-to-stop travel.** Positive q retracts (wheel up,
+body low). The extended stop sits essentially on the 4-bar singularity
+(kr = 0.939 against the solver's 0.95 cutoff), so there is no travel to be
+recovered past it — the stop is protecting a real limit, not an arbitrary one.
+
+Derived, in `teensy/src/control_loop.cpp`:
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `L_EFF_RET` | 0.086777 | \|W_z\| body-centre frame at +28° |
+| `L_EFF_EXT` | 0.363396 | \|W_z\| body-centre frame at −57° |
+| `WHEEL_R` | 0.056 | wheel radius [m] |
+
+`l_eff` is the body origin's height above the wheel axle, *not* CG-to-axle —
+the same definition the previous 0.183117/0.295390 pair used (recomputing the
+old geometry with this definition reproduces those two to 5 µm), so the LQR
+gains keep meaning what they meant. Ride height (A above ground) runs
+119.3 → 395.9 mm.
+
+**Two stroke figures, both correct — don't mix them.** The drawing's headline
+**279.95 mm** is the wheel's vertical travel over the optimizer's evaluated
+band, which runs slightly past both stops (−57.64° … +28.65° = 86.29°). Over
+the **hard stops** at −57° … +28° (85.0°) the travel is **276.62 mm**. Use
+276.62 for anything the firmware can actually command; 279.95 is a
+design-envelope number.
+
+**Two inputs are still unverified and both are flagged in the source:**
+
+- `A_Z = −23.5 mm` (hip axis below body centre) is inherited from baseline-1
+  and has not been re-measured on the v4 box. `L_EFF_RET`/`L_EFF_EXT` shift
+  1:1 with it.
+- `M_BODY = 1.638 kg` was not re-derived for the longer v4 links. Only FF2
+  depends on it.
+
+**`WHEEL_R` also scales reported speed.** `wheel_vel_avg_ms` is
+`turns/s × 2π × WHEEL_R`, so the same physical speed now reads 0.747× what it
+did. Everything tuned in m/s — `vel_pi_*`, `v_cmd_ms`, `radio_vel_max`,
+`profileN_vel_max` — is off by that factor until re-checked.
 
 ## Control algorithm (`teensy/src/control_loop.cpp`)
 
@@ -255,23 +321,67 @@ const float retracted = away_dir * param_get(PARAM_CALIB_BACKOFF_RAD);
 const float extended  = away_dir * range_rad;      // calib_range_l/r_rad
 ```
 
-So the span is `calib_range - calib_backoff` = 85° − 5° = **80°**, never checked
-against the hardware. The mechanism has deliberate hard stops at **66°** of hip
-travel (CAD, 2026-08-03), so:
+`hip_cmd_to_setpoints()` then maps `t = 0` to the backoff position and `t = 1`
+to the extended limit, so the swept span is `calib_range − calib_backoff` and
+**`calib_range` is the delta from switch-zero to the extended stop** — exactly
+what the schema description says. For the v4 stops:
 
-- `t = 1` from `hip_cmd_to_setpoints()` commands the leg **14° past the extended
-  stop** — the motor pushes into the stop and holds there.
-- `gain_sched_alpha` saturates near **0.825**, never 1.0, so the extended anchor
-  of every α-scheduled pair (`lqr_*_ext`, `hip_running_tff_ext`,
-  `lqr_pitch_trim_ext`, `lqr_barrier_th_ext`) is never reached and the schedule
-  is compressed by ~21% across its whole range.
-- Any hip angle read from telemetry is in this same 80°-normalised frame.
+```
+calib_range = Q_RET − Q_EXT = +28° − (−57°) = 85° = 1.48353 rad
+  t = 0  →  q = +23°   (5° backoff off the retract stop)
+  t = 1  →  q = −57°   (the extended hard stop)
+  swept span = 80°
+```
 
-Fix: set `calib_range_l_rad` = `calib_range_r_rad` = **1.239 rad (71°)**
-(66° travel + 5° backoff). This rescales α, so re-check the α-scheduled gains
-afterwards — they were tuned against the compressed schedule. Note the AK45
-position scale itself is fine: 1 firmware-rad = 1 rad at the femur, no
+`calib_range_l_rad`/`calib_range_r_rad` now default to **1.48353**. The previous
+default was 1.5708 (90°), which overran the extended stop by 5°.
+
+> **Correction to `AngleRetractedExt.md` (2026-08-03).** That document's
+> recommended fix — `calib_range = travel + backoff` (66° + 5° = 71°) — is wrong
+> by exactly one backoff. `calib_range` is measured from switch-zero, and the
+> backoff eats into the span *below* it rather than extending it, so
+> `travel + backoff` puts `t = 1` a full backoff past the extended stop: the same
+> class of bug it was written to fix. The correct relation is
+> `calib_range = travel`, i.e. `span = travel − backoff`.
+
+**`calib_range = 85°` assumes the retract switch trips *at* the +28° hard stop.**
+It almost certainly trips slightly before it — the switch has to actuate without
+the motor jamming into the stop. If it trips δ early, the true delta to the
+extended stop is `85° − δ` and `t = 1` will push δ into the extended stop.
+Measuring δ is the point of the right-leg bench run below; until it is measured,
+treat 1.48353 as an upper bound.
+
+Two consequences of the α rescale, unchanged in kind from the old geometry:
+
+- `gain_sched_alpha` now spans the real mechanism, so the extended anchor of
+  every α-scheduled pair (`lqr_*_ext`, `hip_running_tff_ext`,
+  `lqr_pitch_trim_ext`, `lqr_barrier_th_ext`) is reachable for the first time.
+  Those anchors were tuned against a schedule that saturated near 0.825 —
+  **re-check them, do not assume they transfer.**
+- Any hip angle read from telemetry is normalised against this span.
+
+The AK45 position scale itself is fine: 1 firmware-rad = 1 rad at the femur, no
 reduction between the output shaft and pivot A.
+
+### Right-leg-only calibration (bench)
+
+`calibration_start()` already supports it: with `hip_l_enable = 0` the left axis
+is forced straight to `CAL_DONE` and logs `Calib L: skipped (hip_l_enable=0)`,
+and `calibration_done()` ignores it. So `hip_r_enable = 1`, `hip_l_enable = 0`,
+both `wheel_*_enable = 0` runs the real seek/zero/backoff sequence on the right
+hip alone, with the robot on a stand.
+
+**One catch:** `measured_hip_alpha()` requires `hm_limits_L.valid &&
+hm_limits_R.valid`. A skipped left axis never reaches `define_limits()`, so
+`hm_limits_L.valid` stays false and `gain_sched_alpha` reports invalid (0) for
+the whole session. Fine for calibrating and for reading raw hip angles, but
+**gain scheduling is not exercised by a single-leg run** — don't read anything
+into α, or into any α-scheduled value, from one.
+
+To measure the switch-to-stop offset δ: after calibration completes, jog the
+right hip toward retraction in `MANUAL` until it meets the retract hard stop and
+read `hip_r_pos_rad`. Firmware-zero is the switch, so δ is that reading, and the
+corrected `calib_range_r_rad = 1.48353 − δ`.
 
 **Hip feedforward is α-scheduled** (`hip_running_tff_ret`/`_ext`, same α as
 the LQR gains). The hip hold is a pure MIT impedance with no integrator, so
