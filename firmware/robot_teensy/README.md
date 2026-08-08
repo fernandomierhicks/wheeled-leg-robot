@@ -320,44 +320,53 @@ sequencing all set hip setpoints directly and bypass it. The disarm ramp
 target, so releasing the hips doesn't also snap the target underneath the
 ramp.
 
-**The calibrated hip span is configured, not measured — and it is currently
-14° too large.** `define_limits()` (`Calibration/calibration.cpp`) only *finds*
-the retract switch; the extended end is simply `calib_range_*_rad` away from it:
-
-```cpp
-const float retracted = away_dir * param_get(PARAM_CALIB_BACKOFF_RAD);
-const float extended  = away_dir * range_rad;      // calib_range_l/r_rad
-```
-
-`hip_cmd_to_setpoints()` then maps `t = 0` to the backoff position and `t = 1`
-to the extended limit, so the swept span is `calib_range − calib_backoff` and
-**`calib_range` is the delta from switch-zero to the extended stop** — exactly
-what the schema description says. For the v4 stops:
+**The calibrated hip span is measured at both ends.** Calibration finds the
+retract switch, zeroes there, backs off `calib_backoff_rad`, then *drives to
+the extended hard stop and measures it* rather than trusting a configured
+number. Full phase order in `Calibration/calibration.cpp`:
 
 ```
-calib_range = Q_RET − Q_EXT = +28° − (−57°) = 85° = 1.48353 rad
-  t = 0  →  q = +23°   (5° backoff off the retract stop)
-  t = 1  →  q = −57°   (the extended hard stop)
-  swept span = 80°
+RELEASE_SWITCH? → SEEK_SWITCH → WAIT_ZERO_SYNC → BACKOFF
+                → SEEK_EXTENDED → RETURN_HOME → RAMPDOWN → DONE
 ```
 
-`calib_range_l_rad`/`calib_range_r_rad` now default to **1.48353**. The previous
-default was 1.5708 (90°), which overran the extended stop by 5°.
+`SEEK_EXTENDED` reuses the existing torque-trip machinery, with one deliberate
+inversion: in the seek phases an over-torque trip means *something jammed* and
+faults the axis, but here it means *we reached the stop* and is the
+measurement. That is what `command_motion()`'s `stop_found` out-parameter
+selects. The software limit is then backed off the measured stop by
+`calib_backoff_rad`, mirroring the retract end, so `t = 1` never commands the
+leg onto the stop itself.
 
-> **Correction to `AngleRetractedExt.md` (2026-08-03).** That document's
-> recommended fix — `calib_range = travel + backoff` (66° + 5° = 71°) — is wrong
-> by exactly one backoff. `calib_range` is measured from switch-zero, and the
-> backoff eats into the span *below* it rather than extending it, so
-> `travel + backoff` puts `t = 1` a full backoff past the extended stop: the same
-> class of bug it was written to fix. The correct relation is
-> `calib_range = travel`, i.e. `span = travel − backoff`.
+**`calib_range_*_rad` is now a safety ceiling, not the answer.** If no stop is
+found within it, calibration logs a `WARN` and falls back to exactly the old
+configured-range behaviour — so a missing, soft, or mis-tuned stop can never
+let the leg run away, it just degrades to the previous assumption and says so.
+Watch for that warning: it means `calib_move_trq_lim` is too high, or the stop
+isn't where it should be.
 
-**`calib_range = 85°` assumes the retract switch trips *at* the +28° hard stop.**
-It almost certainly trips slightly before it — the switch has to actuate without
-the motor jamming into the stop. If it trips δ early, the true delta to the
-extended stop is `85° − δ` and `t = 1` will push δ into the extended stop.
-Measuring δ is the point of the right-leg bench run below; until it is measured,
-treat 1.48353 as an upper bound.
+`RETURN_HOME` walks the leg back to the retract-backoff rest pose under the
+same speed and torque limits before `RAMPDOWN`. Without it the leg would still
+be at full extension when `RAMPDOWN` starts commanding `home_target` — a
+near-full-span position step under a decaying `kp`.
+
+For reference, the v4 CAD stops predict what the search should find:
+
+```
+Q_RET +28°, Q_EXT −57°  →  85° stop to stop = 1.48353 rad
+  t = 0  →  q = +23°   (backed off the retract stop)
+  t = 1  →  q ≈ −52°   (backed off the measured extended stop)
+```
+
+`calib_range_l_rad`/`calib_range_r_rad` default to **1.48353** as that ceiling.
+
+> **Not yet bench-validated.** `SEEK_EXTENDED` deliberately drives the leg into
+> a hard stop, and has only been built and unit-tested — never run on hardware.
+> It is bounded three ways (torque trip, the `calib_range` travel ceiling, and
+> `calib_seek_timeout`), but watch the first run with a hand near the estop, and
+> confirm the measured stop lands near the 85° the CAD predicts. If the switch
+> trips δ before the retract stop, the measured span comes out `85° − δ` — which
+> is now handled automatically rather than being an assumption to verify.
 
 Two consequences of the α rescale, unchanged in kind from the old geometry:
 
@@ -612,6 +621,22 @@ deliberately small clamp (default 0.1 rad·s) rather than relying on
 asymmetry, so it is worth confirming the bias isn't a real CG/leg-length
 problem first. There is no integrator state in telemetry, but the total
 commanded offset is observable as `(hip_l_cmd_pos_rad − hip_r_cmd_pos_rad)/2`.
+
+**Symmetric travel-headroom clamp.** The effective offset limit each tick is
+`min(roll_offset_max, min(t, 1−t) × span)`, applied *before* the differential
+is split onto the two legs. At normalized ride height `t` a leg has `t × span`
+of retract headroom and `(1−t) × span` of extend headroom, and a differential
+spends one of each whichever way it leans — so `min(t, 1−t) × span` is the
+largest magnitude *both* legs can honour. The per-leg clamps against
+`hm_limits_*` are still there but are now only a backstop; previously they were
+the whole story, which meant one leg could saturate while the other didn't,
+silently turning a symmetric offset into an asymmetric one and shifting mean
+ride height mid-correction. `span` is the smaller of the two calibrated spans,
+so a mismatched pair is governed by the tighter leg. The anti-windup is given
+this same effective limit rather than `roll_offset_max`, so the integral can't
+wind up against travel headroom the clamp is about to remove. This is what
+makes a larger `roll_offset_max` safe at low ride height — the binding
+constraint becomes headroom, automatically.
 
 ## Live parameter tuning (`teensy/src/live_tune.h`)
 

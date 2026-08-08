@@ -343,10 +343,33 @@ void controlLoop_run() {
         float offset_pd = live_tune_value(PARAM_ROLL_KP) * roll_err
                         - live_tune_value(PARAM_ROLL_KD) * roll_rate;
 
+        // Symmetric travel-headroom clamp, folded into the limit BEFORE the
+        // differential is applied. At normalized ride height t a leg has
+        // t*span of retract headroom and (1-t)*span of extend headroom; a
+        // differential offset spends one of each whichever way it goes, so
+        // min(t, 1-t)*span is the largest magnitude BOTH legs can honour.
+        // Clamping only per-leg after the split (which is all that used to
+        // happen, further down) lets one leg saturate while the other doesn't
+        // — the offset silently stops being symmetric and mean ride height
+        // shifts mid-correction. Uses the smaller of the two calibrated spans
+        // so a mismatched pair is governed by the tighter leg.
+        float off_lim = off_max;
+        if (hm_limits_L.valid && hm_limits_R.valid) {
+            float t_h = s_hip_cmd_rlt;
+            if (t_h < 0.0f) t_h = 0.0f;
+            if (t_h > 1.0f) t_h = 1.0f;
+            float span = fminf(hm_limits_L.max_rad - hm_limits_L.min_rad,
+                               hm_limits_R.max_rad - hm_limits_R.min_rad);
+            float headroom = fminf(t_h, 1.0f - t_h) * span;
+            if (headroom < off_lim) off_lim = headroom;
+        }
+
         // Same conditional-integration anti-windup the velocity PI uses
         // (symmetric limits here): the integral freezes only when it would
-        // drive an already-saturated offset further past roll_offset_max, and
-        // is always free to unwind back out.
+        // drive an already-saturated offset further past the effective limit,
+        // and is always free to unwind back out. It is given off_lim, not
+        // off_max, so the integral cannot wind up against travel headroom the
+        // clamp below is about to remove.
         s_roll_integral = velocity_pi_integral_step(
             s_roll_integral,
             roll_err,
@@ -354,13 +377,13 @@ void controlLoop_run() {
             param_get(PARAM_ROLL_INT_MAX),
             roll_ki,
             offset_pd,
-            off_max,
-            off_max
+            off_lim,
+            off_lim
         );
 
         float offset = offset_pd + roll_ki * s_roll_integral;
-        if (offset >  off_max) offset =  off_max;
-        if (offset < -off_max) offset = -off_max;
+        if (offset >  off_lim) offset =  off_lim;
+        if (offset < -off_lim) offset = -off_lim;
 
         // Differential apply. Hip sign convention (README "Motor direction"):
         // increasing pos_L/pos_R retracts, decreasing extends. IMU convention
