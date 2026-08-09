@@ -77,8 +77,8 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0121` | `PARAM_CALIB_MOVE_SPEED` | `calib_move_speed` | 0.174533 | 0.01 … 0.5 | persistent |
 | `0x0122` | `PARAM_CALIB_SEEK_KP` | `calib_seek_kp` | 16 | 0.1 … 100 | persistent |
 | `0x0123` | `PARAM_CALIB_KD` | `calib_kd` | 0.05 | 0 … 5 | persistent |
-| `0x0124` | `PARAM_CALIB_SEEK_TORQUE_LIMIT_NM` | `calib_seek_trq_lim` | 0.3 | 0.05 … 2 | persistent |
-| `0x0125` | `PARAM_CALIB_MOVE_TORQUE_LIMIT_NM` | `calib_move_trq_lim` | 0.6 | 0.05 … 4 | persistent |
+| `0x0124` | `PARAM_CALIB_SEEK_TORQUE_LIMIT_NM` | `calib_seek_trq_lim` | 0.3 | 0.05 … 6 | persistent |
+| `0x0125` | `PARAM_CALIB_MOVE_TORQUE_LIMIT_NM` | `calib_move_trq_lim` | 0.6 | 0.05 … 6 | persistent |
 | `0x0126` | `PARAM_CALIB_BACKOFF_RAD` | `calib_backoff_rad` | 0.0872665 | 0.01 … 0.35 | persistent |
 | `0x0127` | `PARAM_CALIB_RANGE_L_RAD` | `calib_range_l_rad` | 1.48353 | 0.1 … 3.14159 | persistent |
 | `0x0128` | `PARAM_CALIB_RANGE_R_RAD` | `calib_range_r_rad` | 1.48353 | 0.1 … 3.14159 | persistent |

@@ -478,7 +478,7 @@
       "name": "calib_seek_trq_lim",
       "default": 0.3,
       "min": 0.05,
-      "max": 2.0,
+      "max": 6.0,
       "flags": [
         "persistent"
       ],
@@ -491,7 +491,7 @@
       "name": "calib_move_trq_lim",
       "default": 0.6,
       "min": 0.05,
-      "max": 4.0,
+      "max": 6.0,
       "flags": [
         "persistent"
       ],
