@@ -76,7 +76,7 @@
 {.id = PARAM_LQR_K_RATE_EXT, .group_id = GROUP_CONTROL, .name = "lqr_k_rate_ext", .value = -0.1f, .min_val = -5.0f, .max_val = 0.0f, .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
 {.id = PARAM_LQR_K_VEL, .group_id = GROUP_CONTROL, .name = "lqr_k_vel", .value = -0.007f, .min_val = -1.0f, .max_val = 0.0f, .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
 {.id = PARAM_RUNNING_WHEEL_BYPASS_EN, .group_id = GROUP_CONTROL, .name = "run_wheel_bypass_en", .value = 0.0f, .min_val = 0.0f, .max_val = 1.0f, .flags = 0, .on_change = nullptr},
-{.id = PARAM_ALPHA_FORCE_RETRACTED_EN, .group_id = GROUP_CONTROL, .name = "alpha_force_ret_en", .value = 0.0f, .min_val = 0.0f, .max_val = 1.0f, .flags = 0, .on_change = nullptr},
+{.id = PARAM_ALPHA_FORCE_RETRACTED_EN, .group_id = GROUP_CONTROL, .name = "alpha_force_ret_en", .value = 0.0f, .min_val = 0.0f, .max_val = 1.0f, .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
 {.id = PARAM_GUI_MOTION_CTRL_EN, .group_id = GROUP_CONTROL, .name = "gui_motion_ctrl_en", .value = 0.0f, .min_val = 0.0f, .max_val = 1.0f, .flags = 0, .on_change = nullptr},
 {.id = PARAM_STANDUP_ENABLE, .group_id = GROUP_CONTROL, .name = "standup_enable", .value = 0.0f, .min_val = 0.0f, .max_val = 1.0f, .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
 {.id = PARAM_STANDUP_MAX_PITCH_FWD_RAD, .group_id = GROUP_CONTROL, .name = "standup_pitch_fwd", .value = 0.6f, .min_val = 0.0f, .max_val = 1.4f, .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},

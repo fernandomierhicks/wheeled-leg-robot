@@ -577,6 +577,19 @@ void setup() {
     comm_log(LOG_LEVEL_INFO, "Firmware starting");
     param_init();
 
+    // alpha_force_ret_en became persistent on 2026-08-09 so a tuning session at
+    // one leg height survives a power cycle. It used to always boot to 0
+    // precisely so a forgotten bench override could not silently follow the
+    // robot into a real run -- with retracted gains applied at full extension
+    // and nothing on screen to say why. This warning is what replaces that
+    // guarantee, so it is deliberately loud and unconditional.
+    if (param_get(PARAM_ALPHA_FORCE_RETRACTED_EN) >= 0.5f) {
+        comm_log(LOG_LEVEL_WARN,
+                 "alpha_force_ret_en=1 restored from flash: gain schedule PINNED to "
+                 "retracted (alpha=0) at every leg height, and telemetry alpha reads 0. "
+                 "Clear it before extending the legs.");
+    }
+
     g_led.begin();
     g_buzzer.begin();
     g_buzzer.set_volume(param_get(PARAM_BUZZER_VOLUME));
