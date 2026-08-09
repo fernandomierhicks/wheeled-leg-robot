@@ -6,9 +6,8 @@
 ---Fernandos note dont change below
 
 
---Battery clip so CG is always the same. 
---Standing behaviour with pitch watchdog
 
+--Standing behaviour with pitch watchdog
 Tune up to 3 group of gains with both switches and kmobs
 
 
