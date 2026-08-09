@@ -18,8 +18,6 @@ enum CalibAxisState : uint8_t {
     CAL_SEEK_SWITCH,
     CAL_WAIT_ZERO_SYNC,
     CAL_BACKOFF,
-    CAL_SEEK_EXTENDED,
-    CAL_RETURN_HOME,
     CAL_RAMPDOWN,
     CAL_DONE,
     CAL_FAULT,
@@ -93,14 +91,13 @@ static void fault_axis(CalibAxis& ax, SendFn send, const char* tag,
     comm_send_calib_event(axis_id, CALIB_EVENT_FAULT, position, 0.0f, 0.0f);
 }
 
-// stop_found: when non-null, an over-torque trip means "we have run into a
-// hard stop" and is reported through it instead of faulting the axis. That is
-// the whole difference between the seek phases (where torque means something
-// jammed) and the extended-stop search (where torque is the measurement).
+// Every phase treats a sustained over-torque as "something jammed" and faults
+// the axis. Calibration only ever moves between the retract switch and the
+// backoff pose, so there is no phase where torque is a measurement rather than
+// a fault — see the note above define_limits.
 static bool command_motion(CalibAxis& ax, HipAxisState& hm, SendFn send,
                            const char* tag, uint8_t axis_id, float target,
-                           uint16_t torque_limit_param, uint16_t kp_param,
-                           bool* stop_found = nullptr) {
+                           uint16_t torque_limit_param, uint16_t kp_param) {
     // Stall detection: the AK45 MIT reply field is shaft torque [N·m], not
     // amps (see hip_motors.cpp). The limit params are in the same units.
     const float torque_limit = param_get(torque_limit_param);
@@ -122,11 +119,6 @@ static bool command_motion(CalibAxis& ax, HipAxisState& hm, SendFn send,
         const uint32_t overtorque_ms =
             (uint32_t)(now_ms - ax.overtorque_since_ms);
         if (trip_ms == 0 || overtorque_ms >= trip_ms) {
-            if (stop_found) {
-                *stop_found = true;
-                ax.overtorque_active = false;
-                return true;
-            }
             comm_log(LOG_LEVEL_ERROR,
                      "Calib %s: torque %.2f Nm exceeded %.2f Nm for %lu ms",
                      tag, torque, torque_limit,
@@ -148,8 +140,16 @@ static bool command_motion(CalibAxis& ax, HipAxisState& hm, SendFn send,
 }
 
 // extended_rad is the axis position of the extended software limit, already in
-// the switch-zero frame. It comes from the measured hard stop when the
-// extended search found one, and from the configured ceiling otherwise.
+// the switch-zero frame, and comes from the configured calib_range_*_rad.
+//
+// Calibration deliberately does NOT drive out to the extended stop to measure
+// it. It once did (a SEEK_EXTENDED phase that pushed into the stop and read the
+// torque trip as the measurement), and that was removed: the robot is unbalanced
+// and unsupported through calibration, so swinging the leg through its full
+// stroke there is not a safe way to learn a number the mechanism already fixes.
+// The travel from the retract switch to the extended stop is a property of the
+// linkage (~85 deg on v4) — trust it, and keep calibration's motion confined to
+// the switch and the small backoff next to it.
 static void define_limits(CalibAxis& ax, HipLimits& limits, float extended_rad) {
     const float away_dir = -ax.seek_dir;
     const float retracted = away_dir * param_get(PARAM_CALIB_BACKOFF_RAD);
@@ -314,93 +314,21 @@ static void update_axis(CalibAxis& ax, HipAxisState& hm, HipLimits& limits,
                     return;
                 }
                 comm_log(LOG_LEVEL_INFO,
-                         "Calib %s: backoff %.1f deg; seeking extended stop",
+                         "Calib %s: backoff %.1f deg complete",
                          tag, backoff * 57.2957795f);
-                set_phase(ax, CAL_SEEK_EXTENDED, hm.pos_rad, now_ms);
-            }
-            break;
-        }
 
-        case CAL_SEEK_EXTENDED: {
-            // Measure the extended hard stop rather than trusting
-            // calib_range_*_rad. Same soft-authority profile as the other move
-            // phases; the difference is that an over-torque trip here is the
-            // measurement, not a fault (see command_motion's stop_found).
-            //
-            // range_rad is now a SAFETY CEILING, not the answer: if no stop is
-            // found within it we fall back to exactly the old behaviour and say
-            // so, so a missing/soft stop can never let the leg run away.
-            if ((uint32_t)(now_ms - ax.phase_start_ms) > seek_timeout_ms) {
-                fault_axis(ax, send, tag, axis_id, hm.pos_rad,
-                           "extended stop search timed out");
-                return;
-            }
-
-            ax.ramp_target += away_dir * move_speed * dt;
-
-            bool stop_found = false;
-            if (!command_motion(ax, hm, send, tag, axis_id, ax.ramp_target,
-                                PARAM_CALIB_MOVE_TORQUE_LIMIT_NM,
-                                PARAM_CALIB_MOVE_KP, &stop_found)) return;
-
-            // Travel is measured from switch zero, which is where the encoder
-            // was zeroed, so |pos| is directly comparable to range_rad.
-            const float travel_from_zero = away_dir * hm.pos_rad;
-            const bool  at_ceiling = (away_dir * ax.ramp_target) >= range_rad;
-
-            if (stop_found || at_ceiling) {
-                float extended;
-                if (stop_found) {
-                    // Back the software limit off the measured stop by the same
-                    // margin used at the retract end, so t=1 never commands the
-                    // leg onto the stop itself.
-                    extended = hm.pos_rad - away_dir * backoff;
-                    comm_log(LOG_LEVEL_INFO,
-                             "Calib %s: extended stop at %.3f rad (%.1f deg from "
-                             "zero); limit backed off to %.3f rad",
-                             tag, hm.pos_rad, travel_from_zero * 57.2957795f,
-                             extended);
-                } else {
-                    extended = away_dir * range_rad;
-                    comm_log(LOG_LEVEL_WARN,
-                             "Calib %s: no extended stop found within configured "
-                             "%.1f deg -- falling back to the configured range. "
-                             "Check calib_move_trq_lim / the mechanical stop.",
-                             tag, range_rad * 57.2957795f);
-                }
-
-                define_limits(ax, limits, extended);
+                // Backoff IS the rest pose, so there is nothing to walk back
+                // from — define the span from the configured range and ramp
+                // down right here.
+                define_limits(ax, limits, away_dir * range_rad);
                 comm_log(LOG_LEVEL_INFO,
                          "Calib %s: limits [%.3f, %.3f] rad (span %.1f deg)",
                          tag, limits.min_rad, limits.max_rad,
                          (limits.max_rad - limits.min_rad) * 57.2957795f);
                 comm_send_calib_event(axis_id, CALIB_EVENT_LIMITS,
-                                      extended,
+                                      away_dir * range_rad,
                                       limits.min_rad, limits.max_rad);
-                set_phase(ax, CAL_RETURN_HOME, hm.pos_rad, now_ms);
-            }
-            break;
-        }
 
-        case CAL_RETURN_HOME: {
-            // Walk back to the retract-backoff rest pose under the same speed
-            // and torque limits. Without this the leg would still be at full
-            // extension when CAL_RAMPDOWN starts commanding home_target, which
-            // is a near-full-span position step under a decaying kp.
-            if ((uint32_t)(now_ms - ax.phase_start_ms) > seek_timeout_ms) {
-                fault_axis(ax, send, tag, axis_id, hm.pos_rad,
-                           "return to home position timed out");
-                return;
-            }
-
-            ax.ramp_target = slew_toward(ax.ramp_target, ax.home_target,
-                                         move_speed * dt);
-
-            if (!command_motion(ax, hm, send, tag, axis_id, ax.ramp_target,
-                                PARAM_CALIB_MOVE_TORQUE_LIMIT_NM,
-                                PARAM_CALIB_MOVE_KP)) return;
-
-            if (fabsf(ax.ramp_target - ax.home_target) < 1.0e-4f) {
                 ax.rampdown_start_ms = now_ms;
                 ax.kp0_rampdown = ax.kp_out;
                 ax.kd0_rampdown = param_get(PARAM_CALIB_KD);

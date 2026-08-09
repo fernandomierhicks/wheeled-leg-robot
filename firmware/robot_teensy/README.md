@@ -320,53 +320,32 @@ sequencing all set hip setpoints directly and bypass it. The disarm ramp
 target, so releasing the hips doesn't also snap the target underneath the
 ramp.
 
-**The calibrated hip span is measured at both ends.** Calibration finds the
-retract switch, zeroes there, backs off `calib_backoff_rad`, then *drives to
-the extended hard stop and measures it* rather than trusting a configured
-number. Full phase order in `Calibration/calibration.cpp`:
+**Calibration only ever seeks the retract switch.** It finds the switch, zeroes
+there, backs off `calib_backoff_rad`, and stops. The extended end of the span
+comes from `calib_range_*_rad` — a property of the linkage, not something
+calibration goes out and measures. Full phase order in
+`Calibration/calibration.cpp`:
 
 ```
-RELEASE_SWITCH? → SEEK_SWITCH → WAIT_ZERO_SYNC → BACKOFF
-                → SEEK_EXTENDED → RETURN_HOME → RAMPDOWN → DONE
+RELEASE_SWITCH? -> SEEK_SWITCH -> WAIT_ZERO_SYNC -> BACKOFF -> RAMPDOWN -> DONE
 ```
 
-`SEEK_EXTENDED` reuses the existing torque-trip machinery, with one deliberate
-inversion: in the seek phases an over-torque trip means *something jammed* and
-faults the axis, but here it means *we reached the stop* and is the
-measurement. That is what `command_motion()`'s `stop_found` out-parameter
-selects. The software limit is then backed off the measured stop by
-`calib_backoff_rad`, mirroring the retract end, so `t = 1` never commands the
-leg onto the stop itself.
+The leg's total commanded excursion is therefore `calib_backoff_rad` (5 deg by
+default) either side of the switch. It never travels toward extension.
 
-**`calib_range_*_rad` is now a safety ceiling, not the answer.** If no stop is
-found within it, calibration logs a `WARN` and falls back to exactly the old
-configured-range behaviour — so a missing, soft, or mis-tuned stop can never
-let the leg run away, it just degrades to the previous assumption and says so.
-Watch for that warning: it means `calib_move_trq_lim` is too high, or the stop
-isn't where it should be.
-
-`RETURN_HOME` walks the leg back to the retract-backoff rest pose under the
-same speed and torque limits before `RAMPDOWN`. Without it the leg would still
-be at full extension when `RAMPDOWN` starts commanding `home_target` — a
-near-full-span position step under a decaying `kp`.
-
-For reference, the v4 CAD stops predict what the search should find:
-
-```
-Q_RET +28°, Q_EXT −57°  →  85° stop to stop = 1.48353 rad
-  t = 0  →  q = +23°   (backed off the retract stop)
-  t = 1  →  q ≈ −52°   (backed off the measured extended stop)
-```
-
-`calib_range_l_rad`/`calib_range_r_rad` default to **1.48353** as that ceiling.
-
-> **Not yet bench-validated.** `SEEK_EXTENDED` deliberately drives the leg into
-> a hard stop, and has only been built and unit-tested — never run on hardware.
-> It is bounded three ways (torque trip, the `calib_range` travel ceiling, and
-> `calib_seek_timeout`), but watch the first run with a hand near the estop, and
-> confirm the measured stop lands near the 85° the CAD predicts. If the switch
-> trips δ before the retract stop, the measured span comes out `85° − δ` — which
-> is now handled automatically rather than being an assumption to verify.
+> **Removed 2026-08-08: the `SEEK_EXTENDED` / `RETURN_HOME` phases.** An earlier
+> version drove the leg from the switch all the way out to the extended hard
+> stop and read the over-torque trip as a measurement of the span, then walked
+> it back. It was removed unrun: **the robot is unsupported and not balancing
+> during CALIBRATION**, so swinging a leg through its full ~85 deg stroke there
+> is a large unforced disturbance — to learn a number the mechanism already
+> fixes and the CAD already gives. If the retract switch trips δ before the
+> +28 deg stop, the usable span is `85 deg − δ`; set `calib_range_*_rad` to that
+> rather than having calibration discover it by pushing into the stop.
+>
+> A consequence worth knowing: `calib_move_trq_lim` is now purely a *fault*
+> threshold in every phase. There is no longer any phase where exceeding it is
+> the intended outcome, so it should be set as low as the backoff move allows.
 
 Two consequences of the α rescale, unchanged in kind from the old geometry:
 
@@ -688,6 +667,34 @@ what makes the override actually take effect.
 
 Full step-by-step operator procedure and the CH5/CH6/CH7/CH8 radio table: see
 "Live parameter tuning" in `radio_channels.md`.
+
+## Radio rescue combo — clear ESTOP / reboot (`teensy/src/main.cpp`, `radio_update()`)
+
+A transmitter-only escape hatch for when the GUI isn't connected: **both sticks
+jammed into opposite corners** — CH3 and CH2 full up (`> 1990`), CH1 and CH4
+full down (`< 1010`), debounced 3 ticks (~6 ms @ 500 Hz).
+
+| Event | Effect | Cue |
+|---|---|---|
+| Rising edge, in `ESTOP` | `stateMachine_request_reset()` → `STARTUP`. Clears `fault_code` regardless of severity and re-runs the startup checks. | A5⇄E6 siren + white LED flash |
+| Rising edge, in `STANDBY` | Nothing to clear — beep only, and the 3 s countdown starts. | same siren |
+| Held 3 s | Full MCU reset (`SCB_AIRCR`), the same path as `CMD_ID_REBOOT`: hips out of MIT, wheels IDLE, flush, reset. | E6→A5→D5→G4 fall |
+
+Notes:
+
+- **Armed only in `STANDBY`/`ESTOP`** — never with torque live. The *hold timer*
+  additionally survives `STARTUP`, because that is where the reset lands: a fault
+  that can't really be cleared re-faults straight back to `ESTOP`, and dropping
+  the timer in that gap would make the 3 s fallback unreachable in the one case
+  it exists for. `STARTUP` is torque-free and already an accepted
+  `CMD_ID_REBOOT` state (`cmd_allowed()`), so this widens nothing.
+- Releasing the combo (or leaving those states) re-arms it, so a second attempt
+  starts a fresh 3 s countdown rather than resuming one.
+- Every term is gated on `g_ibus.alive()`: `IBus::channel()` returns `0` on
+  signal loss, so without that gate a dead radio would satisfy both stick-low
+  tests for free.
+- Like `CMD_ID_REBOOT`, the reboot does **not** finalize an in-progress SD log —
+  a recording started in `STANDBY`/`ESTOP` will be left unclosed.
 
 ## Motor direction / sign conventions
 
