@@ -990,6 +990,12 @@ static void read_sensors(bool prof) {
 static const BuzzerNote RADIO_ACQ_MELODY[]    = {{76, 80, 0}};             // E5 — single: "link up"
 static const BuzzerNote RADIO_LOST_MELODY[]   = {{64, 100, 30}, {60, 150, 0}}; // E4→C4 desc: "link lost"
 static const BuzzerNote ARM_IGNORED_MELODY[]  = {{69, 60, 40}, {69, 60, 0}};   // A4-A4 double-tap: "not ready, try again"
+// Rescue stick combo (radio_update()). A fast alternating two-note siren, and a
+// long descending fall for the reboot — deliberately unlike every other cue on
+// the robot so neither can be mistaken for an arm/profile/link event.
+static const BuzzerNote RESCUE_CLEAR_MELODY[]  = {{81, 60, 10}, {88, 60, 10}, {81, 60, 10}, {88, 140, 0}}; // A5⇄E6 siren: "rescue"
+static const BuzzerNote RESCUE_REBOOT_MELODY[] = {{88, 70, 10}, {81, 70, 10}, {74, 70, 10}, {67, 220, 0}}; // E6→A5→D5→G4: "rebooting"
+static constexpr uint32_t RESCUE_REBOOT_CHIME_MS = 500;  // blocking pump so the fall is audible before reset
 
 // ── Live parameter tuning (live_tune.h) ────────────────────────────────────────
 // CH7/CH8 knob -> param mapping, grouped in threes by the CH5/CH6 switch
@@ -1114,6 +1120,83 @@ static void radio_update() {
         }
     }
     s_was_alive = alive;
+
+    // ── Rescue stick combo: clear ESTOP, or hold 3 s to reboot ────────────────
+    // CH3 + CH2 pinned full up, CH1 + CH4 pinned full down — both sticks jammed
+    // into opposite corners. No driving input produces that, and it is awkward
+    // enough to hold deliberately that it can't be stumbled into.
+    //
+    // Rising edge: full reset (ESTOP -> STARTUP), which clears fault_code
+    // regardless of severity and re-runs the startup checks. In STANDBY there
+    // is nothing to clear, so the edge is just the beep.
+    // Held RESCUE_REBOOT_HOLD_MS: full MCU reset, identical to CMD_ID_REBOOT.
+    //
+    // Armed only in STANDBY/ESTOP — never with torque live. The hold timer
+    // additionally survives STARTUP because that is exactly where the reset
+    // above lands: a fault that can't actually be cleared re-faults out of
+    // STARTUP back into ESTOP, and dropping the timer in that gap would make
+    // the 3 s fallback unreachable in the one case it exists for. STARTUP is
+    // torque-free and already an accepted CMD_ID_REBOOT state (cmd_allowed()),
+    // so this widens nothing.
+    //
+    // Every term is guarded by `alive`: channel() returns 0 on signal loss, so
+    // without it a dead radio would satisfy both stick-low tests for free.
+    static constexpr uint8_t  RESCUE_DEBOUNCE_TICKS = 3;     // ~6 ms @ 500 Hz
+    static constexpr uint32_t RESCUE_REBOOT_HOLD_MS = 3000;
+    static uint8_t  s_rescue_ticks    = 0;
+    static bool     s_rescue_held     = false;
+    static uint32_t s_rescue_since_ms = 0;
+
+    const bool rescue_arm_state  = (g_state.state == STATE_STANDBY || g_state.state == STATE_ESTOP);
+    const bool rescue_hold_state = rescue_arm_state || (g_state.state == STATE_STARTUP);
+    const bool rescue_raw = alive &&
+                            g_ibus.channel(3) > 1990 && g_ibus.channel(2) > 1990 &&
+                            g_ibus.channel(1) < 1010 && g_ibus.channel(4) < 1010;
+    if (rescue_raw && (s_rescue_held ? rescue_hold_state : rescue_arm_state)) {
+        if (s_rescue_ticks < RESCUE_DEBOUNCE_TICKS) s_rescue_ticks++;
+    } else {
+        // Release (or leaving the permitted states) re-arms the combo, so a
+        // second attempt starts a fresh 3 s countdown rather than resuming one.
+        s_rescue_ticks = 0;
+        s_rescue_held  = false;
+    }
+
+    if (s_rescue_ticks >= RESCUE_DEBOUNCE_TICKS && !s_rescue_held) {
+        s_rescue_held     = true;
+        s_rescue_since_ms = millis();
+        g_buzzer.play(RESCUE_CLEAR_MELODY, sizeof(RESCUE_CLEAR_MELODY) / sizeof(RESCUE_CLEAR_MELODY[0]));
+        s_profile_flash_rgb[0] = 255; s_profile_flash_rgb[1] = 255; s_profile_flash_rgb[2] = 255;
+        s_profile_flash_until_ms = millis() + 300;
+        if (g_state.state == STATE_ESTOP) {
+            comm_log(LOG_LEVEL_WARN,
+                     "Radio: rescue combo — reset ESTOP [fault 0x%02X] -> STARTUP; hold %lu ms to reboot",
+                     g_state.fault_code, (unsigned long)RESCUE_REBOOT_HOLD_MS);
+            stateMachine_request_reset();
+        } else {
+            comm_log(LOG_LEVEL_WARN,
+                     "Radio: rescue combo — no ESTOP to clear (state=%d); hold %lu ms to reboot",
+                     (int)g_state.state, (unsigned long)RESCUE_REBOOT_HOLD_MS);
+        }
+    }
+
+    if (s_rescue_held && (millis() - s_rescue_since_ms) >= RESCUE_REBOOT_HOLD_MS) {
+        comm_log(LOG_LEVEL_WARN, "Radio: rescue combo held %lu ms -> REBOOT (state=%d)",
+                 (unsigned long)RESCUE_REBOOT_HOLD_MS, (int)g_state.state);
+        // Same safe-shutdown order as the CMD_ID_REBOOT handler: MIT keepalive
+        // is live in STANDBY, so drop it before pulling the MCU out from under it.
+        hip_motors_exit_mit();
+        wheel_motors_set_mode(WheelMode::IDLE);
+        // The buzzer is non-blocking and driven by update(), so pump it here —
+        // the reset would otherwise silence it before the first note finished.
+        // Well inside WATCHDOG_TIMEOUT_MS, and we are resetting regardless.
+        g_buzzer.play(RESCUE_REBOOT_MELODY, sizeof(RESCUE_REBOOT_MELODY) / sizeof(RESCUE_REBOOT_MELODY[0]));
+        const uint32_t chime_until = millis() + RESCUE_REBOOT_CHIME_MS;
+        while ((int32_t)(millis() - chime_until) < 0) g_buzzer.update();
+        Serial.flush();
+        Serial5.flush();
+        delay(50);
+        SCB_AIRCR = 0x05FA0004;  // Cortex-M7 system reset request
+    }
 
     // Debounce CH10: the raw armed level must hold for ARM_DEBOUNCE_TICKS
     // consecutive ticks before an arm is requested. Filters a single bad

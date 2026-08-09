@@ -37,4 +37,7 @@ float    imu_accel_x();         // linear accel X (forward)  [m/s²] — BNO086 
 float    imu_accel_y();         // linear accel Y (left)     [m/s²]
 float    imu_accel_z();         // linear accel Z (up)       [m/s²]
 float    imu_packet_loss();     // 0.0–1.0, rolling 1-second window
-uint32_t imu_last_update_ms();  // millis() of last good GRV packet
+// millis() of the OLDER of the two required streams (Game Rotation Vector and
+// gyro). They stall independently — a gyro-only stall freezes the body rates
+// while attitude keeps updating — so freshness must be judged on the weakest.
+uint32_t imu_last_update_ms();

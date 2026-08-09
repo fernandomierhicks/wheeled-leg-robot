@@ -20,6 +20,25 @@
 | C9  | 3-pos switch       | Speed profile        | < 1333 = profile 1, 1333–1667 = profile 2, > 1667 = profile 3. Selects the active `vel_max`, `yaw_max`, `torque_lim`, and `roll_max`. |
 | C10 | Right switch (ARM) | Arm / disarm         | > 1990 → RUNNING (requires calibration); drop → STANDBY    |
 
+## Rescue combo — clear ESTOP / reboot
+
+Both sticks jammed into opposite corners, held: **C3 and C2 full up (> 1990),
+C1 and C4 full down (< 1010)**. Debounced 3 ticks (~6 ms @ 500 Hz). Only armed
+in **STANDBY** or **ESTOP** — never with torque live. Intended as a
+transmitter-only escape hatch when the GUI isn't connected; no normal driving
+input produces this stick position.
+
+| Event | Effect | Cue |
+|---|---|---|
+| Enter combo, in ESTOP | Full reset → STARTUP: clears the fault regardless of severity and re-runs the startup checks | A5⇄E6 siren + white LED flash |
+| Enter combo, in STANDBY | Nothing to clear — beep only, and the 3 s countdown starts | same siren |
+| Hold 3 s | Full MCU reset, identical to the GUI's Reboot command | E6→A5→D5→G4 descending fall |
+
+If the fault can't actually be cleared (a REBOOT-severity hardware dropout),
+STARTUP re-faults straight back to ESTOP — keep holding and the 3 s reboot
+fires anyway. Releasing the sticks re-arms the combo, so a second attempt
+starts a fresh countdown. Loss of the radio link cannot satisfy the combo.
+
 ## Arm authority
 
 - With no live radio link, the GUI/API may arm and owns that running session.
