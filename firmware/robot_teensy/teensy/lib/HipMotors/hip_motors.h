@@ -15,6 +15,14 @@ struct HipAxisState {
     bool     ever_heard;   // true once any CAN reply has been received
     bool     ok;           // true when feedback is fresh (< HIP_CAN_TIMEOUT_MS) AND ever_heard
     bool     mit_active;   // true after enter_mit sent, false after exit_mit
+    // Set when an encoder-zero command has been sent but the motor has not yet
+    // replied in the new frame. Commands are already in the zeroed frame while
+    // feedback is still in the old one, so the two are not comparable — see
+    // hip_motors.cpp for why the position-jump guard must stand down until the
+    // motor confirms. Cleared by hip_motors_poll().
+    bool     zero_pending;
+    uint32_t zero_cmd_ms;  // millis() when the zero command went out
+    uint32_t zero_fb_seq;  // feedback_seq at that moment (to spot in-flight frames)
 };
 
 // Cached MIT setpoint, re-sent every poll() tick while active. Falls back to

@@ -10,6 +10,17 @@
 // Maximum allowed position step per command (rad). Larger jumps trigger ESTOP.
 #define MAX_HIP_DELTA_RAD  1.5708f  // 90 deg
 
+// Encoder-zero settling window. Zeroing redefines the motor's position frame:
+// our next command is already in the new frame while replies still in flight
+// carry the old one, so |cmd - feedback| is meaningless until the motor answers
+// in the new frame. A reply is taken as confirmation once it is newer than the
+// zero command AND reads near zero — matching the tolerance calibration uses
+// for the same handshake. TIMEOUT_MS bounds how long the guard can stay down if
+// confirmation never comes; after it, the guard resumes and a motor that really
+// failed to zero faults on the next command, which is what we want.
+#define HM_ZERO_SYNC_TOL_RAD    0.05f
+#define HM_ZERO_SYNC_TIMEOUT_MS 200u
+
 // AK45-10 MIT Cheetah protocol parameter limits.
 //
 // These are PER MOTOR MODEL. Position, Kp and Kd are common to the whole AK
@@ -138,7 +149,7 @@ static void send_raw(uint32_t id, const uint8_t data[8]) {
 static void pack_and_send(uint32_t id, float pos, float vel, float kp, float kd, float torque) {
     // Guard against large position jumps — fault and suppress the frame.
     const HipAxisState* ax = (id == AK45_ID_L) ? &hm_L : &hm_R;
-    if (ax->ever_heard) {
+    if (ax->ever_heard && !ax->zero_pending) {
         float delta = pos - ax->pos_rad;
         if (delta < 0) delta = -delta;
         if (delta > MAX_HIP_DELTA_RAD) {
@@ -231,6 +242,20 @@ bool hip_motors_init() {
     return true;
 }
 
+// End the encoder-zero settling window once the motor has answered in the new
+// frame. Both conditions matter: feedback_seq must have moved past the reply
+// that was already in flight when the zero went out (that one still carries the
+// OLD frame), and the position it carries must read near zero, which only a
+// genuinely re-zeroed motor reports.
+static void clear_zero_pending_if_synced(HipAxisState* ax, uint32_t now) {
+    if (!ax->zero_pending) return;
+    if ((ax->feedback_seq != ax->zero_fb_seq &&
+         fabsf(ax->pos_rad) <= HM_ZERO_SYNC_TOL_RAD) ||
+        (uint32_t)(now - ax->zero_cmd_ms) > HM_ZERO_SYNC_TIMEOUT_MS) {
+        ax->zero_pending = false;
+    }
+}
+
 void hip_motors_poll() {
     uint32_t now = millis();
 
@@ -247,6 +272,11 @@ void hip_motors_poll() {
 
     hm_L.ok = hm_L.ever_heard && !s_tx_stalled && (now - hm_L.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
     hm_R.ok = hm_R.ever_heard && !s_tx_stalled && (now - hm_R.last_fb_ms) < HIP_CAN_TIMEOUT_MS;
+
+    // Retire the encoder-zero settling window before this tick's frames go out,
+    // so the jump guard is back in force the moment feedback is comparable again.
+    clear_zero_pending_if_synced(&hm_L, now);
+    clear_zero_pending_if_synced(&hm_R, now);
 
     // (No periodic enter_mit() here — see the note above MIT_REENTER_MS's
     // former home at the top of this file.)
@@ -307,26 +337,41 @@ void hip_motors_exit_mit() {
     hip_motors_clear_setpoints();
 }
 
+// Arm the settling window described at HM_ZERO_SYNC_TOL_RAD. Must be called for
+// every axis a zero command goes out to, or the position-jump guard will fault
+// on the frame discontinuity the zero just created.
+static void mark_zero_pending(HipAxisState* ax) {
+    ax->zero_pending = true;
+    ax->zero_cmd_ms  = millis();
+    ax->zero_fb_seq  = ax->feedback_seq;
+}
+
 void hip_motors_zero() {
     static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE};
     bool l_en = param_get(PARAM_HIP_L_ENABLE) >= 0.5f;
     bool r_en = param_get(PARAM_HIP_R_ENABLE) >= 0.5f;
     if (l_en) {
+        mark_zero_pending(&hm_L);
         send_raw(AK45_ID_L, cmd);
         delayMicroseconds(CAN_INTER_FRAME_US);
     }
-    if (r_en) send_raw(AK45_ID_R, cmd);
+    if (r_en) {
+        mark_zero_pending(&hm_R);
+        send_raw(AK45_ID_R, cmd);
+    }
     comm_log(LOG_LEVEL_INFO, "Hip encoders zeroed (L=%d R=%d)", (int)l_en, (int)r_en);
 }
 
 void hip_motor_zero_L() {
     static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE};
+    mark_zero_pending(&hm_L);
     send_raw(AK45_ID_L, cmd);
     comm_log(LOG_LEVEL_INFO, "Hip encoder zeroed (L)");
 }
 
 void hip_motor_zero_R() {
     static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE};
+    mark_zero_pending(&hm_R);
     send_raw(AK45_ID_R, cmd);
     comm_log(LOG_LEVEL_INFO, "Hip encoder zeroed (R)");
 }
