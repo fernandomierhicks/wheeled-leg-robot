@@ -97,6 +97,19 @@ def analyse(path):
               file=sys.stderr)
         return run, [], []
 
+    # alpha_force_ret_en=1 pins g_state.gain_sched_alpha to 0 in TELEMETRY too,
+    # not just in the gain blend -- so a sweep captured with that flag still set
+    # bins every leg height at alpha=0 and silently overwrites one row instead
+    # of building a table. Catch it here rather than in the data.
+    hip_cmd = f["hip_l_cmd_pos_rad"][idx]
+    if np.ptp(alpha) < 1e-6 and np.ptp(hip_cmd) > np.radians(1.0):
+        print(f"  !! gain_sched_alpha is pinned at {alpha[0]:.3f} while the hip command moved "
+              f"{np.degrees(np.ptp(hip_cmd)):.1f} deg.\n"
+              f"     That is alpha_force_ret_en=1 -- the logged alpha is not the real leg "
+              f"height, so these points cannot be binned. Clear the flag and recapture.",
+              file=sys.stderr)
+        return run, [], []
+
     tau   = f["tau_sym"][idx]
     wheel = 0.5 * (f["wm_l_vel_turns_s"][idx] + f["wm_r_vel_turns_s"][idx])
 
