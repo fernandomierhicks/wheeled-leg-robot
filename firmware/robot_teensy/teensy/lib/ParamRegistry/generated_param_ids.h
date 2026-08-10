@@ -89,9 +89,11 @@
 #define PARAM_ALPHA_FORCE_RETRACTED_EN             0x042A
 #define PARAM_GUI_MOTION_CTRL_EN                   0x042B
 #define PARAM_STANDUP_ENABLE                       0x042C
-#define PARAM_STANDUP_MAX_PITCH_FWD_RAD            0x042D
-#define PARAM_STANDUP_MAX_PITCH_BWD_RAD            0x042E
+#define PARAM_STANDUP_PITCH_MIN_RAD                0x042E
+#define PARAM_STANDUP_PITCH_MAX_RAD                0x042D
 #define PARAM_STANDUP_CROUCH_TIME_S                0x0431
+#define PARAM_STANDUP_CROUCH_STIFF                 0x052F
+#define PARAM_STANDUP_STIFFEN_TIME_S               0x0530
 #define PARAM_STANDUP_K_PITCH                      0x0432
 #define PARAM_STANDUP_K_RATE                       0x0433
 #define PARAM_STANDUP_TORQUE_LIMIT                 0x0434
@@ -114,9 +116,16 @@
 #define PARAM_PITCH_WATCHDOG_BWD_EXT               0x0445
 #define PARAM_STANDUP_DIVERGE_PITCH_FWD_RAD        0x0446
 #define PARAM_STANDUP_DIVERGE_PITCH_BWD_RAD        0x0447
+#define PARAM_STANDUP_USE_RET_GAINS                0x052D
 #define PARAM_LQR_BARRIER_K                        0x0448
 #define PARAM_LQR_BARRIER_THRESH_RET               0x0449
 #define PARAM_LQR_BARRIER_THRESH_EXT               0x044A
+#define PARAM_PLANT_ID_ENABLE                      0x044B
+#define PARAM_PLANT_ID_AMPLITUDE_NM                0x044C
+#define PARAM_PLANT_ID_F0_HZ                       0x044D
+#define PARAM_PLANT_ID_F1_HZ                       0x044E
+#define PARAM_PLANT_ID_DURATION_S                  0x044F
+#define PARAM_LQR_PITCH_TRIM_CURVE                 0x0450
 #define PARAM_RADIO_HIP_CMD                        0x0500
 #define PARAM_RADIO_VEL_MAX                        0x0501
 #define PARAM_RADIO_YAW_MAX                        0x0502
@@ -133,6 +142,7 @@
 #define PARAM_PROFILE_3_TORQUE_LIM                 0x0518
 #define PARAM_ACTIVE_PROFILE                       0x0519
 #define PARAM_LIVE_TUNE_LATCH                      0x051A
+#define PARAM_LIVE_TUNE_MULTI_EN                   0x0504
 #define PARAM_ROLL_CTRL_EN                         0x051C
 #define PARAM_ROLL_KP                              0x051D
 #define PARAM_ROLL_KD                              0x051E
@@ -142,6 +152,7 @@
 #define PARAM_ROLL_RATE_LIM                        0x0520
 #define PARAM_ROLL_WATCHDOG_EN                     0x0521
 #define PARAM_ROLL_WATCHDOG_LIMIT                  0x0522
+#define PARAM_WHEEL_RUNAWAY_EN                     0x052E
 #define PARAM_HIP_ROLL_KP                          0x0523
 #define PARAM_HIP_ROLL_KD                          0x0524
 #define PARAM_ROLL_CMD_RAD                         0x0525

@@ -1,0 +1,12 @@
+{
+  "name": "t4_4_yaw_step",
+  "stage": "yaw_pi",
+  "duration_s": 6.0,
+  "initial_state": {"hip_alpha": 0.0},
+  "initial_params": {"lqr_torque_limit": 0.3, "yaw_pi_en": 1.0, "omega_cmd_rds": 0.0},
+  "events": [
+    {"time_s": 1.0, "params": {"omega_cmd_rds": 1.0}},
+    {"time_s": 3.0, "params": {"omega_cmd_rds": -1.0}},
+    {"time_s": 5.0, "params": {"omega_cmd_rds": 0.0}}
+  ]
+}

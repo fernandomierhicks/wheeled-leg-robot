@@ -35,16 +35,25 @@ If a question is about fast transients (torque spikes, loop timing, glitch
 filters), prefer a `.WLOG`. For duty-cycle / RMS / percentile questions the 50 Hz
 HOST capture is fine and there are far more of them.
 
-**But a `.WLOG` can never contain `RUNNING`.** `main.cpp` stops the SD logger on
-entry to any state outside `{STARTUP, STANDBY, ESTOP, CMD_REJECT}`, so the 500 Hz
-path is unavailable for exactly the state balance tuning cares about. Anything
-about balance behaviour has to come from a 50 Hz HOST capture, and transients
-faster than ~25 Hz are simply not observable today. Treat the preference above as
-applying to bench work in permitted states only. Lifting this is the single
-biggest unlock for log-driven tuning — see §7.
+**A `.WLOG` can contain `RUNNING` again as of 2026-08-09.** `main.cpp` used to
+stop the SD logger on entry to any state outside `{STARTUP, STANDBY, ESTOP,
+CMD_REJECT}`, which made the 500 Hz path unavailable for exactly the state
+balance tuning cares about. That auto-stop is gone; recording now continues
+through RUNNING/JUMPING/STANDING_UP.
+
+A log must still be **started** in STANDBY/ESTOP — opening one preallocates and
+blocks the loop ~96 ms — so the workflow is: start the log, then arm. Closing is
+still deferred until a non-energetic state (`sd_logger_finalize_service()`).
+
+**Any capture dated before 2026-08-09 is still STANDBY-only**, so balance
+behaviour in those bundles has to come from a 50 Hz HOST capture, where
+transients faster than ~25 Hz are not observable.
 
 `host.jsonl` is one JSON object per line. `ptype == 0x01` is a TELEM record;
-other ptypes are LOG (`type_name == "LOG"`, field `log_msg`), CALIB, WIFI_DIAG.
+other ptypes are LOG (`type_name == "LOG"`, field `log_msg`), PARAM_REPORT,
+CALIB, WIFI_DIAG. HostLogger requests a parameter dump when capture starts;
+`load_host_param_sidecar()` in `analysis/param_sidecar.py` reconstructs a
+parameter timeline from the PARAM_REPORT records that actually arrived.
 
 ---
 
@@ -77,6 +86,17 @@ python software/gui/tools/analyze_hw_run.py <path> --stage {lqr,vel_pi,yaw_pi}
 ```
 Exit 0 = safe, 2 = safety-maxima violation, 1 = couldn't analyze.
 
+**For a multi-leg-height run, use `analysis/leg_height_sweep.py` instead** — see
+§4.10. Whole-file statistics average the heights together and answer nothing.
+
+```python
+from analysis.leg_height_sweep import plateau_report, fit_trim_schedule
+rows = plateau_report(run, torque_limit_nm=..., rate_lim=..., theta_max_bwd=...)
+```
+
+The same numbers are on screen under the Log Analyzer tab's **Leg-height sweep**
+view, which reads the clamps from the `.PARAMS` sidecar itself.
+
 **Live GUI route** (only when the GUI is already running, and only if you need
 its plots): `python software/gui/tools/robot_ctl.py analyzer_load <path>`, then
 `ui_snapshot tab/log-analyzer`. For pure number-crunching the Python route above
@@ -107,7 +127,7 @@ what gets pulled into arrays — **add a field there before trying to use it.**
 | `omega_cmd_rds` | rad/s | yaw rate command |
 | `hip_l_torque_nm`, `hip_r_torque_nm` | **N·m** | AK45 MIT reply, motor-side (see §4.3) |
 | `hip_*_pos_rad`, `hip_*_cmd_pos_rad` | rad | firmware frame (L/R already unflipped) |
-| `active_profile` | 1..3 | CH9 speed profile — sets the torque clamp |
+| `active_profile` | 0..2 | CH9 speed profile index (0 = profile1) — sets the torque clamp |
 | `loop_count`, `timestamp_ms` | — | reset to small values ⇒ reboot |
 
 Health-flag bits (`comm_protocol.h`):
@@ -191,16 +211,22 @@ it rather than assuming the key exists; only fall back to inferring α from
 `hip_*_pos_rad` when the flag is false, and say that you did.
 
 Note α = 0 means *fully retracted*, and it is also the value used whenever hip
-calibration is invalid (`control_loop.cpp` defaults to the retracted anchor).
-A run that is α ≡ 0 throughout is therefore either genuinely retracted or
-uncalibrated — cross-check `HIP_LIMITS_VALID` (health bit 4) before concluding.
+calibration is invalid (`control_loop.cpp` defaults to the retracted anchor) or
+`alpha_force_ret_en=1`. A run that is α ≡ 0 throughout is therefore either
+genuinely retracted, uncalibrated, or deliberately pinned. Cross-check
+`HIP_LIMITS_VALID` (health bit 4), and compare measured/commanded hip position:
+valid calibration plus substantial hip travel while α stays zero is direct
+evidence that the override is pinned.
 
 ### 4.7 `.PARAMS` sidecar
 
 SD runs carry the param values at capture time —
 `software/gui/analysis/param_sidecar.py` aligns them to `run.t_micros`. HOST
-captures have no sidecar; if a param value matters, get it from the run's own
-telemetry (`active_profile`, `max(|tau_sym|)`) or say it is unknown.
+captures can carry PARAM_REPORT records; use `load_host_param_sidecar()` to
+align the reports to telemetry. A HOST dump can be incomplete if packets were
+lost, so only treat parameters present in the reconstructed timeline as known.
+For a missing value, infer it from a telemetry identity only when the fit is
+unambiguous (and say that you inferred it), otherwise report it as unknown.
 
 ### 4.8 Pitch error is trim-relative — and older numbers are not
 
@@ -256,6 +282,59 @@ captured after the change as it did before.
 Nothing in the wire format changed, so `TELEM_VERSION` is still 12 and there is
 **no field that tells you which radius a run used.** Date the bundle: anything
 under `data/logs/runs/` timestamped before `20260807` is a Ø150 capture.
+
+### 4.10 A multi-height run must be split by α before anything is computed
+
+Everything worth asking about a leg-height sweep is a per-height question, and
+the plant genuinely changes across the stroke (§4.6). Averaging heights together
+produces numbers that describe no configuration the robot was ever in.
+
+`software/gui/analysis/leg_height_sweep.py` does the split — `alpha_plateaus()`
+for the segmentation, `plateau_report()` for the per-height table. Use it rather
+than re-deriving; the GUI's **Leg-height sweep** view and
+`tools/balance_trim_sweep.py` both call it, so screen and CLI agree.
+
+Traps this exists to stop:
+
+- **"Stationary" is not "at one leg height."** A sweep that changes height
+  without touching the sticks is stationary end to end, so splitting on stick
+  input alone yields one huge stretch straddling every height. That is exactly
+  what `balance_trim_sweep.py` did to the 2026-08-09 four-height run: one 43.5 s
+  window, failed equilibrium, entire sweep reported nothing. Fixed 2026-08-09 by
+  intersecting with the α plateaus.
+- **α ≈ 0 does not mean the leg is parked.** α is clipped at 0 below the
+  calibration backoff, so the whole arm-in transient — 15.5° of hip travel while
+  `hip_running_ramp_s` ramps stiffness in — logs as a flat α ≈ 0. Detecting
+  plateaus by *drift* (half-mean difference) rather than peak-to-peak separates
+  it from the settled retracted stance that follows; a peak-to-peak test merges
+  the two and contaminates the retracted balance point with the transient.
+- **The equilibrium gate needs both halves.** `tau_sym ≈ 0` alone will certify
+  an oscillating window, because a limit cycle averages its torque to nearly
+  zero while the robot still creeps. Require the wheel-drift gate too. Plateaus
+  that fail are reported with `equilibrium=False`, not dropped — "it never
+  settled at this height" is the finding when a run went unstable up-stroke.
+- **`trim_ext` from a sweep that stopped short of α = 1 is an extrapolation.**
+  `fit_trim_schedule()` fits the firmware's own `scheduled_pitch_trim()` basis,
+  which includes a quadratic term and therefore extrapolates hard. It sets
+  `extrapolated` whenever the sweep topped out below α = 0.9. Do not type an
+  `_ext` anchor into params off an interior-only sweep.
+
+### 4.11 Band-split the pitch error before blaming a loop
+
+The band a disturbance lives in names the loop that owns it, and an RMS figure
+hides this completely. `band_split()` / `band_rms()` in the same module use the
+boundaries the loops actually separate at: **0.3–1.5 Hz is the velocity PI,
+1.5–4 Hz the LQR pitch loop, >10 Hz leg/hip structure.** On the 2026-08-09 run,
+total pitch-error RMS grew 2.4° → 4.8° across the stroke and *all* of the growth
+was in the velocity-PI band while the LQR band stayed flat at ~0.7° — which
+rules out the inner loop and the hips as the cause before any gain is touched.
+
+`rate_limit_duty()` covers the other thing RMS cannot see: how much of the time
+`vel_pi_rate_lim` is slewing `theta_ref`. A rate limiter inside a feedback loop
+is a describing-function limit-cycle source. `mean_run_s` is what matters —
+runs of a few ms are the limiter smoothing encoder noise (what it is for), runs
+approaching half an oscillation period mean `theta_ref` has become a triangle
+wave and the limiter now sets the loop's phase.
 
 ---
 
@@ -337,11 +416,22 @@ Acted on the verified subset of `ChatGPTfixes.md`. Analysis-relevant results:
 | **`JUMPING` duration is no longer a flat 3 s** | Time in state 7 is now phase-driven (`JP_DONE` + 300 ms settle) rather than a fixed timer, so JUMPING episode lengths are not comparable across this boundary. |
 | **CAN TX deferrals counted on both buses** | A sustained TX stall now clears `HIP_L/R_OK` / `WM_L/R_OK` (health-flag bits 0–3) and forces IDLE. A run ending with those bits dropping may be a *bus* failure, not a feedback failure — the distinguishing evidence is the `comm_log` line `CAN2/CAN3 TX stalled` (HOST captures only; `.WLOG` has no log text). Counters themselves are **not** in telemetry yet. |
 | **`wm_*.ok` now also requires a fresh ODrive heartbeat in `CLOSED_LOOP`** | Bits 2/3 mean more than "encoder fresh" from this date on. If the firmware logged `no ODrive heartbeat seen` at boot, the added check is inert and the bits mean exactly what they used to. |
-| **`alpha_force_ret_en` no longer persistent** | It now always boots to 0. In logs *before* this date a forced-retracted gain schedule could silently be active across a power cycle, so an unexplained retracted-anchor response in an older run is worth suspecting. Still not directly observable — see §4.6. |
+| **`alpha_force_ret_en` became non-persistent** | At this point it booted to 0. This was temporary: the 2026-08-09 change below made it persistent again. For captures in this interval, a forced-retracted schedule could not survive a reboot. See §4.6 for how to identify a pinned run. |
 | **`COMM_TYPE_ESP32_STATUS` `0x16` → `0x17`** | Wire-level only; no telemetry field changed and `TELEM_VERSION` is unchanged at 12. Affects live capture with mismatched Teensy/ESP32 firmware (heartbeat down, `esp32_link_ok` false), not decoding of existing files. |
 
-Not done, and still true as written elsewhere in this file: SD logging is still
-stopped on entry to any energetic state, so **there are still no `.WLOG`
-captures of `RUNNING`** — §1's advice to prefer a `.WLOG` for fast transients
-only applies to states that permit recording. This is the main open limitation
-on log-driven tuning.
+### 2026-08-09 — leg-height sweep analysis
+
+| Change | Effect on analysis |
+|---|---|
+| **`analysis/leg_height_sweep.py` added** | Plateau segmentation, per-height metrics, band splitting, rate-limiter duty, and trim-schedule fitting, shared by the GUI tab and the CLI. See §4.10 / §4.11. |
+| **Log Analyzer gained a "Leg-height sweep" view** | Per-plateau balance point with the equilibrium gate shown, pitch error, and `dθref/dt` against `vel_pi_rate_lim`. Clamps are read from the `.PARAMS` sidecar; without one the saturation percentages read 0 rather than being guessed. |
+| **`balance_trim_sweep.py` now splits by α plateau** | It previously split only on stick input, so any multi-height run collapsed into one window and reported nothing. Re-run any earlier sweep that came back empty — the log was probably fine. |
+
+### 2026-08-09 — SD logging survives RUNNING
+
+| Change | Effect on analysis |
+|---|---|
+| **The "stopping before energetic state" auto-stop was removed** | `.WLOG` captures can now cover `RUNNING`/`JUMPING`/`STANDING_UP` at 500 Hz. Fast transients (torque spikes, the ~13 Hz hip/leg mode, glitch filters) are observable for the first time. Bundles dated before this are still STANDBY-only. |
+| **Starting a log is still gated to STANDBY/ESTOP** | Workflow is start-then-arm; a log cannot be opened mid-run (preAllocate blocks ~96 ms). C6 on the radio drives this when `live_tune_multi_en = 0`. |
+| **Ring-buffer overflow is now the failure mode to watch** | 32 KB buffer, 251 B/record at 500 Hz = ~261 ms of card stall absorbed before samples drop. Overflow logs `"SDLogger: ring buffer overflow, samples dropped"` — check for it before trusting sample continuity in a long RUNNING capture. |
+| **`alpha_force_ret_en` is persistent again** | A tuning session can now stay pinned to the retracted gain/trim anchors across a reboot. Telemetry still reports α = 0 while pinned, even if the calibrated legs move through the stroke. Check hip motion as described in §4.6; firmware also emits a boot warning in HOST logs when the override is restored. |

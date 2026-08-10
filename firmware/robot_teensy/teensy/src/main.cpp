@@ -390,6 +390,18 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         }
         bool changed = (set_result == ParamSetResult::OK || set_result == ParamSetResult::CLAMPED) &&
                        param_get(id) != old_val;
+        // Motor presence flags are normally boot-time configuration, but the
+        // GUI's No Motors preset must be a safe live transition. Once a 1->0
+        // write lands, explicitly idle that physical axis before the regular
+        // polling path starts ignoring it. In particular, an AK45 otherwise
+        // remains in MIT mode holding its last received command when polling
+        // stops; merely changing the parameter is not an output cutoff.
+        if (changed && old_val >= 0.5f && param_get(id) < 0.5f) {
+            if      (id == PARAM_HIP_L_ENABLE)   hip_motor_disable_L();
+            else if (id == PARAM_HIP_R_ENABLE)   hip_motor_disable_R();
+            else if (id == PARAM_WHEEL_L_ENABLE) wheel_motor_disable_L();
+            else if (id == PARAM_WHEEL_R_ENABLE) wheel_motor_disable_R();
+        }
         // Buzzer volume normally only applies at boot (param_init() ran before
         // g_buzzer.set_volume() in setup()) — re-apply live so a volume change
         // (including muting to 0) takes effect on every chirp immediately,
@@ -590,6 +602,27 @@ void setup() {
                  "Clear it before extending the legs.");
     }
 
+    // run_wheel_bypass_en became persistent on 2026-08-09 for the opposite
+    // reason to the two above: booting to 0 every time meant arming silently
+    // broke after every power cycle, and on_running_guard() reports it as
+    // "a motor is disabled" rather than naming the bypass that went missing --
+    // easy to chase for a long time. This warning is the replacement guarantee.
+    if (param_get(PARAM_RUNNING_WHEEL_BYPASS_EN) >= 0.5f) {
+        comm_log(LOG_LEVEL_WARN,
+                 "run_wheel_bypass_en=1 restored from flash: RUNNING will arm with the "
+                 "wheel motors DISABLED. Clear it before a real run.");
+    }
+
+    // Same bargain as above: wheel_runaway_en is persistent so a bench session
+    // that legitimately overspeeds the wheels survives a power cycle, and this
+    // warning is what stands in for the boot-to-safe guarantee that gives up.
+    if (param_get(PARAM_WHEEL_RUNAWAY_EN) < 0.5f) {
+        comm_log(LOG_LEVEL_WARN,
+                 "wheel_runaway_en=0 restored from flash: the FAULT_WHEEL_RUNAWAY "
+                 "backup behind the wheel velocity governor is DISABLED. "
+                 "Set it before running.");
+    }
+
     g_led.begin();
     g_buzzer.begin();
     g_buzzer.set_volume(param_get(PARAM_BUZZER_VOLUME));
@@ -746,7 +779,10 @@ static inline void prof_mark(uint32_t& slot, uint32_t t0) {
 // ── Telemetry ─────────────────────────────────────────────────────────────────
 
 static uint16_t build_health_flags() {
-    float soft_lim = param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
+    // The limit actually governing this tick, so the flags don't report the
+    // wheels as velocity-limited during a STANDING_UP catch that is running
+    // under the higher standup_vel_limit override.
+    float soft_lim = controlLoop_wheel_vel_limit();
     uint16_t f = 0;
     if (hm_L.ok)                                    f |= HEALTH_HIP_L_OK;
     if (hm_R.ok)                                    f |= HEALTH_HIP_R_OK;
@@ -1368,9 +1404,9 @@ static void radio_update() {
     }
 
     // CH6: debounced level, symmetric with CH5's CALIB_DEBOUNCE_TICKS pattern
-    // above. Used only to combine with CH5 for live-tune gain-group select
-    // below -- CH6 no longer drives SD logging (that's GUI/comm-triggered
-    // only now; see sd_logger_start()/sd_logger_stop() call sites elsewhere).
+    // above. What it *drives* depends on PARAM_LIVE_TUNE_MULTI_EN:
+    //   0 (SIMPLE, default) -> CH6 is the SD-log switch, handled just below.
+    //   1 (LEGACY)          -> CH6 only combines with CH5 for gain-group select.
     static constexpr uint8_t CH6_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
     static uint8_t s_ch6_hi_ticks = 0;
     static uint8_t s_ch6_lo_ticks = 0;
@@ -1389,6 +1425,46 @@ static void radio_update() {
     }
     if (s_ch6_hi_ticks >= CH6_DEBOUNCE_TICKS) s_ch6_switch_high = true;
     if (s_ch6_lo_ticks >= CH6_DEBOUNCE_TICKS) s_ch6_switch_high = false;
+
+    // ── CH6 as the SD-log switch (SIMPLE mode only) ───────────────────────────
+    // Edge-triggered, not level-driven: re-issuing start every tick would hammer
+    // a logger that is already running. s_ch6_log_prev starts UNKNOWN so the
+    // first debounced reading only seeds it -- otherwise the `true` init above
+    // would look like a high->low edge at boot and stop a log nobody started.
+    //
+    // Start is gated to STANDBY/ESTOP, matching CMD_ID_LOG's own gate: opening a
+    // log preallocates and can block the loop ~96 ms, which is not something to
+    // do with torque live. Once opened, the logger deliberately remains active
+    // through RUNNING/JUMPING/STANDING_UP; only final close is deferred until
+    // the robot returns to a non-energetic state.
+    if (param_get(PARAM_LIVE_TUNE_MULTI_EN) < 0.5f) {
+        static int8_t s_ch6_log_prev = -1;              // -1 unknown, 0 low, 1 high
+        const int8_t ch6_now = s_ch6_switch_high ? 1 : 0;
+        if (s_ch6_log_prev < 0) {
+            s_ch6_log_prev = ch6_now;                   // seed, never act on it
+        } else if (ch6_now != s_ch6_log_prev) {
+            s_ch6_log_prev = ch6_now;
+            if (ch6_now == 1) {
+                if (g_state.state == STATE_STANDBY || g_state.state == STATE_ESTOP) {
+                    const bool started = sd_logger_start(0);   // 0 = until stopped
+                    forgive_sd_blocking_stall();
+                    if (started) {
+                        g_buzzer.play(LOG_START_CHIRP, 1);
+                        comm_log(LOG_LEVEL_INFO, "Radio: CH6 up -> SD logging STARTED");
+                    } else {
+                        comm_log(LOG_LEVEL_WARN, "Radio: CH6 up -> SD log start FAILED");
+                    }
+                } else {
+                    comm_log(LOG_LEVEL_WARN,
+                             "Radio: CH6 up ignored -- start the log before arming");
+                }
+            } else if (sd_logger_is_active()) {
+                sd_logger_stop();
+                forgive_sd_blocking_stall();
+                comm_log(LOG_LEVEL_INFO, "Radio: CH6 down -> SD logging STOPPED");
+            }
+        }
+    }
 
     // §1d (tuning.md): while PARAM_GUI_MOTION_CTRL_EN is set, the two radio-driven
     // writes to v_cmd_ms/omega_cmd_rds below are skipped so a GUI/CLI param_set()
@@ -1487,15 +1563,24 @@ static void radio_update() {
     }
 
     // ── Live parameter tuning (CH7/CH8 knobs) ──────────────────────────────────
-    // Active while RUNNING with CH5+CH6 selecting one of 3 gain groups (see
-    // LIVE_TUNE_SLOTS above for the group table and knob-direction convention).
-    // CH5 down + CH6 up -> group 0; CH5 up + CH6 down -> group 1; both down
-    // -> group 2; both up -> no group, tuning inactive. See live_tune.h for
-    // the safety rationale (pickup, explicit latch).
+    // Which switch scheme is in force is PARAM_LIVE_TUNE_MULTI_EN's whole job;
+    // see LIVE_TUNE_SLOTS above for the group table and knob-direction
+    // convention, and live_tune.h for the safety rationale (pickup, latch).
+    //
+    // SIMPLE (default): CH5 up alone arms group 0, which is the LQR retracted
+    // pitch/rate pair -- the only group worth a knob during single-leg-height
+    // tuning. CH6 is spent on SD logging instead of group select. Groups 1 and 2
+    // are unreachable here by design, not deleted; flip the param to get them.
+    //
+    // LEGACY: the original three-group combination scheme.
     int8_t live_tune_group = -1;
-    if (!s_calib_switch_high && s_ch6_switch_high)      live_tune_group = 0;
-    else if (s_calib_switch_high && !s_ch6_switch_high) live_tune_group = 1;
-    else if (!s_calib_switch_high && !s_ch6_switch_high) live_tune_group = 2;
+    if (param_get(PARAM_LIVE_TUNE_MULTI_EN) >= 0.5f) {
+        if (!s_calib_switch_high && s_ch6_switch_high)       live_tune_group = 0;
+        else if (s_calib_switch_high && !s_ch6_switch_high)  live_tune_group = 1;
+        else if (!s_calib_switch_high && !s_ch6_switch_high) live_tune_group = 2;
+    } else if (s_calib_switch_high) {
+        live_tune_group = 0;
+    }
     bool live_tune_active = (g_state.state == STATE_RUNNING) && (live_tune_group >= 0);
     static constexpr float LIVE_TUNE_PICKUP_EPS = 0.01f;
     for (uint8_t i = 0; i < NUM_LIVE_TUNE_SLOTS; i++) {
@@ -1546,7 +1631,28 @@ static void radio_update() {
 }
 
 static void run_control_loop() {
+    const RobotStateEnum state_before_update = g_state.state;
     stateMachine_update();
+
+    // One transition-time diagnostic makes the recording invariant visible in
+    // the HOST log: an SD file opened in STANDBY must still be active after the
+    // state machine enters its first torque-producing state. Do not auto-open
+    // here -- preAllocate() blocks for ~96 ms -- but make a missed pre-arm start
+    // explicit instead of discovering it only after downloading an empty log.
+    const bool was_armed = state_before_update == STATE_RUNNING ||
+                           state_before_update == STATE_JUMPING ||
+                           state_before_update == STATE_STANDING_UP;
+    const bool is_armed  = g_state.state == STATE_RUNNING ||
+                           g_state.state == STATE_JUMPING ||
+                           g_state.state == STATE_STANDING_UP;
+    if (!was_armed && is_armed) {
+        if (sd_logger_is_active()) {
+            comm_log(LOG_LEVEL_INFO, "ARM SD logging ACTIVE index=%u",
+                     (unsigned)sd_logger_active_index());
+        } else {
+            comm_log(LOG_LEVEL_WARN, "ARM entered without active SD logging");
+        }
+    }
 }
 
 // SD-log open/finalize are known-blocking main-loop operations that can freeze
@@ -1644,10 +1750,26 @@ void loop() {
                              g_state.state == STATE_STANDBY ||
                              g_state.state == STATE_ESTOP ||
                              g_state.state == STATE_CMD_REJECT;
-    if (sd_logger_is_active() && !sd_recording_safe) {
-        comm_log(LOG_LEVEL_INFO, "SDLogger: stopping before energetic state");
-        sd_logger_stop();
-    }
+    // Recording deliberately CONTINUES through RUNNING/JUMPING/STANDING_UP.
+    // There used to be a "stopping before energetic state" stop here (added in
+    // 39a5040 alongside the deferred finalize below); it was removed 2026-08-09
+    // because it made the 500 Hz path useless for exactly the states worth
+    // logging, and it was never what protected the control loop:
+    //
+    //   - sd_logger_write() only copies into a 32 KB DMAMEM RingBuf. Never
+    //     blocks; on overflow it warns and drops samples.
+    //   - sd_logger_service() flushes at most ONE 512-byte sector per tick, and
+    //     only when !isBusy() -- it skips rather than waits. That is SdFat's own
+    //     TeensySdioLogger streaming pattern, designed to run continuously.
+    //   - The two genuinely blocking operations are already handled elsewhere:
+    //     start/preAllocate (~96 ms) is gated to STANDBY/ESTOP at its call
+    //     sites, and close (~56 ms) is deferred by the
+    //     sd_logger_finalize_service(sd_recording_safe) call below.
+    //
+    // At 251 B/record and 500 Hz the buffer fills at 123 KB/s against a
+    // 250 KB/s drain, so it absorbs ~261 ms of total card stall before dropping
+    // samples -- a data-quality risk that announces itself in the log, not a
+    // loop-timing one. sd_recording_safe survives purely to gate the finalize.
     if (sd_logger_is_active()) {
         static LogRecord rec;
         fill_telemetry(rec.telem);

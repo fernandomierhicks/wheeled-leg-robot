@@ -58,7 +58,7 @@ static float s_defaults[PARAM_COUNT];
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-static float migration_scale(uint16_t id, uint16_t from_version);
+static float migrate_value(uint16_t id, float value, uint16_t from_version);
 
 static Param* find(uint16_t id) {
     for (uint16_t i = 0; i < PARAM_COUNT; i++) {
@@ -97,8 +97,8 @@ static void load_legacy_from_flash() {
         if (p && !(p->flags & PARAM_FLAG_READONLY)) {
             // params.bin predates the CRC slots entirely, so it is always in
             // the pre-v3 hip units — convert before clamping (see
-            // migration_scale()).
-            val *= migration_scale(p->id, LEGACY_STORE_VERSION);
+            // migrate_value()).
+            val = migrate_value(p->id, val, LEGACY_STORE_VERSION);
             // clamp to current bounds before restoring
             if (val < p->min_val) val = p->min_val;
             if (val > p->max_val) val = p->max_val;
@@ -144,7 +144,7 @@ static SlotInfo inspect_slot(const char* path, ParamStoreEntry* entries = nullpt
     return info;
 }
 
-// ── v2 → v3 unit migration ───────────────────────────────────────────────────
+// ── Stored-value migrations ──────────────────────────────────────────────────
 //
 // The AK45-10's MIT torque/velocity full-scale constants were wrong (see the
 // T_MIN/T_MAX note in hip_motors.cpp), so a handful of persisted params were
@@ -176,13 +176,28 @@ static const HipScaleMigration HIP_SCALE_V2_TO_V3[] = {
     {PARAM_JUMP_OMEGA_MAX,            20.0f / 65.0f},
 };
 
-// Multiplier to bring one param from `from_version` up to PARAM_STORE_VERSION.
-static float migration_scale(uint16_t id, uint16_t from_version) {
-    if (from_version >= PARAM_STORE_VERSION) return 1.0f;
-    for (const HipScaleMigration& m : HIP_SCALE_V2_TO_V3) {
-        if (m.id == id) return m.scale;
+// Bring one raw stored value forward through each semantic version boundary.
+// Keep the version checks independent: after adding v4, using a single
+// `from_version < PARAM_STORE_VERSION` check would incorrectly reapply the
+// v2->v3 hip scale to an already-migrated v3 slot.
+static float migrate_value(uint16_t id, float value, uint16_t from_version) {
+    if (from_version < 3) {
+        for (const HipScaleMigration& m : HIP_SCALE_V2_TO_V3) {
+            if (m.id == id) {
+                value *= m.scale;
+                break;
+            }
+        }
     }
-    return 1.0f;
+
+    // v3 -> v4: ID 0x042E used to store a positive backward magnitude. It now
+    // stores the signed lower entry bound, so preserve the physical threshold
+    // by making the old magnitude negative. fabsf also handles malformed
+    // legacy input conservatively before the current bounds clamp below.
+    if (from_version < 4 && id == PARAM_STANDUP_PITCH_MIN_RAD)
+        value = -fabsf(value);
+
+    return value;
 }
 
 static uint16_t apply_entries(const ParamStoreEntry* entries, uint16_t count,
@@ -192,10 +207,9 @@ static uint16_t apply_entries(const ParamStoreEntry* entries, uint16_t count,
         Param* p = find(entries[i].id);
         float value = entries[i].value;
         if (!p || !(p->flags & PARAM_FLAG_PERSISTENT) || !isfinite(value)) continue;
-        const float scale = migration_scale(p->id, store_version);
-        if (scale != 1.0f) {
-            const float before = value;
-            value *= scale;
+        const float before = value;
+        value = migrate_value(p->id, value, store_version);
+        if (value != before) {
             comm_log(LOG_LEVEL_WARN, "Param migrate v%u->v%u: %s %.4f -> %.4f",
                      store_version, PARAM_STORE_VERSION, p->name, before, value);
         }

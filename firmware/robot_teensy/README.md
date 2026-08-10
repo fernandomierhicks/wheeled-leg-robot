@@ -156,6 +156,24 @@ tests/CI to detect stale generated artifacts. The generator writes the C++
 IDs/tables, the pure-Python GUI module, documentation, and frozen vectors.
 Generated files are checked in so embedded builds do not require Python.
 
+### Digital-twin parameter and plant-identification hooks
+
+`simulation/mujoco/v4_twin_279mm_baseline/twin/params_control.py` is generated
+from the same schema, so firmware and twin use one parameter namespace. Run its
+generator with `--check` alongside the protocol check when the schema changes.
+The GUI Params tab is also generated from this schema and therefore exposes new
+parameters without a hand-written widget.
+
+The control group includes five non-persistent identification parameters:
+`plant_id_en`, `plant_id_amp`, `plant_id_f0`, `plant_id_f1`, and
+`plant_id_dur`. When enabled in RUNNING/JUMPING, `control_loop.cpp` adds a
+linear-frequency symmetric torque chirp after the normal LQR/barrier and before
+the existing torque clamps and wheel governors. It auto-clears at the requested
+duration and on every controlled-state exit. These are test hooks, not normal
+driving settings; use them only with the robot restrained and a reviewed test
+procedure. The complete offline/hardware workflow is documented in the twin's
+`README.md` and `HARDWARE_TEST_HANDOFF.md`.
+
 Persistent Teensy parameters use two generation-numbered, CRC32-protected
 LittleFS slots. A save is verified before it becomes current, the previous
 valid slot remains available after interruption or corruption, and legacy
@@ -255,10 +273,12 @@ did. Everything tuned in m/s — `vel_pi_*`, `v_cmd_ms`, `radio_vel_max`,
 
 LQR on 3-state linearised inverted pendulum: `[pitch−θ_ref−trim, pitch_rate, wheel_vel_avg−v_ref]`.  
 Gains are scheduled with leg height (α ∈ [0,1], retracted→extended).  
-Balance-point trim (`lqr_pitch_trim_ret/ext`, same α schedule) offsets the pitch
-target so zero velocity holds at the true balance lean when the CG isn't over the
-axle. Edit via the Params tab, or repoint a live-tune slot at it for a future
-bench session (see below).  
+Balance-point trim offsets the pitch target so zero velocity holds at the true
+balance lean when the CG isn't over the axle. Its height schedule is
+`trim(α) = trim_ret + α(trim_ext − trim_ret) + lqr_trim_curve·α(1−α)`;
+the curve coefficient leaves both endpoint trims unchanged, and zero preserves
+the old linear schedule. The GUI groups all three parameters under Hip →
+Pitch Trim vs Leg Height.
 
 **Backward soft-limit barrier** — authority is asymmetric: the leg linkage
 hits the ground on a hard backward lean well before forward pitch runs out of
@@ -314,8 +334,12 @@ motor positions, so a snapped hip stick can't step the legs straight to a new
 height — the default `0.2` gives a 5 s full-stroke transition and cuts down
 reaction-current impulses and linkage chatter. `0` disables limiting. Only
 applies to normal RUNNING hip-height commands: calibration, MANUAL, the ESTOP
-hold ramp, JUMPING's own crouch/extend phases, and STANDING_UP's catch
-sequencing all set hip setpoints directly and bypass it. The disarm ramp
+hold ramp, JUMPING's own crouch/extend phases, and STANDING_UP's CROUCH/STIFFEN
+ramps all set hip setpoints directly and bypass it. STANDING_UP's RECOVER phase goes
+through `controlLoop_run()` but holds the hip override, which writes the
+rate-limiter's shadow directly instead of slewing — that is what lets the
+RUNNING handoff resume normal CH3 slewing from the pinned height with no step.
+The disarm ramp
 (RUNNING → STANDBY) slews from the last *filtered* command, not the raw radio
 target, so releasing the hips doesn't also snap the target underneath the
 ramp.
@@ -512,6 +536,14 @@ electrical:
    50 ms) like the pitch/roll watchdogs, instead of ESTOPping on a single
    over-limit sample. Much shorter than their 200 ms because a genuinely
    runaway wheel covers ground fast.
+
+`wheel_runaway_en` (default 1) switches that watchdog off entirely, for bench
+work that legitimately spins the wheels past `2 × wm_vel_limit` — free-spin
+torque tests, encoder-scaling checks. With it off the per-tick velocity
+governor still clamps commands, but nothing backs it up and a real runaway
+falls to the pitch watchdog alone. It is **persistent**, so a disable survives
+a power cycle; `setup()` logs an unconditional `WARN` on any boot that comes up
+with it cleared, which is what replaces the boot-to-safe guarantee.
 
 **Jump phase budget and overrun fault** — `JUMPING` used to exit on a flat
 3000 ms timer regardless of what the phase machine was doing. That was safe
@@ -737,10 +769,14 @@ Full FSM diagram: `teensy/state_machine.md`.
 | 5 | `STATE_MANUAL` | GUI direct control (MIT frames); watchdog 500 ms |
 | 6 | `STATE_CMD_REJECT` | ~1 s transient: buzzer + red blink, auto-returns to prior state |
 | 7 | `STATE_JUMPING` | ~3 s jump sequence from RUNNING; auto-returns to RUNNING |
-| 8 | `STATE_STANDING_UP` | Arm-time recovery from a fallen pose — retract legs, energetic wheel push, then RUNNING |
+| 8 | `STATE_STANDING_UP` | Arm-time settling window — crouch to a fixed leg height, stiffen the hips, balance with the pitch watchdog masked, then RUNNING |
 | 9 | `STATE_DISARMING` | Normal active-state or radio-calibration exit: wheel IDLE immediately, hip torque ramps safely to zero, then STANDBY |
 
-**Standing-up mode (`STATE_STANDING_UP`)**: entered on arm only when `standup_enable=1` and pitch is within the recoverable range (`standup_pitch_fwd/bwd`, checked once at arm time only); with `standup_enable=0` (default) arming goes straight to `RUNNING`, byte-identical to before this state existed. Two phases: **CROUCH** ramps the hips to the retracted pose and holds them there rigidly for the rest of the sequence, at the same `hip_running_kp/kd` RUNNING uses (not a separate standup-only gain) so the eventual handoff is a hip *position* step only, not also a stiffness step — hips move once, to a fixed pose, and never actively right the robot. **RECOVER** does the actual catch entirely with wheel torque: a saturated P/D law on the trim-relative pitch error and pitch-rate (`tau = K_pitch*(pitch−lqr_pitch_trim_ret) + K_rate*pitch_rate`, same sign convention as the small-angle LQR, and the same trim RUNNING's LQR regulates to since legs are pinned retracted throughout) pushes the wheelbase back under the CG until pitch settles in-band around that trim, then hands off to `RUNNING` for the tuned LQR to take over. A separate, looser pitch range (`standup_div_fwd/bwd`, debounced 50 ms) aborts a catch that's diverging mid-attempt — deliberately not the same params as the arm-time gate, so a saturated catch has overshoot budget instead of self-tripping the instant it starts. Full spec: `standing_up.md`.
+**Standing-up mode (`STATE_STANDING_UP`)**: entered on arm only when `standup_enable=1` and signed pitch is within `[standup_pitch_min, standup_pitch_max]` (negative = backward, positive = forward; checked once at arm time only); with `standup_enable=0` (default) arming goes straight to `RUNNING`, byte-identical to before this state existed. It exists because the pitch watchdog is checked from the very first RUNNING tick, so arming from any appreciable lean ESTOPs before the balance loop gets a chance to pull the robot in.
+
+**It is not a separate controller.** Two phases: **CROUCH** moves the hips to the calibrated retracted endpoint over `standup_crouch_time` with a quintic minimum-jerk S-curve, at the same `hip_running_kp/kd` RUNNING uses and with wheels at zero. The S-curve starts and ends with zero commanded velocity and acceleration, removing the former linear ramp's instantaneous velocity steps. That endpoint is exactly `calib_backoff_rad` away from each retract switch (15° when that parameter was set to 15° before calibration); there is no separate stand-up hip-height parameter. After the ramp, the hips must remain within 2° of both targets and below 0.2 rad/s for 100 ms before continuing. Failure to settle within 2 s faults `FAULT_STANDUP_FAILED`, so elapsed trajectory time alone can never enable wheel balance. Passing the gate explicitly completes the normal hip-gain ramp, preserving full `hip_running_kp/kd` stiffness when **RECOVER** calls `controlLoop_run()` — the ordinary balance LQR, velocity PI, yaw PI, feedforward, per-wheel soft governor and wheel-runaway watchdog — with *only* the pitch watchdog masked (gated on `STATE_STANDING_UP`, so it can't be left suppressed by accident). The hips stay pinned at the calibrated retracted endpoint via the control-loop hip override, so CH3 can't walk them off that pose mid-catch. `standup_ret_gains=1` (default) additionally pins the gain-schedule alpha to the matching retracted anchor for the duration. Changing `calib_backoff_rad` after calibration requires recalibrating before arming, because calibration builds the endpoint stored in the hip limits.
+
+Handoff to `RUNNING` happens once `|pitch − lqr_pitch_trim_ret| < standup_cap_pitch` and `|pitch_rate| < standup_cap_rate` hold continuously for `standup_cap_hold`. Keep `standup_cap_pitch` well inside `pitch_wd_bwd_ret − |lqr_pitch_trim_ret|`: at its former 0.12 default a capture at the backward edge of the band handed off ~0.002 rad from the backward watchdog trip angle, so a successful catch was immediately followed by `FAULT_PITCH_WATCHDOG`. The handoff deliberately does *not* call `controlLoop_reset()` — the loop is already running and settled, and resetting would step both torque and leg position exactly when the watchdog goes live. A separate pitch range (`standup_div_fwd/bwd`, debounced 50 ms) aborts a catch diverging mid-attempt; it is the only pitch bound in effect while the watchdog is masked, hence `standup_div_bwd` is tighter than `standup_div_fwd`. Full spec: `standing_up.md`.
 
 ### Canonical state colour table
 
@@ -773,8 +809,8 @@ Set in `g_state.fault_code` before entering `STATE_ESTOP`. Non-zero only while i
 | `0x05` | `FAULT_CALIBRATION_TIMEOUT` | Retract-switch homing safety check failed | REPOSITION |
 | `0x06` | `FAULT_HUMAN_ESTOP` | ESTOP requested by GUI or radio | SOFT |
 | `0x07` | *(reserved)* | Was `FAULT_PARAM_OUT_OF_BOUNDS` — removed; out-of-range param writes always clamp | — |
-| `0x08` | `FAULT_PITCH_WATCHDOG` | pitch outside `[-pitch_wd_bwd, +pitch_wd_fwd]` (asymmetric, gain-scheduled ret/ext by leg height) for > 200 ms | REPOSITION |
-| `0x09` | `FAULT_WHEEL_RUNAWAY` | Wheel velocity exceeded 2× soft governor limit | SOFT |
+| `0x08` | `FAULT_PITCH_WATCHDOG` | pitch outside `[-pitch_wd_bwd, +pitch_wd_fwd]` (asymmetric, gain-scheduled ret/ext by leg height) for > 200 ms. Not checked in `STANDING_UP` | REPOSITION |
+| `0x09` | `FAULT_WHEEL_RUNAWAY` | Wheel velocity exceeded 2× soft governor limit for > 50 ms. Requires `wheel_runaway_en=1` | SOFT |
 | `0x0A` | `FAULT_IMU_LOST` | IMU left NOMINAL while RUNNING/JUMPING (silence or heavy packet loss) | REBOOT |
 | `0x0B` | `FAULT_WHEEL_FEEDBACK_LOST` | Wheel encoder timeout or ODrive error during operation | REBOOT |
 | `0x0C` | `FAULT_WHEEL_INIT_TIMEOUT` | No CAN reply from wheel motors within 2 s of boot | REBOOT |
@@ -962,10 +998,18 @@ there's no separate/weaker software arm path.
 command/state-machine smoke test with zero real torque anywhere when
 combined with `hip_l/r_enable` also off (bypassed via the existing
 `PARAM_CALIB_BYPASS_EN`). Independent of `PARAM_CALIB_BYPASS_EN`, which only
-ever covered the hip check — that asymmetry was the bug this param fixes.
-**Not persisted** — always boots to 0 (bypass off), unlike
-`PARAM_CALIB_BYPASS_EN`, so it can't be left silently armed across a power
-cycle.
+ever covered the hip check — that asymmetry was the bug this param fixes. It is
+persisted; boot logs a warning whenever it is restored enabled.
+
+**GUI No Motors preset** — the firmware does not infer a special operating mode
+from all four motor-enable values. The GUI explicitly writes and read-verifies
+the four motor enables, both arm bypasses, `standup_enable`, and the
+pitch/roll/runaway watchdog enables. A live motor-enable `1 -> 0` write sends
+MIT-exit to that AK45 or IDLE to that ODrive before its polling is skipped; this
+is the direct effect of the motor-enable parameter, not an implicit safety
+override. **Full Robot** restores the affected safety parameters; reboot after
+returning to a motor-enabled configuration so boot-time peripheral
+initialization is rerun before real operation.
 
 **Software disarm is explicit.** `SET_MODE(STANDBY)` from `RUNNING`,
 `JUMPING`, or `STANDING_UP` enters `STATE_DISARMING`. Fault/ESTOP guards have

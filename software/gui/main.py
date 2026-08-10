@@ -480,6 +480,9 @@ _FAULT_SEVERITY = {
     0x06: "SOFT",        # HUMAN_ESTOP
     0x09: "SOFT",        # WHEEL_RUNAWAY
     0x08: "REPOSITION",  # PITCH_WATCHDOG
+    0x0D: "REPOSITION",  # STANDUP_FAILED
+    0x0E: "REPOSITION",  # ROLL_WATCHDOG
+    0x0F: "REPOSITION",  # JUMP_TIMEOUT
     0x05: "RECALIBRATE", # CALIBRATION_TIMEOUT (reposition + re-run calib)
     0x04: "GUI_FIX",     # HIP_LARGE_POS_CMD
     0x01: "REBOOT",      # IMU_ERROR
@@ -487,6 +490,7 @@ _FAULT_SEVERITY = {
     0x03: "REBOOT",      # HIP_FEEDBACK_LOST
     0x0A: "REBOOT",      # IMU_LOST
     0x0B: "REBOOT",      # WHEEL_FEEDBACK_LOST
+    0x0C: "REBOOT",      # WHEEL_INIT_TIMEOUT
 }
 
 # ── Battery status widget ─────────────────────────────────────────────────────
@@ -736,7 +740,8 @@ class LogMiniControls(QWidget):
       - SD (Teensy): records the fixed TELEM struct onto the robot's SD card
         (LogTransferManager) — retrieved after the fact via the Logs tab.
       - GUI (host): records every packet this GUI receives, as it receives it,
-        to a .jsonl file on the PC (HostLogger) — independent of the SD card.
+        to a .jsonl file on the PC (HostLogger). It follows every observed SD
+        start/stop automatically and can also be run independently.
     All three drive the same singletons the Logs tab uses, so state always
     stays in sync regardless of which tab is visible."""
 
@@ -762,7 +767,9 @@ class LogMiniControls(QWidget):
 
         gui_lbl = QLabel("GUI:")
         gui_lbl.setStyleSheet(f"color: {DIM}; font-size: 11px;")
-        gui_lbl.setToolTip("Host-side capture of everything this GUI receives, to a .jsonl on this PC")
+        gui_lbl.setToolTip(
+            "Host-side .jsonl capture; automatically follows Teensy SD logging"
+        )
 
         self._gui_rec_lbl = QLabel("●")
         self._gui_rec_lbl.setStyleSheet(f"color: {DIM}; font-weight: bold; font-size: 12px;")

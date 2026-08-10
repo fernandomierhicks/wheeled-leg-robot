@@ -1370,7 +1370,7 @@ static const char* fault_description(uint8_t code) {
         case FAULT_HIP_LARGE_POS_CMD:  return "Commanded hip position jump exceeded MAX_HIP_DELTA_RAD";
         case FAULT_CALIBRATION_TIMEOUT:return "Retract-switch homing safety check failed";
         case FAULT_HUMAN_ESTOP:        return "Human triggered ESTOP";
-        case FAULT_PITCH_WATCHDOG:     return "|pitch| > 50 deg for > 200 ms - robot tipped";
+        case FAULT_PITCH_WATCHDOG:     return "pitch outside pitch_wd_fwd/bwd for > 200 ms - robot tipped";
         case FAULT_WHEEL_RUNAWAY:      return "Wheel velocity exceeded 2x soft governor limit";
         case FAULT_IMU_LOST:           return "IMU left NOMINAL while RUNNING/JUMPING (silence or heavy loss)";
         case FAULT_WHEEL_FEEDBACK_LOST:return "Wheel encoder timeout or ODrive error during operation";

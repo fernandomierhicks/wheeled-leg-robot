@@ -1,0 +1,917 @@
+"""physics.py — 4-bar kinematics, equilibrium pitch, and MJCF builder.
+
+Ported from latency_sensitivity/physics.py.  All functions take explicit
+RobotGeometry (or its .as_dict()) instead of importing module-level globals.
+"""
+import math
+import struct
+import numpy as np
+
+from v4_twin_279mm_baseline.params import RobotGeometry, MotorParams
+
+_SINGULARITY_LIM = 0.95
+
+
+# ---------------------------------------------------------------------------
+# Torus wheel mesh (generated in memory — no STL file needed)
+# ---------------------------------------------------------------------------
+def generate_torus_stl(R_t: float, r_t: float,
+                       N_theta: int = 48, N_phi: int = 24) -> bytes:
+    """Binary STL for a torus lying in the X-Z plane (rotation axis = Y)."""
+    def _pt(theta, phi):
+        r = R_t + r_t * math.cos(phi)
+        return (r * math.sin(theta), r_t * math.sin(phi), r * math.cos(theta))
+
+    def _cross(a, b):
+        return (a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0])
+
+    def _norm3(v):
+        m = math.sqrt(v[0]**2 + v[1]**2 + v[2]**2) or 1.0
+        return (v[0]/m, v[1]/m, v[2]/m)
+
+    tris = []
+    for i in range(N_theta):
+        for j in range(N_phi):
+            t0 = 2*math.pi*i/N_theta;     t1 = 2*math.pi*(i+1)/N_theta
+            p0 = 2*math.pi*j/N_phi;       p1 = 2*math.pi*(j+1)/N_phi
+            v00, v10, v11, v01 = _pt(t0, p0), _pt(t1, p0), _pt(t1, p1), _pt(t0, p1)
+            for tri in ((v00, v10, v11), (v00, v11, v01)):
+                e1 = tuple(tri[1][k]-tri[0][k] for k in range(3))
+                e2 = tuple(tri[2][k]-tri[0][k] for k in range(3))
+                tris.append((_norm3(_cross(e1, e2)), tri[0], tri[1], tri[2]))
+
+    buf = bytearray(80)
+    buf += struct.pack('<I', len(tris))
+    for n, v1, v2, v3 in tris:
+        buf += struct.pack('<fff', *n)
+        buf += struct.pack('<fff', *v1)
+        buf += struct.pack('<fff', *v2)
+        buf += struct.pack('<fff', *v3)
+        buf += struct.pack('<H', 0)
+    return bytes(buf)
+
+
+def build_assets() -> dict:
+    """Return assets dict for mujoco.MjModel.from_xml_string(..., assets=...)."""
+    # Visual torus only; collision uses the exact 56 mm-radius cylinder below.
+    return {"torus_wheel.stl": generate_torus_stl(R_t=0.041, r_t=0.015)}
+
+
+# ---------------------------------------------------------------------------
+# 4-bar inverse kinematics
+# ---------------------------------------------------------------------------
+def _wrap(a: float) -> float:
+    return (a + math.pi) % (2 * math.pi) - math.pi
+
+
+def firmware_hip_to_sim_q(q_firmware_rad: float) -> float:
+    """Map the firmware physical hip angle into the v4 twin joint frame.
+
+    The v4 twin re-anchors its MuJoCo hinge to the firmware convention: zero
+    is a horizontal femur and positive rotation retracts. Keeping this named
+    identity transform is intentional; call sites do not inline a convention
+    that may change after encoder/CAD registration is measured.
+    """
+    return float(q_firmware_rad)
+
+
+def sim_q_to_firmware_hip(q_sim_rad: float) -> float:
+    """Inverse of :func:`firmware_hip_to_sim_q`."""
+    return float(q_sim_rad)
+
+
+def alpha_to_hip_q(alpha: float, robot: RobotGeometry) -> float:
+    """Convert calibrated extension fraction to physical hip angle."""
+    a = max(0.0, min(1.0, float(alpha)))
+    return robot.Q_ALPHA_RET + a * (robot.Q_EXT - robot.Q_ALPHA_RET)
+
+
+def hip_q_to_alpha(q_hip: float, robot: RobotGeometry) -> float:
+    """Inverse calibrated-span mapping, clamped to [0, 1]."""
+    span = robot.Q_EXT - robot.Q_ALPHA_RET
+    if abs(span) < 1e-12:
+        return 0.0
+    return max(0.0, min(1.0, (float(q_hip) - robot.Q_ALPHA_RET) / span))
+
+
+def solve_ik(q_hip: float, p: dict) -> dict | None:
+    """v4 dogleg 4-bar IK in the body-centre frame.
+
+    The optimizer stores W at local ``(-L_tibia, w_perp)`` in a tibia frame
+    whose local +Z handedness is opposite the legacy MuJoCo solver's alpha
+    basis. Converting that handedness explicitly reproduces the firmware's
+    L_EFF_RET/L_EFF_EXT constants.
+    """
+    L_f = p['L_femur']; L_s = p['L_stub']; L_t = p['L_tibia']
+    w_perp = p.get('w_perp', 0.0)
+    Lc  = p['Lc'];      F_X = p['F_X'];    F_Z = p['F_Z']; A_Z = p['A_Z']
+
+    C_x = -L_f * math.cos(q_hip)
+    C_z =  A_Z + L_f * math.sin(q_hip)
+    dx, dz = C_x - F_X, C_z - F_Z
+    R = math.sqrt(dx*dx + dz*dz)
+    if R < 1e-9: return None
+
+    K  = (Lc**2 - dx**2 - dz**2 - L_s**2) / (2.0 * L_s)
+    kr = abs(K) / R
+    if kr >= _SINGULARITY_LIM: return None
+
+    phi   = math.atan2(dz, dx)
+    asinv = math.asin(max(-1.0, min(1.0, K / R)))
+    a1    = _wrap(asinv - phi)
+    a2    = _wrap(math.pi - asinv - phi)
+    qk1, qk2 = a1 - q_hip, a2 - q_hip
+    alpha = a1 if abs(qk1) <= abs(qk2) else a2
+
+    q_knee      = alpha - q_hip
+    E_x         = C_x + L_s * math.sin(alpha)
+    E_z         = C_z + L_s * math.cos(alpha)
+    W_x         = C_x - L_t * math.sin(alpha) - w_perp * math.cos(alpha)
+    W_z         = C_z - L_t * math.cos(alpha) + w_perp * math.sin(alpha)
+    q_coupler_F = math.atan2(E_z - F_Z, F_X - E_x)
+
+    return dict(
+        q_hip=q_hip, q_knee=q_knee, q_coupler_F=q_coupler_F,
+        C=(C_x, C_z), E=(E_x, E_z), F=(F_X, F_Z), W=(W_x, W_z),
+        W_z=W_z, KR_ratio=kr, alpha=alpha,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mechanical constraint checks (analytical, no sim needed)
+# ---------------------------------------------------------------------------
+
+# Bearing outer radii [m] — from COMPONENTS.md
+_BEARING_R_608  = 0.011   # 608: OD 22 mm → radius 11 mm
+_BEARING_R_6001 = 0.014   # 6001: OD 28 mm → radius 14 mm
+
+# Pivot bearing assignments: A=608, C=608, E=6001, F=6001, W=608
+_PIVOT_R = {'A': _BEARING_R_608, 'C': _BEARING_R_608,
+            'E': _BEARING_R_6001, 'F': _BEARING_R_6001,
+            'W': _BEARING_R_608}
+
+# Minimum gap between bearing housings [m]
+_MIN_BEARING_GAP = 0.002  # 2 mm wall between housings
+
+# Minimum link-to-body clearance [m]
+_MIN_BODY_CLEARANCE = 0.003  # 3 mm
+
+# Minimum link-to-link clearance [m] (tube OD / 2 each side)
+_TUBE_RADIUS_FEMUR   = 0.007  # 14 mm OD tube
+_TUBE_RADIUS_COUPLER = 0.005  # 10 mm OD tube
+_TUBE_RADIUS_TIBIA   = 0.008  # 16 mm OD tube
+_MIN_LINK_GAP = 0.002         # 2 mm gap between tube surfaces
+
+
+def _seg_min_dist(p1, p2, p3, p4):
+    """Minimum distance between line segments p1-p2 and p3-p4 (2D)."""
+    # Parametric: S1 = p1 + t*(p2-p1), S2 = p3 + s*(p4-p3), t,s in [0,1]
+    d1 = (p2[0] - p1[0], p2[1] - p1[1])
+    d2 = (p4[0] - p3[0], p4[1] - p3[1])
+    cross = d1[0] * d2[1] - d1[1] * d2[0]
+
+    def _pt_seg_dist(px, py, ax, ay, bx, by):
+        dx, dy = bx - ax, by - ay
+        len2 = dx * dx + dy * dy
+        if len2 < 1e-18:
+            return math.sqrt((px - ax) ** 2 + (py - ay) ** 2)
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / len2))
+        return math.sqrt((px - ax - t * dx) ** 2 + (py - ay - t * dy) ** 2)
+
+    # Check all four point-to-segment distances + segment intersection
+    dists = [
+        _pt_seg_dist(p1[0], p1[1], p3[0], p3[1], p4[0], p4[1]),
+        _pt_seg_dist(p2[0], p2[1], p3[0], p3[1], p4[0], p4[1]),
+        _pt_seg_dist(p3[0], p3[1], p1[0], p1[1], p2[0], p2[1]),
+        _pt_seg_dist(p4[0], p4[1], p1[0], p1[1], p2[0], p2[1]),
+    ]
+    return min(dists)
+
+
+def _check_mechanical_at_q(q: float, ik: dict, p: dict, A, F,
+                           bx_min, bx_max, bz_min, bz_max,
+                           wheel_r: float) -> str | None:
+    """Per-position mechanical constraint check. Returns failure reason or None."""
+    C = ik['C']
+    E = ik['E']
+    W = ik['W']
+
+    # ── 1. Bearing-to-bearing interference ──────────────────────────
+    pairs = [
+        ('A', A, 'F', F),
+        ('A', A, 'C', C),
+        ('A', A, 'E', E),
+        ('C', C, 'E', E),
+        ('C', C, 'F', F),
+        ('E', E, 'F', F),
+    ]
+    for n1, pos1, n2, pos2 in pairs:
+        dist = math.sqrt((pos1[0] - pos2[0]) ** 2 + (pos1[1] - pos2[1]) ** 2)
+        min_dist = _PIVOT_R[n1] + _PIVOT_R[n2] + _MIN_BEARING_GAP
+        if dist < min_dist:
+            return (f"bearing_interference:{n1}-{n2} "
+                    f"dist={dist*1000:.1f}mm < min={min_dist*1000:.1f}mm "
+                    f"at q_hip={math.degrees(q):.1f}deg")
+
+    # ── 2. Link-to-link: femur (A→C) vs coupler (F→E) ──────────────
+    fem_coup_dist = _seg_min_dist(A, C, F, E)
+    min_link_dist = _TUBE_RADIUS_FEMUR + _TUBE_RADIUS_COUPLER + _MIN_LINK_GAP
+    if fem_coup_dist < min_link_dist:
+        return (f"link_collision:femur-coupler "
+                f"dist={fem_coup_dist*1000:.1f}mm < min={min_link_dist*1000:.1f}mm "
+                f"at q_hip={math.degrees(q):.1f}deg")
+
+    # Femur (A→C) vs tibia (C→W) — share pivot C (knee bearing).
+    # NOT checked: tubes are in offset Y-planes (opposite sides of the
+    # 608 bearing) and the 4-bar passes through near-straight configs
+    # mid-stroke.  auto_stroke_angles rejects true singularities.
+
+    # ── 3. Link/wheel vs body box ──────────────────────────────────
+    # Femur and coupler start at body-mounted pivots (A, F) and exit
+    # through slots — only check the outer half away from the body.
+    link_segments = [
+        ("femur",   A, C,  0.5),
+        ("coupler", F, E,  0.5),
+        ("tibia",   C, W,  0.0),
+    ]
+    for name, seg_a, seg_b, t_start in link_segments:
+        for t in (0.1, 0.3, 0.5, 0.7, 0.9):
+            if t < t_start:
+                continue
+            px = seg_a[0] + t * (seg_b[0] - seg_a[0])
+            pz = seg_a[1] + t * (seg_b[1] - seg_a[1])
+            if bx_min < px < bx_max and bz_min < pz < bz_max:
+                return (f"body_collision:{name} "
+                        f"point=({px*1000:.1f},{pz*1000:.1f})mm inside body box "
+                        f"at q_hip={math.degrees(q):.1f}deg")
+
+    # Wheel centre vs body box (with wheel radius margin)
+    wx, wz = W
+    if (bx_min - wheel_r < wx < bx_max + wheel_r and
+            bz_min - wheel_r < wz < bz_max + wheel_r):
+        cx = max(bx_min, min(wx, bx_max))
+        cz = max(bz_min, min(wz, bz_max))
+        if math.sqrt((wx - cx) ** 2 + (wz - cz) ** 2) < wheel_r:
+            return (f"wheel_body_collision: "
+                    f"W=({wx*1000:.1f},{wz*1000:.1f})mm r={wheel_r*1000:.0f}mm "
+                    f"inside body box at q_hip={math.degrees(q):.1f}deg")
+
+    return None
+
+
+def _mech_check_context(robot):
+    """Build reusable context for mechanical checks from a RobotGeometry."""
+    import dataclasses
+    p = dataclasses.asdict(robot) if not isinstance(robot, dict) else robot
+    A = (0.0, p['A_Z'])
+    F = (p['F_X'], p['F_Z'])
+    box_hx, box_hz = 0.070, 0.052
+    bx_min = -box_hx - _MIN_BODY_CLEARANCE
+    bx_max =  box_hx + _MIN_BODY_CLEARANCE
+    bz_min = -box_hz - _MIN_BODY_CLEARANCE
+    bz_max =  box_hz + _MIN_BODY_CLEARANCE
+    wr = robot.wheel_r if hasattr(robot, 'wheel_r') else p.get('wheel_r', 0.075)
+    return p, A, F, bx_min, bx_max, bz_min, bz_max, wr
+
+
+def check_mechanical_constraints(robot, q_ret: float, q_ext: float,
+                                 n_samples: int = 50) -> str | None:
+    """Check for bearing interference, link collisions, and body clearance.
+
+    Sweeps q_hip from q_ret to q_ext and checks at each sample.
+    Returns None if all checks pass, or a failure reason string.
+    """
+    p, A, F, bx_min, bx_max, bz_min, bz_max, wr = _mech_check_context(robot)
+
+    q_lo = min(q_ret, q_ext)
+    q_hi = max(q_ret, q_ext)
+    for i in range(n_samples):
+        q = q_lo + (q_hi - q_lo) * i / (n_samples - 1)
+        ik = solve_ik(q, p)
+        if ik is None:
+            continue
+        fail = _check_mechanical_at_q(q, ik, p, A, F,
+                                      bx_min, bx_max, bz_min, bz_max, wr)
+        if fail is not None:
+            return fail
+
+    return None
+
+
+def auto_stroke_angles(robot) -> tuple[float, float] | None:
+    """Find valid hip stroke range for an arbitrary 4-bar geometry.
+
+    Sweeps q_hip from -0.05 to -2.5 rad and calls solve_ik() at each step.
+    Returns (q_ret, q_ext) — crouch and full-extension angles — or None if
+    the geometry is infeasible (too singular, too short a stroke, etc.).
+    """
+    import dataclasses
+    p_dict = dataclasses.asdict(robot)
+
+    KNEE_LIMIT = math.pi / 3          # ±60° physical joint limit
+    N          = 500
+    q_sweep    = [(-0.05 - 2.45 * i / (N - 1)) for i in range(N)]
+
+    # Build mechanical check context
+    ctx = _mech_check_context(robot)
+    _, A, F, bx_min, bx_max, bz_min, bz_max, wr = ctx
+
+    valid = []   # list of (q_hip, W_z)
+    for q in q_sweep:
+        r = solve_ik(q, p_dict)
+        if r is None:
+            continue
+        if abs(r['q_knee']) > KNEE_LIMIT:
+            continue
+        # Reject positions that violate mechanical constraints
+        if _check_mechanical_at_q(q, r, p_dict, A, F,
+                                  bx_min, bx_max, bz_min, bz_max, wr) is not None:
+            continue
+        valid.append((q, r['W_z']))
+
+    if len(valid) < 50:
+        return None   # not enough valid range
+
+    # Trim 5% at each end to stay away from singularities
+    margin = max(1, len(valid) // 20)
+    valid  = valid[margin:-margin]
+    if len(valid) < 20:
+        return None
+
+    # Q_RET = where wheel is highest (most retracted)
+    # Q_EXT = where wheel is lowest  (most extended)
+    q_ret = max(valid, key=lambda x: x[1])[0]
+    q_ext = min(valid, key=lambda x: x[1])[0]
+
+    if abs(q_ext - q_ret) < 0.30:    # need at least ~17° usable stroke
+        return None
+
+    return (q_ret, q_ext)
+
+
+# ---------------------------------------------------------------------------
+# Equilibrium pitch
+# ---------------------------------------------------------------------------
+def get_equilibrium_pitch(robot: RobotGeometry, q_hip: float,
+                          m_spring: float = 0.0) -> float:
+    """Body pitch [rad] that places system CoM directly over wheel centre W.
+
+    Args:
+        m_spring: mass of one knee spring [kg] (located at knee pivot C, ×2 legs)
+    """
+    p = robot.as_dict()
+    ik = solve_ik(q_hip, p)
+    if ik is None: return 0.0
+
+    n = 2  # two legs
+    m_sys = p['m_box'];  mx = 0.0;  mz = 0.0
+
+    # Hip motors
+    m_sys += n * robot.motor_mass
+    mz    += n * robot.motor_mass * p['A_Z']
+
+    # Femur midpoint
+    C_x, C_z = ik['C']
+    m_sys += n * p['m_femur']
+    mx    += n * p['m_femur'] * C_x / 2.0
+    mz    += n * p['m_femur'] * (p['A_Z'] + C_z) / 2.0
+
+    # Coupler midpoint
+    E_x, E_z = ik['E']
+    F_X, F_Z = ik['F']
+    m_sys += n * p['m_coupler']
+    mx    += n * p['m_coupler'] * (F_X + E_x) / 2.0
+    mz    += n * p['m_coupler'] * (F_Z + E_z) / 2.0
+
+    # Tibia CoM
+    L_s, L_t = p['L_stub'], p['L_tibia']
+    alpha = ik['alpha']
+    off = (L_s - L_t) / 2.0
+    m_sys += n * p['m_tibia']
+    mx    += n * p['m_tibia'] * (C_x + off * math.sin(alpha))
+    mz    += n * p['m_tibia'] * (C_z + off * math.cos(alpha))
+
+    # Bearings (4 per leg)
+    m_sys += n * p['m_bearing'] * 4
+    mx    += n * p['m_bearing'] * (F_X + 2.0 * E_x + C_x)
+    mz    += n * p['m_bearing'] * (F_Z + 2.0 * E_z + C_z)
+
+    # Knee springs (at knee pivot C)
+    if m_spring > 0.0:
+        m_sys += n * m_spring
+        mx    += n * m_spring * C_x
+        mz    += n * m_spring * C_z
+
+    # Wheels
+    W_x, W_z = ik['W']
+    m_sys += n * p['m_wheel']
+    mx    += n * p['m_wheel'] * W_x
+    mz    += n * p['m_wheel'] * W_z
+
+    com_x = mx / m_sys
+    com_z = mz / m_sys
+    dx = com_x - W_x
+    dz = com_z - W_z
+    if abs(dz) < 1e-4: return 0.0
+    return -math.atan2(dx, dz)
+
+
+def compute_com_x_body_frame(robot: RobotGeometry, q_hip: float,
+                              m_spring: float = 0.0) -> float | None:
+    """Return X-coordinate [m] of whole-body CoM in body frame (box origin = 0).
+
+    Same mass model as get_equilibrium_pitch(). Returns the raw CoM X
+    (body frame, wheel not subtracted). Used to compare against MuJoCo's
+    ground-truth subtree CoM in the Geometry tab.
+    """
+    p = robot.as_dict()
+    ik = solve_ik(q_hip, p)
+    if ik is None:
+        return None
+
+    n = 2
+    m_sys = p['m_box']
+    mx = 0.0
+
+    m_sys += n * robot.motor_mass
+
+    C_x, _ = ik['C']
+    m_sys += n * p['m_femur']
+    mx    += n * p['m_femur'] * C_x / 2.0
+
+    E_x, _ = ik['E']
+    F_X, _ = ik['F']
+    m_sys += n * p['m_coupler']
+    mx    += n * p['m_coupler'] * (F_X + E_x) / 2.0
+
+    L_s, L_t = p['L_stub'], p['L_tibia']
+    alpha = ik['alpha']
+    off = (L_s - L_t) / 2.0
+    m_sys += n * p['m_tibia']
+    mx    += n * p['m_tibia'] * (C_x + off * math.sin(alpha))
+
+    m_sys += n * p['m_bearing'] * 4
+    mx    += n * p['m_bearing'] * (F_X + 2.0 * E_x + C_x)
+
+    if m_spring > 0.0:
+        m_sys += n * m_spring
+        mx    += n * m_spring * C_x
+
+    W_x, _ = ik['W']
+    m_sys += n * p['m_wheel']
+    mx    += n * p['m_wheel'] * W_x
+
+    return mx / m_sys
+
+
+# ---------------------------------------------------------------------------
+# Simulation initialisation (4-bar closure + joint angles from IK)
+# ---------------------------------------------------------------------------
+def init_sim(model, data, robot: RobotGeometry, q_hip_init: float = None):
+    """Reset MuJoCo data and place robot at q_hip_init with valid 4-bar closure.
+
+    1. Overwrites equality-constraint anchors so coupler E connects to tibia stub E.
+    2. Sets hip, knee, and coupler joint angles from IK.
+    """
+    import mujoco as mj
+
+    if q_hip_init is None:
+        q_hip_init = robot.Q_NOM
+
+    mj.mj_resetData(model, data)
+    p = robot.as_dict()
+
+    # --- Fix 4-bar equality-constraint anchors --------------------------------
+    for side in ('L', 'R'):
+        eq_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_EQUALITY,
+                               f"4bar_close_{side}")
+        if eq_id >= 0:
+            model.eq_data[eq_id, 0:3] = [-robot.Lc, 0.0, 0.0]       # coupler frame: far end E
+            model.eq_data[eq_id, 3:6] = [0.0, 0.0, robot.L_stub]     # tibia frame: stub end E
+
+    # --- Set joint angles from IK ---------------------------------------------
+    ik = solve_ik(q_hip_init, p)
+    if ik is None:
+        raise RuntimeError(f"IK failed at q_hip={q_hip_init:.3f}")
+
+    for side in ('L', 'R'):
+        hF_id   = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, f"hinge_F_{side}")
+        hip_id  = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, f"hip_{side}")
+        knee_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, f"knee_joint_{side}")
+        data.qpos[model.jnt_qposadr[hF_id]]   = ik['q_coupler_F']
+        data.qpos[model.jnt_qposadr[hip_id]]  = ik['q_hip']
+        data.qpos[model.jnt_qposadr[knee_id]] = ik['q_knee']
+
+    mj.mj_forward(model, data)
+
+
+# ---------------------------------------------------------------------------
+# Stroke finder
+# ---------------------------------------------------------------------------
+def find_stroke(robot: RobotGeometry) -> tuple | None:
+    """Scan IK-valid range and return (Q_ret, Q_ext) at W_z extrema."""
+    p = robot.as_dict()
+    MARGIN = math.radians(3.0)
+    Q_MAX = -0.35
+    angles = np.linspace(-2.5, 0.5, 1200)
+    valid = [(q, solve_ik(q, p)) for q in angles]
+    valid = [(q, r) for q, r in valid if r is not None]
+    if len(valid) < 20: return None
+
+    qs, wzs = zip(*[(q, r['W_z']) for q, r in valid])
+    trimmed = [(q, wz) for q, wz in zip(qs, wzs)
+               if qs[0] + MARGIN <= q <= min(qs[-1] - MARGIN, Q_MAX)]
+    if not trimmed: return None
+
+    q_ret = max(trimmed, key=lambda x: x[1])[0]
+    q_ext = min(trimmed, key=lambda x: x[1])[0]
+    if q_ret < q_ext: q_ret, q_ext = q_ext, q_ret
+    return float(q_ret), float(q_ext)
+
+
+# ---------------------------------------------------------------------------
+# MJCF XML builder
+# ---------------------------------------------------------------------------
+def _obstacle_rgba(h: float) -> str:
+    if h <= 0.02: return "0.85 0.85 0.20"
+    if h <= 0.04: return "0.90 0.55 0.10"
+    if h <= 0.06: return "0.90 0.30 0.10"
+    return "0.85 0.10 0.10"
+
+_OBS_ATTR = 'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"'
+
+
+def _get(o, key, default=None):
+    """Get attribute from dict or dataclass."""
+    if isinstance(o, dict):
+        return o.get(key, default)
+    return getattr(o, key, default)
+
+
+def _render_sandbox_obstacles(obstacles: list) -> str:
+    if not obstacles:
+        return ""
+    parts = []
+    for i, o in enumerate(obstacles):
+        s = _get(o, "shape")
+        x, y = _get(o, "x"), _get(o, "y")
+        if s == "box":
+            h = _get(o, "h")
+            _rgba = _get(o, "rgba") or f"{_obstacle_rgba(h)} 1.0"
+            parts.append(
+                f'<geom name="sbox_{i}" type="box" '
+                f'pos="{x:.3f} {y:.3f} {h/2:.5f}" '
+                f'size="{_get(o, "rx"):.4f} {_get(o, "ry"):.4f} {h/2:.5f}" '
+                f'rgba="{_rgba}" {_OBS_ATTR}/>')
+        elif s == "cyl":
+            h = _get(o, "h")
+            parts.append(
+                f'<geom name="scyl_{i}" type="cylinder" '
+                f'pos="{x:.3f} {y:.3f} {h/2:.5f}" '
+                f'size="{_get(o, "r"):.4f} {h/2:.5f}" '
+                f'rgba="{_obstacle_rgba(h)} 1.0" {_OBS_ATTR}/>')
+        elif s == "capsule":
+            r = _get(o, "r"); length = _get(o, "length")
+            parts.append(
+                f'<geom name="scap_{i}" type="capsule" '
+                f'pos="{x:.3f} {y:.3f} {r:.5f}" '
+                f'size="{r:.4f} {length/2:.4f}" euler="90 0 0" '
+                f'rgba="0.55 0.75 0.35 1.0" {_OBS_ATTR}/>')
+        elif s == "ramp":
+            ang = _get(o, "angle_deg")
+            lx = _get(o, "length") / 2.0
+            ly = _get(o, "width") / 2.0
+            lz = _get(o, "h", _get(o, "length") * math.sin(math.radians(ang))) / 2.0
+            cx = x + lx * math.cos(math.radians(ang))
+            cz = lz
+            parts.append(
+                f'<geom name="sramp_{i}" type="box" '
+                f'pos="{cx:.3f} {y:.3f} {cz:.4f}" '
+                f'size="{lx:.4f} {ly:.4f} {lz:.4f}" '
+                f'euler="0 {-ang:.2f} 0" '
+                f'rgba="0.60 0.70 0.45 1.0" {_OBS_ATTR}/>')
+        elif s == "sphere":
+            h = _get(o, "h"); r = _get(o, "r")
+            cz = -(r - h)
+            parts.append(
+                f'<geom name="sph_{i}" type="sphere" '
+                f'pos="{x:.3f} {y:.3f} {cz:.4f}" '
+                f'size="{r:.4f}" '
+                f'rgba="0.50 0.65 0.80 1.0" {_OBS_ATTR}/>')
+    return "\n    ".join(parts)
+
+
+def _render_prop_bodies(props: list) -> str:
+    """Free-body props — real-world objects for scale reference."""
+    if not props:
+        return ""
+    parts = []
+    for i, p in enumerate(props):
+        x, y = p["x"], p["y"]
+        t = p["type"]
+        if t == "can":
+            parts.append(
+                f'<body name="prop_can_{i}" pos="{x:.3f} {y:.3f} 0.061">'
+                f'<freejoint/>'
+                f'<inertial pos="0 0 0" mass="0.385" diaginertia="3.5e-4 3.5e-4 2.1e-4"/>'
+                f'<geom type="cylinder" size="0.033 0.061" '
+                f'rgba="0.85 0.15 0.15 1.0" condim="4" friction="0.6 0.01 0.001"/>'
+                f'</body>')
+        elif t == "bottle":
+            parts.append(
+                f'<body name="prop_bottle_{i}" pos="{x:.3f} {y:.3f} 0.125">'
+                f'<freejoint/>'
+                f'<inertial pos="0 0 0" mass="0.520" diaginertia="8.0e-4 8.0e-4 1.7e-4"/>'
+                f'<geom type="cylinder" size="0.040 0.125" '
+                f'rgba="0.30 0.65 0.90 0.55" condim="4" friction="0.5 0.01 0.001"/>'
+                f'</body>')
+        elif t == "ball":
+            parts.append(
+                f'<body name="prop_ball_{i}" pos="{x:.3f} {y:.3f} 0.033">'
+                f'<freejoint/>'
+                f'<inertial pos="0 0 0" mass="0.057" diaginertia="2.5e-5 2.5e-5 2.5e-5"/>'
+                f'<geom type="sphere" size="0.033" '
+                f'rgba="0.85 0.95 0.15 1.0" condim="4" friction="0.6 0.01 0.001"/>'
+                f'</body>')
+        elif t == "cardboard_box":
+            parts.append(
+                f'<body name="prop_cbox_{i}" pos="{x:.3f} {y:.3f} 0.100">'
+                f'<freejoint/>'
+                f'<inertial pos="0 0 0" mass="0.300" diaginertia="1.7e-3 2.6e-3 3.5e-3"/>'
+                f'<geom type="box" size="0.150 0.100 0.100" '
+                f'rgba="0.75 0.60 0.35 1.0" condim="4" friction="0.6 0.01 0.001"/>'
+                f'</body>')
+    return "\n    ".join(parts)
+
+
+def build_xml(robot: RobotGeometry = None,
+              motors: MotorParams = None,
+              obstacle_height: float = 0.0,
+              bumps: list = None,
+              sandbox_obstacles: list = None,
+              prop_bodies: list = None,
+              floor_size: tuple = None,
+              weld_body: bool = False) -> str:
+    """Generate MJCF XML for the two-leg balance robot.
+
+    robot: RobotGeometry (defaults to RobotGeometry()).
+    motors: MotorParams for actuator torque limits (defaults to MotorParams()).
+    weld_body: if True, body is fixed to world frame (no freejoint) — Phase 0 early verification.
+    """
+    if robot is None:
+        robot = RobotGeometry()
+    if motors is None:
+        motors = MotorParams()
+    if floor_size is None:
+        floor_size = (10, 5)
+
+    p = robot.as_dict()
+    L_f = robot.L_femur; L_s = robot.L_stub; L_t = robot.L_tibia
+    w_local_x = -robot.w_perp
+    Lc = robot.Lc; F_X = robot.F_X; F_Z = robot.F_Z; A_Z = robot.A_Z
+    LEG_Y = robot.leg_y
+    WHEEL_R = robot.wheel_r
+    HIP_MOTOR_MASS = robot.motor_mass
+    OBSTACLE_X = 0.50
+
+    motor_y_L = LEG_Y - 0.0215
+    motor_y_R = -(LEG_Y - 0.0215)
+
+    W_Y = 0.036
+
+    maytech = min(robot.wheel_motor_mass, p['m_wheel'])
+    tyre = max(0.005, p['m_wheel'] - maytech)
+
+    # ── Corrected inertial masses ────────────────────────────────────────
+    # MuJoCo ignores geom mass= when an explicit <inertial> tag exists,
+    # so we fold motor and bearing masses into the <inertial> mass and
+    # set those geoms to mass="0".
+    m_brg = p['m_bearing']
+    box_inertial_mass = p['m_box'] + 2 * HIP_MOTOR_MASS    # 2 hip motors on box
+    coupler_inertial_mass = p['m_coupler'] + 2 * m_brg      # bearings at F and E
+    femur_inertial_mass = p['m_femur'] + m_brg               # bearing at knee C
+    tibia_inertial_mass = p['m_tibia'] + m_brg               # bearing at stub E
+
+    # ── Composite link inertials (rod + folded bearings, at true CoM) ─────
+    # Each link's <inertial> must be at the mass-weighted CoM of (rod +
+    # bearings that were folded into its mass). Previously everything sat at
+    # pos=0, which placed femur/coupler mass at the pivot instead of along
+    # the rod — the bias drove pitch_ff undercompensation.
+    femur_r, coupler_r, tibia_r = 0.007, 0.005, 0.008
+
+    # Femur: rod CoM at -L_f/2, bearing (knee C) at -L_f
+    m_f, m_b = p['m_femur'], m_brg
+    femur_com_x = (m_f * (-L_f / 2.0) + m_b * (-L_f)) / (m_f + m_b)
+    femur_Iyz = (m_f * L_f**2 / 12.0
+                 + m_f * (femur_com_x - (-L_f / 2.0))**2
+                 + m_b * (femur_com_x - (-L_f))**2)
+    femur_Ix  = 0.5 * (m_f + m_b) * femur_r**2
+
+    # Coupler: rod CoM at -Lc/2, bearings at F (0) and E (-Lc) — mean = rod midpoint
+    m_c = p['m_coupler']
+    coupler_com_x = -Lc / 2.0
+    coupler_Iyz = (m_c * Lc**2 / 12.0
+                   + 2 * m_b * (Lc / 2.0)**2)
+    coupler_Ix  = 0.5 * (m_c + 2 * m_b) * coupler_r**2
+
+    # Tibia dogleg (local frame: C=(0,0), E=(0,+L_s),
+    # W=(w_local_x,-L_t)). The provisional inertia treats the complete E-W
+    # member as a slender chord until T0.1/T1.1 identify its real mass/inertia.
+    m_t = p['m_tibia']
+    tib_rod_cx = w_local_x / 2.0
+    tib_rod_cz = (L_s - L_t) / 2.0
+    tibia_com_x = (m_t * tib_rod_cx) / (m_t + m_b)
+    tibia_com_z = (m_t * tib_rod_cz + m_b * L_s) / (m_t + m_b)
+    tibia_chord = math.hypot(L_s + L_t, w_local_x)
+    tibia_Ixy = (m_t * tibia_chord**2 / 12.0
+                 + m_t * (tibia_com_z - tib_rod_cz)**2
+                 + m_b * (tibia_com_z - L_s)**2)
+    tibia_Iz  = 0.5 * (m_t + m_b) * tibia_r**2
+
+    # Body frame geometry
+    ch_hx, ch_hy, ch_hz = 0.070, 0.050, 0.052
+    arm_x_lo = F_X - 0.010; arm_x_hi = 0.015
+    arm_cx = (arm_x_lo + arm_x_hi) / 2.0
+    arm_hx_v = (arm_x_hi - arm_x_lo) / 2.0
+    arm_cy = (ch_hy + LEG_Y) / 2.0
+    arm_hy_v = (LEG_Y - ch_hy) / 2.0
+    arm_z_lo = min(A_Z, F_Z) - 0.015; arm_z_hi = max(A_Z, F_Z) + 0.020
+    arm_cz = (arm_z_lo + arm_z_hi) / 2.0
+    arm_hz_v = (arm_z_hi - arm_z_lo) / 2.0
+
+    bat_z = -(ch_hz - 0.022); ode_z = ch_hz - 0.010
+    ard_z = ch_hz - 0.030; imu_z = ch_hz - 0.003
+
+    # Joint type for the body
+    if weld_body:
+        body_joint = ""  # fixed to world
+    else:
+        body_joint = '<joint name="root_free" type="free"/>'
+
+    def _leg(side: str) -> str:
+        sy = LEG_Y if side == 'L' else -LEG_Y
+        wy = W_Y if side == 'L' else -W_Y
+        wm = (W_Y + 0.016) if side == 'L' else -(W_Y + 0.016)
+        return f"""\
+      <!-- == {side} LEG ====================================================== -->
+      <body name="coupler_{side}" pos="{F_X:.5f} {sy:.5f} {F_Z:.5f}">
+        <inertial pos="{coupler_com_x:.5f} 0 0" mass="{coupler_inertial_mass:.4f}" diaginertia="{coupler_Ix:.3e} {coupler_Iyz:.3e} {coupler_Iyz:.3e}"/>
+        <joint name="hinge_F_{side}" type="hinge" axis="0 1 0" damping="0.001" frictionloss="0.06"/>
+        <geom type="cylinder" pos="0 0 0" euler="90 0 0"
+              size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+              contype="0" conaffinity="0" mass="0"/>
+        <geom name="coupler_geom_{side}" type="cylinder" fromto="0 0 0 {-Lc:.5f} 0 0"
+              size="0.005" rgba="0.30 0.90 0.90 0.55"
+              solref="0.02 1" contype="1" conaffinity="1"/>
+        <geom type="cylinder" pos="{-Lc:.5f} 0 0" euler="90 0 0"
+              size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+              contype="0" conaffinity="0" mass="0"/>
+      </body>
+      <body name="femur_{side}" pos="0 {sy:.5f} {A_Z:.5f}">
+        <inertial pos="{femur_com_x:.5f} 0 0" mass="{femur_inertial_mass:.4f}" diaginertia="{femur_Ix:.3e} {femur_Iyz:.3e} {femur_Iyz:.3e}"/>
+        <joint name="hip_{side}" type="hinge" axis="0 1 0"
+               range="-180 180" armature="0.01" damping="0.05"/>
+        <geom name="femur_geom_{side}" type="cylinder" fromto="0 0 0 {-L_f:.5f} 0 0"
+              size="0.007" rgba="0.94 0.75 0.25 0.55"
+              solref="0.02 1" contype="1" conaffinity="1"/>
+        <geom name="knee_geom_{side}" type="cylinder" pos="{-L_f:.5f} 0 0"
+              euler="90 0 0" size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+              contype="0" conaffinity="0" mass="0" solref="0.02 1"/>
+        <body name="tibia_{side}" pos="{-L_f:.5f} 0 0">
+          <inertial pos="{tibia_com_x:.5f} 0 {tibia_com_z:.5f}" mass="{tibia_inertial_mass:.4f}" diaginertia="{tibia_Ixy:.3e} {tibia_Ixy:.3e} {tibia_Iz:.3e}"/>
+          <joint name="knee_joint_{side}" type="hinge" axis="0 1 0"
+                 range="-60 60" damping="0.001" frictionloss="0.06"/>
+          <geom name="tibia_geom_{side}" type="cylinder"
+                fromto="0 0 0 {w_local_x:.5f} 0 {-L_t:.5f}"
+                size="0.008" rgba="0.75 0.45 0.90 0.55"
+                solref="0.02 1" contype="1" conaffinity="1"/>
+          <geom name="tibia_stub_{side}" type="cylinder"
+                fromto="0 0 0 0 0 {L_s:.5f}"
+                size="0.008" rgba="0.75 0.45 0.90 0.55"
+                solref="0.02 1" contype="1" conaffinity="1"/>
+          <geom name="stub_geom_{side}" type="cylinder" pos="0 0 {L_s:.5f}"
+                euler="90 0 0" size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+                contype="0" conaffinity="0" mass="0" solref="0.02 1"/>
+          <body name="wheel_asm_{side}" pos="{w_local_x:.5f} 0 {-L_t:.5f}">
+            <joint name="wheel_spin_{side}" type="hinge" axis="0 1 0" damping="0.001"/>
+            <geom name="motor_body_geom_{side}" type="cylinder"
+                  pos="0 {wy:.4f} 0" euler="90 0 0"
+                  size="0.035 0.026" rgba="0.15 0.15 0.15 0.80"
+                  mass="{maytech:.4f}" solref="0.02 1" contype="1" conaffinity="1"/>
+            <geom name="wheel_tire_geom_{side}" type="cylinder"
+                  pos="0 {wy:.4f} 0" euler="90 0 0"
+                  size="{WHEEL_R} 0.015" rgba="0 0 0 0"
+                  friction="0.8 0.01 0.001" solref="0.06 0.9"
+                  solimp="0.7 0.95 0.005"
+                  mass="{tyre:.4f}" contype="1" conaffinity="1"/>
+            <geom name="wheel_torus_{side}" type="mesh" mesh="torus_wheel"
+                  pos="0 {wy:.4f} 0" rgba="0.25 0.70 0.35 0.90"
+                  contype="0" conaffinity="0" mass="0"/>
+            <geom name="wheel_marker_{side}" type="box"
+                  pos="0 {wm:.4f} {WHEEL_R*0.82:.5f}"
+                  size="0.007 0.012 0.007" rgba="1.0 0.15 0.15 1.0"
+                  contype="0" conaffinity="0" mass="0"/>
+          </body>
+        </body>
+      </body>"""
+
+    hip_torque_lim = motors.hip.torque_limit
+    wheel_torque_lim = motors.wheel.torque_limit
+
+    return f"""<mujoco model="lqr_balance">
+  <option gravity="0 0 -9.81" timestep="0.0005" solver="Newton"
+          iterations="200" tolerance="1e-10"/>
+  <visual><global offwidth="1280" offheight="720"/></visual>
+  <asset>
+    <mesh name="torus_wheel" file="torus_wheel.stl" scale="1 1 1"/>
+    <texture name="checker" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.50 0.50 0.50" rgb2="0.28 0.28 0.28"/>
+    <material name="floor_mat" texture="checker" texrepeat="50 50" reflectance="0.12"/>
+    <texture name="wall_tex" type="2d" builtin="flat" width="1" height="1"
+             rgb1="0.68 0.64 0.58"/>
+    <material name="wall_mat" texture="wall_tex" reflectance="0.04"/>
+  </asset>
+  <worldbody>
+    <light name="sun"   pos="0 0 4"    dir="0 0 -1"   diffuse="0.80 0.80 0.75" castshadow="true"/>
+    <light name="front" pos="0 -3 2.5" dir="0  1 -0.8" diffuse="0.40 0.40 0.45"/>
+    <light name="back"  pos="0  3 2.5" dir="0 -1 -0.8" diffuse="0.40 0.40 0.45"/>
+
+    <geom name="ground" type="plane" size="{floor_size[0]} {floor_size[1]} 0.1"
+          material="floor_mat" condim="3" friction="0.8 0.01 0.001"
+          solref="0.04 1" solimp="0.9 0.95 0.001"/>
+    {f'<geom name="floor_step" type="box" pos="{OBSTACLE_X + 2.0:.3f} 0 {obstacle_height/2:.5f}" size="2.0 5.0 {obstacle_height/2:.5f}" rgba="0.75 0.50 0.20 1.0" condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>' if obstacle_height > 0.0 else ''}
+    {''.join(
+        f'<geom name="bump_{i}" type="box" '
+        f'pos="{x:.3f} 0 {h/2:.5f}" '
+        f'size="0.02 5.0 {h/2:.5f}" '
+        f'rgba="{"0.85 0.65 0.20" if h <= 0.015 else "0.80 0.35 0.15"} 1.0" '
+        f'condim="3" friction="0.8 0.01 0.001" solref="0.04 1" solimp="0.9 0.95 0.001"/>'
+        for i, b in enumerate(bumps)
+        for x, h in [((b.x, b.height) if hasattr(b, 'x') else (b[0], b[1]))]
+    ) if bumps else ''}
+    {_render_sandbox_obstacles(sandbox_obstacles)}
+    {_render_prop_bodies(prop_bodies)}
+
+
+    <!-- == Body =========================================================== -->
+    <body name="box" pos="0 0 0.45">
+      {body_joint}
+      <inertial pos="0 0 0" mass="{box_inertial_mass:.4f}"
+                diaginertia="8.0e-4 1.2e-3 1.2e-3"/>
+      <geom name="chassis" type="box"
+            size="{ch_hx:.4f} {ch_hy:.4f} {ch_hz:.4f}"
+            rgba="0.25 0.35 0.55 0.85" mass="0"
+            contype="0" conaffinity="0"/>
+      <geom name="arm_L" type="box"
+            pos="{arm_cx:.5f} {arm_cy:.5f} {arm_cz:.5f}"
+            size="{arm_hx_v:.5f} {arm_hy_v:.5f} {arm_hz_v:.5f}"
+            rgba="0.35 0.45 0.65 0.70" mass="0" contype="0" conaffinity="0"/>
+      <geom name="arm_R" type="box"
+            pos="{arm_cx:.5f} {-arm_cy:.5f} {arm_cz:.5f}"
+            size="{arm_hx_v:.5f} {arm_hy_v:.5f} {arm_hz_v:.5f}"
+            rgba="0.35 0.45 0.65 0.70" mass="0" contype="0" conaffinity="0"/>
+      <geom name="motor_L" type="cylinder"
+            pos="0 {motor_y_L:.5f} {A_Z:.5f}" euler="90 0 0"
+            size="0.0265 0.0215" rgba="0.15 0.15 0.15 0.90"
+            mass="0" contype="0" conaffinity="0"/>
+      <geom name="motor_R" type="cylinder"
+            pos="0 {motor_y_R:.5f} {A_Z:.5f}" euler="90 0 0"
+            size="0.0265 0.0215" rgba="0.15 0.15 0.15 0.90"
+            mass="0" contype="0" conaffinity="0"/>
+      <!-- Electronics (massless, visual only) -->
+      <geom type="box" pos="0 0 {bat_z:.5f}" size="0.060 0.038 0.018"
+            rgba="0.20 0.20 0.80 0.70" mass="0" contype="0" conaffinity="0"/>
+      <geom type="box" pos="0 0 {ode_z:.5f}" size="0.050 0.030 0.008"
+            rgba="0.80 0.30 0.10 0.80" mass="0" contype="0" conaffinity="0"/>
+      <geom type="box" pos="0 0 {ard_z:.5f}" size="0.054 0.027 0.006"
+            rgba="0.10 0.60 0.10 0.80" mass="0" contype="0" conaffinity="0"/>
+      <geom type="box" pos="0 0 {imu_z:.5f}" size="0.010 0.010 0.003"
+            rgba="0.80 0.80 0.10 0.90" mass="0" contype="0" conaffinity="0"/>
+      <site name="imu_site" pos="0 0 {imu_z:.5f}" size="0.002"/>
+      {_leg('L')}
+      {_leg('R')}
+    </body>
+  </worldbody>
+
+  <equality>
+    <connect name="4bar_close_L" body1="coupler_L" body2="tibia_L"
+             anchor="0 0 0" solref="0.002 1" solimp="0.9999 0.9999 0.001"/>
+    <connect name="4bar_close_R" body1="coupler_R" body2="tibia_R"
+             anchor="0 0 0" solref="0.002 1" solimp="0.9999 0.9999 0.001"/>
+  </equality>
+
+  <actuator>
+    <motor name="hip_act_L"   joint="hip_L"        gear="1"
+           ctrllimited="true" ctrlrange="{-hip_torque_lim:.1f} {hip_torque_lim:.1f}"/>
+    <motor name="hip_act_R"   joint="hip_R"        gear="1"
+           ctrllimited="true" ctrlrange="{-hip_torque_lim:.1f} {hip_torque_lim:.1f}"/>
+    <motor name="wheel_act_L" joint="wheel_spin_L" gear="1"
+           ctrllimited="true" ctrlrange="{-wheel_torque_lim:.1f} {wheel_torque_lim:.1f}"/>
+    <motor name="wheel_act_R" joint="wheel_spin_R" gear="1"
+           ctrllimited="true" ctrlrange="{-wheel_torque_lim:.1f} {wheel_torque_lim:.1f}"/>
+  </actuator>
+
+  <sensor>
+    <accelerometer name="accel" site="imu_site"/>
+  </sensor>
+</mujoco>"""

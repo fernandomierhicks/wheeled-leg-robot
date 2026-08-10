@@ -1,0 +1,13 @@
+{
+  "name": "t4_3_velocity_step",
+  "stage": "vel_pi",
+  "duration_s": 8.0,
+  "initial_state": {"hip_alpha": 0.0},
+  "initial_params": {"lqr_torque_limit": 0.3, "vel_pi_en": 1.0, "v_cmd_ms": 0.0},
+  "events": [
+    {"time_s": 1.0, "params": {"v_cmd_ms": 0.3}},
+    {"time_s": 3.0, "params": {"v_cmd_ms": 0.0}},
+    {"time_s": 5.0, "params": {"v_cmd_ms": -0.3}},
+    {"time_s": 7.0, "params": {"v_cmd_ms": 0.0}}
+  ]
+}

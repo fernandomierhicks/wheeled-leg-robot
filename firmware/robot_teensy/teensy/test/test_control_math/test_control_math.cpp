@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "control_safety.h"
+#include "standup_safety.h"
 #include "wheel_safety.h"
 #include "velocity_pi_anti_windup.h"
 
@@ -52,6 +53,20 @@ static void test_backward_theta_limit_preserves_already_safe_configuration() {
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.1396263f, safe);
 }
 
+static void test_pitch_trim_curve_preserves_endpoints_and_linear_default() {
+    TEST_ASSERT_FLOAT_WITHIN(
+        1e-6f, -0.14f, scheduled_pitch_trim(-0.14f, 0.02f, -0.08f, 0.0f));
+    TEST_ASSERT_FLOAT_WITHIN(
+        1e-6f, 0.02f, scheduled_pitch_trim(-0.14f, 0.02f, -0.08f, 1.0f));
+    TEST_ASSERT_FLOAT_WITHIN(
+        1e-6f, -0.10f, scheduled_pitch_trim(-0.14f, 0.02f, 0.0f, 0.25f));
+}
+
+static void test_pitch_trim_curve_contributes_one_quarter_at_midpoint() {
+    TEST_ASSERT_FLOAT_WITHIN(
+        1e-6f, -0.08f, scheduled_pitch_trim(-0.14f, 0.02f, -0.08f, 0.5f));
+}
+
 static void test_backward_velocity_guard_fades_only_opposing_term() {
     TEST_ASSERT_FLOAT_WITHIN(
         1e-6f, -0.05f,
@@ -68,6 +83,83 @@ static void test_slew_toward_limits_both_directions_and_can_be_disabled() {
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0004f, slew_toward(0.0f, 1.0f, 0.2f, 0.002f));
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.9996f, slew_toward(1.0f, 0.0f, 0.2f, 0.002f));
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.7f, slew_toward(0.1f, 0.7f, 0.0f, 0.002f));
+}
+
+static void test_standup_hip_gate_requires_both_positions_and_velocities() {
+    const float tol = STANDUP_HIP_POS_TOL_RAD;
+    TEST_ASSERT_TRUE(standup_hips_in_settle_band(
+        1.01f, 0.10f, -1.01f, -0.10f, 1.0f, -1.0f, tol));
+    TEST_ASSERT_FALSE(standup_hips_in_settle_band(
+        1.04f, 0.10f, -1.01f, -0.10f, 1.0f, -1.0f, tol));
+    TEST_ASSERT_FALSE(standup_hips_in_settle_band(
+        1.01f, 0.10f, -1.04f, -0.10f, 1.0f, -1.0f, tol));
+    TEST_ASSERT_FALSE(standup_hips_in_settle_band(
+        1.01f, 0.21f, -1.01f, -0.10f, 1.0f, -1.0f, tol));
+    TEST_ASSERT_FALSE(standup_hips_in_settle_band(
+        1.01f, 0.10f, -1.01f, -0.21f, 1.0f, -1.0f, tol));
+}
+
+// Regression: a P-hold with hip_running_tff_ret = -2.5 and hip_running_kp = 25
+// rests 0.1 rad off target on unloaded legs, so a fixed 2 deg gate could never
+// be met off the ground — STANDING_UP faulted every arm at the STIFFEN gate.
+static void test_standup_pos_tol_allows_the_feedforward_offset() {
+    const float tol = standup_hip_pos_tol(25.0f, -2.5f);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, STANDUP_HIP_POS_TOL_RAD + 0.1f, tol);
+    TEST_ASSERT_TRUE(standup_hips_in_settle_band(
+        -0.091f, -0.044f, -0.093f, 0.015f, 0.0f, 0.0f, tol));
+    // Still catches a leg that never made it to the crouch pose.
+    TEST_ASSERT_FALSE(standup_hips_in_settle_band(
+        -0.40f, 0.0f, -0.40f, 0.0f, 0.0f, 0.0f, tol));
+    // No feedforward, or no hold at all, leaves the strict band in place.
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, STANDUP_HIP_POS_TOL_RAD, standup_hip_pos_tol(25.0f, 0.0f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, STANDUP_HIP_POS_TOL_RAD, standup_hip_pos_tol(0.0f, -2.5f));
+    // A badly scaled pair is capped, not allowed to disable the gate.
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, STANDUP_HIP_POS_TOL_MAX_RAD, standup_hip_pos_tol(1.0f, -2.5f));
+}
+
+// The CROUCH gate is velocity-only by design: the excursion runs at a fraction
+// of the running hip stiffness, so the legs are still sagging out of the strict
+// position band when the motion has finished.
+// A catch running under the raised standup_vel_limit must not hand off with the
+// wheels still above RUNNING's governor: RUNNING zeroes their torque on tick one
+// and the runaway watchdog trips at 2x it.
+static void test_standup_handoff_requires_wheels_inside_running_limit() {
+    TEST_ASSERT_TRUE(standup_wheels_ready_for_handoff(2.9f, -2.9f, 3.0f));
+    TEST_ASSERT_TRUE(standup_wheels_ready_for_handoff(3.0f, 3.0f, 3.0f));
+    TEST_ASSERT_FALSE(standup_wheels_ready_for_handoff(3.1f, 0.0f, 3.0f));
+    TEST_ASSERT_FALSE(standup_wheels_ready_for_handoff(0.0f, -6.5f, 3.0f));
+}
+
+static void test_standup_crouch_gate_is_velocity_only() {
+    TEST_ASSERT_TRUE(standup_hips_quiet(0.10f, -0.10f));
+    TEST_ASSERT_TRUE(standup_hips_quiet(0.20f, 0.20f));
+    TEST_ASSERT_FALSE(standup_hips_quiet(0.21f, 0.0f));
+    TEST_ASSERT_FALSE(standup_hips_quiet(0.0f, -0.21f));
+}
+
+static void test_standup_stiffen_ramp_spans_crouch_fraction_to_full() {
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.5f,  standup_stiffen_scale(0.0f, 2.0f, 0.5f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.75f, standup_stiffen_scale(1.0f, 2.0f, 0.5f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f,  standup_stiffen_scale(2.0f, 2.0f, 0.5f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f,  standup_stiffen_scale(9.0f, 2.0f, 0.5f));
+    // Zero duration means "already stiff", not a divide by zero.
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f,  standup_stiffen_scale(0.0f, 0.0f, 0.5f));
+}
+
+static void test_standup_minimum_jerk_trajectory_has_smooth_endpoints() {
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, standup_min_jerk_position(0.0f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.5f, standup_min_jerk_position(0.5f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, standup_min_jerk_position(1.0f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, standup_min_jerk_rate(0.0f, 1.0f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.875f, standup_min_jerk_rate(0.5f, 1.0f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, standup_min_jerk_rate(1.0f, 1.0f));
+}
+
+static void test_standup_target_must_match_backoff_used_by_calibration() {
+    TEST_ASSERT_TRUE(standup_target_matches_configured_backoff(
+        -0.2617994f, 0.2617994f, 0.2617994f, 1.0f, -1.0f));
+    TEST_ASSERT_FALSE(standup_target_matches_configured_backoff(
+        -0.0872665f, 0.0872665f, 0.2617994f, 1.0f, -1.0f));
 }
 
 static void test_wheel_glitch_filter_passes_plausible_change() {
@@ -128,8 +220,17 @@ int main(int, char**) {
     RUN_TEST(test_integral_state_clamp_still_applies);
     RUN_TEST(test_backward_theta_limit_accounts_for_negative_trim_and_margin);
     RUN_TEST(test_backward_theta_limit_preserves_already_safe_configuration);
+    RUN_TEST(test_pitch_trim_curve_preserves_endpoints_and_linear_default);
+    RUN_TEST(test_pitch_trim_curve_contributes_one_quarter_at_midpoint);
     RUN_TEST(test_backward_velocity_guard_fades_only_opposing_term);
     RUN_TEST(test_slew_toward_limits_both_directions_and_can_be_disabled);
+    RUN_TEST(test_standup_hip_gate_requires_both_positions_and_velocities);
+    RUN_TEST(test_standup_pos_tol_allows_the_feedforward_offset);
+    RUN_TEST(test_standup_handoff_requires_wheels_inside_running_limit);
+    RUN_TEST(test_standup_crouch_gate_is_velocity_only);
+    RUN_TEST(test_standup_stiffen_ramp_spans_crouch_fraction_to_full);
+    RUN_TEST(test_standup_minimum_jerk_trajectory_has_smooth_endpoints);
+    RUN_TEST(test_standup_target_must_match_backoff_used_by_calibration);
     RUN_TEST(test_wheel_glitch_filter_passes_plausible_change);
     RUN_TEST(test_wheel_glitch_filter_rejects_impossible_jump);
     RUN_TEST(test_wheel_glitch_filter_fails_open_after_max_consecutive);

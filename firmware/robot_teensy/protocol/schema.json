@@ -91,7 +91,7 @@
     {
       "symbol": "FAULT_PITCH_WATCHDOG",
       "id": 8,
-      "description": "|pitch| > 50° for > 200 ms"
+      "description": "pitch outside [-pitch_wd_bwd, +pitch_wd_fwd] (asymmetric, gain-scheduled by leg height) for > 200 ms. Suppressed in STANDING_UP."
     },
     {
       "symbol": "FAULT_WHEEL_RUNAWAY",
@@ -508,7 +508,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Actual encoder distance the hip must move away from the switch during initial clearance and after homing [rad]; default 5 degrees."
+      "description": "Actual encoder distance the hip must move away from the switch during initial clearance and after homing [rad]; default 5 degrees. This calibrated retracted endpoint is also the fixed STANDING_UP hip target. Set this value before calibration; changing it afterward requires recalibration so the stored hip limits are rebuilt."
     },
     {
       "symbol": "PARAM_CALIB_RANGE_L_RAD",
@@ -1181,8 +1181,10 @@
       "default": 0.0,
       "min": 0.0,
       "max": 1.0,
-      "flags": [],
-      "description": "1 = allow RUNNING mode to arm with wheel_l/r_enable off (bench-test only, e.g. a software-triggered smoke test with hips also disabled, no real torque anywhere). Independent of calib_bypass_en, which only covers the hip check. Not persisted — always boots to 0 (bypass off)."
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = allow RUNNING mode to arm with wheel_l/r_enable off (bench-test only, e.g. a software-triggered smoke test with hips also disabled, no real torque anywhere). Independent of calib_bypass_en, which only covers the hip check. Persistent since 2026-08-09 so a bench session survives a power cycle -- it used to boot to 0 every time, which silently blocked arming after every reboot with a message naming the motor rather than the missing bypass. setup() logs a loud WARN on any boot that comes up with it set, which is what replaces the boot-to-safe guarantee."
     },
     {
       "symbol": "PARAM_ALPHA_FORCE_RETRACTED_EN",
@@ -1222,30 +1224,30 @@
       "description": "Master gate: 0 = arm goes STANDBY->RUNNING directly (today's behavior). 1 = arm routes through STANDING_UP recovery first. Default 0."
     },
     {
-      "symbol": "PARAM_STANDUP_MAX_PITCH_FWD_RAD",
-      "id": 1069,
-      "group": "GROUP_CONTROL",
-      "name": "standup_pitch_fwd",
-      "default": 0.6,
-      "min": 0.0,
-      "max": 1.4,
-      "flags": [
-        "persistent"
-      ],
-      "description": "Arm-time-only gate: max forward pitch [rad] considered recoverable at the moment STANDING_UP is requested. Default 0.6 (~34°). Does not bound the catch itself once underway — see standup_div_fwd for that."
-    },
-    {
-      "symbol": "PARAM_STANDUP_MAX_PITCH_BWD_RAD",
+      "symbol": "PARAM_STANDUP_PITCH_MIN_RAD",
       "id": 1070,
       "group": "GROUP_CONTROL",
-      "name": "standup_pitch_bwd",
+      "name": "standup_pitch_min",
+      "default": -0.6,
+      "min": -1.4,
+      "max": 0.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Arm-time-only lower signed pitch bound [rad] considered recoverable when STANDING_UP is requested (negative = backward). Default -0.6 (~-34°). Does not bound the catch itself once underway — see standup_div_bwd for that. Parameter ID 0x042E is retained from the former positive-magnitude standup_pitch_bwd; param-store v4 negates its persisted value once during migration."
+    },
+    {
+      "symbol": "PARAM_STANDUP_PITCH_MAX_RAD",
+      "id": 1069,
+      "group": "GROUP_CONTROL",
+      "name": "standup_pitch_max",
       "default": 0.6,
       "min": 0.0,
       "max": 1.4,
       "flags": [
         "persistent"
       ],
-      "description": "Arm-time-only gate: max backward pitch [rad] considered recoverable at the moment STANDING_UP is requested. Default 0.6 (~34°). Does not bound the catch itself once underway — see standup_div_bwd for that."
+      "description": "Arm-time-only upper signed pitch bound [rad] considered recoverable when STANDING_UP is requested (positive = forward). Default 0.6 (~34°). Does not bound the catch itself once underway — see standup_div_fwd for that. Parameter ID 0x042D is retained from the former standup_pitch_fwd."
     },
     {
       "symbol": "PARAM_STANDUP_CROUCH_TIME_S",
@@ -1254,11 +1256,37 @@
       "name": "standup_crouch_time",
       "default": 0.3,
       "min": 0.05,
-      "max": 2.0,
+      "max": 5.0,
       "flags": [
         "persistent"
       ],
-      "description": "CROUCH phase (leg retraction) duration [s]. Default 0.30."
+      "description": "CROUCH phase duration [s]: the commanded minimum-jerk excursion from the hips' pose at arm to the calibrated retracted endpoint. The phase does not end until the ramp has run its full length AND both hips have stopped moving, so this is the excursion time, not a timeout. Default 0.30."
+    },
+    {
+      "symbol": "PARAM_STANDUP_CROUCH_STIFF",
+      "id": 1327,
+      "group": "GROUP_CONTROL",
+      "name": "standup_crouch_kpf",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Hip stiffness during the CROUCH excursion, as a fraction of hip_running_kp/hip_running_tff_ret (kd always runs at its full value). Faded in from 0 on the same minimum-jerk profile as the position ramp, so arming applies no torque step even when the legs start outside the calibrated span. Lower = gentler excursion but more sag against gravity; the sag is pulled out by the STIFFEN ramp that follows. Default 0.5."
+    },
+    {
+      "symbol": "PARAM_STANDUP_STIFFEN_TIME_S",
+      "id": 1328,
+      "group": "GROUP_CONTROL",
+      "name": "standup_stiff_time",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "STIFFEN phase duration [s]: hips hold the calibrated retracted endpoint while kp and the hip feedforward ramp linearly from standup_crouch_kpf to their full hip_running_* values. The LQR is engaged only after this ramp completes AND the hips settle inside the strict position/velocity band at full stiffness. Default 1.0."
     },
     {
       "symbol": "PARAM_STANDUP_K_PITCH",
@@ -1271,7 +1299,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Recovery P gain on pitch [N·m/rad], same positive-sign convention as the LQR/FF2 terms. Starts at 0 — tune up on the bench."
+      "description": "Recovery P gain on pitch [N*m/rad]. NOT READ in the current design: STANDING_UP reuses controlLoop_run() (the RUNNING LQR, velocity PI, wheel governor and runaway watchdog) instead of a standup-specific law, so the equivalent RUNNING params govern. Retained for a future standup-specific control law."
     },
     {
       "symbol": "PARAM_STANDUP_K_RATE",
@@ -1284,7 +1312,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Recovery D gain on pitch rate. Starts at 0 — tune up on the bench."
+      "description": "Recovery D gain on pitch rate. NOT READ in the current design: STANDING_UP reuses controlLoop_run() (the RUNNING LQR, velocity PI, wheel governor and runaway watchdog) instead of a standup-specific law, so the equivalent RUNNING params govern. Retained for a future standup-specific control law."
     },
     {
       "symbol": "PARAM_STANDUP_TORQUE_LIMIT",
@@ -1297,33 +1325,33 @@
       "flags": [
         "persistent"
       ],
-      "description": "|tau_recover| clamp [N·m], applied before the hard MOTOR_TRQ_MAX clamp. Starts at 0 — tune up on the bench; max = MOTOR_TRQ_MAX (7.0)."
+      "description": "STANDING_UP-scoped replacement for lqr_torque_limit [N*m]: while the state is active this clamps tau_sym and the mixed per-wheel output instead of the RUNNING value, so the catch can be given the authority to swing the body up without detuning the balance loop. 0 = use lqr_torque_limit (off by default). MOTOR_TRQ_MAX (7 N*m) remains the hard ceiling either way."
     },
     {
       "symbol": "PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S",
       "id": 1077,
       "group": "GROUP_CONTROL",
       "name": "standup_vel_limit",
-      "default": 3.0,
-      "min": 1.0,
+      "default": 0.0,
+      "min": 0.0,
       "max": 20.0,
       "flags": [
         "persistent"
       ],
-      "description": "Dedicated runaway-backup baseline [turns/s], trips at 2x — independent of wm_vel_limit so tuning one doesn't loosen the other's margin."
+      "description": "STANDING_UP-scoped replacement for wm_vel_limit [turns/s]: while the state is active this is both the per-wheel soft governor threshold and the baseline for the runaway watchdog's 2x trip. The governor zeroes wheel torque outright once the wheel passes it in the driven direction, so the RUNNING value is what ends the catch's backward acceleration early; raise this to let the wheels run out far enough to tilt the body forward. 0 = use wm_vel_limit (off by default)."
     },
     {
       "symbol": "PARAM_STANDUP_CAPTURE_PITCH_RAD",
       "id": 1078,
       "group": "GROUP_CONTROL",
       "name": "standup_cap_pitch",
-      "default": 0.12,
+      "default": 0.05,
       "min": 0.02,
       "max": 0.4,
       "flags": [
         "persistent"
       ],
-      "description": "|pitch| below this [rad] (+ rate below standup_cap_rate) for the hold time => captured (handoff to RUNNING)."
+      "description": "|pitch - lqr_pitch_trim_ret| below this [rad] (+ rate below standup_cap_rate) for standup_cap_hold => captured (handoff to RUNNING). Kept well inside pitch_wd_bwd_ret minus |lqr_pitch_trim_ret|: at the old 0.12 a capture at the backward edge of the band handed off ~0.002 rad from the backward pitch-watchdog trip angle, so a successful catch was immediately followed by FAULT_PITCH_WATCHDOG in RUNNING."
     },
     {
       "symbol": "PARAM_STANDUP_CAPTURE_RATE_RADS",
@@ -1401,7 +1429,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Balance-point pitch offset [rad], fully retracted leg (alpha=0). The lean the LQR holds for zero velocity, compensating a CG that is not exactly over the wheel axle. Interpolated toward lqr_pitch_trim_ext by the gain-schedule alpha. Default -0.14 rad (~-8 deg), measured on the bench 2026-07-25: with this at 0 the vel-PI integrator was doing the trim's job, permanently eating ~8 deg of the backward lean budget. Not currently a live-tune target (see LIVE_TUNE_SLOTS in main.cpp) — edit via the Params tab, or repoint a live-tune slot at this param for a future bench session."
+      "description": "Balance-point pitch offset [rad], fully retracted leg (alpha=0). This is the retracted endpoint of trim(alpha) = trim_ret + alpha*(trim_ext-trim_ret) + trim_curve*alpha*(1-alpha). The lean the LQR holds for zero velocity compensates a CG that is not exactly over the wheel axle. Default -0.14 rad (~-8 deg), measured on the bench 2026-07-25: with this at 0 the vel-PI integrator was doing the trim's job, permanently eating ~8 deg of the backward lean budget. Not currently a live-tune target (see LIVE_TUNE_SLOTS in main.cpp) — edit via the Params tab, or repoint a live-tune slot at this param for a future bench session."
     },
     {
       "symbol": "PARAM_LQR_PITCH_TRIM_EXT",
@@ -1414,7 +1442,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Balance-point pitch offset [rad], fully extended leg (alpha=1). Companion to lqr_pitch_trim_ret; the two are linearly interpolated by the gain-schedule alpha (higher order later if needed)."
+      "description": "Balance-point pitch offset [rad], fully extended leg (alpha=1). This is the extended endpoint of the quadratic height schedule; lqr_trim_curve changes only the interior of the alpha range."
     },
     {
       "symbol": "PARAM_VEL_PI_THETA_MAX_FWD_RET",
@@ -1531,20 +1559,33 @@
       "flags": [
         "persistent"
       ],
-      "description": "In-progress divergence limit: max forward pitch [rad] tolerated *during* a RECOVER attempt before declaring it diverged (FAULT_STANDUP_FAILED, no retry). Deliberately looser than standup_pitch_fwd (the arm-time-only gate) so a saturated catch has overshoot budget instead of self-tripping the instant it starts. Must stay checked with the same debounce as a normal fault (not instantaneous) to avoid a single noisy IMU sample aborting a good catch."
+      "description": "In-progress divergence limit: max forward pitch [rad] tolerated *during* a RECOVER attempt before declaring it diverged (FAULT_STANDUP_FAILED, no retry). Deliberately looser than standup_pitch_max (the arm-time-only gate) so a saturated catch has overshoot budget instead of self-tripping the instant it starts. Must stay checked with the same debounce as a normal fault (not instantaneous) to avoid a single noisy IMU sample aborting a good catch."
     },
     {
       "symbol": "PARAM_STANDUP_DIVERGE_PITCH_BWD_RAD",
       "id": 1095,
       "group": "GROUP_CONTROL",
       "name": "standup_div_bwd",
-      "default": 1.0,
+      "default": 0.5,
       "min": 0.0,
       "max": 1.4,
       "flags": [
         "persistent"
       ],
-      "description": "In-progress divergence limit: max backward pitch [rad] tolerated *during* a RECOVER attempt before declaring it diverged (FAULT_STANDUP_FAILED, no retry). Deliberately looser than standup_pitch_bwd (the arm-time-only gate) — see standup_div_fwd."
+      "description": "In-progress divergence limit: max backward pitch [rad] tolerated *during* a RECOVER attempt before declaring it diverged (FAULT_STANDUP_FAILED, no retry). This is the only pitch bound in effect while STANDING_UP suppresses the pitch watchdog, and the leg linkage reaches the ground on a backward lean well before the forward limit, so it is tighter than standup_div_fwd rather than symmetric with it."
+    },
+    {
+      "symbol": "PARAM_STANDUP_USE_RET_GAINS",
+      "id": 1325,
+      "group": "GROUP_CONTROL",
+      "name": "standup_ret_gains",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = pin the gain-schedule alpha to 0 (the retracted anchor) for the duration of STANDING_UP, so the LQR gains, pitch trim, barrier threshold and watchdog thresholds use their _ret values while the hips are held at the calibrated retracted endpoint. Scoped to STANDING_UP only, unlike alpha_force_ret_en which pins alpha globally. Set to 0 to schedule on measured leg height instead."
     },
     {
       "symbol": "PARAM_LQR_BARRIER_K",
@@ -1584,6 +1625,74 @@
         "persistent"
       ],
       "description": "Backward pitch magnitude [rad] past which the lqr_barrier_k soft limit engages, fully extended leg. Companion to lqr_barrier_th_ret; defaults to the same value until bench-tuned separately."
+    },
+    {
+      "symbol": "PARAM_PLANT_ID_ENABLE",
+      "id": 1099,
+      "group": "GROUP_CONTROL",
+      "name": "plant_id_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "Arm the control-loop plant-identification chirp. Non-persistent and inert at 0. The firmware auto-clears it after plant_id_dur and whenever RUNNING/JUMPING exits."
+    },
+    {
+      "symbol": "PARAM_PLANT_ID_AMPLITUDE_NM",
+      "id": 1100,
+      "group": "GROUP_CONTROL",
+      "name": "plant_id_amp",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 0.3,
+      "flags": [],
+      "description": "Plant-identification chirp amplitude [N*m], added to tau_sym before the normal lqr_torque_limit clamp. Non-persistent."
+    },
+    {
+      "symbol": "PARAM_PLANT_ID_F0_HZ",
+      "id": 1101,
+      "group": "GROUP_CONTROL",
+      "name": "plant_id_f0",
+      "default": 0.2,
+      "min": 0.2,
+      "max": 40.0,
+      "flags": [],
+      "description": "Plant-identification linear chirp start frequency [Hz]. Non-persistent."
+    },
+    {
+      "symbol": "PARAM_PLANT_ID_F1_HZ",
+      "id": 1102,
+      "group": "GROUP_CONTROL",
+      "name": "plant_id_f1",
+      "default": 10.0,
+      "min": 0.2,
+      "max": 40.0,
+      "flags": [],
+      "description": "Plant-identification linear chirp end frequency [Hz]. Non-persistent."
+    },
+    {
+      "symbol": "PARAM_PLANT_ID_DURATION_S",
+      "id": 1103,
+      "group": "GROUP_CONTROL",
+      "name": "plant_id_dur",
+      "default": 5.0,
+      "min": 0.5,
+      "max": 20.0,
+      "flags": [],
+      "description": "Plant-identification chirp duration [s]. The excitation auto-disarms when this time elapses. Non-persistent."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_CURVE",
+      "id": 1104,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_trim_curve",
+      "default": 0.0,
+      "min": -0.3491,
+      "max": 0.3491,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Interior curvature [rad] for the balance-point pitch-trim height schedule: trim(alpha) = trim_ret + alpha*(trim_ext-trim_ret) + lqr_trim_curve*alpha*(1-alpha). It is zero at alpha=0 and alpha=1, contributes one quarter of its value at alpha=0.5, and default 0 preserves the previous linear interpolation. Negative values add more backward (negative) trim at intermediate leg heights."
     },
     {
       "symbol": "PARAM_RADIO_HIP_CMD",
@@ -1800,6 +1909,19 @@
       "description": "Write 1 while live-tuning (RUNNING + calibration switch up) to persist every currently-picked-up LIVE_TUNE_SLOTS entry's shadow value into its real param. One-shot: firmware performs the latch(es) and resets this to 0. Slots that haven't picked up yet (knob never swept through the target's current value) are skipped, not latched at their un-picked-up shadow value. Ignored outside live-tune mode."
     },
     {
+      "symbol": "PARAM_LIVE_TUNE_MULTI_EN",
+      "id": 1284,
+      "group": "GROUP_COMMAND",
+      "name": "live_tune_multi_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Selects what the CH5/CH6 switches do while RUNNING. 0 (default) = SIMPLE: CH5 up alone enables live tuning on gain group 0 (lqr_k_pitch_ret on CH7, lqr_k_rate_ret on CH8), and CH6 becomes the SD-log switch -- flip up to start recording, down to stop. 1 = LEGACY: the original three-group scheme where CH5+CH6 combinations pick group 0/1/2 (CH5 down+CH6 up, CH5 up+CH6 down, both down; both up = inactive) and CH6 does not touch SD logging. Groups 1 and 2 (vel_pi and roll gains) are only reachable in LEGACY mode -- nothing was removed, it is behind this flag. A log must still be STARTED in STANDBY/ESTOP (opening one preallocates and blocks ~96 ms), but recording then continues through RUNNING."
+    },
+    {
       "symbol": "PARAM_ROLL_CTRL_EN",
       "id": 1308,
       "group": "GROUP_CONTROL",
@@ -1871,7 +1993,7 @@
       "name": "roll_offset_max",
       "default": 0.15,
       "min": 0.0,
-      "max": 0.6,
+      "max": 2.0,
       "flags": [
         "persistent"
       ],
@@ -1915,6 +2037,19 @@
         "persistent"
       ],
       "description": "|roll| threshold [rad] that trips FAULT_ROLL_WATCHDOG after 200 ms (default ~20°). Set well inside the lateral tip-over angle."
+    },
+    {
+      "symbol": "PARAM_WHEEL_RUNAWAY_EN",
+      "id": 1326,
+      "group": "GROUP_CONTROL",
+      "name": "wheel_runaway_en",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = ESTOP (FAULT_WHEEL_RUNAWAY) if either wheel exceeds 2x wm_vel_limit for > 50 ms. Set 0 only for bench work that legitimately spins the wheels past the governor (free-spin torque tests, encoder-scaling checks) — it removes the hard backup behind the per-tick velocity governor, so a real runaway then relies on the pitch watchdog alone. Persistent, so a disable survives a power cycle; setup() logs a loud WARN whenever it boots with the check off."
     },
     {
       "symbol": "PARAM_HIP_ROLL_KP",
@@ -1963,7 +2098,7 @@
       "name": "radio_roll_max",
       "default": 0.1,
       "min": 0.0,
-      "max": 0.5,
+      "max": 0.7853982,
       "flags": [
         "readonly",
         "command"
@@ -1977,11 +2112,11 @@
       "name": "profile1_roll_max",
       "default": 0.05,
       "min": 0.0,
-      "max": 0.5,
+      "max": 0.7853982,
       "flags": [
         "persistent"
       ],
-      "description": "Speed profile 1 (slow) max roll setpoint [rad]; CH9 selects the active profile. Conservative — well inside the lateral tip angle."
+      "description": "Speed profile 1 (slow) max roll setpoint [rad]; CH9 selects the active profile. Conservative — well inside the lateral tip angle. The 0.785 rad (45 deg) ceiling on this and its siblings is a bench-testing headroom figure, not a safe operating value: nothing downstream knows where the CG is, so anything approaching it relies entirely on roll_watchdog_en and roll_offset_max to stop a tip-over."
     },
     {
       "symbol": "PARAM_PROFILE_2_ROLL_MAX",
@@ -1990,7 +2125,7 @@
       "name": "profile2_roll_max",
       "default": 0.1,
       "min": 0.0,
-      "max": 0.5,
+      "max": 0.7853982,
       "flags": [
         "persistent"
       ],
@@ -2003,7 +2138,7 @@
       "name": "profile3_roll_max",
       "default": 0.17,
       "min": 0.0,
-      "max": 0.5,
+      "max": 0.7853982,
       "flags": [
         "persistent"
       ],

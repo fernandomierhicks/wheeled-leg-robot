@@ -96,6 +96,7 @@ HipLimits    hm_limits_R = {};
 
 // CAN2 on Teensy 4.1 uses pins 1 (TX) and 0 (RX) — matches config.h PIN_CAN2_*.
 static FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> can2;
+static bool s_can_initialized = false;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,12 @@ static float clamp_to_limits(float pos, const HipLimits& lim) {
     if (pos < lim.min_rad) return lim.min_rad;
     if (pos > lim.max_rad) return lim.max_rad;
     return pos;
+}
+
+// Public alias — callers that ramp from the measured pose need the same clamp
+// the send path applies (see hip_motors.h).
+float hip_motors_clamp_to_limits(float pos, const HipLimits& lim) {
+    return clamp_to_limits(pos, lim);
 }
 
 // ── CAN TX health ────────────────────────────────────────────────────────────
@@ -233,6 +240,7 @@ bool hip_motors_init() {
     can2.enableFIFO();
     can2.enableFIFOInterrupt();
     can2.onReceive(rx_callback);
+    s_can_initialized = true;
     Serial.print("[HipMotors] CAN2 init OK  ");
     Serial.print(CAN_BAUD / 1000);
     Serial.print(" kbps  id_L=0x");
@@ -297,14 +305,14 @@ void hip_motors_poll() {
     // by the zero-torque ping below. Otherwise ping with current-position +
     // zero-torque so the AK45 returns feedback every frame. Each side is gated
     // independently so a disabled/absent motor never gets CAN traffic.
-    if (hm_L.mit_active) {
+    if (hm_L.mit_active && param_get(PARAM_HIP_L_ENABLE) >= 0.5f) {
         if (hm_sp_L.active)
             pack_and_send(AK45_ID_L, hm_sp_L.p, hm_sp_L.v, hm_sp_L.kp, hm_sp_L.kd, hm_sp_L.tff);
         else
             pack_and_send(AK45_ID_L, hm_L.pos_rad, 0.0f, 0.0f, 0.0f, 0.0f);
         delayMicroseconds(CAN_INTER_FRAME_US);
     }
-    if (hm_R.mit_active) {
+    if (hm_R.mit_active && param_get(PARAM_HIP_R_ENABLE) >= 0.5f) {
         if (hm_sp_R.active)
             pack_and_send(AK45_ID_R, hm_sp_R.p, hm_sp_R.v, hm_sp_R.kp, hm_sp_R.kd, hm_sp_R.tff);
         else
@@ -326,15 +334,24 @@ void hip_motors_enter_mit() {
 }
 
 void hip_motors_exit_mit() {
+    bool delay_between = hm_L.mit_active && hm_R.mit_active && s_can_initialized;
+    hip_motor_disable_L();
+    if (delay_between) delayMicroseconds(CAN_INTER_FRAME_US);
+    hip_motor_disable_R();
+}
+
+void hip_motor_disable_L() {
     static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFD};
-    if (hm_L.mit_active) {
-        send_raw(AK45_ID_L, cmd);
-        delayMicroseconds(CAN_INTER_FRAME_US);
-    }
-    if (hm_R.mit_active) send_raw(AK45_ID_R, cmd);
+    hm_sp_L.active = false;
+    if (hm_L.mit_active && s_can_initialized) send_raw(AK45_ID_L, cmd);
     hm_L.mit_active = false;
+}
+
+void hip_motor_disable_R() {
+    static const uint8_t cmd[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFD};
+    hm_sp_R.active = false;
+    if (hm_R.mit_active && s_can_initialized) send_raw(AK45_ID_R, cmd);
     hm_R.mit_active = false;
-    hip_motors_clear_setpoints();
 }
 
 // Arm the settling window described at HM_ZERO_SYNC_TOL_RAD. Must be called for
@@ -380,29 +397,31 @@ void hip_motors_send(float pos_L, float vel_L, float kp_L, float kd_L, float trq
                      float pos_R, float vel_R, float kp_R, float kd_R, float trq_R) {
     // Gate each motor independently — with only one leg enabled (bench config)
     // the active side must still receive its frame.
-    if (hm_L.mit_active) {
+    if (hm_L.mit_active && param_get(PARAM_HIP_L_ENABLE) >= 0.5f) {
         pack_and_send(AK45_ID_L, clamp_to_limits(pos_L, hm_limits_L), vel_L, kp_L, kd_L, trq_L);
         delayMicroseconds(CAN_INTER_FRAME_US);
     }
-    if (hm_R.mit_active)
+    if (hm_R.mit_active && param_get(PARAM_HIP_R_ENABLE) >= 0.5f)
         pack_and_send(AK45_ID_R, clamp_to_limits(pos_R, hm_limits_R), vel_R, kp_R, kd_R, trq_R);
 }
 
 void hip_motor_send_L(float pos, float vel, float kp, float kd, float torque) {
-    if (!hm_L.mit_active) return;
+    if (!hm_L.mit_active || param_get(PARAM_HIP_L_ENABLE) < 0.5f) return;
     pack_and_send(AK45_ID_L, clamp_to_limits(pos, hm_limits_L), vel, kp, kd, torque);
 }
 
 void hip_motor_send_R(float pos, float vel, float kp, float kd, float torque) {
-    if (!hm_R.mit_active) return;
+    if (!hm_R.mit_active || param_get(PARAM_HIP_R_ENABLE) < 0.5f) return;
     pack_and_send(AK45_ID_R, clamp_to_limits(pos, hm_limits_R), vel, kp, kd, torque);
 }
 
 void hip_motors_set_setpoint_L(float pos, float vel, float kp, float kd, float torque) {
+    if (param_get(PARAM_HIP_L_ENABLE) < 0.5f) { hm_sp_L.active = false; return; }
     hm_sp_L = {clamp_to_limits(pos, hm_limits_L), vel, kp, kd, torque, true, millis()};
 }
 
 void hip_motors_set_setpoint_R(float pos, float vel, float kp, float kd, float torque) {
+    if (param_get(PARAM_HIP_R_ENABLE) < 0.5f) { hm_sp_R.active = false; return; }
     hm_sp_R = {clamp_to_limits(pos, hm_limits_R), vel, kp, kd, torque, true, millis()};
 }
 

@@ -2,6 +2,7 @@ import tempfile
 import unittest
 import zlib
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from PyQt6.QtCore import QCoreApplication
 
@@ -155,6 +156,34 @@ class LogTransferRepairTests(unittest.TestCase):
         self._end(5, b"".join(chunks[1:]))
         self.assertEqual(len(self.completed), 1)
         self.assertTrue(self.completed[0][2])
+
+    def test_gui_sd_commands_start_and_stop_host_capture(self):
+        self.manager._host = Mock()
+        with (
+            patch.object(log_transfer, "send_log_start") as send_start,
+            patch.object(log_transfer, "send_log_stop") as send_stop,
+        ):
+            self.manager.start_logging(2500)
+            self.manager.stop_logging()
+
+        send_start.assert_called_once_with(2500)
+        send_stop.assert_called_once_with()
+        self.manager._host.start.assert_called_once_with()
+        self.manager._host.stop.assert_called_once_with()
+
+    def test_onboard_sd_events_start_and_stop_host_capture(self):
+        self.manager._host = Mock()
+        self.manager._on_log_info({
+            "log_info_type": log_transfer.LOG_INFO_STARTED,
+            "log_file_index": 12,
+        })
+        self.manager._on_log_info({
+            "log_info_type": log_transfer.LOG_INFO_STOPPED,
+            "log_file_index": 12,
+        })
+
+        self.manager._host.start.assert_called_once_with()
+        self.manager._host.stop.assert_called_once_with()
 
 
 if __name__ == "__main__":

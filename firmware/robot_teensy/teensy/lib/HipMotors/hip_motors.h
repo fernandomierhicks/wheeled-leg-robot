@@ -75,6 +75,12 @@ void hip_motors_enter_mit();
 // Send the MIT-mode disable command to both motors (motors go idle / safe).
 void hip_motors_exit_mit();
 
+// Immediately disable one axis, independent of its just-updated enable param.
+// Used by the live parameter path so changing hip_*_enable from 1 to 0 sends
+// the motor's MIT-exit frame before polling for that axis stops.
+void hip_motor_disable_L();
+void hip_motor_disable_R();
+
 // Zero the encoder on both motors at the current shaft position.
 void hip_motors_zero();
 
@@ -108,6 +114,13 @@ void hip_motors_set_setpoint_R(float pos, float vel, float kp, float kd, float t
 // Drop any cached setpoints on both axes, reverting poll() to the safe
 // zero-torque ping. Call on disable, or when leaving the commanding mode.
 void hip_motors_clear_setpoints();
+
+// Clamp a position [rad] to a calibrated software limit pair (returns it
+// unchanged while `valid` is false). Exposed because every command sent below
+// is clamped this way, so a caller that ramps *from* the measured pose has to
+// start the ramp from the clamped pose — otherwise the first command silently
+// steps to the limit instead of tracking the ramp. See on_standing_up().
+float hip_motors_clamp_to_limits(float pos, const HipLimits& lim);
 
 // Convert a normalised hip extension command t ∈ [0,1] (0 = retracted,
 // 1 = fully extended) into per-motor position setpoints [rad], accounting

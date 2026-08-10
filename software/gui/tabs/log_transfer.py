@@ -23,6 +23,7 @@ from .comm_commands import (
     LOG_FILE_KIND_PARAMS, LOG_FILE_KIND_WLOG, send_log_get, send_log_list,
     send_log_start, send_log_stop,
 )
+from .host_logger import HostLogger
 from .log_bus import LogPacketBus
 from .log_paths import RUNS_DIR
 
@@ -84,6 +85,14 @@ class LogTransferManager(QObject):
 
         self._logging       = False
         self._logging_token = 0
+        self._host = HostLogger.instance()
+
+        # One authoritative coupling point for every SD trigger. GUI/remote
+        # commands emit this signal immediately; onboard triggers (radio,
+        # arm-time logging, timed completion) arrive as STARTED/STOPPED events.
+        # HostLogger.start()/stop() are idempotent, so duplicate confirmation
+        # events cannot split one SD session into multiple host files.
+        self.logging_state_changed.connect(self._sync_host_logging)
 
         LogPacketBus.instance().packet.connect(self._on_packet)
 
@@ -91,6 +100,12 @@ class LogTransferManager(QObject):
         self._watchdog.setInterval(500)
         self._watchdog.timeout.connect(self._check_timeout)
         self._watchdog.start()
+
+    def _sync_host_logging(self, active: bool):
+        if active:
+            self._host.start()
+        else:
+            self._host.stop()
 
     # ── Logging start/stop (single source of truth for all GUI controls) ──────
     # The firmware's LOG_INFO STATUS ack doesn't distinguish START/STOP/DELETE,

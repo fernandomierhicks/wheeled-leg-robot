@@ -8,6 +8,7 @@
 #include "config.h"
 #include "param_registry.h"
 #include "control_loop.h"
+#include "standup_safety.h"
 #include "wheel_motors.h"
 #include "Buzzer.h"
 #include <StateMachine.h>
@@ -139,14 +140,20 @@ static float     s_jp_from_L       = 0.0f;    // hip pos when RETRACT began
 static float     s_jp_from_R       = 0.0f;
 
 // ── Standing-up FSM state ─────────────────────────────────────────────────────
-typedef enum : uint8_t { SU_CROUCH = 0, SU_RECOVER = 1, SU_PAUSE = 2 } StandupPhase;
+// Phase order is CROUCH -> STIFFEN -> RECOVER (-> PAUSE on a retry). SU_STIFFEN
+// is numbered last, not in sequence, so the telemetry codes already in logs and
+// in the GUI keep their meaning.
+typedef enum : uint8_t {
+    SU_CROUCH = 0, SU_RECOVER = 1, SU_PAUSE = 2, SU_STIFFEN = 3
+} StandupPhase;
 // Divergence debounce — fixed duration (not a tunable param), same rationale
 // as control_loop.cpp's PITCH_WATCHDOG_MS: a safety-timeout, not a tuning knob.
 static constexpr uint32_t STANDUP_DIVERGE_MS = 50;
 static StandupPhase s_su_phase             = SU_CROUCH;
 static uint32_t     s_su_phase_ms          = 0;
 static float        s_su_nom_L, s_su_nom_R;       // hip pos snapshot at entry
-static float        s_su_ret_L, s_su_ret_R;       // calibrated retracted target
+static uint32_t     s_su_hip_settle_since_ms = 0; // 0 = hips not continuously settled
+static float        s_su_stiff_from          = 0.0f; // stiffness scale STIFFEN ramps up from
 static uint8_t      s_su_attempt           = 0;   // 1-based RECOVER attempt counter
 static uint32_t     s_su_capture_since_ms  = 0;   // 0 = not currently in-band
 static uint32_t     s_su_diverge_start_ms  = 0;   // 0 = not currently past the divergence limit
@@ -196,8 +203,8 @@ static void on_standby()  {
         wheel_motors_set_mode(WheelMode::IDLE);
         wheel_motors_clear_errors();
     }
-    // Startup succeeded: IMU (if enabled) reached NOMINAL and both hip motors
-    // replied — startup_ok() is the only path into STANDBY from STARTUP.
+    // Startup succeeded: enabled hardware is ready and the IMU (if enabled)
+    // reached NOMINAL.
     if (entering && from_startup) comm_log(LOG_LEVEL_INFO, "Startup complete");
     if (entering) comm_log(LOG_LEVEL_INFO, "-> STANDBY");
     if (from_estop) {
@@ -292,7 +299,17 @@ static void on_running() {
         comm_log(LOG_LEVEL_INFO, "-> RUNNING (armed)");
         g_buzzer.play(ARMED_MELODY, sizeof(ARMED_MELODY) / sizeof(ARMED_MELODY[0]));
         wheel_motors_set_mode(WheelMode::TORQUE);
-        controlLoop_reset();  // C1: clear integrators/rate-limit state so each arm starts clean
+        // A captured standup has been running this very control loop for the
+        // last few hundred ms, settled, with only the pitch watchdog masked.
+        // Resetting it here would throw away a converged velocity integral and
+        // re-seed the hip rate-limiter from CH3 — a torque and leg-position
+        // step at the exact moment the watchdog goes live. Release the hip
+        // override instead and let CH3 slew in from the pinned height.
+        if (from_standing_up) {
+            controlLoop_clear_hip_override();
+        } else {
+            controlLoop_reset();  // C1: clear integrators/rate-limit state so each arm starts clean
+        }
         // Skip on a jump landing or a successful standup catch — the hips are
         // already stiffly holding the post-jump/post-catch position; re-ramping
         // kp from 0 here would loosen them right when they need to hold.
@@ -452,10 +469,32 @@ static void on_jumping() {
         hip_motors_set_setpoint_R(s_jp_nom_R, 0.0f, kp, kd, 0.0f);
     }
 }
-// Self-contained recovery sequence for arming while fallen — see standing_up.md.
-// Never calls controlLoop_run(): pitch is large/outside the LQR's linearization
-// region during the energetic phase, so this codes its own minimal wheel-torque
-// law inline, the same way on_jumping() codes its own hip logic inline.
+// Hip hold used by the pre-LQR standup phases. `stiff` scales kp and the hip
+// feedforward together — the same pair control_loop.cpp's arm-in ramp_alpha
+// scales, and for the same reason: kp alone would leave the feedforward
+// stepping in whole at the RECOVER handoff (hip_running_tff_ret is -2.5 N·m by
+// default, which is a real kick). kd is at its full running value throughout,
+// also matching the arm-in ramp — damping is what keeps a softly-held leg from
+// oscillating, so it is never the thing that gets faded.
+//
+// The feedforward uses the retracted anchor only. It is exact at the crouch
+// target (where alpha = 0, and where the hips spend STIFFEN and RECOVER) and
+// approximate during the excursion, where the leg is still extended; `stiff` is
+// small there, so the error it can contribute is small too.
+static void standup_hold_hips(float pos_L, float pos_R,
+                              float vel_L, float vel_R, float stiff) {
+    float kp  = stiff * param_get(PARAM_HIP_RUNNING_KP);
+    float kd  = param_get(PARAM_HIP_RUNNING_KD);
+    float tff = stiff * param_get(PARAM_HIP_RUNNING_TFF_RET);
+    hip_motors_set_setpoint_L(pos_L, vel_L, kp, kd, tff);
+    hip_motors_set_setpoint_R(pos_R, vel_R, kp, kd, tff);
+}
+
+// Arm-time settling window — see standing_up.md. Not a separate controller:
+// CROUCH poses the legs, then RECOVER hands every tick to controlLoop_run()
+// (the ordinary RUNNING stack) with only the pitch watchdog masked, so the
+// catch and the steady state are the same loop and the handoff to RUNNING is
+// not a controller switch. Replaced an earlier inline P/D wheel-torque law.
 static void on_standing_up() {
     bool entering = (g_state.state != STATE_STANDING_UP);
     g_state.state = STATE_STANDING_UP;
@@ -469,21 +508,39 @@ static void on_standing_up() {
         s_su_captured         = false;
         s_su_capture_since_ms = 0;
         s_su_diverge_start_ms = 0;
-        s_su_nom_L = hm_L.pos_rad;
-        s_su_nom_R = hm_R.pos_rad;
-        hip_cmd_to_setpoints(0.0f, &s_su_ret_L, &s_su_ret_R);  // t=0 → retracted
+        s_su_hip_settle_since_ms = 0;
+        s_su_stiff_from = 0.0f;
+        // Clamp the ramp's starting pose into the calibrated span. Every hip
+        // command is clamped on the way out (hip_motors_set_setpoint_*), so a
+        // ramp starting outside the span is not a ramp at all: its first
+        // command is already the clamped endpoint and the excursion collapses
+        // into a step. That is the normal case, not a corner case — the leg
+        // parks *on* the retract switch at the end of calibration, which is one
+        // calib_backoff_rad (15 deg as configured) beyond the retracted end of
+        // the span, so every arm from the parked pose used to snap the hips
+        // through that backoff at full running stiffness, whatever
+        // standup_crouch_time said. Clamping here makes the ramp start where
+        // the commands can actually start; the stiffness fade-in below is what
+        // removes the torque step the remaining pose error would otherwise
+        // still produce.
+        s_su_nom_L = hip_motors_clamp_to_limits(hm_L.pos_rad, hm_limits_L);
+        s_su_nom_R = hip_motors_clamp_to_limits(hm_R.pos_rad, hm_limits_R);
         wheel_motors_set_mode(WheelMode::TORQUE);
+        // Clean integrators/rate-limit state before the RUNNING controllers are
+        // handed the catch in SU_RECOVER. Also clears any stale hip override.
+        controlLoop_reset();
     }
 
     g_state.standup_state = (uint8_t)s_su_phase;
 
     // Refuse to command hips without valid calibrated limits — mirrors the
-    // identical guard in on_jumping(). Without it, hip_cmd_to_setpoints(0.0f)
-    // silently returns pos=0 (span==0), not "retracted", which would snap the
-    // hip to an arbitrary pose at full stiffness. Unlike on_jumping(), there's
-    // no LQR fallback to keep running here (pitch is outside its
-    // linearization region), so an invalid-limits abort goes straight to
-    // ESTOP rather than just skipping hip commands for the tick.
+    // identical guard in on_jumping(). Without it, hip_cmd_to_setpoints()
+    // silently returns pos=0 (span==0), not the requested height, which would
+    // snap the hip to an arbitrary pose at full stiffness. Unlike
+    // on_jumping(), an invalid-limits abort here goes straight to ESTOP rather
+    // than just skipping hip commands for the tick: the whole point of this
+    // state is that the pitch watchdog is masked, so there is no safety net
+    // left to fall back on if the legs are in an unknown pose.
     if (!hm_limits_L.valid || !hm_limits_R.valid) {
         comm_log(LOG_LEVEL_WARN, "STANDING_UP: limits not valid — aborting");
         g_state.fault_code = FAULT_STANDUP_FAILED;
@@ -493,15 +550,27 @@ static void on_standing_up() {
 
     float pitch      = g_state.pitch_rad;
     float pitch_rate = g_state.pitch_rate_rads;
-    // Legs are pinned at the retracted target for the entire STANDING_UP
-    // sequence, so the retracted-anchor balance trim applies throughout — no
-    // need to gain-schedule by leg height the way control_loop.cpp does.
-    float trim = param_get(PARAM_LQR_PITCH_TRIM_RET);
+
+    // The stand-up pose is the calibrated retracted endpoint. Calibration
+    // defines t=0 at exactly calib_backoff_rad away from each retract switch,
+    // so no second stand-up height parameter can disagree with it.
+    float su_ret_L, su_ret_R;
+    hip_cmd_to_setpoints(0.0f, &su_ret_L, &su_ret_R);
+    float configured_backoff = param_get(PARAM_CALIB_BACKOFF_RAD);
+    if (!standup_target_matches_configured_backoff(
+            su_ret_L, su_ret_R, configured_backoff,
+            CALIB_L_SEEK_DIR, CALIB_R_SEEK_DIR)) {
+        comm_log(LOG_LEVEL_ERROR,
+                 "STANDING_UP: calib_backoff changed since calibration; recalibrate before arming");
+        g_state.fault_code = FAULT_STANDUP_FAILED;
+        stateMachine_request_estop();
+        return;
+    }
 
     // Divergence check (no retry): pitch grew past the recoverable range
     // mid-attempt — a wrong-direction/unstable response, not just a slow one.
     // Deliberately looser than the arm-time-only entry gate
-    // (standup_pitch_fwd/bwd) so a saturated catch has overshoot budget
+    // (standup_pitch_min/max) so a saturated catch has overshoot budget
     // instead of self-tripping the instant it starts, and debounced
     // (STANDUP_DIVERGE_MS) like every other fault instead of instantaneous,
     // so one noisy IMU sample can't abort a good catch. Checked every phase,
@@ -518,66 +587,152 @@ static void on_standing_up() {
         s_su_diverge_start_ms = 0;
     }
 
-    // Same hip gains RUNNING will use — not a separate standup_crouch_kp/kd —
-    // so capture handoff to RUNNING (on_running(), from_standing_up) doesn't
-    // also have to absorb a stiffness step on top of the hip position step.
-    float kp      = param_get(PARAM_HIP_RUNNING_KP);
-    float kd      = param_get(PARAM_HIP_RUNNING_KD);
     float elapsed = (millis() - s_su_phase_ms) / 1000.0f;
 
     if (s_su_phase == SU_CROUCH) {
+        // The excursion: walk the hip setpoint from where the legs actually are
+        // to the calibrated retracted endpoint over standup_crouch_time. This
+        // is the pose the balance controller can recover from, and getting
+        // there slowly — under a stiffness that fades in with the motion rather
+        // than being applied whole on tick one — is the whole point of the
+        // phase. Wheels stay at zero until the legs are in a measured
+        // known-good pose.
         float crouch_t = param_get(PARAM_STANDUP_CROUCH_TIME_S);
-        float alpha    = elapsed / crouch_t;
-        if (alpha > 1.0f) alpha = 1.0f;
-        float dq_L = (s_su_ret_L - s_su_nom_L) / crouch_t;
-        float dq_R = (s_su_ret_R - s_su_nom_R) / crouch_t;
-        hip_motors_set_setpoint_L(s_su_nom_L + alpha * (s_su_ret_L - s_su_nom_L), dq_L, kp, kd, 0.0f);
-        hip_motors_set_setpoint_R(s_su_nom_R + alpha * (s_su_ret_R - s_su_nom_R), dq_R, kp, kd, 0.0f);
+        float u = elapsed / crouch_t;
+        if (u > 1.0f) u = 1.0f;
+        float alpha      = standup_min_jerk_position(u);
+        float alpha_rate = standup_min_jerk_rate(u, crouch_t);
+        float dq_L = (su_ret_L - s_su_nom_L) * alpha_rate;
+        float dq_R = (su_ret_R - s_su_nom_R) * alpha_rate;
+        bool ramp_done = elapsed >= crouch_t;
+
+        // Fade kp/tff in on the same minimum-jerk profile as the position, so
+        // both the commanded motion and the stiffness that drives it start at
+        // exactly zero. Arming therefore applies no torque step regardless of
+        // where the legs are — including the parked-on-the-switch case above,
+        // where the clamped ramp has no distance left to travel and this fade
+        // is the only thing moving the leg onto the backoff pose.
+        float crouch_stiff = param_get(PARAM_STANDUP_CROUCH_STIFF) * alpha;
+        standup_hold_hips(s_su_nom_L + alpha * (su_ret_L - s_su_nom_L),
+                          s_su_nom_R + alpha * (su_ret_R - s_su_nom_R),
+                          dq_L, dq_R, crouch_stiff);
         wheel_motors_send(0.0f, 0.0f);  // no wheel motion until legs are known-good
         g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = 0.0f;
-        if (elapsed >= crouch_t) {
-            s_su_phase    = SU_RECOVER;
-            s_su_phase_ms = millis();
-            s_su_attempt  = 1;
+
+        uint32_t now_ms = millis();
+        bool hips_quiet = ramp_done && standup_hips_quiet(hm_L.vel_rad_s, hm_R.vel_rad_s);
+        if (hips_quiet) {
+            if (s_su_hip_settle_since_ms == 0) s_su_hip_settle_since_ms = now_ms;
+        } else {
+            s_su_hip_settle_since_ms = 0;
+        }
+
+        // Excursion over: the commanded trajectory has run its full length and
+        // the legs have come to rest. Only their *position* is still unverified
+        // — a partial-stiffness proportional hold sags well past the strict
+        // band — so that check belongs to STIFFEN, at full gains.
+        if (s_su_hip_settle_since_ms != 0 &&
+            now_ms - s_su_hip_settle_since_ms >= STANDUP_HIP_SETTLE_HOLD_MS) {
+            s_su_stiff_from = param_get(PARAM_STANDUP_CROUCH_STIFF);
+            s_su_phase    = SU_STIFFEN;
+            s_su_phase_ms = now_ms;
+            s_su_hip_settle_since_ms = 0;
+        } else if (ramp_done &&
+                   now_ms - s_su_phase_ms >=
+                       (uint32_t)(crouch_t * 1000.0f) + STANDUP_HIP_SETTLE_TIMEOUT_MS) {
+            comm_log(LOG_LEVEL_ERROR,
+                     "STANDING_UP: hips still moving after crouch (vel L=%.3f R=%.3f rad/s)",
+                     (double)hm_L.vel_rad_s, (double)hm_R.vel_rad_s);
+            g_state.fault_code = FAULT_STANDUP_FAILED;
+            stateMachine_request_estop();
         }
         return;
     }
 
-    // SU_RECOVER / SU_PAUSE: hold hips at the retracted target throughout
-    hip_motors_set_setpoint_L(s_su_ret_L, 0.0f, kp, kd, 0.0f);
-    hip_motors_set_setpoint_R(s_su_ret_R, 0.0f, kp, kd, 0.0f);
+    if (s_su_phase == SU_STIFFEN) {
+        // Legs are parked at the crouch target; make them rigid before handing
+        // the robot to the LQR. kp and the hip feedforward ramp from the crouch
+        // fraction to their full running values, which also pulls out the sag
+        // the softer hold left — so the strict position band below is only
+        // reachable once the hips really are stiff.
+        float stiffen_t = param_get(PARAM_STANDUP_STIFFEN_TIME_S);
+        float stiff = standup_stiffen_scale(elapsed, stiffen_t, s_su_stiff_from);
+        standup_hold_hips(su_ret_L, su_ret_R, 0.0f, 0.0f, stiff);
+        wheel_motors_send(0.0f, 0.0f);
+        g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = 0.0f;
 
-    if (s_su_phase == SU_RECOVER) {
-        // Dedicated runaway hard-backup, independent of PARAM_WHEEL_VEL_LIMIT_TURNS_S
-        // so tuning one doesn't loosen the other's safety margin.
-        float hard_limit = param_get(PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S) * 2.0f;
-        if (fabsf(wm_L.vel_turns_s) > hard_limit || fabsf(wm_R.vel_turns_s) > hard_limit) {
-            g_state.fault_code = FAULT_WHEEL_RUNAWAY;
-            stateMachine_request_estop();
-            return;
+        uint32_t now_ms = millis();
+        bool at_full_stiffness = elapsed >= stiffen_t;
+        // Tolerance at the gains actually commanded this tick: a P-hold with a
+        // feedforward rests offset by (tff - load)/kp, and the load is nothing
+        // like the standing load while the wheels are still off the ground.
+        float pos_tol = standup_hip_pos_tol(stiff * param_get(PARAM_HIP_RUNNING_KP),
+                                            stiff * param_get(PARAM_HIP_RUNNING_TFF_RET));
+        bool hips_settled = at_full_stiffness && standup_hips_in_settle_band(
+            hm_L.pos_rad, hm_L.vel_rad_s, hm_R.pos_rad, hm_R.vel_rad_s,
+            su_ret_L, su_ret_R, pos_tol);
+        if (hips_settled) {
+            if (s_su_hip_settle_since_ms == 0) s_su_hip_settle_since_ms = now_ms;
+        } else {
+            s_su_hip_settle_since_ms = 0;
         }
 
-        // x0 mirrors the LQR's own pitch error term (control_loop.cpp:
-        // pitch - theta_ref - pitch_trim, with theta_ref=0 here — standup
-        // isn't tracking a velocity command) so the catch regulates to the
-        // same equilibrium RUNNING will hold, instead of to pitch=0.
-        float x0  = pitch - trim;
-        float tau = param_get(PARAM_STANDUP_K_PITCH) * x0 + param_get(PARAM_STANDUP_K_RATE) * pitch_rate;
-        float trq_limit = param_get(PARAM_STANDUP_TORQUE_LIMIT);
-        if (tau >  trq_limit) tau =  trq_limit;
-        if (tau < -trq_limit) tau = -trq_limit;
-        if (tau >  MOTOR_TRQ_MAX) tau =  MOTOR_TRQ_MAX;
-        if (tau < -MOTOR_TRQ_MAX) tau = -MOTOR_TRQ_MAX;
-        wheel_motors_send(tau, tau);  // symmetric, no yaw/differential — straight push only
-        g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = tau;
+        // Engage the balance controller only after both measured hips have
+        // reached the calibrated backoff pose, at full stiffness, and stopped
+        // there continuously.
+        if (s_su_hip_settle_since_ms != 0 &&
+            now_ms - s_su_hip_settle_since_ms >= STANDUP_HIP_SETTLE_HOLD_MS) {
+            // STIFFEN has just walked the hips up to full hip_running_kp/tff.
+            // Mark the ordinary arm-in ramp complete so RECOVER and the RUNNING
+            // handoff continue from there instead of re-loosening a verified
+            // pose the moment the wheel LQR is enabled.
+            controlLoop_complete_hip_ramp();
+            s_su_phase    = SU_RECOVER;
+            s_su_phase_ms = now_ms;
+            s_su_attempt  = 1;
+            s_su_hip_settle_since_ms = 0;
+        } else if (at_full_stiffness &&
+                   now_ms - s_su_phase_ms >=
+                       (uint32_t)(stiffen_t * 1000.0f) + STANDUP_HIP_SETTLE_TIMEOUT_MS) {
+            comm_log(LOG_LEVEL_ERROR,
+                     "STANDING_UP: hips failed to settle (err L=%.3f R=%.3f rad, tol %.3f, "
+                     "vel L=%.3f R=%.3f rad/s)",
+                     (double)(hm_L.pos_rad - su_ret_L),
+                     (double)(hm_R.pos_rad - su_ret_R), (double)pos_tol,
+                     (double)hm_L.vel_rad_s, (double)hm_R.vel_rad_s);
+            g_state.fault_code = FAULT_STANDUP_FAILED;
+            stateMachine_request_estop();
+        }
+        return;
+    }
 
-        // Capture check: in-band relative to the same trim the catch is
+    if (s_su_phase == SU_RECOVER) {
+        // The catch is the ordinary RUNNING control stack — balance LQR,
+        // velocity PI, yaw PI, feedforward, per-wheel soft governor and
+        // wheel-runaway watchdog — with only the pitch watchdog suppressed
+        // (control_loop.cpp gates it on STATE_STANDING_UP). No standup-specific
+        // torque law: from the leans the entry gate admits, the linearized LQR
+        // is what will be holding the robot a moment later anyway, so catching
+        // with the same controller removes the handoff discontinuity entirely.
+        // controlLoop_run() commands the hips too; re-assert the calibrated
+        // retracted endpoint every tick so CH3 cannot move them mid-catch.
+        controlLoop_set_hip_override(0.0f);
+        controlLoop_run();
+
+        // Capture check: in-band relative to the same trim the LQR is
         // regulating to (not pitch=0), continuously for the hold time =>
-        // good enough for LQR. A trim-blind band centered on zero would
-        // capture mid-roll, since x0=0 there requires sustained forward
-        // acceleration rather than being an equilibrium.
+        // settled enough to re-arm the pitch watchdog. A trim-blind band
+        // centered on zero would capture mid-roll, since x0=0 there requires
+        // sustained forward acceleration rather than being an equilibrium.
+        // Reads the trim controlLoop_run() just applied this tick rather than
+        // lqr_pitch_trim_ret directly, so the band stays centred on the actual
+        // equilibrium when standup_ret_gains=0 leaves alpha free to schedule.
+        float x0 = pitch - g_state.applied_pitch_trim;
         bool in_band = fabsf(x0)         < param_get(PARAM_STANDUP_CAPTURE_PITCH_RAD) &&
-                        fabsf(pitch_rate) < param_get(PARAM_STANDUP_CAPTURE_RATE_RADS);
+                        fabsf(pitch_rate) < param_get(PARAM_STANDUP_CAPTURE_RATE_RADS) &&
+                        standup_wheels_ready_for_handoff(
+                            wm_L.vel_turns_s, wm_R.vel_turns_s,
+                            param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S));
         if (in_band) {
             if (s_su_capture_since_ms == 0) s_su_capture_since_ms = millis();
             if (millis() - s_su_capture_since_ms >= (uint32_t)(param_get(PARAM_STANDUP_CAPTURE_HOLD_S) * 1000.0f)) {
@@ -599,6 +754,13 @@ static void on_standing_up() {
         }
     }
     else {  // SU_PAUSE
+        // controlLoop_run() is not called here, so hold the hips explicitly at
+        // the same pinned height RECOVER uses (the override only takes effect
+        // inside controlLoop_run(); it stays set across the pause). Full
+        // stiffness, feedforward included: the hips were rigid entering the
+        // pause and dropping either one would sag the legs and hand RECOVER a
+        // different pose than the one it left.
+        standup_hold_hips(su_ret_L, su_ret_R, 0.0f, 0.0f, 1.0f);
         wheel_motors_send(0.0f, 0.0f);
         g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = 0.0f;
         if (elapsed >= param_get(PARAM_STANDUP_RETRY_PAUSE_S)) {
@@ -661,7 +823,8 @@ static void on_estop() {
 // ── Transition conditions ─────────────────────────────────────────────────────
 
 static bool startup_ok() {
-    bool imu_ok = (param_get(PARAM_IMU_ENABLE) < 0.5f) || (imu_state() == ImuState::NOMINAL);
+    bool imu_ok = (param_get(PARAM_IMU_ENABLE) < 0.5f) ||
+                  (imu_state() == ImuState::NOMINAL);
     return imu_ok && hip_motors_ok() && wheel_motors_ok();
 }
 static bool startup_fail() {
@@ -740,13 +903,28 @@ static bool req_running_checks_common() {
         }
         comm_log(LOG_LEVEL_WARN, "Running mode ARMED without calibration (calib_bypass_en=1) — hip limits unenforced.");
     }
+    // The two halves are reported separately and by name. Fused into one
+    // message ("a motor is disabled") they were genuinely hard to act on: with
+    // calib_bypass_en=1 the log said the hip bypass was working on one line and
+    // denied on the next, without ever revealing that it was the *wheel* half
+    // and a different param (run_wheel_bypass_en) that was missing.
     bool bypass_hip_check   = param_get(PARAM_CALIB_BYPASS_EN)         >= 0.5f;
     bool bypass_wheel_check = param_get(PARAM_RUNNING_WHEEL_BYPASS_EN) >= 0.5f;
-    if ((!bypass_hip_check &&
-         (param_get(PARAM_HIP_L_ENABLE) < 0.5f || param_get(PARAM_HIP_R_ENABLE) < 0.5f)) ||
-        (!bypass_wheel_check &&
-         (param_get(PARAM_WHEEL_L_ENABLE) < 0.5f || param_get(PARAM_WHEEL_R_ENABLE) < 0.5f))) {
-        comm_log(LOG_LEVEL_WARN, "Running mode denied: bench-test mode (a motor is disabled)");
+    if (!bypass_hip_check &&
+        (param_get(PARAM_HIP_L_ENABLE) < 0.5f || param_get(PARAM_HIP_R_ENABLE) < 0.5f)) {
+        comm_log(LOG_LEVEL_WARN,
+                 "Running mode denied: hip motor disabled (hip_l_enable=%.0f hip_r_enable=%.0f) "
+                 "and calib_bypass_en=0",
+                 param_get(PARAM_HIP_L_ENABLE), param_get(PARAM_HIP_R_ENABLE));
+        stateMachine_request_cmd_reject();
+        return false;
+    }
+    if (!bypass_wheel_check &&
+        (param_get(PARAM_WHEEL_L_ENABLE) < 0.5f || param_get(PARAM_WHEEL_R_ENABLE) < 0.5f)) {
+        comm_log(LOG_LEVEL_WARN,
+                 "Running mode denied: wheel motor disabled (wheel_l_enable=%.0f wheel_r_enable=%.0f) "
+                 "and run_wheel_bypass_en=0",
+                 param_get(PARAM_WHEEL_L_ENABLE), param_get(PARAM_WHEEL_R_ENABLE));
         stateMachine_request_cmd_reject();
         return false;
     }
@@ -898,7 +1076,12 @@ void stateMachine_init() {
 }
 
 void stateMachine_update() {
+    RobotStateEnum previous_state = g_state.state;
     sm.run();
+    if (g_state.state != previous_state &&
+        (previous_state == STATE_RUNNING || previous_state == STATE_JUMPING)) {
+        controlLoop_disarm_plant_id();
+    }
 }
 
 // ── Public request API ────────────────────────────────────────────────────────
@@ -951,8 +1134,8 @@ bool stateMachine_request_running() {
     if (!req_running_checks_common()) return false;
     if (param_get(PARAM_STANDUP_ENABLE) >= 0.5f) {
         float pitch = g_state.pitch_rad;
-        if (pitch > param_get(PARAM_STANDUP_MAX_PITCH_FWD_RAD) ||
-            pitch < -param_get(PARAM_STANDUP_MAX_PITCH_BWD_RAD)) {
+        if (pitch < param_get(PARAM_STANDUP_PITCH_MIN_RAD) ||
+            pitch > param_get(PARAM_STANDUP_PITCH_MAX_RAD)) {
             comm_log(LOG_LEVEL_WARN, "Standing-up denied: pitch %.3f rad outside recoverable range", pitch);
             stateMachine_request_cmd_reject();
             return false;

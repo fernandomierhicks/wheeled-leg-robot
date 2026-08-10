@@ -1,0 +1,201 @@
+<mujoco model="lqr_balance">
+  <option gravity="0 0 -9.81" timestep="0.0005" solver="Newton"
+          iterations="200" tolerance="1e-10"/>
+  <visual><global offwidth="1280" offheight="720"/></visual>
+  <asset>
+    <mesh name="torus_wheel" file="torus_wheel.stl" scale="1 1 1"/>
+    <texture name="checker" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.50 0.50 0.50" rgb2="0.28 0.28 0.28"/>
+    <material name="floor_mat" texture="checker" texrepeat="50 50" reflectance="0.12"/>
+    <texture name="wall_tex" type="2d" builtin="flat" width="1" height="1"
+             rgb1="0.68 0.64 0.58"/>
+    <material name="wall_mat" texture="wall_tex" reflectance="0.04"/>
+  </asset>
+  <worldbody>
+    <light name="sun"   pos="0 0 4"    dir="0 0 -1"   diffuse="0.80 0.80 0.75" castshadow="true"/>
+    <light name="front" pos="0 -3 2.5" dir="0  1 -0.8" diffuse="0.40 0.40 0.45"/>
+    <light name="back"  pos="0  3 2.5" dir="0 -1 -0.8" diffuse="0.40 0.40 0.45"/>
+
+    <geom name="ground" type="plane" size="10 5 0.1"
+          material="floor_mat" condim="3" friction="0.8 0.01 0.001"
+          solref="0.04 1" solimp="0.9 0.95 0.001"/>
+    
+    
+    
+    
+
+
+    <!-- == Body =========================================================== -->
+    <body name="box" pos="0 0 0.45">
+      <joint name="root_free" type="free"/>
+      <inertial pos="0 0 0" mass="1.9500"
+                diaginertia="8.0e-4 1.2e-3 1.2e-3"/>
+      <geom name="chassis" type="box"
+            size="0.0700 0.0500 0.0520"
+            rgba="0.25 0.35 0.55 0.85" mass="0"
+            contype="0" conaffinity="0"/>
+      <geom name="arm_L" type="box"
+            pos="-0.02694 0.09650 -0.01835"
+            size="0.04194 0.04650 0.02014"
+            rgba="0.35 0.45 0.65 0.70" mass="0" contype="0" conaffinity="0"/>
+      <geom name="arm_R" type="box"
+            pos="-0.02694 -0.09650 -0.01835"
+            size="0.04194 0.04650 0.02014"
+            rgba="0.35 0.45 0.65 0.70" mass="0" contype="0" conaffinity="0"/>
+      <geom name="motor_L" type="cylinder"
+            pos="0 0.12150 -0.02350" euler="90 0 0"
+            size="0.0265 0.0215" rgba="0.15 0.15 0.15 0.90"
+            mass="0" contype="0" conaffinity="0"/>
+      <geom name="motor_R" type="cylinder"
+            pos="0 -0.12150 -0.02350" euler="90 0 0"
+            size="0.0265 0.0215" rgba="0.15 0.15 0.15 0.90"
+            mass="0" contype="0" conaffinity="0"/>
+      <!-- Electronics (massless, visual only) -->
+      <geom type="box" pos="0 0 -0.03000" size="0.060 0.038 0.018"
+            rgba="0.20 0.20 0.80 0.70" mass="0" contype="0" conaffinity="0"/>
+      <geom type="box" pos="0 0 0.04200" size="0.050 0.030 0.008"
+            rgba="0.80 0.30 0.10 0.80" mass="0" contype="0" conaffinity="0"/>
+      <geom type="box" pos="0 0 0.02200" size="0.054 0.027 0.006"
+            rgba="0.10 0.60 0.10 0.80" mass="0" contype="0" conaffinity="0"/>
+      <geom type="box" pos="0 0 0.04900" size="0.010 0.010 0.003"
+            rgba="0.80 0.80 0.10 0.90" mass="0" contype="0" conaffinity="0"/>
+      <site name="imu_site" pos="0 0 0.04900" size="0.002"/>
+            <!-- == L LEG ====================================================== -->
+      <body name="coupler_L" pos="-0.05887 0.14300 -0.01821">
+        <inertial pos="0 0 0" mass="0.0444" diaginertia="1.8e-5 1.8e-5 2.0e-7"/>
+        <joint name="hinge_F_L" type="hinge" axis="0 1 0" damping="0.001"/>
+        <geom type="cylinder" pos="0 0 0" euler="90 0 0"
+              size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+              contype="0" conaffinity="0" mass="0"/>
+        <geom name="coupler_geom_L" type="cylinder" fromto="0 0 0 -0.15081 0 0"
+              size="0.005" rgba="0.30 0.90 0.90 0.55"
+              solref="0.02 1" contype="1" conaffinity="1"/>
+        <geom type="cylinder" pos="-0.15081 0 0" euler="90 0 0"
+              size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+              contype="0" conaffinity="0" mass="0"/>
+      </body>
+      <body name="femur_L" pos="0 0.14300 -0.02350">
+        <inertial pos="0 0 0" mass="0.0367" diaginertia="4.9e-5 4.9e-5 8.2e-7"/>
+        <joint name="hip_L" type="hinge" axis="0 1 0"
+               range="-180 180" armature="0.01" damping="0.05"/>
+        <geom name="femur_geom_L" type="cylinder" fromto="0 0 0 -0.17378 0 0"
+              size="0.007" rgba="0.94 0.75 0.25 0.55"
+              solref="0.02 1" contype="1" conaffinity="1"/>
+        <geom name="knee_geom_L" type="cylinder" pos="-0.17378 0 0"
+              euler="90 0 0" size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+              contype="0" conaffinity="0" mass="0" solref="0.02 1"/>
+        <body name="tibia_L" pos="-0.17378 0 0">
+          <inertial pos="0 0 -0.04713" mass="0.0358" diaginertia="4.2e-5 4.2e-5 1.0e-6"/>
+          <joint name="knee_joint_L" type="hinge" axis="0 1 0"
+                 range="-60 60" damping="0.001"/>
+          <geom name="tibia_geom_L" type="cylinder"
+                fromto="0 0 0.03513 0 0 -0.12939"
+                size="0.008" rgba="0.75 0.45 0.90 0.55"
+                solref="0.02 1" contype="1" conaffinity="1"/>
+          <geom name="stub_geom_L" type="cylinder" pos="0 0 0.03513"
+                euler="90 0 0" size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+                contype="0" conaffinity="0" mass="0" solref="0.02 1"/>
+          <body name="wheel_asm_L" pos="0 0 -0.12939">
+            <joint name="wheel_spin_L" type="hinge" axis="0 1 0" damping="0.001"/>
+            <geom name="motor_body_geom_L" type="cylinder"
+                  pos="0 0.0360 0" euler="90 0 0"
+                  size="0.035 0.026" rgba="0.15 0.15 0.15 0.80"
+                  mass="0.2600" solref="0.02 1" contype="1" conaffinity="1"/>
+            <geom name="wheel_tire_geom_L" type="cylinder"
+                  pos="0 0.0360 0" euler="90 0 0"
+                  size="0.075 0.015" rgba="0 0 0 0"
+                  friction="0.8 0.01 0.001" solref="0.06 0.9"
+                  solimp="0.7 0.95 0.005"
+                  mass="0.2600" contype="1" conaffinity="1"/>
+            <geom name="wheel_torus_L" type="mesh" mesh="torus_wheel"
+                  pos="0 0.0360 0" rgba="0.25 0.70 0.35 0.90"
+                  contype="0" conaffinity="0" mass="0"/>
+            <geom name="wheel_marker_L" type="box"
+                  pos="0 0.0520 0.06150"
+                  size="0.007 0.012 0.007" rgba="1.0 0.15 0.15 1.0"
+                  contype="0" conaffinity="0" mass="0"/>
+          </body>
+        </body>
+      </body>
+            <!-- == R LEG ====================================================== -->
+      <body name="coupler_R" pos="-0.05887 -0.14300 -0.01821">
+        <inertial pos="0 0 0" mass="0.0444" diaginertia="1.8e-5 1.8e-5 2.0e-7"/>
+        <joint name="hinge_F_R" type="hinge" axis="0 1 0" damping="0.001"/>
+        <geom type="cylinder" pos="0 0 0" euler="90 0 0"
+              size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+              contype="0" conaffinity="0" mass="0"/>
+        <geom name="coupler_geom_R" type="cylinder" fromto="0 0 0 -0.15081 0 0"
+              size="0.005" rgba="0.30 0.90 0.90 0.55"
+              solref="0.02 1" contype="1" conaffinity="1"/>
+        <geom type="cylinder" pos="-0.15081 0 0" euler="90 0 0"
+              size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+              contype="0" conaffinity="0" mass="0"/>
+      </body>
+      <body name="femur_R" pos="0 -0.14300 -0.02350">
+        <inertial pos="0 0 0" mass="0.0367" diaginertia="4.9e-5 4.9e-5 8.2e-7"/>
+        <joint name="hip_R" type="hinge" axis="0 1 0"
+               range="-180 180" armature="0.01" damping="0.05"/>
+        <geom name="femur_geom_R" type="cylinder" fromto="0 0 0 -0.17378 0 0"
+              size="0.007" rgba="0.94 0.75 0.25 0.55"
+              solref="0.02 1" contype="1" conaffinity="1"/>
+        <geom name="knee_geom_R" type="cylinder" pos="-0.17378 0 0"
+              euler="90 0 0" size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+              contype="0" conaffinity="0" mass="0" solref="0.02 1"/>
+        <body name="tibia_R" pos="-0.17378 0 0">
+          <inertial pos="0 0 -0.04713" mass="0.0358" diaginertia="4.2e-5 4.2e-5 1.0e-6"/>
+          <joint name="knee_joint_R" type="hinge" axis="0 1 0"
+                 range="-60 60" damping="0.001"/>
+          <geom name="tibia_geom_R" type="cylinder"
+                fromto="0 0 0.03513 0 0 -0.12939"
+                size="0.008" rgba="0.75 0.45 0.90 0.55"
+                solref="0.02 1" contype="1" conaffinity="1"/>
+          <geom name="stub_geom_R" type="cylinder" pos="0 0 0.03513"
+                euler="90 0 0" size="0.011 0.0035" rgba="0.85 0.85 0.85 0.90"
+                contype="0" conaffinity="0" mass="0" solref="0.02 1"/>
+          <body name="wheel_asm_R" pos="0 0 -0.12939">
+            <joint name="wheel_spin_R" type="hinge" axis="0 1 0" damping="0.001"/>
+            <geom name="motor_body_geom_R" type="cylinder"
+                  pos="0 -0.0360 0" euler="90 0 0"
+                  size="0.035 0.026" rgba="0.15 0.15 0.15 0.80"
+                  mass="0.2600" solref="0.02 1" contype="1" conaffinity="1"/>
+            <geom name="wheel_tire_geom_R" type="cylinder"
+                  pos="0 -0.0360 0" euler="90 0 0"
+                  size="0.075 0.015" rgba="0 0 0 0"
+                  friction="0.8 0.01 0.001" solref="0.06 0.9"
+                  solimp="0.7 0.95 0.005"
+                  mass="0.2600" contype="1" conaffinity="1"/>
+            <geom name="wheel_torus_R" type="mesh" mesh="torus_wheel"
+                  pos="0 -0.0360 0" rgba="0.25 0.70 0.35 0.90"
+                  contype="0" conaffinity="0" mass="0"/>
+            <geom name="wheel_marker_R" type="box"
+                  pos="0 -0.0520 0.06150"
+                  size="0.007 0.012 0.007" rgba="1.0 0.15 0.15 1.0"
+                  contype="0" conaffinity="0" mass="0"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <equality>
+    <connect name="4bar_close_L" body1="coupler_L" body2="tibia_L"
+             anchor="0 0 0" solref="0.002 1" solimp="0.9999 0.9999 0.001"/>
+    <connect name="4bar_close_R" body1="coupler_R" body2="tibia_R"
+             anchor="0 0 0" solref="0.002 1" solimp="0.9999 0.9999 0.001"/>
+  </equality>
+
+  <actuator>
+    <motor name="hip_act_L"   joint="hip_L"        gear="1"
+           ctrllimited="true" ctrlrange="-7.0 7.0"/>
+    <motor name="hip_act_R"   joint="hip_R"        gear="1"
+           ctrllimited="true" ctrlrange="-7.0 7.0"/>
+    <motor name="wheel_act_L" joint="wheel_spin_L" gear="1"
+           ctrllimited="true" ctrlrange="-6.8 6.8"/>
+    <motor name="wheel_act_R" joint="wheel_spin_R" gear="1"
+           ctrllimited="true" ctrlrange="-6.8 6.8"/>
+  </actuator>
+
+  <sensor>
+    <accelerometer name="accel" site="imu_site"/>
+  </sensor>
+</mujoco>

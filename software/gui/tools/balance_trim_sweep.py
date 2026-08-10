@@ -37,12 +37,14 @@ equilibrium gate are discarded outright rather than averaged in.
 """
 
 import argparse
+import math
 import os
 import sys
 
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from analysis.leg_height_sweep import alpha_plateaus  # noqa: E402
 from analysis.wlog_metrics import decode_run  # noqa: E402
 
 STATE_RUNNING = 3
@@ -78,7 +80,28 @@ def _stretches(ok, fs, min_s):
     return [(a, b) for a, b in out if (b - a + 1) / fs >= min_s]
 
 
-def analyse(path):
+def _calib_from_sidecar(path):
+    """(backoff_rad, range_rad) from a .PARAMS companion, or (None, None)."""
+    try:
+        from pathlib import Path
+        from analysis.param_sidecar import load_matching_sidecar
+        sc = load_matching_sidecar(Path(path))
+        if sc is None:
+            return None, None
+        b = sc.initial_value("calib_backoff_rad")
+        r = sc.initial_value("calib_range_l_rad")
+        if b is None or r is None:
+            return None, None
+        return float(b), float(r)
+    except Exception:                                # noqa: BLE001 - sidecar is optional
+        return None, None
+
+
+def analyse(path, backoff_rad=None, range_rad=None):
+    if backoff_rad is None or range_rad is None:
+        sb, sr = _calib_from_sidecar(path)
+        backoff_rad = backoff_rad if backoff_rad is not None else sb
+        range_rad   = range_rad   if range_rad   is not None else sr
     run = decode_run(path)
     f, fs = run.fields, run.sample_rate_hz
     m = f["robot_state"].astype(int) == STATE_RUNNING
@@ -98,23 +121,54 @@ def analyse(path):
         return run, [], []
 
     # alpha_force_ret_en=1 pins g_state.gain_sched_alpha to 0 in TELEMETRY too,
-    # not just in the gain blend -- so a sweep captured with that flag still set
-    # bins every leg height at alpha=0 and silently overwrites one row instead
-    # of building a table. Catch it here rather than in the data.
-    hip_cmd = f["hip_l_cmd_pos_rad"][idx]
+    # not just in the gain blend -- which is exactly the configuration you WANT
+    # for a trim sweep (constant gains, only height varying), so refusing the run
+    # would be unhelpful. Reconstruct the real leg height instead.
+    #
+    # The encoder is zeroed at the retract switch, so hip position is already
+    # "distance from the switch" and alpha is a straight rescale of it:
+    #     alpha = (|hip| - calib_backoff_rad) / (calib_range_rad - calib_backoff_rad)
+    # matching define_limits()/hip_cmd_to_setpoints(). Neither calibration
+    # constant is in telemetry, so they come from the .PARAMS sidecar (SD runs)
+    # or from --backoff-deg/--range-deg.
+    hip_meas = np.abs(f["hip_l_pos_rad"][idx])
+    hip_cmd  = np.abs(f["hip_l_cmd_pos_rad"][idx])
     if np.ptp(alpha) < 1e-6 and np.ptp(hip_cmd) > np.radians(1.0):
-        print(f"  !! gain_sched_alpha is pinned at {alpha[0]:.3f} while the hip command moved "
-              f"{np.degrees(np.ptp(hip_cmd)):.1f} deg.\n"
-              f"     That is alpha_force_ret_en=1 -- the logged alpha is not the real leg "
-              f"height, so these points cannot be binned. Clear the flag and recapture.",
-              file=sys.stderr)
-        return run, [], []
+        if backoff_rad is None or range_rad is None:
+            print(f"  !! gain_sched_alpha is pinned at {alpha[0]:.3f} while the hip command "
+                  f"moved {np.degrees(np.ptp(hip_cmd)):.1f} deg -- that is "
+                  f"alpha_force_ret_en=1.\n"
+                  f"     Leg height can be recovered from hip position, but this run has no "
+                  f".PARAMS sidecar,\n"
+                  f"     so pass the calibration constants: "
+                  f"--backoff-deg 15 --range-deg 85", file=sys.stderr)
+            return run, [], []
+        span = range_rad - backoff_rad
+        if span <= 0:
+            print("  !! range must exceed backoff", file=sys.stderr)
+            return run, [], []
+        alpha = np.clip((hip_meas - backoff_rad) / span, 0.0, 1.0)
+        print(f"  alpha reconstructed from hip position "
+              f"(backoff {np.degrees(backoff_rad):.1f} deg, range {np.degrees(range_rad):.1f} deg): "
+              f"{alpha.min():.3f} .. {alpha.max():.3f}")
 
     tau   = f["tau_sym"][idx]
     wheel = 0.5 * (f["wm_l_vel_turns_s"][idx] + f["wm_r_vel_turns_s"][idx])
 
     still = (np.abs(f["v_ref"][idx]) < V_STILL_MS) & \
             (np.abs(f["omega_cmd_rds"][idx]) < OMEGA_STILL)
+
+    # "Stationary" is not the same as "at one leg height". A sweep that walks
+    # through several heights without touching the sticks is stationary
+    # throughout, so splitting on `still` alone yields one enormous stretch
+    # spanning every height in the run; its tail straddles two of them, fails
+    # the equilibrium gate, and the whole sweep reports nothing (which is
+    # exactly what the 2026-08-09 four-height run did). Intersect with the
+    # flat-alpha plateaus so each height is measured on its own.
+    on_plateau = np.zeros(len(idx), dtype=bool)
+    for a, b in alpha_plateaus(alpha, fs):
+        on_plateau[a:b + 1] = True
+    still &= on_plateau
 
     # Each stationary stretch contributes its tail; keep only the tails that
     # actually reached equilibrium, then pool the survivors by leg height.
@@ -154,13 +208,22 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("runs", nargs="+", help="host.jsonl or .WLOG bundles")
     ap.add_argument("--csv", help="append the rows to this CSV")
+    ap.add_argument("--backoff-deg", type=float, default=None,
+                    help="calib_backoff_rad in DEGREES; only needed to recover leg "
+                         "height when alpha_force_ret_en pinned the logged alpha "
+                         "and there is no .PARAMS sidecar")
+    ap.add_argument("--range-deg", type=float, default=None,
+                    help="calib_range_*_rad in DEGREES; see --backoff-deg")
     args = ap.parse_args()
 
     all_rows = []
     for path in args.runs:
         print(f"\n=== {path} ===")
         try:
-            run, rows, rejected = analyse(path)
+            run, rows, rejected = analyse(
+                path,
+                math.radians(args.backoff_deg) if args.backoff_deg is not None else None,
+                math.radians(args.range_deg) if args.range_deg is not None else None)
         except Exception as exc:                     # noqa: BLE001 - report and continue
             print(f"  could not analyse: {exc}", file=sys.stderr)
             continue

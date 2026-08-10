@@ -3,12 +3,15 @@
 #include <stdint.h>
 
 static constexpr uint32_t PARAM_STORE_MAGIC = 0x32505257u;  // "WRP2" little-endian
+// v4: no format change — standup_pitch_bwd became the signed lower bound
+// standup_pitch_min while retaining parameter ID 0x042E. The registry negates
+// that one persisted magnitude when loading any older slot, then re-saves v4.
 // v3: no format change — the *units* of a few hip params changed when the
 // AK45-10 MIT torque/velocity scale factors were corrected (see
 // hip_motors.cpp). A v2 slot is still readable, and param_registry's
-// migrate_hip_scale_v2_to_v3() rescales exactly those params once on load and
-// re-saves as v3, so the rest of a tuned setup survives untouched.
-static constexpr uint16_t PARAM_STORE_VERSION = 3;
+// migration code rescales exactly those params once on load, so the rest of a
+// tuned setup survives untouched.
+static constexpr uint16_t PARAM_STORE_VERSION = 4;
 static constexpr uint16_t PARAM_STORE_VERSION_MIN = 2;
 
 // A stored slot is readable if its version is one we still know how to migrate

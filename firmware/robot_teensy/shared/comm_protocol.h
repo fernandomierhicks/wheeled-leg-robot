@@ -107,6 +107,7 @@ inline fault_severity_t fault_severity(uint8_t code) {
         case FAULT_HUMAN_ESTOP:
         case FAULT_WHEEL_RUNAWAY:         return FAULT_SEVERITY_SOFT;
         case FAULT_PITCH_WATCHDOG:
+        case FAULT_ROLL_WATCHDOG:
         case FAULT_CALIBRATION_TIMEOUT:
         case FAULT_STANDUP_FAILED:
         case FAULT_JUMP_TIMEOUT:          return FAULT_SEVERITY_REPOSITION;
@@ -299,7 +300,8 @@ typedef struct __attribute__((packed)) {
     float    gain_sched_alpha;    // control_loop.cpp hip gain interpolation [0=retracted,1=extended];
                                    // mirrors g_state.gain_sched_alpha (Phase 5); 0.5 until calibrated
     // V11 addition — standing-up recovery FSM phase (1 byte)
-    uint8_t  standup_state;       // Standup FSM phase (0=CROUCH/inactive) — mirrors g_state.standup_state
+    uint8_t  standup_state;       // Standup FSM phase (0=CROUCH/inactive, 1=RECOVER, 2=PAUSE,
+                                   // 3=STIFFEN) — mirrors g_state.standup_state
 } TelemetryPayload;  // 247 bytes — TELEM_VERSION 11
 
 // Split offsets for two-packet telemetry (TELEM_A + TELEM_B)

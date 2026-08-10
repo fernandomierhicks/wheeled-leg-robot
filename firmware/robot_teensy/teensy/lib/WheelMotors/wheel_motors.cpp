@@ -40,6 +40,7 @@ WheelMode      wm_mode = WheelMode::IDLE;
 
 // CAN3 on Teensy 4.1 uses pins 30 (RX) and 31 (TX) — matches config.h PIN_CAN3_*.
 static FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_16> can3;
+static bool s_can_initialized = false;
 
 // ── CAN TX health ────────────────────────────────────────────────────────────
 // FlexCAN_T4::write() returns 1 when the frame went straight into a hardware
@@ -124,6 +125,7 @@ bool wheel_motors_init() {
     can3.enableFIFO();
     can3.enableFIFOInterrupt();
     can3.onReceive(rx_callback);
+    s_can_initialized = true;
     comm_log(LOG_LEVEL_INFO, "WheelMotors: CAN3 init OK %lu kbps node_L=%u node_R=%u",
              (unsigned long)(CAN_BAUD / 1000), (unsigned)ODESC_NODE_L, (unsigned)ODESC_NODE_R);
     return true;
@@ -275,6 +277,22 @@ void wheel_motors_set_mode(WheelMode mode) {
     }
     wm_mode = mode;
     s_mode_change_ms = millis();  // opens the axis-state settle window
+}
+
+void wheel_motor_disable_L() {
+    if (s_can_initialized) {
+        uint32_t idle = AXIS_IDLE;
+        send_frame(ODESC_NODE_L, CMD_SET_AXIS_STATE, &idle, 4);
+    }
+    if (param_get(PARAM_WHEEL_R_ENABLE) < 0.5f) wm_mode = WheelMode::IDLE;
+}
+
+void wheel_motor_disable_R() {
+    if (s_can_initialized) {
+        uint32_t idle = AXIS_IDLE;
+        send_frame(ODESC_NODE_R, CMD_SET_AXIS_STATE, &idle, 4);
+    }
+    if (param_get(PARAM_WHEEL_L_ENABLE) < 0.5f) wm_mode = WheelMode::IDLE;
 }
 
 void wheel_motors_send(float L, float R) {

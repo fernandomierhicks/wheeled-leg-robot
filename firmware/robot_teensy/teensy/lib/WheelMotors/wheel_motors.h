@@ -55,6 +55,11 @@ void wheel_motors_forgive_feedback_stall();
 //   VELOCITY/POSITION/TORQUE: sets controller mode then CLOSED_LOOP_CONTROL
 void wheel_motors_set_mode(WheelMode mode);
 
+// Immediately command one axis to IDLE, independent of its just-updated
+// enable param. Used by the live parameter path before that axis is ignored.
+void wheel_motor_disable_L();
+void wheel_motor_disable_R();
+
 // Send L/R setpoints. Units depend on mode:
 //   VELOCITY : rad/s   (converted to turns/s internally)
 //   POSITION : rad     (converted to turns internally)

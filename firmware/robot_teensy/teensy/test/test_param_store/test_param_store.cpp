@@ -46,6 +46,22 @@ void test_structural_length_and_version_are_guarded() {
     TEST_ASSERT_FALSE(param_store_header_valid(header));
 }
 
+void test_all_migratable_versions_are_accepted() {
+    ParamStoreEntry entry{5, 0.0f};
+    for (uint16_t version = PARAM_STORE_VERSION_MIN;
+         version <= PARAM_STORE_VERSION; ++version) {
+        ParamStoreHeader header = make_header(&entry, 1, 1);
+        header.version = version;
+        header.header_crc32 = param_store_header_crc(header);
+        TEST_ASSERT_TRUE(param_store_header_valid(header));
+    }
+
+    ParamStoreHeader too_old = make_header(&entry, 1, 1);
+    too_old.version = PARAM_STORE_VERSION_MIN - 1;
+    too_old.header_crc32 = param_store_header_crc(too_old);
+    TEST_ASSERT_FALSE(param_store_header_valid(too_old));
+}
+
 void test_generation_selection_handles_wrap() {
     TEST_ASSERT_TRUE(param_store_generation_newer(11, 10));
     TEST_ASSERT_FALSE(param_store_generation_newer(10, 11));
@@ -56,6 +72,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_header_and_payload_crc_detect_corruption);
     RUN_TEST(test_structural_length_and_version_are_guarded);
+    RUN_TEST(test_all_migratable_versions_are_accepted);
     RUN_TEST(test_generation_selection_handles_wrap);
     return UNITY_END();
 }

@@ -37,6 +37,13 @@ static uint32_t s_roll_fault_start_ms = 0;
 static constexpr uint32_t WHEEL_RUNAWAY_MS = 50;
 static uint32_t s_wheel_fault_start_ms = 0;
 
+// Plant-identification chirp. PARAM_PLANT_ID_ENABLE is deliberately
+// non-persistent; this local latch records the first control tick after arm so
+// phase and duration are repeatable. It is cleared on timeout and on every
+// controlled-state exit.
+static bool     s_plant_id_active   = false;
+static uint32_t s_plant_id_start_ms = 0;
+
 // ── Backward target safety margin ────────────────────────────────────────────
 // Fixed conservative gap (not a tunable param, same reasoning as
 // ESTOP_RAMP_TIME_S below) kept between the code-level backward lean target
@@ -107,6 +114,11 @@ static float s_theta_ref_rlt   = 0.0f;  // rate-limited theta_ref
 static float s_hip_cmd_rlt       = 0.0f;
 static bool  s_hip_cmd_rlt_valid = false;
 
+// Hip height override (controlLoop_set_hip_override/clear, see control_loop.h).
+// STANDING_UP pins the legs here while the RUNNING controllers balance.
+static bool  s_hip_override_active = false;
+static float s_hip_override_t      = 0.0f;
+
 // Roll controller — rate-limited roll setpoint [rad] + PI integral state.
 // The integral nulls the steady-state droop the P-only law left against a
 // standing CG/leg asymmetry; disabled (roll_ki=0) it contributes nothing.
@@ -120,6 +132,7 @@ static float s_yaw_integral    = 0.0f;
 // PARAM_HIP_RUNNING_RAMP_TIME_S so arming doesn't snap the hip to the
 // commanded position at full stiffness. kd runs at full value throughout.
 static uint32_t s_hip_ramp_start_ms = 0;
+static bool     s_hip_ramp_forced_complete = false;
 
 // Hip torque ramp-DOWN on disarm (RUNNING -> STANDBY) — mirror of the above,
 // same PARAM_HIP_RUNNING_RAMP_TIME_S rate, so releasing the hips doesn't snap
@@ -185,6 +198,48 @@ void controlLoop_reset() {
     s_pitch_fault_start_ms = 0;
     s_wheel_fault_start_ms = 0;
     s_hip_cmd_rlt_valid   = false;
+    s_plant_id_active     = false;
+    s_hip_override_active = false;
+}
+
+// STANDING_UP-scoped authority overrides. The catch needs far more wheel torque
+// and far more wheel speed than the balance tune wants in steady state — it has
+// to drive the wheels out from under the CG hard enough to swing the body up,
+// which is a one-off manoeuvre, not a regulation problem. Rather than detune
+// RUNNING to get a livelier catch, standup_torque_lim and standup_vel_limit
+// replace their RUNNING counterparts for the duration of the state.
+//
+// 0 means "use the RUNNING value", so both are inert until deliberately set —
+// the same off-by-default contract every other standup param has. These are the
+// params originally reserved for the removed inline catch law; this is what
+// they now do.
+static float standup_scoped(uint16_t standup_param, float running_value) {
+    if (g_state.state != STATE_STANDING_UP) return running_value;
+    float v = param_get(standup_param);
+    return (v > 0.0f) ? v : running_value;
+}
+
+float controlLoop_wheel_vel_limit() {
+    return standup_scoped(PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S,
+                          param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S));
+}
+
+void controlLoop_set_hip_override(float t) {
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    s_hip_override_active = true;
+    s_hip_override_t      = t;
+}
+
+void controlLoop_clear_hip_override() {
+    s_hip_override_active = false;
+}
+
+void controlLoop_disarm_plant_id() {
+    s_plant_id_active = false;
+    if (param_get(PARAM_PLANT_ID_ENABLE) >= 0.5f) {
+        param_force_set(PARAM_PLANT_ID_ENABLE, 0.0f);
+    }
 }
 
 // Separate from controlLoop_reset(): called only when arming RUNNING fresh
@@ -192,6 +247,7 @@ void controlLoop_reset() {
 // re-loosen the hips right when they need to hold the post-jump position.
 void controlLoop_reset_hip_ramp() {
     s_hip_ramp_start_ms = millis();
+    s_hip_ramp_forced_complete = false;
 
     // Seed the rate-limited hip command from where the legs actually are (not
     // 0) so the new hip_cmd_rate_lim slew doesn't chase from a stale/zero
@@ -201,6 +257,10 @@ void controlLoop_reset_hip_ramp() {
     float measured     = measured_hip_alpha(&alpha_valid);
     s_hip_cmd_rlt       = alpha_valid ? measured : param_get(PARAM_RADIO_HIP_CMD);
     s_hip_cmd_rlt_valid = true;
+}
+
+void controlLoop_complete_hip_ramp() {
+    s_hip_ramp_forced_complete = true;
 }
 
 void controlLoop_reset_hip_disarm_ramp() {
@@ -281,8 +341,16 @@ void controlLoop_run() {
     // LQR gains all key off it. Derived from *measured* hip position, which
     // doesn't change within a tick, so hoisting it above the hip block below
     // doesn't change its value.
+    // standup_ret_gains pins alpha the same way alpha_force_ret_en does, but
+    // scoped to STANDING_UP. That state holds the legs at the calibrated
+    // retracted endpoint, so pinning explicitly selects the matching LQR/trim
+    // anchors. Any small measured position error is allowed to schedule again
+    // after the handoff to RUNNING.
+    bool pin_retracted = param_get(PARAM_ALPHA_FORCE_RETRACTED_EN) >= 0.5f ||
+                         (g_state.state == STATE_STANDING_UP &&
+                          param_get(PARAM_STANDUP_USE_RET_GAINS) >= 0.5f);
     float alpha = 0.0f;  // default: retracted, used whenever calibration is invalid
-    if (param_get(PARAM_ALPHA_FORCE_RETRACTED_EN) >= 0.5f) {
+    if (pin_retracted) {
         alpha = 0.0f;
     } else {
         bool  alpha_valid = false;
@@ -303,14 +371,24 @@ void controlLoop_run() {
         s_hip_cmd_rlt       = hip_cmd_raw;
         s_hip_cmd_rlt_valid = true;
     }
-    s_hip_cmd_rlt = slew_toward(s_hip_cmd_rlt, hip_cmd_raw,
-                                param_get(PARAM_HIP_CMD_RATE_LIMIT_PER_S), DT);
+    if (s_hip_override_active) {
+        // STANDING_UP: ignore CH3 entirely and hold the pinned height. Writing
+        // the shadow (rather than bypassing it) is what makes clearing the
+        // override on the RUNNING handoff resume the CH3 slew from the legs'
+        // actual height instead of stepping to wherever the stick happens to be.
+        s_hip_cmd_rlt = s_hip_override_t;
+    } else {
+        s_hip_cmd_rlt = slew_toward(s_hip_cmd_rlt, hip_cmd_raw,
+                                    param_get(PARAM_HIP_CMD_RATE_LIMIT_PER_S), DT);
+    }
 
     float pos_L, pos_R;
     hip_cmd_to_setpoints(s_hip_cmd_rlt, &pos_L, &pos_R);
     float ramp_s  = param_get(PARAM_HIP_RUNNING_RAMP_TIME_S);
     float elapsed = (millis() - s_hip_ramp_start_ms) / 1000.0f;
-    float ramp_alpha = (ramp_s > 0.0f) ? (elapsed / ramp_s) : 1.0f;
+    float ramp_alpha = s_hip_ramp_forced_complete
+        ? 1.0f
+        : ((ramp_s > 0.0f) ? (elapsed / ramp_s) : 1.0f);
     if (ramp_alpha > 1.0f) ramp_alpha = 1.0f;
 
     // ── Roll controller (active suspension) ───────────────────────────────────
@@ -457,22 +535,34 @@ void controlLoop_run() {
 
     // ── Balance-point pitch trim ─────────────────────────────────────────────
     // The lean that holds zero velocity isn't pitch=0 when the CG isn't exactly
-    // over the wheel axle; it also shifts with leg height. Gain-schedule the
-    // trim by the same alpha as the LQR gains (linear ret→ext for now).
+    // over the wheel axle; it also shifts with leg height. Schedule the trim
+    // by the same alpha as the LQR gains, using fixed ret/ext endpoints plus
+    // a quadratic interior-curvature term.
     // trim_ret goes through live_tune_value() too (live_tune.h) but currently
     // has no LIVE_TUNE_SLOTS entry, so it always falls through to the latched
     // persisted value -- CH7/CH8 are presently assigned to the LQR gains below.
-    // trim_ext has no knob and always reads its persisted value directly.
+    // trim_ext and trim_curve have no knob and read persisted values directly.
     // Offsets only the LQR pitch error, never the velocity setpoint. Computed
     // here (after alpha, before the velocity PI) because the velocity PI's
     // safe backward lean clamp below needs it.
     float trim_ret = live_tune_value(PARAM_LQR_PITCH_TRIM_RET);
     float trim_ext = param_get(PARAM_LQR_PITCH_TRIM_EXT);
-    float pitch_trim = trim_ret + alpha * (trim_ext - trim_ret);
+    float trim_curve = param_get(PARAM_LQR_PITCH_TRIM_CURVE);
+    float pitch_trim = scheduled_pitch_trim(trim_ret, trim_ext, trim_curve, alpha);
     g_state.applied_pitch_trim = pitch_trim;
 
     // ── Pitch watchdog ────────────────────────────────────────────────────────
-    if (param_get(PARAM_PITCH_WATCHDOG_ENABLE) >= 0.5f) {
+    // Suppressed in STANDING_UP: that state exists precisely to let the robot
+    // settle from a lean the watchdog would fault on, and it reuses this same
+    // control loop. standup_div_fwd/bwd is the pitch bound in effect there
+    // instead (state_machine.cpp, on_standing_up). Gating on the state rather
+    // than a param means the suppression cannot be left switched on by
+    // accident. The else branch also keeps the timer pinned at 0 throughout
+    // STANDING_UP, so the handoff to RUNNING always starts a fresh 200 ms
+    // window rather than inheriting a partly-elapsed one.
+    bool pitch_wd_active = param_get(PARAM_PITCH_WATCHDOG_ENABLE) >= 0.5f &&
+                           g_state.state != STATE_STANDING_UP;
+    if (pitch_wd_active) {
         if (pitch > sched_pw_fwd || pitch < -sched_pw_bwd) {
             if (s_pitch_fault_start_ms == 0) s_pitch_fault_start_ms = millis();
             if (millis() - s_pitch_fault_start_ms > PITCH_WATCHDOG_MS) {
@@ -483,6 +573,8 @@ void controlLoop_run() {
         } else {
             s_pitch_fault_start_ms = 0;
         }
+    } else {
+        s_pitch_fault_start_ms = 0;
     }
 
     // ── Roll watchdog (lateral tip guard) ─────────────────────────────────────
@@ -499,6 +591,8 @@ void controlLoop_run() {
         } else {
             s_roll_fault_start_ms = 0;
         }
+    } else {
+        s_roll_fault_start_ms = 0;
     }
 
     // ── Wheel runaway watchdog (hard backup) ──────────────────────────────────
@@ -508,15 +602,30 @@ void controlLoop_run() {
     // over the limit continuously, so the debounce costs nothing against it;
     // WHEEL_RUNAWAY_MS is much shorter than the 200 ms pitch/roll windows
     // because a genuinely runaway wheel covers ground fast.
-    float hard_limit = param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S) * 2.0f;
-    if (fabsf(wm_L.vel_turns_s) > hard_limit || fabsf(wm_R.vel_turns_s) > hard_limit) {
-        if (s_wheel_fault_start_ms == 0) s_wheel_fault_start_ms = millis();
-        if (millis() - s_wheel_fault_start_ms > WHEEL_RUNAWAY_MS) {
-            g_state.fault_code = FAULT_WHEEL_RUNAWAY;
-            stateMachine_request_estop();
-            return;
+    //
+    // wheel_runaway_en=0 disables the trip for bench work that legitimately
+    // spins the wheels past 2x the governor. It is persistent, so main.cpp
+    // logs a loud WARN at boot whenever it comes back off flash cleared.
+    //
+    // The trip follows whichever limit is actually in force, so raising
+    // standup_vel_limit for an energetic catch doesn't ESTOP the moment the
+    // wheels pass 2x the (lower) RUNNING governor they aren't being held to.
+    float wheel_vel_limit = controlLoop_wheel_vel_limit();
+    if (param_get(PARAM_WHEEL_RUNAWAY_EN) >= 0.5f) {
+        float hard_limit = wheel_vel_limit * 2.0f;
+        if (fabsf(wm_L.vel_turns_s) > hard_limit || fabsf(wm_R.vel_turns_s) > hard_limit) {
+            if (s_wheel_fault_start_ms == 0) s_wheel_fault_start_ms = millis();
+            if (millis() - s_wheel_fault_start_ms > WHEEL_RUNAWAY_MS) {
+                g_state.fault_code = FAULT_WHEEL_RUNAWAY;
+                stateMachine_request_estop();
+                return;
+            }
+        } else {
+            s_wheel_fault_start_ms = 0;
         }
     } else {
+        // Keep the debounce timer pinned while disabled, so re-enabling always
+        // starts a fresh 50 ms window rather than inheriting a stale one.
         s_wheel_fault_start_ms = 0;
     }
 
@@ -672,8 +781,36 @@ void controlLoop_run() {
     float bar_over = -pitch - sched_bar_th;  // > 0 only past the backward soft limit
     if (bar_over > 0.0f) g_state.tau_sym -= param_get(PARAM_LQR_BARRIER_K) * bar_over;
 
-    // Clamp to adjustable test limit
-    float torque_limit = param_get(PARAM_LQR_TORQUE_LIMIT);
+    // Linear chirp added after the normal symmetric law and barrier, but
+    // before lqr_torque_limit. The normal clamp and motor governors therefore
+    // remain authoritative. Arming always starts a fresh phase.
+    if (param_get(PARAM_PLANT_ID_ENABLE) >= 0.5f) {
+        if (!s_plant_id_active) {
+            s_plant_id_active   = true;
+            s_plant_id_start_ms = millis();
+        }
+        float duration_s = param_get(PARAM_PLANT_ID_DURATION_S);
+        float elapsed_s  = (millis() - s_plant_id_start_ms) / 1000.0f;
+        if (elapsed_s >= duration_s) {
+            controlLoop_disarm_plant_id();
+        } else {
+            float f0_hz = param_get(PARAM_PLANT_ID_F0_HZ);
+            float f1_hz = param_get(PARAM_PLANT_ID_F1_HZ);
+            float phase = 2.0f * (float)M_PI
+                        * (f0_hz * elapsed_s
+                           + 0.5f * (f1_hz - f0_hz)
+                           * elapsed_s * elapsed_s / duration_s);
+            g_state.tau_sym += param_get(PARAM_PLANT_ID_AMPLITUDE_NM) * sinf(phase);
+        }
+    } else {
+        s_plant_id_active = false;
+    }
+
+    // Clamp to adjustable test limit (standup_torque_lim replaces it during
+    // STANDING_UP when set — see standup_scoped()). MOTOR_TRQ_MAX below is
+    // still the hard ceiling either way.
+    float torque_limit = standup_scoped(PARAM_STANDUP_TORQUE_LIMIT,
+                                        param_get(PARAM_LQR_TORQUE_LIMIT));
     if (g_state.tau_sym >  torque_limit) g_state.tau_sym =  torque_limit;
     if (g_state.tau_sym < -torque_limit) g_state.tau_sym = -torque_limit;
 
@@ -701,7 +838,7 @@ void controlLoop_run() {
     float tau_R = 0.0f;
 
     if (param_get(PARAM_LQR_ENABLE) >= 0.5f) {
-        float soft_limit = param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
+        float soft_limit = wheel_vel_limit;  // standup-scoped, see above
 
         // Mix: symmetric + yaw differential + symmetric FF terms
         // Driving the left wheel harder than the right yaws the robot right (-Z),

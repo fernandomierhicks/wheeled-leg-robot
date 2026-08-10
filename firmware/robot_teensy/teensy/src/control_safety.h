@@ -2,6 +2,17 @@
 
 #include <math.h>
 
+// Quadratic balance-trim schedule with fixed retracted/extended endpoints.
+// A zero curve coefficient is exactly the legacy linear interpolation; at
+// alpha=0.5 the curve contributes one quarter of its configured value.
+inline float scheduled_pitch_trim(float trim_ret, float trim_ext,
+                                  float trim_curve, float alpha) {
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+    return trim_ret + alpha * (trim_ext - trim_ret)
+         + trim_curve * alpha * (1.0f - alpha);
+}
+
 // Keep the velocity-loop backward pitch target inside the independently
 // configured backward watchdog after accounting for the scheduled balance
 // trim. For theta_ref = -theta_bwd, the absolute target is:

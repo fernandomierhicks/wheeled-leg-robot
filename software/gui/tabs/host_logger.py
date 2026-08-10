@@ -1,11 +1,13 @@
 """host_logger.py — GUI-side capture of every TelemetryBus packet to a
-timestamped .jsonl file, independent of SD logging (log_transfer.py).
+timestamped .jsonl file, automatically synchronized by log_transfer.py when
+Teensy SD logging changes state.
 
 Where SD logging only records the fixed TELEM struct on the robot, this
 captures whatever the GUI actually receives — TELEM, robot LOG messages,
 CALIB events, WIFI_DIAG — each packet dict as one JSON line with a host-side
-timestamp, so nothing needs a matching fixed-size record layout. Manual
-start/stop only (see Logs tab); does not run automatically.
+timestamp, so nothing needs a matching fixed-size record layout. It can still
+be controlled manually, and LogTransferManager also starts/stops it whenever
+Teensy SD logging starts/stops from any observed trigger.
 """
 
 import json

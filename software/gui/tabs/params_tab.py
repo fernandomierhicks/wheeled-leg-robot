@@ -72,15 +72,26 @@ _ANGLE_PARAM_NAMES = frozenset({
     "theta_max_bwd_ext",
     "jump_ramp_down",
     "jump_hs_margin",
-    "standup_pitch_fwd",
-    "standup_pitch_bwd",
+    "standup_pitch_min",
+    "standup_pitch_max",
     "standup_cap_pitch",
     "lqr_pitch_trim_ret",
     "lqr_pitch_trim_ext",
+    "lqr_trim_curve",
     "pitch_wd_fwd_ret",
     "pitch_wd_bwd_ret",
     "pitch_wd_fwd_ext",
     "pitch_wd_bwd_ext",
+    # A hip position offset, not a body angle — but it is still a direct angular
+    # quantity in rad, so degrees read better than the 0.15 rad it defaults to.
+    "roll_offset_max",
+    # Roll setpoint limits. radio_roll_max is firmware-written from the active
+    # CH9 profile, so the three profile values are where these actually get set;
+    # all four display together or the comparison is unreadable.
+    "radio_roll_max",
+    "profile1_roll_max",
+    "profile2_roll_max",
+    "profile3_roll_max",
 })
 _ANGULAR_RATE_PARAM_NAMES = frozenset({
     "calib_seek_speed",
@@ -100,6 +111,19 @@ _DISPLAY_UNIT_BY_PARAM = {
     **{_PARAM_BY_NAME[name]: "deg/s" for name in _ANGULAR_RATE_PARAM_NAMES},
 }
 _RAD_TO_DEG = 180.0 / math.pi
+
+
+def _migrate_import_value(param_id: int, entry, value: float) -> float:
+    """Translate values from parameter exports made before a semantic rename."""
+    if (
+        param_id == _PARAM_BY_NAME["standup_pitch_min"]
+        and isinstance(entry, dict)
+        and entry.get("name") == "standup_pitch_bwd"
+    ):
+        # ID 0x042E used to be a positive backward magnitude. It is now the
+        # signed lower bound, matching the firmware's param-store v4 migration.
+        return -abs(value)
+    return value
 
 # ── Group map (param_ids.h GROUP_*) ───────────────────────────────────────────
 _GROUP_NAMES = {
@@ -137,6 +161,7 @@ _WATCHDOG_PARAM_IDS = frozenset({
     0x0300,  # PARAM_WM_ENC_TIMEOUT_MS (wheel encoder feedback watchdog)
     0x0301,  # PARAM_WM_VEL_SLEW_MAX (encoder-velocity plausibility filter; guards the runaway trip)
     0x0403,  # PARAM_WHEEL_VEL_LIMIT_TURNS_S (soft wheel governor; ESTOP at 2x)
+    0x052E,  # PARAM_WHEEL_RUNAWAY_EN (the 2x ESTOP itself; persistent, so a disable outlives the bench session)
     0x0423,  # PARAM_PITCH_WATCHDOG_ENABLE
     0x0521,  # PARAM_ROLL_WATCHDOG_EN
     0x0522,  # PARAM_ROLL_WATCHDOG_LIMIT (trips FAULT_ROLL_WATCHDOG)
@@ -150,7 +175,19 @@ _WATCHDOG_PARAM_IDS = frozenset({
 # reviewed/tuned as a unit at the same level as Calibration rather than
 # buried as a Control subsection.
 _GROUP_STANDUP = 0x08
-_STANDUP_PARAM_IDS = frozenset(range(0x042C, 0x043C))
+_STANDUP_DIVERGENCE_PARAM_IDS = frozenset({
+    0x0446,  # PARAM_STANDUP_DIVERGE_PITCH_FWD_RAD
+    0x0447,  # PARAM_STANDUP_DIVERGE_PITCH_BWD_RAD
+})
+_STANDUP_PARAM_IDS = (
+    frozenset(range(0x042C, 0x043C))
+    | _STANDUP_DIVERGENCE_PARAM_IDS
+    | frozenset({
+        0x052D,  # PARAM_STANDUP_USE_RET_GAINS
+        0x052F,  # PARAM_STANDUP_CROUCH_STIFF
+        0x0530,  # PARAM_STANDUP_STIFFEN_TIME_S
+    })
+)
 
 # gui_motion_ctrl_en lives natively in GROUP_CONTROL (param_ids.h) but is a
 # System-level "who's driving" toggle, not a control-tuning value — pulled
@@ -183,12 +220,117 @@ _ROLL_HIP_OVERRIDE_PARAM_IDS = frozenset({
     0x0523,  # PARAM_HIP_ROLL_KP
     0x0524,  # PARAM_HIP_ROLL_KD
 })
+_BALANCE_TRIM_HIP_PARAM_IDS = frozenset({
+    0x043C,  # PARAM_LQR_PITCH_TRIM_RET
+    0x043D,  # PARAM_LQR_PITCH_TRIM_EXT
+    0x0450,  # PARAM_LQR_PITCH_TRIM_CURVE
+})
+
+# ── Bench-mode presets ────────────────────────────────────────────────────────
+# One-click sets of the params that decide whether RUNNING will arm, so a bench
+# configuration doesn't have to be reassembled by hand from memory. The arm gate
+# is state_machine.cpp on_running_guard(): it needs imu_enable, all four
+# motor-enable flags, and (per half) either the motor enabled or its bypass set —
+# calib_bypass_en covers the hip half, run_wheel_bypass_en the wheel half.
+#
+# Each bench preset also owns the transition/safety settings made meaningless by
+# the hardware it removes. "Fully functional" restores every safety a bench
+# session may have switched off, since "nothing bypassed" is its whole point.
+#
+# alpha_force_ret_en is deliberately cleared by the Full preset only. It is a
+# tuning tool (persistent since 2026-08-09 so a session at one leg height
+# survives a power cycle), so the bench presets leave whatever you set alone
+# rather than clobbering it on every click.
+#
+# Values are written by NAME and resolved through the generated schema below, so
+# a re-generated id can never silently point a preset at the wrong param.
+_PRESET_GATE_NOTE = (
+    "No Motors cuts enabled actuator outputs live; safety/bypass values also "
+    "apply immediately. Every value is read back to confirm the write landed.\n"
+    "Bench settings can disable safety checks and most persist across reboot. "
+    "Click Full Robot, verify it, and reboot before operating the complete robot."
+)
+_BENCH_PRESETS: list[tuple[str, str, str, str, dict[str, float]]] = [
+    # (key, button label, tooltip title, accent colour, {param name: value})
+    ("full", "Full Robot", "Fully functional robot", GREEN, {
+        "hip_l_enable": 1.0, "hip_r_enable": 1.0,
+        "wheel_l_enable": 1.0, "wheel_r_enable": 1.0,
+        "calib_bypass_en": 0.0, "run_wheel_bypass_en": 0.0,
+        # Everything active, all safeties active, nothing bypassed.
+        "imu_enable": 1.0,
+        "pitch_watchdog_en": 1.0,
+        "roll_watchdog_en": 1.0,
+        "wheel_runaway_en": 1.0,
+        "alpha_force_ret_en": 0.0,
+    }),
+    ("no_hips", "No Hips", "Hips disabled", ORANGE, {
+        "hip_l_enable": 0.0, "hip_r_enable": 0.0,
+        "wheel_l_enable": 1.0, "wheel_r_enable": 1.0,
+        "calib_bypass_en": 1.0, "run_wheel_bypass_en": 0.0,
+        # Disabled hips can never be calibrated, and STANDING_UP hard-requires
+        # valid hip limits (it does NOT honour calib_bypass_en — its pitch
+        # watchdog is masked, so an unknown leg pose has no safety net). Arming
+        # with standup_enable=1 would therefore always ESTOP on
+        # FAULT_STANDUP_FAILED. Route straight to RUNNING instead.
+        "standup_enable": 0.0,
+    }),
+    ("no_wheels", "No Wheels", "Wheels disabled", ORANGE, {
+        "hip_l_enable": 1.0, "hip_r_enable": 1.0,
+        "wheel_l_enable": 0.0, "wheel_r_enable": 0.0,
+        "calib_bypass_en": 0.0, "run_wheel_bypass_en": 1.0,
+    }),
+    ("no_motors", "No Motors", "All motors disabled", RED, {
+        # Order is a safety property: dict insertion order becomes the write
+        # queue. Disable pose watchdogs first, before an already-enabled arm
+        # bypass can admit RUNNING. Their 200 ms debounce then cannot beat the
+        # preset's paced writes. The two arm bypasses are deliberately last.
+        "roll_watchdog_en": 0.0,
+        "pitch_watchdog_en": 0.0,
+        "wheel_runaway_en": 0.0,
+        "standup_enable": 0.0,   # same reason as No Hips — see above
+        "hip_l_enable": 0.0, "hip_r_enable": 0.0,
+        "wheel_l_enable": 0.0, "wheel_r_enable": 0.0,
+        "calib_bypass_en": 1.0, "run_wheel_bypass_en": 1.0,
+        # A no-torque bench arm is commonly lying on its side or back. Pose
+        # watchdogs are independent of the motor-enable gates, so leaving them
+        # active causes an otherwise successful arm to ESTOP after exactly its
+        # 200 ms debounce (FAULT_ROLL_WATCHDOG/PITCH_WATCHDOG). Wheel runaway is
+        # likewise meaningless with both wheel interfaces disabled. Full Robot
+        # explicitly restores all three before real operation. These are
+        # ordinary parameter writes; firmware does not infer a separate mode
+        # from the four motor-enable values.
+    }),
+]
+
+# Preset apply → read-back → verify pacing. The read-back is unconditional
+# rather than trusting the PARAM_SET echoes: on WiFi a dropped SET and a
+# dropped echo look identical from here, and this whole feature exists because
+# a param that silently wasn't set is what blocks arming.
+_PRESET_SETTLE_MS      = 350   # after the SETs, before the read-back GETs
+_PRESET_VERIFY_WAIT_MS = 500   # after the GETs, before judging the values
+_PRESET_MAX_ROUNDS     = 4     # re-SET + re-GET attempts for stragglers
+_PRESET_TOLERANCE      = 1e-3
+# One PARAM_SET per tick rather than the whole preset at once. Firmware chirps
+# PARAM_SET_CHIRP (C6, 30 ms) on every param whose value actually *changed*, and
+# Buzzer::play() restarts the melody from note 0 on each call — so a burst of
+# writes landing within a few ms of each other collapses into a single short
+# tick instead of one beep per param. Spacing them past the note length gives
+# the audible per-param feedback back, and stops hammering a lossy WiFi link
+# with a simultaneous burst. Unchanged params are silent by firmware design.
+_PRESET_SEND_SPACING_MS = 90
 
 # Dev/debug params pulled out of their native group into their own top-level
 # Diagnostics section.
 _GROUP_DIAGNOSTICS = 0x09
+_PLANT_ID_PARAM_IDS = frozenset(range(0x044B, 0x0450))
 _DIAGNOSTICS_PARAM_IDS = frozenset({
     0x000A,  # PARAM_LOOP_PROFILE_ENABLE
+}) | _PLANT_ID_PARAM_IDS
+
+_LQR_BARRIER_PARAM_IDS = frozenset({
+    0x0448,  # PARAM_LQR_BARRIER_K
+    0x0449,  # PARAM_LQR_BARRIER_THRESH_RET
+    0x044A,  # PARAM_LQR_BARRIER_THRESH_EXT
 })
 
 
@@ -204,6 +346,8 @@ def _effective_group(param_id: int) -> int:
     if param_id in _ROLL_CONTROL_OVERRIDE_PARAM_IDS:
         return 0x04  # GROUP_CONTROL
     if param_id in _ROLL_HIP_OVERRIDE_PARAM_IDS:
+        return 0x02  # GROUP_HIP
+    if param_id in _BALANCE_TRIM_HIP_PARAM_IDS:
         return 0x02  # GROUP_HIP
     return (param_id >> 8) & 0xFF
 
@@ -237,6 +381,9 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
         0x012F,  # calib_rampdown_s
     }), 0x01, "Shared"),
 
+    # Height-scheduled LQR balance point, presented with the leg geometry.
+    (_BALANCE_TRIM_HIP_PARAM_IDS, 0x02, "Pitch Trim vs Leg Height"),
+
     # Balance/control tuning.
     (frozenset({0x0400, 0x0402}), 0x04, "LQR Core"),
     (range(0x0424, 0x0429), 0x04, "LQR Gains"),
@@ -247,10 +394,23 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     (frozenset({0x0401, 0x0420, 0x0421, 0x0422}), 0x04, "Sim Injection"),
     (_ROLL_CONTROL_OVERRIDE_PARAM_IDS, 0x04, "Roll"),
     (range(0x043E, 0x0446), 0x04, "Pitch Envelope"),  # theta_max_*, pitch_wd_* (fwd/bwd x ret/ext)
-    (range(0x0500, 0x0504), 0x05, "Radio Scale"),  # radio_hip_cmd, radio_vel_max, radio_yaw_max, live_tune_ch7_val
-    (range(0x0510, 0x0513), 0x05, "Profile 1"),    # profile1_vel_max/yaw_max/torque_lim
-    (range(0x0513, 0x0516), 0x05, "Profile 2"),    # profile2_vel_max/yaw_max/torque_lim
-    (range(0x0516, 0x0519), 0x05, "Profile 3"),    # profile3_vel_max/yaw_max/torque_lim
+    (_LQR_BARRIER_PARAM_IDS, 0x04, "Backward Pitch Barrier"),
+
+    # Standing-up safety and developer diagnostics.
+    (_STANDUP_DIVERGENCE_PARAM_IDS, 0x08, "Divergence Limits"),
+    (_PLANT_ID_PARAM_IDS, 0x09, "Plant Identification"),
+
+    # The roll members of these four sets were allocated later, out of the 0x052x
+    # tail rather than next to their siblings, so they are listed explicitly —
+    # they belong with the radio/profile values they are set alongside, not
+    # loose at the bottom of Command.
+    (frozenset(range(0x0500, 0x0504)) | frozenset({
+        0x0525,  # roll_cmd_rad   (live CH1 setpoint, same as radio_hip_cmd)
+        0x0526,  # radio_roll_max (readonly, copied from the active profile)
+    }), 0x05, "Radio Scale"),      # + radio_hip_cmd, radio_vel_max, radio_yaw_max, live_tune_ch7_val
+    (frozenset(range(0x0510, 0x0513)) | frozenset({0x0527}), 0x05, "Profile 1"),  # vel_max/yaw_max/torque_lim/roll_max
+    (frozenset(range(0x0513, 0x0516)) | frozenset({0x0528}), 0x05, "Profile 2"),
+    (frozenset(range(0x0516, 0x0519)) | frozenset({0x0529}), 0x05, "Profile 3"),
     # active_profile (0x0519) intentionally left without a subgroup — it's the
     # CH9-selected index, not a per-profile value.
 ]
@@ -259,6 +419,7 @@ _SUBGROUP_COLORS: dict[str, str] = {
     "Retracting":     "#66aaff",
     "Extending":      "#ff9955",
     "Shared":         "#99aabb",
+    "Pitch Trim vs Leg Height": "#ffb36b",
     "LQR Core":       "#dd99ff",
     "LQR Gains":      "#ee88ff",
     "Velocity PI":    "#bb77ee",
@@ -268,6 +429,9 @@ _SUBGROUP_COLORS: dict[str, str] = {
     "Sim Injection":  "#88ddcc",
     "Roll":           "#55ccff",
     "Pitch Envelope": "#ff99aa",
+    "Backward Pitch Barrier": "#ff7788",
+    "Divergence Limits": "#ff8866",
+    "Plant Identification": "#ffdd66",
     "Safety":         "#ff5555",
     "Radio Scale":    "#ff88cc",
     "Profile 1":      "#ffdd88",
@@ -618,6 +782,20 @@ class ParamsTab(QWidget):
         self._sweep_timer.timeout.connect(self._sweep_missing_params)
         self._sweep_round = 0
 
+        # Bench-mode preset apply → read-back → verify cycle (see _apply_preset).
+        self._preset_timer = QTimer(self)
+        self._preset_timer.setSingleShot(True)
+        self._preset_timer.timeout.connect(self._preset_tick)
+        self._preset_send_timer = QTimer(self)
+        self._preset_send_timer.setSingleShot(True)
+        self._preset_send_timer.timeout.connect(self._preset_send_next)
+        self._preset_expect: dict[int, float] = {}
+        self._preset_queue: list[tuple[int, float]] = []
+        self._preset_title = ""
+        self._preset_round = 0
+        self._preset_phase = "read"   # "read" = writes done, go re-read; "judge" = compare
+        self._preset_box = None
+
         # ── Toolbar ───────────────────────────────────────────────────────────
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
@@ -703,6 +881,31 @@ class ParamsTab(QWidget):
         toolbar.addWidget(self._lbl_status)
         toolbar.addStretch()
 
+        # ── Bench-mode presets (right-aligned) ────────────────────────────────
+        # Own status label: _update_status() rewrites _lbl_status on every
+        # PARAM_REPORT, which would wipe the apply/verify result the instant the
+        # read-back replies started landing.
+        self._lbl_preset = QLabel("")
+        self._lbl_preset.setStyleSheet(f"color: {DIM}; font-size: 11px;")
+        self._lbl_preset.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        toolbar.addWidget(self._lbl_preset, stretch=1)
+
+        bench_lbl = QLabel("Bench mode:")
+        bench_lbl.setStyleSheet(f"color: {DIM}; font-size: 11px;")
+        toolbar.addWidget(bench_lbl)
+
+        for key, label, title, accent, values in _BENCH_PRESETS:
+            btn = QPushButton(label)
+            btn.setFixedWidth(82)
+            btn.setStyleSheet(
+                f"QPushButton{{background:{SURFACE};color:{accent};"
+                f"border:1px solid {accent};border-radius:3px;padding:3px 8px}}"
+                f"QPushButton:hover{{background:{accent};color:{BG}}}"
+            )
+            btn.setToolTip(self._preset_tooltip(title, values))
+            btn.clicked.connect(lambda _checked=False, k=key: self._apply_preset(k))
+            toolbar.addWidget(btn)
+
         # ── Column header bar ─────────────────────────────────────────────────
         col_bar = QWidget()
         col_bar.setStyleSheet(f"background: {SURFACE};")
@@ -773,6 +976,170 @@ class ParamsTab(QWidget):
         self._lbl_status.setStyleSheet(f"color: {ORANGE}; font-size: 11px;")
         self._start_missing_sweep()
 
+    # ── Bench-mode presets ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _preset_tooltip(title: str, values: dict[str, float]) -> str:
+        body = "\n".join(f"  {name} = {val:g}" for name, val in values.items())
+        return f"{title}\n\nSets {len(values)} params:\n{body}\n\n{_PRESET_GATE_NOTE}"
+
+    def _set_preset_status(self, text: str, color: str):
+        self._lbl_preset.setText(text)
+        self._lbl_preset.setStyleSheet(f"color: {color}; font-size: 11px;")
+
+    def _preset_popup(self, title: str, text: str, detail: str, icon):
+        """Report the apply/verify verdict in a window, since the toolbar label
+        is easy to miss.
+
+        Deliberately NON-modal (show(), not exec()): a modal box spins a nested
+        Qt event loop, which stalls the RemoteControlServer mid-handler and
+        makes robot_ctl.py time out until someone clicks it (see
+        software/gui/CLAUDE.md). This pops up and stays put without wedging
+        automation or the telemetry UI behind it."""
+        prev = getattr(self, "_preset_box", None)
+        if prev is not None:
+            # WA_DeleteOnClose means the C++ side may already be gone if the box
+            # was closed by something other than its own finished signal.
+            try:
+                prev.close()
+            except RuntimeError:
+                pass
+        box = QMessageBox(self)
+        box.setIcon(icon)
+        box.setWindowTitle(title)
+        box.setText(text)
+        box.setInformativeText(detail)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.setWindowModality(Qt.WindowModality.NonModal)
+        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        box.finished.connect(lambda _r: setattr(self, "_preset_box", None))
+        self._preset_box = box
+        box.show()
+        box.raise_()
+
+    def _preset_value_lines(self, pids) -> str:
+        """name = value, read back from the robot (not what we asked for)."""
+        out = []
+        for pid in pids:
+            name = _PARAM_DEFS.get(pid, (f"0x{pid:04X}", ""))[0]
+            row = self._rows.get(pid)
+            if row is None or not row.is_confirmed():
+                out.append(f"  {name} = (no reply)")
+            else:
+                out.append(f"  {name} = {row.current_value():g}")
+        return "\n".join(out)
+
+    def _apply_preset(self, key: str):
+        """Write a bench-mode preset, then read every param back to prove it
+        landed. Firmware reads all of these live, so no reboot is needed."""
+        preset = next((p for p in _BENCH_PRESETS if p[0] == key), None)
+        if preset is None:
+            return
+        _, _, title, _, values = preset
+
+        # Resolve names through the generated schema; skip (and report) anything
+        # this GUI's schema doesn't know, rather than writing a guessed id.
+        expect: dict[int, float] = {}
+        unknown: list[str] = []
+        for name, val in values.items():
+            pid = _PARAM_BY_NAME.get(name)
+            if pid is None:
+                unknown.append(name)
+                continue
+            expect[pid] = val
+        if not expect:
+            self._set_preset_status(f"{title}: no known params to set", RED)
+            return
+
+        self._preset_title  = title
+        self._preset_expect = expect
+        self._preset_round  = 0
+        self._preset_phase  = "read"
+        self._preset_queue  = list(expect.items())
+
+        msg = f"{title}: applying {len(expect)} params…"
+        if unknown:
+            msg += f" ({len(unknown)} unknown to this GUI: {', '.join(unknown)})"
+        self._set_preset_status(msg, ORANGE)
+        self._preset_send_next()
+
+    def _preset_send_next(self):
+        """Drain the pending writes one per tick (see _PRESET_SEND_SPACING_MS),
+        then hand off to the read-back/verify cycle."""
+        if not self._preset_queue:
+            self._preset_timer.start(_PRESET_SETTLE_MS)
+            return
+        pid, val = self._preset_queue.pop(0)
+        send_param_set(pid, val)
+        self._preset_send_timer.start(_PRESET_SEND_SPACING_MS)
+
+    def _preset_mismatches(self) -> list[int]:
+        """Preset ids whose live value doesn't (yet) match what was written.
+        An unconfirmed row counts as a mismatch — no reply is not a pass."""
+        bad = []
+        for pid, want in self._preset_expect.items():
+            row = self._rows.get(pid)
+            if row is None or not row.is_confirmed():
+                bad.append(pid)
+            elif abs(row.current_value() - want) > _PRESET_TOLERANCE:
+                bad.append(pid)
+        return bad
+
+    def _preset_tick(self):
+        if not self._preset_expect:
+            return
+        # "read" runs after every batch of writes — first pass and every retry
+        # alike — and always re-asks firmware rather than trusting the PARAM_SET
+        # echoes, which is the whole point of verifying.
+        if self._preset_phase == "read":
+            self._preset_phase = "judge"
+            for pid in self._preset_expect:
+                send_param_get(pid)
+            self._set_preset_status(f"{self._preset_title}: verifying…", ORANGE)
+            self._preset_timer.start(_PRESET_VERIFY_WAIT_MS)
+            return
+
+        bad = self._preset_mismatches()
+        if not bad:
+            pids = list(self._preset_expect)
+            n = len(pids)
+            self._set_preset_status(f"✓ {self._preset_title} — {n}/{n} params verified", GREEN)
+            self._preset_popup(
+                "Bench Preset Applied",
+                f"{self._preset_title}\n\n{n} of {n} params written and confirmed.",
+                "Read back from the robot after writing:\n"
+                f"{self._preset_value_lines(pids)}",
+                QMessageBox.Icon.Information,
+            )
+            self._preset_expect = {}
+            return
+
+        if self._preset_round >= _PRESET_MAX_ROUNDS:
+            names = ", ".join(_PARAM_DEFS.get(pid, (f"0x{pid:04X}", ""))[0] for pid in bad)
+            total = len(self._preset_expect)
+            self._set_preset_status(
+                f"✗ {self._preset_title} — {len(bad)} param(s) NOT confirmed: {names}", RED)
+            self._preset_popup(
+                "Bench Preset NOT Confirmed",
+                f"{self._preset_title}\n\n{total - len(bad)} of {total} params confirmed — "
+                f"{len(bad)} did NOT take after {_PRESET_MAX_ROUNDS} attempts.",
+                "The robot is in a MIXED state — do not assume it is safe to arm.\n"
+                "Still wrong (value read back from the robot):\n"
+                f"{self._preset_value_lines(bad)}",
+                QMessageBox.Icon.Warning,
+            )
+            self._preset_expect = {}
+            return
+
+        # Straggler: re-send just the ones that are wrong (paced, same as the
+        # first pass), which then falls back into the read-back round.
+        self._preset_round += 1
+        self._preset_phase = "read"
+        self._set_preset_status(
+            f"{self._preset_title}: retry {self._preset_round}, {len(bad)} pending…", ORANGE)
+        self._preset_queue = [(pid, self._preset_expect[pid]) for pid in bad]
+        self._preset_send_next()
+
     def _start_missing_sweep(self):
         """(Re)start the retry sweep that chases down rows still unconfirmed
         after a bulk PARAM_REPORT dump (PARAM_GET 0xFFFF or a defaults reset,
@@ -842,6 +1209,7 @@ class ParamsTab(QWidget):
             try:
                 pid = int(key, 16) if isinstance(key, str) and key.lower().startswith("0x") else int(key)
                 value = float(entry["value"]) if isinstance(entry, dict) else float(entry)
+                value = _migrate_import_value(pid, entry, value)
             except (KeyError, TypeError, ValueError):
                 skipped += 1
                 continue

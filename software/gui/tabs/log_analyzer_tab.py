@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 from analysis.param_sidecar import (
     ParamSidecar, active_profile_series, load_host_param_sidecar, load_matching_sidecar,
 )
+from analysis.leg_height_sweep import PlateauMetrics, fit_trim_schedule, plateau_report
 from analysis.wlog_metrics import (
     HIP_TORQUE_LIMIT_NM, SETTLE_DEG, compute_metrics, decode_run,
 )
@@ -29,7 +30,8 @@ from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, WHI
 
 pg.setConfigOptions(antialias=True, background=BG, foreground=TEXT)
 
-_FLAVORS = ["Overview", "LQR", "Vel-PI", "Yaw-PI", "Hip", "Torque / Current", "Gain schedule"]
+_FLAVORS = ["Overview", "LQR", "Vel-PI", "Yaw-PI", "Hip", "Torque / Current",
+            "Gain schedule", "Leg-height sweep"]
 
 _HF_VEL_PI_SAT = 1 << 7
 _HF_YAW_PI_SAT = 1 << 8
@@ -169,6 +171,7 @@ class LogAnalyzerTab(QWidget):
         self._metrics = None
         self._params = None
         self._param_error = ""
+        self._plateau_cache: list[PlateauMetrics] | None = None
         self._plots: list[pg.PlotWidget] = []
         self._param_changes: list[tuple[float, str, str]] = []
         self._mode_changes: list[tuple[float, str, str]] = []
@@ -241,6 +244,7 @@ class LogAnalyzerTab(QWidget):
             self._run = None
             self._metrics = None
             self._params = None
+            self._plateau_cache = None
             self._lbl_file.setText(f"Failed to open {path.name}: {exc}")
             self._redraw()
             return
@@ -249,6 +253,7 @@ class LogAnalyzerTab(QWidget):
         self._metrics = compute_metrics(run)
         self._params = None
         self._param_error = ""
+        self._plateau_cache = None
         try:
             self._params = (
                 load_host_param_sidecar(path) if run.source_kind == "host"
@@ -802,8 +807,174 @@ class LogAnalyzerTab(QWidget):
                      "This telemetry version did not record the schedule blend."),
                 ])
 
+        elif flavor == "Leg-height sweep":
+            self._draw_leg_height_sweep(t, fields, run)
+
         self._finish_plots()
         self._update_status(t, health, metrics)
+
+    # ── Leg-height sweep ───────────────────────────────────────────────────
+
+    def _sidecar_value(self, name: str) -> float | None:
+        """A parameter's value at capture time, or None if it wasn't recorded."""
+        if self._params is None:
+            return None
+        try:
+            value = self._params.initial_value(name)
+        except (KeyError, ValueError):
+            return None
+        return None if value is None else float(value)
+
+    def _plateaus(self) -> list[PlateauMetrics]:
+        """Per-leg-height metrics, computed once per loaded file.
+
+        Every clamp is read from the .PARAMS sidecar rather than assumed: a
+        saturation percentage measured against the wrong limit is worse than
+        no number at all, so plateau_report() reports zero when a limit is
+        genuinely unknown.
+        """
+        if self._plateau_cache is None and self._run is not None:
+            torque_limit = self._profile_limit("torque_lim")
+            self._plateau_cache = plateau_report(
+                self._run,
+                torque_limit_nm=(float(np.nanmax(torque_limit))
+                                 if torque_limit is not None
+                                 and np.any(np.isfinite(torque_limit)) else None),
+                rate_lim=self._sidecar_value("vel_pi_rate_lim"),
+                theta_max_fwd=self._sidecar_value("theta_max_fwd_ret"),
+                theta_max_bwd=self._sidecar_value("theta_max_bwd_ret"),
+            )
+        return self._plateau_cache or []
+
+    def _draw_leg_height_sweep(self, t: np.ndarray, fields: dict, run):
+        if not run.has_gain_sched_alpha:
+            plot = self._new_plot("Leg-height sweep", "Schedule position α")
+            text = pg.TextItem("Gain-schedule telemetry is unavailable in this log.",
+                               color=DIM, anchor=(0.5, 0.5))
+            plot.addItem(text)
+            text.setPos(float(t[len(t) // 2]) if len(t) else 0.0, 0.5)
+            self._set_meta_rows([("Leg-height sweep", "unavailable",
+                                  "This telemetry version did not record α.")])
+            return
+
+        plateaus = self._plateaus()
+
+        def mask_for(selected) -> np.ndarray:
+            mask = np.zeros(t.size, dtype=bool)
+            for plateau in selected:
+                mask[plateau.i0:plateau.i1 + 1] = True
+            return mask
+
+        settled = [p for p in plateaus if p.equilibrium]
+        unsettled = [p for p in plateaus if not p.equilibrium]
+
+        alpha_plot = self._new_plot("Leg height and detected plateaus",
+                                    "Schedule position α")
+        self._curve(alpha_plot, t, fields["gain_sched_alpha"], BLUE,
+                    "Gain-schedule position α — 0=retracted, 1=extended", 1.6)
+        self._add_regions(alpha_plot, t, mask_for(settled), GREEN,
+                          "Settled plateau — in equilibrium, balance point is trustworthy")
+        self._add_regions(alpha_plot, t, mask_for(unsettled), YELLOW,
+                          "Unsettled plateau — still drifting, balance point is provisional")
+
+        pitch_plot = self._new_plot("Pitch against the scheduled balance point",
+                                    "Angle", "°", auto_si_prefix=False)
+        self._curve(pitch_plot, t, np.degrees(fields["pitch_rad"]), BLUE,
+                    "Pitch — measured body tilt (°)", 1.5)
+        self._curve(pitch_plot, t, np.degrees(fields["pitch_trim_rad"]), ORANGE,
+                    "Applied trim — the balance point the schedule believes in (°)", 1.3)
+        for plateau in plateaus:
+            marker = pg.PlotDataItem(
+                [plateau.t0, plateau.t1],
+                [np.degrees(plateau.balance_rad)] * 2,
+                pen=pg.mkPen(GREEN if plateau.equilibrium else YELLOW,
+                             width=2.2, style=Qt.PenStyle.DashLine))
+            marker.setZValue(20)
+            pitch_plot.addItem(marker)
+        if plateaus and pitch_plot.plotItem.legend is not None:
+            sample = pg.PlotDataItem(pen=pg.mkPen(GREEN, width=2.2,
+                                                  style=Qt.PenStyle.DashLine))
+            pitch_plot.plotItem.legend.addItem(sample, "Measured balance point")
+            _set_legend_tooltip(
+                pitch_plot.plotItem.legend, sample,
+                "Mean pitch over each plateau's settled tail. Where this sits away "
+                "from the applied trim, the trim schedule is wrong by the gap.")
+
+        err_plot = self._new_plot("LQR pitch error", "Pitch error", "°",
+                                  auto_si_prefix=False)
+        self._curve(err_plot, t,
+                    np.degrees(fields["pitch_rad"] - fields["theta_ref"]
+                               - fields["pitch_trim_rad"]), RED,
+                    "Pitch error — pitch − θref − trim, the quantity the LQR regulates (°)",
+                    1.3)
+
+        slew_plot = self._new_plot("Velocity-PI lean-target slew rate", "Slew rate",
+                                   "°/s", auto_si_prefix=False)
+        slew = np.zeros_like(t)
+        if t.size > 1:
+            slew[1:] = np.diff(fields["theta_ref"]) * run.sample_rate_hz
+        self._curve(slew_plot, t, np.degrees(slew), BLUE,
+                    "dθref/dt — how fast the velocity PI is moving the lean target (°/s)",
+                    1.1)
+        rate_lim = self._sidecar_value("vel_pi_rate_lim")
+        if rate_lim:
+            self._limit_pair(
+                slew_plot, t, np.degrees(rate_lim), YELLOW,
+                "Upper vel_pi_rate_lim — θref slew clamp (°/s)",
+                "Lower vel_pi_rate_lim — θref slew clamp (°/s)")
+
+        self._set_meta_rows(self._leg_height_rows(plateaus))
+
+    @staticmethod
+    def _leg_height_rows(plateaus: list[PlateauMetrics]) -> list[tuple[str, str, str]]:
+        if not plateaus:
+            return [("Leg-height plateaus", "none found",
+                     "No stretch of RUNNING held α flat for long enough to measure. "
+                     "Hold each leg height still for several seconds.")]
+
+        rows: list[tuple[str, str, str]] = []
+        for plateau in plateaus:
+            gate = ("settled" if plateau.equilibrium else
+                    f"NOT settled (drift {plateau.drift_turns_s:+.3f} turns/s)")
+            rows.append((
+                f"α {plateau.alpha:.3f} · {plateau.duration_s:.0f} s",
+                f"{np.degrees(plateau.balance_rad):+.2f}°",
+                f"Balance point, {gate}. Applied trim "
+                f"{np.degrees(plateau.applied_trim_rad):+.2f}°, so the schedule is off by "
+                f"{np.degrees(plateau.applied_trim_rad - plateau.balance_rad):+.2f}°. "
+                f"Pitch error {np.degrees(plateau.rms_pitch_err_rad):.2f}° RMS "
+                f"({np.degrees(plateau.pitch_err_bands['vel_pi']):.2f}° of it in the "
+                f"0.3–1.5 Hz velocity-PI band, "
+                f"{np.degrees(plateau.pitch_err_bands['lqr']):.2f}° in the 1.5–4 Hz LQR band). "
+                f"θref slew-limited {100 * plateau.rate_limit['duty_frac']:.0f}% of the time "
+                f"in runs averaging {1000 * plateau.rate_limit['mean_run_s']:.0f} ms. "
+                f"Backward lean clamp hit {100 * plateau.theta_bwd_sat_frac:.1f}%, "
+                f"wheel torque clamp {100 * plateau.torque_sat_frac:.1f}%. "
+                f"Hip sag {np.degrees(plateau.hip_sag_l_rad):+.2f}°/"
+                f"{np.degrees(plateau.hip_sag_r_rad):+.2f}° at "
+                f"{plateau.mean_hip_torque_nm:+.2f} N·m."))
+
+        settled = [p for p in plateaus if p.equilibrium]
+        if len(settled) >= 2:
+            fit = fit_trim_schedule([p.alpha for p in settled],
+                                    [p.balance_rad for p in settled])
+            note = (f"Least-squares fit of the {fit['n_points']} settled plateaus to "
+                    f"control_safety.h's scheduled_pitch_trim(); worst residual "
+                    f"{np.degrees(fit['max_residual_rad']):.2f}°.")
+            if fit["extrapolated"]:
+                note += (f" The sweep only reached α={fit['alpha_span'][1]:.2f}, so "
+                         f"trim_ext (the α=1 value) is an extrapolation, not a "
+                         f"measurement — do not trust it above the measured span.")
+            rows.append((
+                "Fitted trim schedule",
+                f"{fit['trim_ret']:+.4f} / {fit['trim_ext']:+.4f} / {fit['trim_curve']:+.4f}",
+                "lqr_pitch_trim_ret / _ext / _curve [rad]. " + note))
+        else:
+            rows.append((
+                "Fitted trim schedule", "not enough settled heights",
+                "At least two plateaus must pass the equilibrium gate before a trim "
+                "schedule can be fitted."))
+        return rows
 
     def _update_status(self, t: np.ndarray, health: np.ndarray, metrics: dict):
         warnings = []

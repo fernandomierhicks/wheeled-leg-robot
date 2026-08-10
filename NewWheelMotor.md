@@ -84,7 +84,7 @@ firmware will ask for. Per wheel, M = 3.1 kg, r = 0.075 m:
 | 10° slope, static hold | `M·g·sinθ·r/2` | 0.198 |
 | 20° slope, static hold | | 0.390 |
 | Catch a 20° lean | `M·g·tanθ·r/2` | 0.415 |
-| **Catch 34°** — `standup_pitch_fwd` = 0.6 rad, the arm-time gate | | **0.78** |
+| **Catch 34° forward** — `standup_pitch_max` = +0.6 rad, the arm-time gate | | **0.78** |
 | **Catch 57°** — `standup_div_fwd` = 1.0 rad, the abort limit | | **1.78** |
 
 **The binding case is the stand-up catch at 1.78 N·m — 26 % of what you have.**

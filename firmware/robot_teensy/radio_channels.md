@@ -13,8 +13,8 @@
 | C2  | Pitch stick        | Forward velocity     | 1000–2000 → −1…+1 × `RADIO_VEL_MAX` → `PARAM_V_CMD_MS`   |
 | C3  | Throttle stick     | Hip height / angle   | 1000–2000 → 0…1 → `PARAM_RADIO_HIP_CMD`                   |
 | C4  | Rudder stick       | Yaw rate             | 1000–2000 → −1…+1 × `RADIO_YAW_MAX` → `PARAM_OMEGA_CMD_RDS` |
-| C5  | SWA (left switch)  | Calibration / live-tune gain-group select | In **STANDBY**: rising edge > 1990 starts calibration; falling edge gracefully cancels a radio-triggered calibration through DISARMING. In **RUNNING**: combines with C6 to select a live-tune gain group for C7/C8 (see "Live parameter tuning" below). Arming is refused while C5 is up. |
-| C6  | SWB                 | Live-tune gain-group select | In **RUNNING**, combines with C5 to select a live-tune gain group for C7/C8. No effect outside RUNNING. |
+| C5  | SWA (left switch)  | Calibration / live-tune enable | In **STANDBY**: rising edge > 1990 starts calibration; falling edge gracefully cancels a radio-triggered calibration through DISARMING. In **RUNNING**: **up = live tuning armed on gain group 0** (LQR retracted pitch/rate). Arming is refused while C5 is up. *(LEGACY mode: combines with C6 for 3-group select instead — see below.)* |
+| C6  | SWB                 | **SD logging** | **Up = start recording, down = stop.** Edge-triggered. A start is refused outside STANDBY/ESTOP (`"CH6 up ignored -- start the log before arming"`) because opening a log preallocates and blocks ~96 ms — but once started, **recording continues through RUNNING**, which is the whole point. Confirmed by a single G5 chirp, so check `buzzer_volume` — there is no LED cue. *(LEGACY mode: gain-group select with C5, and no SD-log function.)* |
 | C7  | First knob         | Live tune, slot 0 of active group | 1000–2000 → active group's slot-0 range → its mapped param. See "Live parameter tuning" below. |
 | C8  | Second knob        | Live tune, slot 1 of active group | 1000–2000 → active group's slot-1 range → its mapped param. See "Live parameter tuning" below. |
 | C9  | 3-pos switch       | Speed profile        | < 1333 = profile 1, 1333–1667 = profile 2, > 1667 = profile 3. Selects the active `vel_max`, `yaw_max`, `torque_lim`, and `roll_max`. |
@@ -60,13 +60,30 @@ starts a fresh countdown. Loss of the radio link cannot satisfy the combo.
 Generic mechanism (`teensy/src/live_tune.h`, `LIVE_TUNE_SLOTS` in `main.cpp`)
 for feeling out a gain/limit live on the bench with a knob instead of editing
 the Params tab blind and re-arming to see the effect. C7/C8 each drive one
-slot of whichever *gain group* is currently selected by the C5/C6 switch
-combination (RUNNING only):
+slot of the active *gain group*, RUNNING only.
+
+**Which switches select the group is set by `live_tune_multi_en`.**
+
+### `live_tune_multi_en = 0` — SIMPLE (default)
+
+C5 alone. C6 is spent on SD logging instead of group select.
+
+| C5 | Group | Slot 0 (C7) | Slot 1 (C8) |
+|---|---|---|---|
+| down | *(none — tuning inactive)* | — | — |
+| **up** | **0** | `lqr_k_pitch_ret`, -0.1 … -2.0 | `lqr_k_rate_ret`, -0.01 … -1.0 |
+
+Groups 1 and 2 are unreachable in this mode. They are not deleted — set
+`live_tune_multi_en = 1` to get them back.
+
+### `live_tune_multi_en = 1` — LEGACY (three groups)
+
+The original combination scheme. C6 does **not** drive SD logging in this mode.
 
 | C5 | C6 | Group | Slot 0 (C7) | Slot 1 (C8) |
 |---|---|---|---|---|
 | up | up | *(none — tuning inactive)* | — | — |
-| down | up | 0 | `lqr_k_pitch_ret`, -0.1 … -0.5 | `lqr_k_rate_ret`, -0.01 … -0.5 |
+| down | up | 0 | `lqr_k_pitch_ret`, -0.1 … -2.0 | `lqr_k_rate_ret`, -0.01 … -1.0 |
 | up | down | 1 | `vel_pi_kp`, 0.05 … 1.0 | `vel_pi_ki`, 0.02 … 0.5 |
 | down | down | 2 | `roll_kp`, 0.3 … 4.0 | `roll_kd`, 0.02 … 0.5 |
 
@@ -90,8 +107,9 @@ long as the target's read site in `control_loop.cpp` goes through
 param's *current* value; only then does it "pick up" and start tracking 1:1.
 This avoids the gain jumping instantly to wherever the knob happened to be
 sitting when the group was selected. Pickup resets every time you leave
-live-tune mode or change groups (C5/C6 combination changes, or leaving
-RUNNING) — re-entering always requires re-sweeping.
+live-tune mode or change groups (C5 going down in SIMPLE mode, any C5/C6
+change in LEGACY mode, or leaving RUNNING) — re-entering always requires
+re-sweeping.
 
 **Nothing is written to the real, persistent param until you say so.** While a
 slot is picked up, its live shadow value is what the control loop actually
@@ -100,7 +118,8 @@ persistent param is untouched, so exiting live-tune mode (or switching groups)
 without latching leaves it exactly as it was.
 
 1. Arm normally (C5 **down**, raise C10) → RUNNING.
-2. Set C5/C6 to the desired group (see table above). Sweep C7/C8 through the
+2. Select the group — **SIMPLE: raise C5.** LEGACY: set the C5/C6 combination
+   (see tables above). Sweep C7/C8 through the
    group's current values to pick each slot up (watch `live_tune_ch7_val`/
    `live_tune_ch8_val` in telemetry — they update immediately; the *effect* on
    balance only kicks in once picked up, independently per slot).
@@ -108,6 +127,6 @@ without latching leaves it exactly as it was.
    picked-up slot's shadow value into its real param. One-shot: firmware
    latches and resets the flag. A slot that never picked up this session is
    skipped, not latched at a stale/arbitrary value.
-4. Set C5/C6 to another group to tune it (repeat steps 2-3), or return both to
-   **up** to leave live-tune mode; the latched (or, if you didn't latch,
-   unchanged) persistent values take over.
+4. To leave live-tune mode: **SIMPLE — lower C5.** LEGACY — return both C5 and
+   C6 to **up**, or move to another group and repeat steps 2-3. Either way the
+   latched (or, if you didn't latch, unchanged) persistent values take over.

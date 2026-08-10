@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *.pyo
+*.obj
 .venv/
 venv/
 *.egg-info/
@@ -23,6 +24,7 @@ venv/
 data/logs/
 data/test_results/
 data/tuning/
+data/twin/
 
 # MuJoCo generated
 *.mjb

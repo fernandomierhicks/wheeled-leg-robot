@@ -37,6 +37,10 @@ _T_MICROS_SIZE = 4
 SPEED_OPTIONS = [0.1, 0.25, 0.5, 1.0, 2.0, 4.0]
 SPEED_DEFAULT_INDEX = SPEED_OPTIONS.index(1.0)
 
+_DELETE_ALL_ACK_TIMEOUT_MS = 1500
+_DELETE_ALL_MAX_RETRIES = 3
+_DELETE_ALL_SPACING_MS = 75
+
 
 class LogReader:
     """Random-access reader for a .wlog file. read(idx) returns one dict
@@ -216,6 +220,15 @@ class LogsTab(QWidget):
         self._pb   = LogPlaybackController.instance()
         self._host = HostLogger.instance()
 
+        self._delete_all_queue: list[int] = []
+        self._delete_all_total = 0
+        self._delete_all_failed: list[int] = []
+        self._delete_all_waiting: int | None = None
+        self._delete_all_retries = 0
+        self._delete_all_timer = QTimer(self)
+        self._delete_all_timer.setSingleShot(True)
+        self._delete_all_timer.timeout.connect(self._on_delete_all_timeout)
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(10)
@@ -290,10 +303,19 @@ class LogsTab(QWidget):
         btn_download.clicked.connect(self._on_download)
         file_row.addWidget(btn_download)
 
-        btn_delete = QPushButton("Delete Selected")
-        btn_delete.setStyleSheet(_btn_style(RED))
-        btn_delete.clicked.connect(self._on_delete)
-        file_row.addWidget(btn_delete)
+        self._btn_delete = QPushButton("Delete Selected")
+        self._btn_delete.setStyleSheet(_btn_style(RED))
+        self._btn_delete.clicked.connect(self._on_delete)
+        file_row.addWidget(self._btn_delete)
+
+        self._btn_delete_all = QPushButton("Delete All Logs")
+        self._btn_delete_all.setStyleSheet(_btn_style(RED))
+        self._btn_delete_all.setToolTip(
+            "Permanently delete every Teensy SD .WLOG and its paired .PARAMS file"
+        )
+        self._btn_delete_all.setEnabled(False)
+        self._btn_delete_all.clicked.connect(self._on_delete_all)
+        file_row.addWidget(self._btn_delete_all)
         file_row.addStretch()
         lay.addLayout(file_row)
 
@@ -316,6 +338,7 @@ class LogsTab(QWidget):
     def _on_logging_state(self, active: bool):
         self._btn_start.setEnabled(not active)
         self._btn_stop.setEnabled(active)
+        self._update_delete_buttons()
 
     def _on_directory(self, entries: list):
         self._file_list.clear()
@@ -326,6 +349,13 @@ class LogsTab(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, e["index"])
             self._file_list.addItem(item)
         self._lbl_status.setText(f"{len(entries)} log(s) on card")
+        self._update_delete_buttons()
+
+    def _update_delete_buttons(self):
+        bulk_active = self._delete_all_waiting is not None or bool(self._delete_all_queue)
+        blocked = bulk_active or self._xfer.is_logging() or self._xfer.is_transferring()
+        self._btn_delete.setEnabled(not blocked)
+        self._btn_delete_all.setEnabled(not blocked and self._file_list.count() > 0)
 
     def _selected_index(self):
         item = self._file_list.currentItem()
@@ -344,6 +374,103 @@ class LogsTab(QWidget):
         if idx is None:
             return
         send_log_delete(idx)
+
+    def _on_delete_all(self):
+        if self._xfer.is_logging():
+            QMessageBox.warning(
+                self, "Cannot Delete Logs", "Stop Teensy SD logging before deleting logs."
+            )
+            return
+        if self._xfer.is_transferring():
+            QMessageBox.warning(
+                self, "Cannot Delete Logs", "Wait for the current Teensy log download to finish."
+            )
+            return
+
+        indices = [
+            self._file_list.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(self._file_list.count())
+        ]
+        indices = [int(idx) for idx in indices if idx is not None]
+        if not indices:
+            self._lbl_status.setText("No Teensy logs to delete")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Delete All Teensy Logs?",
+            f"Delete all {len(indices)} logs from the Teensy SD card?\n\n"
+            "This permanently deletes every .WLOG file and its paired .PARAMS "
+            "sidecar. Logs already downloaded to this computer are not affected.\n\n"
+            "This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self._delete_all_queue = indices
+        self._delete_all_total = len(indices)
+        self._delete_all_failed = []
+        self._delete_all_waiting = None
+        self._delete_all_retries = 0
+        self._update_delete_buttons()
+        self._send_next_delete_all()
+
+    def _send_next_delete_all(self):
+        if not self._delete_all_queue:
+            self._finish_delete_all()
+            return
+        idx = self._delete_all_queue[0]
+        self._delete_all_waiting = idx
+        deleted = self._delete_all_total - len(self._delete_all_queue)
+        self._lbl_status.setText(
+            f"Deleting Teensy logs: {deleted}/{self._delete_all_total} complete "
+            f"(LOG{idx:04d}.WLOG)..."
+        )
+        send_log_delete(idx)
+        self._delete_all_timer.start(_DELETE_ALL_ACK_TIMEOUT_MS)
+
+    def _on_delete_all_timeout(self):
+        idx = self._delete_all_waiting
+        if idx is None:
+            return
+        self._delete_all_retries += 1
+        if self._delete_all_retries <= _DELETE_ALL_MAX_RETRIES:
+            self._lbl_status.setText(
+                f"Retrying delete of LOG{idx:04d}.WLOG "
+                f"({self._delete_all_retries}/{_DELETE_ALL_MAX_RETRIES})..."
+            )
+            send_log_delete(idx)
+            self._delete_all_timer.start(_DELETE_ALL_ACK_TIMEOUT_MS)
+            return
+        self._complete_one_delete_all(idx, False)
+
+    def _complete_one_delete_all(self, idx: int, ok: bool):
+        self._delete_all_timer.stop()
+        if self._delete_all_queue and self._delete_all_queue[0] == idx:
+            self._delete_all_queue.pop(0)
+        if not ok:
+            self._delete_all_failed.append(idx)
+        self._delete_all_waiting = None
+        self._delete_all_retries = 0
+        QTimer.singleShot(_DELETE_ALL_SPACING_MS, self._send_next_delete_all)
+
+    def _finish_delete_all(self):
+        total = self._delete_all_total
+        failed = list(self._delete_all_failed)
+        self._delete_all_waiting = None
+        self._delete_all_total = 0
+        self._delete_all_queue = []
+        self._update_delete_buttons()
+        if failed:
+            names = ", ".join(f"LOG{idx:04d}" for idx in failed)
+            self._lbl_status.setText(
+                f"Deleted {total - len(failed)}/{total} Teensy logs; failed: {names}"
+            )
+        else:
+            self._lbl_status.setText(f"Deleted all {total} Teensy logs")
+        self._xfer.refresh()
 
     def _on_progress(self, idx, got, total):
         pct = int(100 * got / total) if total else 0
@@ -366,6 +493,9 @@ class LogsTab(QWidget):
         self._refresh_local_files()
 
     def _on_status_ack(self, idx, status):
+        if self._delete_all_waiting is not None and idx == self._delete_all_waiting:
+            self._complete_one_delete_all(idx, status == 0)
+            return
         ok = "OK" if status == 0 else f"ERROR {status}"
         self._lbl_status.setText(f"LOG{idx:04d}.WLOG command ack: {ok}")
         if status == 0:
@@ -385,8 +515,9 @@ class LogsTab(QWidget):
         note = QLabel(
             "Records every packet from the selected live source before UI coalescing — telemetry, robot log "
             "messages, calibration events, WiFi diagnostics — to a timestamped "
-            ".jsonl file in data/logs/runs/, at whatever rate it arrives. Independent "
-            "of SD logging; starts/stops only when you click below."
+            ".jsonl file in data/logs/runs/, at whatever rate it arrives. It starts "
+            "and stops automatically with Teensy SD logging, including remote and "
+            "radio-triggered sessions; the buttons also allow independent capture."
         )
         note.setWordWrap(True)
         note.setStyleSheet(f"color: {DIM}; font-size: 11px;")
