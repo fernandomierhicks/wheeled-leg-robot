@@ -1,44 +1,54 @@
-"""scenarios — Scenario registry and evaluate() entry point.
+"""Scenario registry and headless evaluation entry point.
 
-All scenarios are registered in SCENARIOS dict by name.
-evaluate(params, scenario_name) runs the scenario headlessly and returns metrics + fitness.
+The registry is loaded lazily.  Importing ``scenarios.base`` from low-level
+simulation/identification code must not load ``DEFAULT_PARAMS`` first: doing so
+would make it impossible for ``fit_robot_match`` to regenerate a deliberately
+stale controller-snapshot lock after the GUI export changes.
 """
-from v4_twin_279mm_baseline.scenarios.base import ScenarioConfig, WorldConfig
-from v4_twin_279mm_baseline.scenarios.s01_lqr_pitch_step import CONFIG as S01
-from v4_twin_279mm_baseline.scenarios.s02_leg_height_gain_sched import CONFIG as S02
-from v4_twin_279mm_baseline.scenarios.s03_vel_pi_disturbance import CONFIG as S03
-from v4_twin_279mm_baseline.scenarios.s04_vel_pi_staircase import CONFIG as S04
-from v4_twin_279mm_baseline.scenarios.s05_vel_pi_leg_cycling import CONFIG as S05
-from v4_twin_279mm_baseline.scenarios.s06_yaw_pi_turn import CONFIG as S06
-from v4_twin_279mm_baseline.scenarios.s07_drive_turn import CONFIG as S07
-from v4_twin_279mm_baseline.scenarios.s08_terrain_compliance import CONFIG as S08
-from v4_twin_279mm_baseline.scenarios.s09_integrated import CONFIG as S09
-from v4_twin_279mm_baseline.scenarios.s10_jump import CONFIG as S10
+
+from __future__ import annotations
+
+from .base import ScenarioConfig, WorldConfig
 
 
-# ── Registry ──────────────────────────────────────────────────────────────────
-
-SCENARIOS: dict[str, ScenarioConfig] = {
-    s.name: s for s in [S01, S02, S03, S04, S05, S06, S07, S08, S09, S10]
-}
+_SCENARIOS: dict[str, ScenarioConfig] | None = None
 
 
-def evaluate(params, scenario_name: str, rng_seed: int = None) -> dict:
-    """Run a named scenario headlessly and return metrics dict with 'fitness' key.
+def get_scenarios() -> dict[str, ScenarioConfig]:
+    global _SCENARIOS
+    if _SCENARIOS is None:
+        from .s01_lqr_pitch_step import CONFIG as s01
+        from .s02_leg_height_gain_sched import CONFIG as s02
+        from .s03_vel_pi_disturbance import CONFIG as s03
+        from .s04_vel_pi_staircase import CONFIG as s04
+        from .s05_vel_pi_leg_cycling import CONFIG as s05
+        from .s06_yaw_pi_turn import CONFIG as s06
+        from .s07_drive_turn import CONFIG as s07
+        from .s08_terrain_compliance import CONFIG as s08
+        from .s09_integrated import CONFIG as s09
+        from .s10_jump import CONFIG as s10
 
-    Parameters
-    ----------
-    params         : SimParams
-    scenario_name  : key in SCENARIOS, e.g. "s01_lqr_pitch_step"
-    rng_seed       : reproducible noise seed
+        _SCENARIOS = {
+            scenario.name: scenario
+            for scenario in (s01, s02, s03, s04, s05, s06, s07, s08, s09, s10)
+        }
+    return _SCENARIOS
 
-    Returns
-    -------
-    dict with all sim_loop metrics + computed 'fitness' value
-    """
+
+def __getattr__(name: str):
+    if name == "SCENARIOS":
+        return get_scenarios()
+    raise AttributeError(name)
+
+
+def evaluate(params, scenario_name: str, rng_seed: int | None = None) -> dict:
+    """Run a named scenario and return its metrics plus fitness."""
     from v4_twin_279mm_baseline.sim_loop import run
 
-    cfg = SCENARIOS[scenario_name]
-    metrics = run(params, cfg, rng_seed=rng_seed)
-    metrics['fitness'] = round(cfg.fitness_fn(metrics), 6)
+    config = get_scenarios()[scenario_name]
+    metrics = run(params, config, rng_seed=rng_seed)
+    metrics["fitness"] = round(config.fitness_fn(metrics), 6)
     return metrics
+
+
+__all__ = ("ScenarioConfig", "WorldConfig", "SCENARIOS", "get_scenarios", "evaluate")

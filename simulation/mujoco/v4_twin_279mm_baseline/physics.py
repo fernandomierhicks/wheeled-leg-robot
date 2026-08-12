@@ -64,20 +64,25 @@ def _wrap(a: float) -> float:
     return (a + math.pi) % (2 * math.pi) - math.pi
 
 
-def firmware_hip_to_sim_q(q_firmware_rad: float) -> float:
-    """Map the firmware physical hip angle into the v4 twin joint frame.
+def firmware_hip_to_sim_q(q_firmware_rad: float,
+                          robot: RobotGeometry | None = None) -> float:
+    """Map a calibrated firmware encoder angle into the MuJoCo joint frame.
 
-    The v4 twin re-anchors its MuJoCo hinge to the firmware convention: zero
-    is a horizontal femur and positive rotation retracts. Keeping this named
-    identity transform is intentional; call sites do not inline a convention
-    that may change after encoder/CAD registration is measured.
+    Firmware zeros each AK45 at the retract switch, so a normal calibrated
+    RUNNING position is approximately ``-backoff`` at alpha=0.  The MuJoCo
+    hinge uses the CAD/physical convention where the retract stop is
+    ``Q_RET=+28 deg``.  The two frames therefore differ by ``Q_RET`` even
+    though their rotation signs are the same.
     """
-    return float(q_firmware_rad)
+    geometry = robot or RobotGeometry()
+    return float(q_firmware_rad) + geometry.Q_RET
 
 
-def sim_q_to_firmware_hip(q_sim_rad: float) -> float:
+def sim_q_to_firmware_hip(q_sim_rad: float,
+                          robot: RobotGeometry | None = None) -> float:
     """Inverse of :func:`firmware_hip_to_sim_q`."""
-    return float(q_sim_rad)
+    geometry = robot or RobotGeometry()
+    return float(q_sim_rad) - geometry.Q_RET
 
 
 def alpha_to_hip_q(alpha: float, robot: RobotGeometry) -> float:
@@ -364,7 +369,11 @@ def get_equilibrium_pitch(robot: RobotGeometry, q_hip: float,
     if ik is None: return 0.0
 
     n = 2  # two legs
-    m_sys = p['m_box'];  mx = 0.0;  mz = 0.0
+    m_sys = p['m_box'] + p.get('m_battery', 0.0)
+    mx = p['m_box'] * p.get('box_cg_x', 0.0)
+    mz = p['m_box'] * p.get('box_cg_z', 0.0)
+    mx += p.get('m_battery', 0.0) * p.get('battery_cg_x', 0.0)
+    mz += p.get('m_battery', 0.0) * p.get('battery_cg_z', 0.0)
 
     # Hip motors
     m_sys += n * robot.motor_mass
@@ -391,10 +400,12 @@ def get_equilibrium_pitch(robot: RobotGeometry, q_hip: float,
     mx    += n * p['m_tibia'] * (C_x + off * math.sin(alpha))
     mz    += n * p['m_tibia'] * (C_z + off * math.cos(alpha))
 
-    # Bearings (4 per leg)
-    m_sys += n * p['m_bearing'] * 4
-    mx    += n * p['m_bearing'] * (F_X + 2.0 * E_x + C_x)
-    mz    += n * p['m_bearing'] * (F_Z + 2.0 * E_z + C_z)
+    # Bearings (8 per leg): coupler has 2 at F + 2 at E; tibia has
+    # 2 at C + 2 at E. This gives 2F + 4E + 2C per side.
+    bearings_per_leg = p.get('bearings_per_leg', 8)
+    m_sys += n * p['m_bearing'] * bearings_per_leg
+    mx    += n * p['m_bearing'] * (2.0 * F_X + 4.0 * E_x + 2.0 * C_x)
+    mz    += n * p['m_bearing'] * (2.0 * F_Z + 4.0 * E_z + 2.0 * C_z)
 
     # Knee springs (at knee pivot C)
     if m_spring > 0.0:
@@ -430,8 +441,9 @@ def compute_com_x_body_frame(robot: RobotGeometry, q_hip: float,
         return None
 
     n = 2
-    m_sys = p['m_box']
-    mx = 0.0
+    m_sys = p['m_box'] + p.get('m_battery', 0.0)
+    mx = p['m_box'] * p.get('box_cg_x', 0.0)
+    mx += p.get('m_battery', 0.0) * p.get('battery_cg_x', 0.0)
 
     m_sys += n * robot.motor_mass
 
@@ -450,8 +462,9 @@ def compute_com_x_body_frame(robot: RobotGeometry, q_hip: float,
     m_sys += n * p['m_tibia']
     mx    += n * p['m_tibia'] * (C_x + off * math.sin(alpha))
 
-    m_sys += n * p['m_bearing'] * 4
-    mx    += n * p['m_bearing'] * (F_X + 2.0 * E_x + C_x)
+    bearings_per_leg = p.get('bearings_per_leg', 8)
+    m_sys += n * p['m_bearing'] * bearings_per_leg
+    mx    += n * p['m_bearing'] * (2.0 * F_X + 4.0 * E_x + 2.0 * C_x)
 
     if m_spring > 0.0:
         m_sys += n * m_spring
@@ -687,10 +700,15 @@ def build_xml(robot: RobotGeometry = None,
     # so we fold motor and bearing masses into the <inertial> mass and
     # set those geoms to mass="0".
     m_brg = p['m_bearing']
-    box_inertial_mass = p['m_box'] + 2 * HIP_MOTOR_MASS    # 2 hip motors on box
-    coupler_inertial_mass = p['m_coupler'] + 2 * m_brg      # bearings at F and E
-    femur_inertial_mass = p['m_femur'] + m_brg               # bearing at knee C
-    tibia_inertial_mass = p['m_tibia'] + m_brg               # bearing at stub E
+    box_inertial_mass = p['m_box'] + 2 * HIP_MOTOR_MASS    # battery is separate below
+    # Keep the measured electronics-box CoM distinct from the two hip motors,
+    # whose shafts are at (0, A_Z), then place the composite inertial correctly.
+    box_com_x = p['m_box'] * p.get('box_cg_x', 0.0) / box_inertial_mass
+    box_com_z = (p['m_box'] * p.get('box_cg_z', 0.0)
+                 + 2 * HIP_MOTOR_MASS * A_Z) / box_inertial_mass
+    coupler_inertial_mass = p['m_coupler'] + 4 * m_brg  # 2 bearings at F and E
+    femur_inertial_mass = p['m_femur']                  # bearings live on tibia
+    tibia_inertial_mass = p['m_tibia'] + 4 * m_brg     # 2 bearings at C and E
 
     # ── Composite link inertials (rod + folded bearings, at true CoM) ─────
     # Each link's <inertial> must be at the mass-weighted CoM of (rod +
@@ -699,34 +717,35 @@ def build_xml(robot: RobotGeometry = None,
     # the rod — the bias drove pitch_ff undercompensation.
     femur_r, coupler_r, tibia_r = 0.007, 0.005, 0.008
 
-    # Femur: rod CoM at -L_f/2, bearing (knee C) at -L_f
+    # Femur: measured print plus the unresolved whole-robot residual, treated
+    # as an equivalent distributed link mass. Knee bearings are on the tibia.
     m_f, m_b = p['m_femur'], m_brg
-    femur_com_x = (m_f * (-L_f / 2.0) + m_b * (-L_f)) / (m_f + m_b)
-    femur_Iyz = (m_f * L_f**2 / 12.0
-                 + m_f * (femur_com_x - (-L_f / 2.0))**2
-                 + m_b * (femur_com_x - (-L_f))**2)
-    femur_Ix  = 0.5 * (m_f + m_b) * femur_r**2
+    femur_com_x = -L_f / 2.0
+    femur_Iyz = m_f * L_f**2 / 12.0
+    femur_Ix  = 0.5 * m_f * femur_r**2
 
-    # Coupler: rod CoM at -Lc/2, bearings at F (0) and E (-Lc) — mean = rod midpoint
+    # Coupler: rod CoM at -Lc/2, two bearings at F and two at E.
     m_c = p['m_coupler']
     coupler_com_x = -Lc / 2.0
     coupler_Iyz = (m_c * Lc**2 / 12.0
-                   + 2 * m_b * (Lc / 2.0)**2)
-    coupler_Ix  = 0.5 * (m_c + 2 * m_b) * coupler_r**2
+                   + 4 * m_b * (Lc / 2.0)**2)
+    coupler_Ix  = 0.5 * (m_c + 4 * m_b) * coupler_r**2
 
     # Tibia dogleg (local frame: C=(0,0), E=(0,+L_s),
     # W=(w_local_x,-L_t)). The provisional inertia treats the complete E-W
-    # member as a slender chord until T0.1/T1.1 identify its real mass/inertia.
+    # member as a slender chord until T1.1 identifies its real inertia.
     m_t = p['m_tibia']
     tib_rod_cx = w_local_x / 2.0
     tib_rod_cz = (L_s - L_t) / 2.0
-    tibia_com_x = (m_t * tib_rod_cx) / (m_t + m_b)
-    tibia_com_z = (m_t * tib_rod_cz + m_b * L_s) / (m_t + m_b)
+    tibia_com_x = (m_t * tib_rod_cx) / (m_t + 4 * m_b)
+    tibia_com_z = (m_t * tib_rod_cz + 2 * m_b * L_s) / (m_t + 4 * m_b)
     tibia_chord = math.hypot(L_s + L_t, w_local_x)
     tibia_Ixy = (m_t * tibia_chord**2 / 12.0
-                 + m_t * (tibia_com_z - tib_rod_cz)**2
-                 + m_b * (tibia_com_z - L_s)**2)
-    tibia_Iz  = 0.5 * (m_t + m_b) * tibia_r**2
+                 + m_t * ((tibia_com_x - tib_rod_cx)**2
+                          + (tibia_com_z - tib_rod_cz)**2)
+                 + 2 * m_b * (tibia_com_x**2 + tibia_com_z**2)
+                 + 2 * m_b * (tibia_com_x**2 + (tibia_com_z - L_s)**2))
+    tibia_Iz  = 0.5 * (m_t + 4 * m_b) * tibia_r**2
 
     # Body frame geometry
     ch_hx, ch_hy, ch_hz = 0.070, 0.050, 0.052
@@ -739,7 +758,14 @@ def build_xml(robot: RobotGeometry = None,
     arm_cz = (arm_z_lo + arm_z_hi) / 2.0
     arm_hz_v = (arm_z_hi - arm_z_lo) / 2.0
 
-    bat_z = -(ch_hz - 0.022); ode_z = ch_hz - 0.010
+    battery_x = p.get('battery_cg_x', 0.0)
+    battery_z = p.get('battery_cg_z', -(ch_hz - 0.022))
+    battery_mass = p.get('m_battery', 0.0)
+    battery_hx, battery_hy, battery_hz = 0.060, 0.038, 0.018
+    battery_Ixx = battery_mass / 3.0 * (battery_hy**2 + battery_hz**2)
+    battery_Iyy = battery_mass / 3.0 * (battery_hx**2 + battery_hz**2)
+    battery_Izz = battery_mass / 3.0 * (battery_hx**2 + battery_hy**2)
+    ode_z = ch_hz - 0.010
     ard_z = ch_hz - 0.030; imu_z = ch_hz - 0.003
 
     # Joint type for the body
@@ -856,7 +882,7 @@ def build_xml(robot: RobotGeometry = None,
     <!-- == Body =========================================================== -->
     <body name="box" pos="0 0 0.45">
       {body_joint}
-      <inertial pos="0 0 0" mass="{box_inertial_mass:.4f}"
+      <inertial pos="{box_com_x:.6f} 0 {box_com_z:.6f}" mass="{box_inertial_mass:.4f}"
                 diaginertia="8.0e-4 1.2e-3 1.2e-3"/>
       <geom name="chassis" type="box"
             size="{ch_hx:.4f} {ch_hy:.4f} {ch_hz:.4f}"
@@ -878,9 +904,14 @@ def build_xml(robot: RobotGeometry = None,
             pos="0 {motor_y_R:.5f} {A_Z:.5f}" euler="90 0 0"
             size="0.0265 0.0215" rgba="0.15 0.15 0.15 0.90"
             mass="0" contype="0" conaffinity="0"/>
-      <!-- Electronics (massless, visual only) -->
-      <geom type="box" pos="0 0 {bat_z:.5f}" size="0.060 0.038 0.018"
-            rgba="0.20 0.20 0.80 0.70" mass="0" contype="0" conaffinity="0"/>
+      <!-- Measured removable battery, kept as a movable fixed-body mass. -->
+      <body name="battery" pos="{battery_x:.5f} 0 {battery_z:.5f}">
+        <inertial pos="0 0 0" mass="{battery_mass:.4f}"
+                  diaginertia="{battery_Ixx:.6e} {battery_Iyy:.6e} {battery_Izz:.6e}"/>
+        <geom type="box" size="{battery_hx:.3f} {battery_hy:.3f} {battery_hz:.3f}"
+              rgba="0.20 0.20 0.80 0.70" mass="0" contype="0" conaffinity="0"/>
+      </body>
+      <!-- Electronics (massless visuals; their measured mass is box inertial). -->
       <geom type="box" pos="0 0 {ode_z:.5f}" size="0.050 0.030 0.008"
             rgba="0.80 0.30 0.10 0.80" mass="0" contype="0" conaffinity="0"/>
       <geom type="box" pos="0 0 {ard_z:.5f}" size="0.054 0.027 0.006"

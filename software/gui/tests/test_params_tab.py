@@ -26,7 +26,11 @@ _APP = QApplication.instance() or QApplication([])
 class ParamsTabAngleDisplayTests(unittest.TestCase):
     def test_every_declared_angle_name_resolves_to_a_generated_parameter(self):
         names = _ANGLE_PARAM_NAMES | _ANGULAR_RATE_PARAM_NAMES
-        self.assertEqual(len(names), 33)
+        # Bump this whenever the two sets change. It had drifted to a stale 33
+        # against an actual 38 before the jump angle/speed params were added;
+        # the real guard is the set equality below, this is just a tripwire that
+        # a name was added without being thought about.
+        self.assertEqual(len(names), 43)
         self.assertEqual(
             {PARAM_BY_NAME[name] for name in names},
             set(_DISPLAY_UNIT_BY_PARAM),

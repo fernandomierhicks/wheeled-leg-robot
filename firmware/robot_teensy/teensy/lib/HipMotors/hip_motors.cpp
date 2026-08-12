@@ -441,6 +441,22 @@ void hip_cmd_to_setpoints(float t, float* pos_L, float* pos_R) {
                              : (hm_limits_R.min_rad + t * span_R);
 }
 
+// Extension angle -> motor position. Calibration zeroes each axis at its
+// retract switch and define_limits() lays the usable travel out on the
+// -seek_dir side of that zero, so travelling `ext_rad` away from the switch is
+// simply -seek_dir * ext_rad in the motor frame. Clamped, so an angle past
+// either calibrated end saturates instead of driving through a stop.
+void hip_ext_angle_to_setpoints(float ext_rad, float* pos_L, float* pos_R) {
+    *pos_L = clamp_to_limits(-CALIB_L_SEEK_DIR * ext_rad, hm_limits_L);
+    *pos_R = clamp_to_limits(-CALIB_R_SEEK_DIR * ext_rad, hm_limits_R);
+}
+
+float hip_measured_ext_angle(const HipAxisState& hm, const HipLimits& lim,
+                             float seek_dir) {
+    if (!lim.valid) return 0.0f;
+    return -seek_dir * hm.pos_rad;
+}
+
 bool hip_motors_ok() {
     bool l_ok = (param_get(PARAM_HIP_L_ENABLE) < 0.5f) || hm_L.ok;
     bool r_ok = (param_get(PARAM_HIP_R_ENABLE) < 0.5f) || hm_R.ok;

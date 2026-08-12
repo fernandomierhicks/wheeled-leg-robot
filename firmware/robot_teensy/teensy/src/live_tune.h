@@ -1,9 +1,11 @@
 #pragma once
 #include <stdint.h>
 
-// Generic radio-knob live parameter tuning. Active while RUNNING with the
-// CH5/CH6 switch combination selecting one of 3 gain groups (see
-// radio_update() in main.cpp: CH5 down+CH6 up -> group 0, CH5 up+CH6 down
+// Generic radio-knob live parameter tuning. Requires PARAM_LIVE_TUNE_MULTI_EN
+// = 1 (LEGACY); in the default SIMPLE mode CH5/CH6 are the SD-log and jump
+// switches and this is entirely inactive. In LEGACY mode it is active while
+// RUNNING with the CH5/CH6 switch combination selecting one of 3 gain groups
+// (see radio_update() in main.cpp: CH5 down+CH6 up -> group 0, CH5 up+CH6 down
 // -> group 1, both down -> group 2, both up -> inactive). Knob->param
 // mappings live in LIVE_TUNE_SLOTS (main.cpp) -- repoint a knob at a
 // different param for a future tuning session by editing that table and

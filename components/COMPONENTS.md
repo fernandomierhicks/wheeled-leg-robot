@@ -1,8 +1,63 @@
 # Components — Wheeled-Leg Robot
-**Shopping list / best estimate — not yet built.** Geometry and masses may differ
-from simulation params, which are tuned per-sim (see each sim folder's `params.py`).
+
+The mass inventory below is the authoritative as-built update from 2026-08-09.
+Costs, electrical ratings, and structural sizing farther down remain useful,
+but their old pre-build mass estimates are superseded by this section.
 Original geometry source: `simulation/mujoco/archive/baseline1_leg_analysis/sim_config.py` (run_id 51167, jump = 282.65 mm)
 Structural sizing source: `simulation/mujoco/archive/baseline1_leg_analysis/size_report.txt` (SF = 2.0×, 6061-T6)
+
+---
+
+## As-built mass inventory — 2026-08-09
+
+All measured values are scale readings supplied in grams. The two AK45 hip
+motors were not reweighed, so their existing 260 g catalog value is retained.
+
+| Component | Qty | Mass each (g) | Accounted mass (g) | Status / placement |
+|---|---:|---:|---:|---|
+| 6804 bearing | 16 | 18 | 288 | Measured reference; 8 per leg |
+| Wheel motor | 2 | 418 | 836 | Measured |
+| Electronics/body box, no battery | 1 | 505 | 505 | Measured |
+| Battery | 1 | 276 | 276 | Measured; mounted toward body front |
+| TPU wheel | 2 | 29 | 58 | Measured |
+| PLA rim | 2 | 31 | 62 | Measured |
+| PLA coupler | 2 | 35 | 70 | Measured print only |
+| PLA femur | 2 | 40 | 80 | Measured print only |
+| PLA tibia/dogleg | 2 | 85 | 170 | Measured print only |
+| AK45-10 hip motor | 2 | 260 | 520 | Catalog value retained |
+
+Bearing count follows the supplied assembly description: each coupler carries
+two bearings at each of its two joints (4 per side), and each tibia carries two
+at the coupler joint plus two at the femur joint (4 per side), for 16 total.
+
+Known measured parts plus the two catalog hip motors account for **2,589 g
+without the battery**. The measured complete robot is **3,242 g without the
+battery**, leaving **653 g** for unweighed fasteners, shafts, mounts, wiring,
+and any catalog/component discrepancy. The driving mass with the 276 g battery
+is therefore **3,518 g**.
+
+For MuJoCo mass closure, the 653 g remainder is an explicitly labelled
+effective mass, not a claim that the printed femurs weigh more. The trim/log fit
+currently assigns it to the two femur bodies (326.5 g per side), making each
+effective femur body 366.5 g while preserving the measured 40 g print value in
+the parameter ledger. The battery is a separate 276 g rigid mass at the front
+and bottom packaging limits. T0.2 CG measurements should replace these two
+identification choices.
+
+| Mass check | Total (g) |
+|---|---:|
+| Known measured + retained hip-motor catalog masses, no battery | 2,589 |
+| Unweighed residual distributed in the twin | 653 |
+| **Complete robot, no battery (measured)** | **3,242** |
+| Battery | 276 |
+| **Complete driving mass** | **3,518** |
+
+---
+
+## Historical BOM, cost, and design estimates
+
+Masses in the tables below are the pre-build estimates and are retained only
+for BOM provenance. Do not use them for simulation mass accounting.
 
 ---
 
@@ -101,7 +156,7 @@ Note: 608 bearings total = 6 (replaced original estimate of 12 — E and F now u
 
 ---
 
-## Mass & Cost Summary
+## Historical pre-build Mass & Cost Summary (superseded for mass)
 
 ### Detailed component breakdown
 

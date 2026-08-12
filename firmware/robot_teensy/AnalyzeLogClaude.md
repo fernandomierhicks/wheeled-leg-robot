@@ -338,6 +338,25 @@ wave and the limiter now sets the loop's phase.
 
 ---
 
+### 4.12 Direct MuJoCo replay is windowed and controller-locked
+
+`simulation/mujoco/v4_twin_279mm_baseline/twin/tools/replay_wlog.py` now runs
+the real MuJoCo model, not the older analytical surrogate. Use `--mode both` to
+produce open-loop plant and closed-loop controller scores. It consumes every
+RUNNING command in consecutive reset windows (0.1 s open, 2.0 s closed) because
+an inverted pendulum open-loop rollout cannot remain meaningful after tiny
+initial-state differences grow.
+
+The sidecar's control values are fixed evidence and are never fit. WLOG does not
+contain raw `radio_hip_cmd`; it contains the post-rate-limit MIT hip setpoints,
+so replay seeds the hip slew state from those setpoints instead of applying the
+rate limiter twice. Hip positions in WLOG are in the calibrated switch-zero
+frame; MuJoCo adds the +28 degree retract-stop offset to enter the CAD frame.
+
+The reported XY score is wheel-speed/yaw dead reckoning, not global-position
+ground truth. Use pitch, pitch rate, wheel speed, yaw rate, hip position, and
+torque residuals to identify plant error.
+
 ## 5. Physical constants for sanity checks
 
 | Quantity | Value | Source |
@@ -396,13 +415,20 @@ print(f"|tau| p50 {np.percentile(abs(tau),50):.4f}  p99 {np.percentile(abs(tau),
 Newest first. Only entries that change the meaning of a field, a metric, or what
 a log can tell you — not every firmware change.
 
+### 2026-08-10 — as-built mass inventory
+
+`M_BODY` changed from the stale 1.638 kg prior to **2.562 kg**: measured/modelled
+3.518 kg driving mass minus two measured 0.478 kg wheel assemblies. This changes
+FF2 gravity compensation only when `ff2_alpha > 0`; the 2026-08-10 default
+export and reference run both have FF2 disabled.
+
 ### 2026-08-07 — v4 leg geometry and the Ø112 wheel
 
 | Change | Effect on analysis |
 |---|---|
 | **`WHEEL_R` 0.075 → 0.056 m** (Ø150 → Ø112 wheel) | See §4.9. `wheel_vel_avg` for a given physical speed reads 0.747× what it used to; `wm_*_vel_turns_s` is unaffected. No telemetry field records which radius was used — go by the bundle's date. |
 | **Velocity-loop and LQR gains are stale across this line** | The plant's torque-to-accel gain changed with `r`. Gain rankings from pre-2026-08-07 runs do not carry over. |
-| **v4 link lengths, new hard stops `Q_RET` +28° / `Q_EXT` −57°** | `hip_*_pos_rad` still means the same firmware-frame angle, but the α it implies is different, so the §4.6 trick of inferring `gain_sched_alpha` from hip position needs the v4 geometry. `L_EFF_RET`/`L_EFF_EXT` were recomputed; `M_BODY` was not. |
+| **v4 link lengths, new hard stops `Q_RET` +28° / `Q_EXT` −57°** | `hip_*_pos_rad` still means the same firmware-frame angle, but the α it implies is different, so the §4.6 trick of inferring `gain_sched_alpha` from hip position needs the v4 geometry. `L_EFF_RET`/`L_EFF_EXT` were recomputed; `M_BODY` was still stale at this date and was updated on 2026-08-10. |
 | **Wire format unchanged** | `TELEM_VERSION` still 12; `wlog_metrics.py` decodes both sides identically. This is a *meaning* change, not a format change — nothing will raise on load. |
 
 ### 2026-08-03 — reliability-audit fixes

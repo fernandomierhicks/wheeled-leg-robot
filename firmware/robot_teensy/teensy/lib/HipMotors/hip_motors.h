@@ -126,3 +126,23 @@ float hip_motors_clamp_to_limits(float pos, const HipLimits& lim);
 // 1 = fully extended) into per-motor position setpoints [rad], accounting
 // for each motor's calibrated span and seek direction.
 void hip_cmd_to_setpoints(float t, float* pos_L, float* pos_R);
+
+// Absolute-angle counterpart of hip_cmd_to_setpoints(), in "extension angle":
+// radians of hip travel away from the retract switch, positive = extended.
+// Zero is the switch itself, so the calibrated retracted endpoint sits at
+// calib_backoff_rad and the extended endpoint at calib_range_*_rad.
+//
+// Absolute angle, not normalised t, is what the jump phases want. t is a
+// fraction of each leg's own calibrated span, so the same t is a *different*
+// physical angle on two legs whose spans differ; an angle from each leg's own
+// switch is the same physical pose on both. It is also the frame a person can
+// read off the machine, which normalised height is not.
+//
+// Results are clamped to the calibrated limits, so an angle past either end
+// saturates rather than commanding through a stop.
+void hip_ext_angle_to_setpoints(float ext_rad, float* pos_L, float* pos_R);
+
+// Inverse of the above for one axis: measured extension angle [rad] away from
+// the retract switch, positive = extended. Returns 0 when uncalibrated.
+float hip_measured_ext_angle(const HipAxisState& hm, const HipLimits& lim,
+                             float seek_dir);

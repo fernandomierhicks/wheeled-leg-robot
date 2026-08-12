@@ -71,11 +71,8 @@ _SCALAR_FIELDS = [
     "health_flags", "fault_code", "robot_state", "loop_count", "active_profile",
 ]
 
-# gain_sched_alpha isn't in TelemetryPayload yet — tuning.md §1a (bump
-# TELEM_VERSION, add the field, reflash) hasn't landed. Handled as an optional
-# field throughout this module: present -> real numbers, absent -> None/"N/A"
-# rather than an error, so §4 works today and picks up the real values the
-# moment §1a ships, with no code change needed here.
+# gain_sched_alpha is present in V10+ telemetry. It remains optional here so
+# older captures decode as None/"N/A" instead of failing.
 _ALPHA_KEY = "gain_sched_alpha"
 
 # ── TELEM_VERSION 11 back-compatibility ──────────────────────────────────────

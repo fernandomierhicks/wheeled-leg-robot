@@ -96,7 +96,7 @@ static constexpr float L_EFF_EXT    = 0.363396f;  // [m] alpha=1, q=-57°
 // m_b = m_box + 2*(m_femur+m_tibia+m_coupler+m_bearing) + 2*motor_mass
 // !! Not re-derived for the v4 links (longer femur/tibia/coupler) — stale, and
 // only FF2 depends on it.
-static constexpr float M_BODY       = 1.6380f;    // [kg] body (excl. wheels)
+static constexpr float M_BODY       = 2.5620f;    // [kg] 2026-08-09 scale inventory, battery in / wheels out
 static constexpr float GRAVITY      = 9.81f;      // [m/s²]
 static constexpr float WHEEL_R      = 0.056f;     // [m] wheel radius (112 mm OD)
 // MOTOR_TRQ_MAX now lives in control_loop.h — shared with state_machine.cpp's standup recovery law

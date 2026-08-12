@@ -5,10 +5,13 @@
 
 ---Fernandos note dont change below
 
+JUMPING
 
 
---Standing behaviour with pitch watchdog
-Tune up to 3 group of gains with both switches and kmobs
+ChatGPT_findings.md in digital twwin simualation
+
+
+
 
 
 

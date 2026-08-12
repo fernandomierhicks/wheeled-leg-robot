@@ -242,7 +242,7 @@ class SimController:
         self.params = params
         self.rng = np.random.default_rng(rng_seed)
         self._lookup_addresses(model)
-        self._init_controllers(params, model)
+        self._init_controllers(params, model, data)
 
     # ── Address lookups (cached once per model) ──────────────────────────────
 
@@ -279,7 +279,7 @@ class SimController:
 
     # ── Controller objects (re-created on reset) ─────────────────────────────
 
-    def _init_controllers(self, params, model):
+    def _init_controllers(self, params, model, data=None):
         robot = params.robot
         ctrl_steps = params.timing.ctrl_steps
         self.dt_ctrl = model.opt.timestep * ctrl_steps
@@ -291,7 +291,19 @@ class SimController:
         # Normal balance/drive/yaw uses the actual Teensy control equations.
         # The copied design controllers below remain only for the not-yet-
         # identified jump phase and its historical visualization scenarios.
-        self.firmware_ctrl = FirmwareController(robot=robot)
+        self.firmware_ctrl = FirmwareController(
+            params=dict(params.firmware_params), robot=robot)
+        # AK telemetry reports the MIT torque quantity, while MuJoCo receives
+        # plant-side joint torque after the fitted transmission scale.  Keep
+        # the two separate so FF1 sees the same quantity as real firmware.
+        self.hip_reported_torque_L = 0.0
+        self.hip_reported_torque_R = 0.0
+        if data is not None:
+            hip_q = 0.5 * (float(data.qpos[self.s_hip_L])
+                           + float(data.qpos[self.s_hip_R]))
+            self.firmware_ctrl.enter_running(
+                float(data.time), hip_q_to_alpha(hip_q, robot),
+                ramp_complete=True)
         self.prev_theta_ref = 0.0
         self.prev_v_target = 0.0
 
@@ -342,7 +354,7 @@ class SimController:
 
     def reset(self, model, data):
         """Reset all controller state (e.g. after sandbox auto-restart)."""
-        self._init_controllers(self.params, model)
+        self._init_controllers(self.params, model, data)
 
     def _patch_gains_subfield(self, subfield: str, field: str, value: float):
         """Replace one field on params.gains.<subfield>, persist to params, and return new sub-gains."""
@@ -385,7 +397,8 @@ class SimController:
             self, model, data, *, pitch_true, pitch_rate_true, pitch_noisy,
             pitch_rate_noisy, pitch_delayed, pitch_rate_delayed,
             wheel_vel, wheel_vel_delayed, hip_q_avg, q_hip_target,
-            v_target_ms, omega_target, use_lqr, use_velocity_pi, use_yaw_pi,
+            v_target_ms, omega_target, roll_target_rad,
+            use_lqr, use_velocity_pi, use_yaw_pi,
             use_roll_leveling, use_suspension, use_ff1, use_ff2,
             az_imu, ax_imu, ay_imu, gx_imu, gy_imu, gz_imu, pitch_ff):
         """Run one non-jump tick through the firmware-equivalent controller."""
@@ -397,6 +410,7 @@ class SimController:
         firmware = self.firmware_ctrl
         firmware.params["v_cmd_ms"] = float(v_target_ms)
         firmware.params["omega_cmd_rds"] = float(omega_target)
+        firmware.params["roll_cmd_rad"] = float(roll_target_rad)
         firmware.params["radio_hip_cmd"] = float(alpha_target)
         firmware.params["vel_pi_en"] = float(bool(use_velocity_pi))
         firmware.params["yaw_pi_en"] = float(bool(use_yaw_pi))
@@ -414,32 +428,42 @@ class SimController:
             wheel_l_turns_s=float(data.qvel[self.d_whl_L]) / (2.0 * math.pi),
             wheel_r_turns_s=float(data.qvel[self.d_whl_R]) / (2.0 * math.pi),
             hip_alpha=float(alpha),
-            hip_l_torque_nm=float(data.ctrl[self.act_hip_L]),
-            hip_r_torque_nm=float(data.ctrl[self.act_hip_R]), state="RUNNING",
+            hip_l_torque_nm=self.hip_reported_torque_L,
+            hip_r_torque_nm=self.hip_reported_torque_R, state="RUNNING",
         ))
         tau_l_cmd = output.tau_l if use_lqr else 0.0
         tau_r_cmd = output.tau_r if use_lqr else 0.0
         self._tau_hist.append(output.tau_sym if use_lqr else 0.0)
         tau_l_delayed, tau_r_delayed = self.ctrl_buf.push((tau_l_cmd, tau_r_cmd))
+        wheel_command_scale = params.motors.wheel.command_torque_scale
         data.ctrl[self.act_wheel_L] = motor_taper(
-            tau_l_delayed, data.qvel[self.d_whl_L], self.v_batt,
+            tau_l_delayed * wheel_command_scale,
+            data.qvel[self.d_whl_L], self.v_batt,
             params.motors, params.battery)
         data.ctrl[self.act_wheel_R] = motor_taper(
-            tau_r_delayed, data.qvel[self.d_whl_R], self.v_batt,
+            tau_r_delayed * wheel_command_scale,
+            data.qvel[self.d_whl_R], self.v_batt,
             params.motors, params.battery)
 
         q_nom_L = output.hip_l_setpoint_rad
         q_nom_R = output.hip_r_setpoint_rad
         if use_suspension:
-            data.ctrl[self.act_hip_L] = float(np.clip(
+            self.hip_reported_torque_L = float(np.clip(
                 output.hip_kp * (q_nom_L - data.qpos[self.s_hip_L])
                 - output.hip_kd * data.qvel[self.d_hip_L] + output.hip_tff,
                 -params.motors.hip.torque_limit, params.motors.hip.torque_limit))
-            data.ctrl[self.act_hip_R] = float(np.clip(
+            self.hip_reported_torque_R = float(np.clip(
                 output.hip_kp * (q_nom_R - data.qpos[self.s_hip_R])
                 - output.hip_kd * data.qvel[self.d_hip_R] + output.hip_tff,
                 -params.motors.hip.torque_limit, params.motors.hip.torque_limit))
+            hip_torque_scale = params.motors.hip.torque_scale(alpha)
+            data.ctrl[self.act_hip_L] = (
+                self.hip_reported_torque_L * hip_torque_scale)
+            data.ctrl[self.act_hip_R] = (
+                self.hip_reported_torque_R * hip_torque_scale)
         else:
+            self.hip_reported_torque_L = 0.0
+            self.hip_reported_torque_R = 0.0
             data.ctrl[self.act_hip_L] = 0.0
             data.ctrl[self.act_hip_R] = 0.0
         data.qfrc_applied[self.d_hip_L] = 0.0
@@ -447,7 +471,7 @@ class SimController:
 
         self.v_batt = self.battery.step(self.dt_ctrl, motor_currents(
             float(data.ctrl[self.act_wheel_L]), float(data.ctrl[self.act_wheel_R]),
-            float(data.ctrl[self.act_hip_L]), float(data.ctrl[self.act_hip_R]),
+            self.hip_reported_torque_L, self.hip_reported_torque_R,
             params.motors, params.battery.I_quiescent))
         yaw_rate = float(data.qvel[self.d_yaw])
         v_measured_ms = float(wheel_vel_delayed) * robot.wheel_r
@@ -461,8 +485,10 @@ class SimController:
             tau_ff2=output.ff2_out, theta_ff4=0.0,
             tau_whl_L=float(data.ctrl[self.act_wheel_L]),
             tau_whl_R=float(data.ctrl[self.act_wheel_R]),
-            tau_hip_L=float(data.ctrl[self.act_hip_L]),
-            tau_hip_R=float(data.ctrl[self.act_hip_R]),
+            tau_hip_L=self.hip_reported_torque_L,
+            tau_hip_R=self.hip_reported_torque_R,
+            tau_hip_physical_L=float(data.ctrl[self.act_hip_L]),
+            tau_hip_physical_R=float(data.ctrl[self.act_hip_R]),
             tau_spring_L=0.0, tau_spring_R=0.0,
             hip_q_L=float(data.qpos[self.s_hip_L]),
             hip_q_R=float(data.qpos[self.s_hip_R]), hip_q_avg=hip_q_avg,
@@ -470,6 +496,7 @@ class SimController:
             batt_soc=self.battery.soc_pct, batt_temp=self.battery.temperature_c,
             i_total=self.battery.i_total, yaw_rate=yaw_rate,
             omega_tgt=omega_target, pos_x=float(data.qpos[self.s_root]),
+            roll_target=roll_target_rad,
             wheel_z_L=float(data.xpos[self.wheel_bid_L][2]),
             wheel_z_R=float(data.xpos[self.wheel_bid_R][2]), fell=fell,
             pitch_noisy=pitch_noisy, pitch_rate_noisy=pitch_rate_noisy,
@@ -492,6 +519,7 @@ class SimController:
     def tick(self, model, data, *,
              v_target_ms: float = 0.0,
              omega_target: float = 0.0,
+             roll_target_rad: float = 0.0,
              theta_ref_cmd: float = 0.0,
              q_hip_target: float = None,
              dq_hip_target: float = 0.0,
@@ -584,7 +612,8 @@ class SimController:
                 pitch_rate_delayed=_pitch_rate_d, wheel_vel=wheel_vel,
                 wheel_vel_delayed=_wheel_vel_d, hip_q_avg=hip_q_avg,
                 q_hip_target=q_hip_target, v_target_ms=v_target_ms,
-                omega_target=omega_target, use_lqr=use_lqr,
+                omega_target=omega_target, roll_target_rad=roll_target_rad,
+                use_lqr=use_lqr,
                 use_velocity_pi=use_velocity_pi, use_yaw_pi=use_yaw_pi,
                 use_roll_leveling=use_roll_leveling,
                 use_suspension=use_suspension, use_ff1=use_ff1,
@@ -824,6 +853,7 @@ class SimController:
             i_total=self.battery.i_total,
             yaw_rate=yaw_rate,
             omega_tgt=omega_target,
+            roll_target=roll_target_rad,
             pos_x=float(data.qpos[self.s_root]),
             wheel_z_L=float(data.xpos[self.wheel_bid_L][2]),
             wheel_z_R=float(data.xpos[self.wheel_bid_R][2]),
@@ -856,7 +886,7 @@ class SimController:
 
 def run(params: SimParams, scenario: ScenarioConfig,
         callbacks: list = None, command_queue=None,
-        rng_seed: int = None) -> dict:
+        rng_seed: int = None, model_mutator=None) -> dict:
     """THE single simulation loop — all scenarios funnel through here.
 
     Parameters
@@ -875,7 +905,10 @@ def run(params: SimParams, scenario: ScenarioConfig,
 
     # ── Build model + init ───────────────────────────────────────────────────
     model, data = build_model_and_data(params, scenario.world)
-    init_sim(model, data, params)
+    init_sim(model, data, params, q_hip_init=scenario.initial_hip_q)
+
+    if model_mutator is not None:
+        model_mutator(model, data)
 
     # Apply scenario-specific initial conditions (e.g., pitch step for S1)
     if scenario.init_fn is not None:
@@ -891,6 +924,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
     v_profile_fn     = scenario.v_profile or (lambda t: 0.0)
     theta_ref_fn     = scenario.theta_ref_profile  # may be None
     omega_profile_fn = scenario.omega_profile  # may be None
+    roll_profile_fn  = scenario.roll_profile   # may be None
     hip_profile_fn   = scenario.hip_profile    # may be None
     hip_vel_fn       = getattr(scenario, 'hip_vel_profile', None)
     use_theta_ref_correction = scenario.use_theta_ref_correction
@@ -909,6 +943,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
     ise_pitch_rate    = 0.0
     pitch_rate_sq_sum = 0.0
     roll_sq_sum       = 0.0
+    roll_track_sq_sum = 0.0
     max_roll          = 0.0
     vel_sq_sum        = 0.0
     yaw_sq_sum        = 0.0
@@ -922,6 +957,13 @@ def run(params: SimParams, scenario: ScenarioConfig,
     prev_tau_hip_L    = 0.0
     prev_tau_hip_R    = 0.0
     hip_cmd_rate_sq   = 0.0
+    tau_sym_sq_sum    = 0.0
+    tau_yaw_sq_sum    = 0.0
+    hip_tau_sq_sum    = 0.0
+    peak_tau_sym      = 0.0
+    peak_tau_yaw      = 0.0
+    peak_hip_torque   = 0.0
+    torque_sat_count  = 0
     prev_q_nom_L      = None
     prev_q_nom_R      = None
     liftoff_kill      = False
@@ -949,6 +991,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
             v_target_ms = v_profile_fn(data.time)
             theta_ref_c = theta_ref_fn(data.time) if theta_ref_fn else 0.0
             omega_tgt   = omega_profile_fn(data.time) if omega_profile_fn else 0.0
+            roll_tgt    = roll_profile_fn(data.time) if roll_profile_fn else 0.0
             q_hip_sym   = hip_profile_fn(data.time) if hip_profile_fn else robot.Q_NOM
             dq_hip_tgt  = hip_vel_fn(data.time) if hip_vel_fn else 0.0
 
@@ -962,6 +1005,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
                 v_target_ms=v_target_ms,
                 theta_ref_cmd=theta_ref_c,
                 omega_target=omega_tgt,
+                roll_target_rad=roll_tgt,
                 q_hip_target=q_hip_sym,
                 dq_hip_target=dq_hip_tgt,
                 **flags)
@@ -996,6 +1040,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
             pitch_rate_sq_sum += math.degrees(pitch_rate_true) ** 2
             roll_deg_now      = math.degrees(roll_true)
             roll_sq_sum      += roll_deg_now ** 2
+            roll_track_sq_sum += math.degrees(roll_true - roll_tgt) ** 2
             max_roll          = max(max_roll, abs(roll_deg_now))
             max_pitch         = max(max_pitch, pitch_err_deg)
             vel_est           = (wheel_vel + pitch_rate_true) * robot.wheel_r
@@ -1003,6 +1048,15 @@ def run(params: SimParams, scenario: ScenarioConfig,
             hip_track_sq_sum += (tick['hip_q_avg'] - q_hip_sym) ** 2
             tau_hip_L = tick['tau_hip_L']
             tau_hip_R = tick['tau_hip_R']
+            tau_sym_sq_sum += tick['tau_sym'] ** 2
+            tau_yaw_sq_sum += tick['tau_yaw'] ** 2
+            hip_tau_sq_sum += 0.5 * (tau_hip_L ** 2 + tau_hip_R ** 2)
+            peak_tau_sym = max(peak_tau_sym, abs(tick['tau_sym']))
+            peak_tau_yaw = max(peak_tau_yaw, abs(tick['tau_yaw']))
+            peak_hip_torque = max(peak_hip_torque, abs(tau_hip_L), abs(tau_hip_R))
+            torque_limit = ctrl.firmware_ctrl.params['lqr_torque_limit']
+            if torque_limit > 0.0 and abs(tick['tau_sym']) >= 0.995 * torque_limit:
+                torque_sat_count += 1
             hip_rate_sq_sum += ((tau_hip_L - prev_tau_hip_L) / dt) ** 2
             hip_rate_sq_sum += ((tau_hip_R - prev_tau_hip_R) / dt) ** 2
             prev_tau_hip_L = tau_hip_L
@@ -1080,11 +1134,15 @@ def run(params: SimParams, scenario: ScenarioConfig,
     rms_pitch_deg      = math.sqrt(pitch_sq_sum / max(1, n_samples))
     rms_pitch_rate_dps = math.sqrt(pitch_rate_sq_sum / max(1, n_samples))
     rms_roll_deg       = math.sqrt(roll_sq_sum  / max(1, n_samples))
+    roll_track_rms_deg = math.sqrt(roll_track_sq_sum / max(1, n_samples))
     hip_track_rms_rad  = math.sqrt(hip_track_sq_sum / max(1, n_samples))
     hip_rate_rms       = math.sqrt(hip_rate_sq_sum / max(1, 2 * n_samples))
     hip_cmd_rate_rms   = math.sqrt(hip_cmd_rate_sq / max(1, 2 * max(1, n_samples - 1)))
     rms_vel_ms         = math.sqrt(vel_sq_sum / max(1, n_vel)) if n_vel > 0 else 0.0
     yaw_track_rms_rads = math.sqrt(yaw_sq_sum / max(1, n_yaw)) if n_yaw > 0 else 0.0
+    rms_tau_sym_nm      = math.sqrt(tau_sym_sq_sum / max(1, n_samples))
+    rms_tau_yaw_nm      = math.sqrt(tau_yaw_sq_sum / max(1, n_samples))
+    rms_hip_torque_nm   = math.sqrt(hip_tau_sq_sum / max(1, n_samples))
     final_x            = data.qpos[ctrl.s_root]
     fell               = survived_s < duration - 0.05 or liftoff_kill or vel_error_kill
 
@@ -1094,6 +1152,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
         ise_pitch_rate          = round(ise_pitch_rate,         6),
         rms_pitch_rate_dps      = round(rms_pitch_rate_dps,    4),
         rms_roll_deg            = round(rms_roll_deg,           4),
+        roll_track_rms_deg      = round(roll_track_rms_deg,     4),
         max_roll_deg            = round(max_roll,               4),
         vel_track_rms_ms        = round(rms_vel_ms,             4),
         transient_lag_ms        = round(transient_lag_sum,      4),
@@ -1106,6 +1165,13 @@ def run(params: SimParams, scenario: ScenarioConfig,
         hip_track_rms_rad       = round(hip_track_rms_rad,      6),
         hip_rate_rms            = round(hip_rate_rms,            4),
         hip_cmd_rate_rms        = round(hip_cmd_rate_rms,        4),
+        rms_tau_sym_nm          = round(rms_tau_sym_nm,          5),
+        rms_tau_yaw_nm          = round(rms_tau_yaw_nm,          5),
+        rms_hip_torque_nm       = round(rms_hip_torque_nm,       5),
+        peak_tau_sym_nm         = round(peak_tau_sym,            5),
+        peak_tau_yaw_nm         = round(peak_tau_yaw,            5),
+        peak_hip_torque_nm      = round(peak_hip_torque,         5),
+        wheel_torque_saturation_frac = round(torque_sat_count / max(1, n_samples), 6),
         final_x_m               = round(final_x,               3),
         settle_time_s           = round(settle_time,            3),
         survived_s              = round(survived_s,             3),

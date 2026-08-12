@@ -58,6 +58,7 @@ class ScenarioConfig:
     v_profile: Optional[Callable] = None
     theta_ref_profile: Optional[Callable] = None   # callable(t) -> theta_ref [rad], used when VelocityPI is off
     omega_profile: Optional[Callable] = None
+    roll_profile: Optional[Callable] = None
     hip_profile: Optional[Callable] = None
     hip_vel_profile: Optional[Callable] = None
     dist_fn: Optional[Callable] = None
@@ -68,6 +69,7 @@ class ScenarioConfig:
     group: str = "lqr"
     order: float = 0.0
     init_fn: Optional[Callable] = None
+    initial_hip_q: Optional[float] = None
     jump_time: Optional[float] = None         # [s] time to trigger jump (None = no jump)
     use_theta_ref_correction: bool = False
     max_liftoff_s: Optional[float] = None   # early-terminate if cumulative liftoff exceeds this

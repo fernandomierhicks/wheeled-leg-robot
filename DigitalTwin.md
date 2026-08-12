@@ -134,8 +134,8 @@ Terms that must be ported, all currently absent from the sim:
 - `wheel_vel_glitch_filter()` (`wm_vel_slew_max`) on the encoder feed
 - clamps: `lqr_torque_limit`, `wm_vel_limit`
 
-`M_BODY = 1.638 kg` is flagged stale in the firmware for the longer v4 links — the
-twin recomputes it from the mass table and **T0.1 tells us which is right**.
+`M_BODY = 2.562 kg` now matches the 2026-08-09 mass inventory: 3.518 kg driving
+mass minus two 0.478 kg wheel assemblies.
 
 ### 1.5 The equivalence test (`simulation/sil/` — currently an empty directory)
 
@@ -197,7 +197,15 @@ Format per test: **what it identifies → rig → procedure → sim acceptance c
 Scale. Weigh the whole robot; remove one wheel assembly and weigh it; weigh a spare
 link set if you have one, else trust CAD for the links only. Also caliper `leg_y`.
 *Accept:* twin's computed `m_b` (excl. wheels) within 3% of `total − 2·m_wheel`.
-Settles whether firmware's `M_BODY = 1.638` is still right (only FF2 depends on it).
+This also sets firmware `M_BODY`; only FF2 depends on it.
+
+**2026-08-09 result: T0.1 complete.** Scale inventory gives 3.242 kg without
+the 0.276 kg battery and 3.518 kg driving mass. Each wheel assembly is 0.478 kg,
+so the measured/accounted body excluding wheels is 2.562 kg. Known component
+masses plus the retained 260 g-per-AK45 catalog values leave a 0.653 kg
+unweighed residual; MuJoCo carries it explicitly on the link bodies so total
+mass closes exactly. Its true placement remains a T0.2 CG question, not a mass
+uncertainty. Full ledger: `components/COMPONENTS.md`.
 
 **T0.2 — CG location vs leg height.** → CG x/z, and therefore `lqr_pitch_trim_ret/ext`.
 Two scales. `MANUAL` mode, hips jogged to a fixed α, robot resting on both wheels
@@ -444,9 +452,10 @@ This is the cheapest high-leverage feature in the plan and it should land early.
 
 - **Closed-loop replay** — load a hardware `.wlog` + sidecar, set the twin to those
   exact params (`param_sidecar.py` already aligns param changes to sample times),
-  drive it with the recorded *commands* (`v_ref`, `omega_cmd_rds`, `radio_hip_cmd`,
-  radio profile), and overlay recorded vs simulated pitch / pitch_rate / wheel_vel /
-  tau_sym.
+  drive it with recorded `v_ref`, `omega_cmd_rds`, and the logged post-rate-limit
+  hip setpoints, and overlay recorded vs simulated pitch / pitch_rate / wheel_vel /
+  tau_sym. Raw `radio_hip_cmd` is not in WLOG, so replay seeds the controller slew
+  state from the observed MIT setpoint instead of rate-limiting it a second time.
 - **Open-loop torque replay** — feed the twin the recorded `whl_tau_l/r` and hip
   setpoints as raw inputs. This mode **isolates plant error from controller error**:
   if open-loop matches and closed-loop doesn't, the bug is in the control port, not
@@ -455,6 +464,14 @@ This is the cheapest high-leverage feature in the plan and it should land early.
 Output a per-channel NRMSE **twin-fidelity score**. Keep a set of reference hardware
 logs checked in and regress the score — the twin's accuracy becomes a tracked number
 that can't quietly rot.
+
+**2026-08-10 result:** implemented as direct MuJoCo multiple-shooting replay, not
+the earlier low-order analytical surrogate. Consecutive 0.1 s open-loop and 2.0 s
+closed-loop reset windows consume 100% of the latest RUNNING command history.
+Closed-loop RMSE is 2.11° pitch, 0.136 m/s wheel speed, 0.221 rad/s yaw rate, and
+0.102 m local dead-reckoned XY. Controller values are SHA-256 locked to the
+current export and cannot be fit; only plant parameters may vary. Machine-readable
+results are in `robot_match_replay.json`.
 
 ### 3.5 GUI ↔ sim
 
@@ -501,6 +518,16 @@ The existing `(1+λ)-ES` machinery (`optimizer/es_engine.py`, `optimize_integrat
 serialized version of this same ES loop (the deleted `tuning.md` §5) — the twin
 should feed its output *into* that, not duplicate it.
 
+**2026-08-11 result:** implemented in `optimizer/robust_mujoco.py` against the
+matched MuJoCo plant and firmware-equivalent controller. The staged search tunes
+27 LQR/velocity/yaw/hip/roll/feedforward parameters while keeping every plant,
+trim, watchdog, torque, and command-limit parameter fixed. The final candidate
+passed 49/49 combinations of seven scenarios and seven plant variations; robust
+fitness improved from 2.6854 to 1.3070. A separate LQR scale sweep reproduces
+the upper-gain boundary: the optimized set passes at 1.0x but fails the
+pitch-rate/saturation guards at 1.5x. Full evidence and transfer caveats are in
+`simulation/mujoco/v4_twin_279mm_baseline/GAIN_OPTIMIZATION_FINDINGS.md`.
+
 ---
 
 ## Part 4 — How this delivers the two stated goals
@@ -529,7 +556,7 @@ robot as a `param_set` batch and is validated by re-running the same scenario fi
 | **2** | Bench: **T0.1–T0.4, T1.1–T1.3, T2.1–T2.5** | plant params replaced by measurements; T0.3 pins `A_Z`; T2.4 curve matches within 10% |
 | **3** | Firmware `plant_id_*` hook (§2.6); **T3.1–T3.3** | delay and noise measured, not guessed |
 | **4** | **T4.1–T4.5**; iterate the plant model until matched | `K_u` within 15%, `T_u` within 10%, both α ends |
-| **5** | Replay tool + fidelity score (§3.4), param push/pull (§3.2), ensemble optimizer (§3.7) | a sim-optimized gain set survives a hardware run unchanged |
+| **5** | Replay/fidelity score (§3.4), guarded param flow (§3.2), and robust MuJoCo ensemble optimizer (§3.7) **complete offline** | the simulation-only gain candidate survives a restrained hardware run unchanged after plant-ID gates |
 | **6** | Optional: GUI-as-sim-client (§3.5 level 2); then roll and jump validation | — |
 
 Phase 2 onward is hands-on hardware; I'll walk through each test one at a time —
@@ -556,7 +583,8 @@ comparison — rather than handing over the whole list at once.
 ## Open items carried forward (flagged, not silently assumed)
 
 - `A_Z = −23.5 mm` — unverified until T0.3. `L_EFF_RET/EXT` shift 1:1 with it.
-- `M_BODY = 1.638 kg` — not re-derived for v4 links; T0.1 settles it.
+- The 0.653 kg whole-robot mass residual is closed in the twin but its true
+  placement is unresolved; T0.2 replaces the current equivalent link-mass fit.
 - Hip gearbox efficiency — expected 10–20%, reported hip torque is motor-side and
   cannot see planetary losses. Not resolvable with a hand-held scale; the twin
   carries it as an explicit unknown rather than folding it into `Kt`.

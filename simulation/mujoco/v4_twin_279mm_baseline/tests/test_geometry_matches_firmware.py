@@ -53,5 +53,9 @@ def test_alpha_uses_calibrated_span_not_hard_stop(robot: RobotGeometry) -> None:
 
 
 def test_named_firmware_sim_transform_round_trips() -> None:
+    robot = RobotGeometry()
     for q in map(math.radians, (-57.0, -10.0, 0.0, 23.0, 28.0)):
-        assert sim_q_to_firmware_hip(firmware_hip_to_sim_q(q)) == q
+        assert sim_q_to_firmware_hip(
+            firmware_hip_to_sim_q(q, robot), robot) == pytest.approx(q)
+    assert firmware_hip_to_sim_q(
+        -robot.calib_backoff_rad, robot) == pytest.approx(robot.Q_ALPHA_RET)

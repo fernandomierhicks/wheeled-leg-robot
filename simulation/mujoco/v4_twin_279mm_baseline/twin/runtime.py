@@ -15,6 +15,7 @@ import math
 from pathlib import Path
 import random
 
+from ..robot_match import load_latest_firmware_params
 from .firmware_control import ControlInput, FirmwareController, L_EFF_EXT, L_EFF_RET
 from .params_control import default_values
 from .params_plant import PlantParams
@@ -115,6 +116,7 @@ def run_scenario(scenario: Scenario, output: Path, *, plant: PlantParams | None 
                  seed: int = 1) -> dict:
     plant_params = plant or PlantParams()
     params = default_values()
+    params.update(load_latest_firmware_params())
     params.update(scenario.initial_params)
     if control_overrides:
         params.update(control_overrides)

@@ -1,0 +1,9 @@
+# Reproducible Windows/Python 3.13 environment for the MuJoCo simulators.
+mujoco==3.6.0
+numpy==2.5.2
+scipy==1.18.0
+matplotlib==3.11.1
+pandas==3.0.1
+pyqtgraph==0.14.0
+PyQt6==6.11.0
+pytest==9.1.1

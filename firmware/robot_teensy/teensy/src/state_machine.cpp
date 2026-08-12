@@ -111,16 +111,37 @@ static uint32_t s_cmd_reject_deadline_ms = 0;
 //
 // Conflating them meant the wall clock, not the phases, decided when to hand
 // back to RUNNING. That happened to be safe only because the three phase
-// budgets at their schema maxima (jump_crouch_time 1.0 + jump_ext_timeout 1.0 +
-// retract 0.2 = 2.2 s) summed to less than 3 s — an undocumented coupling that
-// would have broken silently the moment a bound was raised or a phase added,
-// handing off to RUNNING mid-extension with the hips still under a torque
-// command. The deadline is now derived from the same budgets it is guarding,
-// and overrunning it is a fault rather than a normal exit.
+// budgets at their schema maxima summed to less than 3 s — an undocumented
+// coupling that would have broken silently the moment a bound was raised or a
+// phase added, handing off to RUNNING mid-extension with the hips still under a
+// torque command. The deadline is now derived from the same budgets it is
+// guarding, and overrunning it is a fault rather than a normal exit.
+//
+// CROUCH and RETRACT no longer *have* a configured duration: they are given a
+// target angle and a peak speed, and the duration falls out. The deadline is
+// derived from the same arithmetic, so it tracks a retune automatically —
+// which is the property that made deriving it worth doing in the first place.
 static uint32_t s_jump_deadline_ms = 0;
-static constexpr float    JUMP_RETRACT_TIME_S  = 0.20f;
 static constexpr uint32_t JUMP_SETTLE_MS       = 300;   // stiff hold at nominal before RUNNING
 static constexpr float    JUMP_OVERRUN_MARGIN_S = 0.5f; // slack over the phase budget
+
+// Floor on any derived phase duration. A zero-travel phase (already at the
+// crouch target, or an EXTEND that never moved) must still occupy a couple of
+// control ticks rather than collapsing to zero and dividing badly.
+static constexpr float JUMP_PHASE_MIN_S = 0.02f;
+
+// The quintic minimum-jerk profile's peak rate is 1.875x its average —
+// standup_min_jerk_rate(0.5, 1.0) == 1.875, asserted in test_control_math.cpp.
+// So a phase whose *peak* hip speed must not exceed peak_speed takes this long.
+// Speeds are specified as peak because that is what the motor and the balance
+// disturbance actually see; average would understate both by nearly 2x.
+static constexpr float MIN_JERK_PEAK_OVER_MEAN = 1.875f;
+
+static float jump_phase_duration_s(float travel_rad, float peak_speed_rad_s) {
+    if (peak_speed_rad_s <= 0.0f) return JUMP_PHASE_MIN_S;
+    float d = MIN_JERK_PEAK_OVER_MEAN * fabsf(travel_rad) / peak_speed_rad_s;
+    return d < JUMP_PHASE_MIN_S ? JUMP_PHASE_MIN_S : d;
+}
 
 // ── Jump FSM state (Phase 7) ──────────────────────────────────────────────────
 typedef enum : uint8_t {
@@ -134,10 +155,14 @@ static JumpPhase s_jp_phase        = JP_DONE;
 static uint32_t  s_jp_phase_ms     = 0;       // millis() when current phase started
 static float     s_jp_nom_L        = 0.0f;    // hip pos at jump trigger (RETRACT target)
 static float     s_jp_nom_R        = 0.0f;
-static float     s_jp_ret_L        = 0.0f;    // calibrated retracted pos (CROUCH target)
+static float     s_jp_crouch_L     = 0.0f;    // CROUCH target, from jump_crouch_angle
+static float     s_jp_crouch_R     = 0.0f;
+static float     s_jp_ret_L        = 0.0f;    // RETRACT/JP_DONE target — the landing pose
 static float     s_jp_ret_R        = 0.0f;
 static float     s_jp_from_L       = 0.0f;    // hip pos when RETRACT began
 static float     s_jp_from_R       = 0.0f;
+static float     s_jp_crouch_dur_s = 0.0f;    // derived: angle travel / jump_crouch_speed
+static float     s_jp_retract_dur_s = 0.0f;   // derived when RETRACT begins, from actual travel
 
 // ── Standing-up FSM state ─────────────────────────────────────────────────────
 // Phase order is CROUCH -> STIFFEN -> RECOVER (-> PAUSE on a retry). SU_STIFFEN
@@ -310,10 +335,29 @@ static void on_running() {
         } else {
             controlLoop_reset();  // C1: clear integrators/rate-limit state so each arm starts clean
         }
-        // Skip on a jump landing or a successful standup catch — the hips are
-        // already stiffly holding the post-jump/post-catch position; re-ramping
-        // kp from 0 here would loosen them right when they need to hold.
-        if (!from_jumping && !from_standing_up) controlLoop_reset_hip_ramp();
+        // Skip on a successful standup catch — the hips are already stiffly
+        // holding the post-catch position; re-ramping kp from 0 here would
+        // loosen them right when they need to hold.
+        if (!from_jumping && !from_standing_up) {
+            controlLoop_reset_hip_ramp();
+        } else if (from_jumping) {
+            // A jump landing needs half of reset_hip_ramp() and not the other
+            // half. controlLoop_reset() just invalidated the hip rate-limiter
+            // shadow, so the first RUNNING tick would re-seed it from the raw
+            // CH3 stick and step the legs from the landing pose to the stick
+            // position in one tick at full stiffness. That was invisible while
+            // RETRACT always returned to the pre-jump pose — the step was zero
+            // by construction — but jump_retract_angle makes it as large as the
+            // operator likes. Seeding from the measured pose instead lets CH3
+            // slew back in at hip_cmd_rate_lim, with no step.
+            //
+            // reset_hip_ramp() also restarts the kp ramp from zero, which is
+            // precisely what must not happen on a landing; complete_hip_ramp()
+            // puts full stiffness straight back. Same pairing, and same reason,
+            // as STANDING_UP's capture.
+            controlLoop_reset_hip_ramp();
+            controlLoop_complete_hip_ramp();
+        }
     }
     controlLoop_run();
 }
@@ -333,22 +377,45 @@ static void on_jumping() {
     if (entering) {
         comm_log(LOG_LEVEL_INFO, "-> JUMPING");
         g_buzzer.play(JUMP_MELODY, sizeof(JUMP_MELODY) / sizeof(JUMP_MELODY[0]));
-        // Derived from the live phase params, so retuning them moves the safety
-        // net with them instead of silently eating into a fixed allowance.
-        float budget_s = param_get(PARAM_JUMP_CROUCH_TIME_S)
-                       + param_get(PARAM_JUMP_EXTEND_TIMEOUT_S)
-                       + JUMP_RETRACT_TIME_S
-                       + JUMP_OVERRUN_MARGIN_S;
-        s_jump_deadline_ms = millis() + (uint32_t)(budget_s * 1000.0f);
-        // Snapshot hip positions and calibrated retracted target
+
         s_jp_phase  = JP_CROUCH;
         s_jp_phase_ms = millis();
         s_jp_nom_L  = hm_L.pos_rad;
         s_jp_nom_R  = hm_R.pos_rad;
-        hip_cmd_to_setpoints(0.0f, &s_jp_ret_L, &s_jp_ret_R);  // t=0 → retracted
+
+        // CROUCH target is an absolute extension angle, so the same jump is the
+        // same motion from any ride height. The old code always crouched to the
+        // calibrated retracted endpoint over a fixed time, which meant the
+        // crouch *speed* silently scaled with wherever CH3 happened to be — two
+        // jumps from different heights were two different manoeuvres.
+        hip_ext_angle_to_setpoints(param_get(PARAM_JUMP_CROUCH_ANGLE),
+                                   &s_jp_crouch_L, &s_jp_crouch_R);
+        float crouch_travel = fmaxf(fabsf(s_jp_crouch_L - s_jp_nom_L),
+                                    fabsf(s_jp_crouch_R - s_jp_nom_R));
+        s_jp_crouch_dur_s = jump_phase_duration_s(
+            crouch_travel, param_get(PARAM_JUMP_CROUCH_SPEED));
+        s_jp_retract_dur_s = 0.0f;   // not known until EXTEND ends
+
+        // Overrun budget. CROUCH is known now; RETRACT is not, because how far
+        // it has to travel depends on where EXTEND ends up — so budget its
+        // worst case, a tuck across the entire calibrated span.
+        float span = fmaxf(hm_limits_L.max_rad - hm_limits_L.min_rad,
+                           hm_limits_R.max_rad - hm_limits_R.min_rad);
+        float budget_s = s_jp_crouch_dur_s
+                       + param_get(PARAM_JUMP_EXTEND_TIMEOUT_S)
+                       + jump_phase_duration_s(span, param_get(PARAM_JUMP_RETRACT_SPEED))
+                       + JUMP_OVERRUN_MARGIN_S;
+        s_jump_deadline_ms = millis() + (uint32_t)(budget_s * 1000.0f);
     }
 
-    // LQR wheel balance runs throughout (identical to RUNNING — keeps robot upright on real robot)
+    // The wheel loop runs unchanged through every phase, exactly as in RUNNING.
+    // Zeroing wheel torque across EXTEND/RETRACT was tried and removed: crouched,
+    // l_eff is ~0.09 m and the inverted pendulum's time constant is ~0.1 s, so a
+    // 0.4 s window of free wheels multiplies any pitch error by ~50x if the robot
+    // does not in fact leave the ground — trading a real, every-attempt fall risk
+    // against a benefit that only materialises on a successful jump. Revisit only
+    // once there is genuine liftoff/landing detection to gate it on, so the
+    // wheels are released when airborne rather than whenever a phase says so.
     controlLoop_run();
 
     g_state.jump_state = (uint8_t)s_jp_phase;
@@ -384,14 +451,19 @@ static void on_jumping() {
     float kd       = param_get(PARAM_JUMP_KD);
 
     if (s_jp_phase == JP_CROUCH) {
-        float crouch_t = param_get(PARAM_JUMP_CROUCH_TIME_S);
-        float alpha    = elapsed / crouch_t;
-        if (alpha > 1.0f) alpha = 1.0f;
-        float dq_L = (s_jp_ret_L - s_jp_nom_L) / crouch_t;
-        float dq_R = (s_jp_ret_R - s_jp_nom_R) / crouch_t;
-        hip_motors_set_setpoint_L(s_jp_nom_L + alpha * (s_jp_ret_L - s_jp_nom_L), dq_L, kp, kd, 0.0f);
-        hip_motors_set_setpoint_R(s_jp_nom_R + alpha * (s_jp_ret_R - s_jp_nom_R), dq_R, kp, kd, 0.0f);
-        if (elapsed >= crouch_t) {
+        // Minimum-jerk S-curve, the same profile and helpers STANDING_UP's
+        // CROUCH uses (standup_safety.h). Zero commanded velocity and
+        // acceleration at both ends, so the drop into the crouch no longer
+        // starts and stops with an instantaneous velocity step.
+        float u = (s_jp_crouch_dur_s > 0.0f) ? (elapsed / s_jp_crouch_dur_s) : 1.0f;
+        if (u > 1.0f) u = 1.0f;
+        float s    = standup_min_jerk_position(u);
+        float rate = standup_min_jerk_rate(u, s_jp_crouch_dur_s);
+        float dq_L = (s_jp_crouch_L - s_jp_nom_L) * rate;
+        float dq_R = (s_jp_crouch_R - s_jp_nom_R) * rate;
+        hip_motors_set_setpoint_L(s_jp_nom_L + s * (s_jp_crouch_L - s_jp_nom_L), dq_L, kp, kd, 0.0f);
+        hip_motors_set_setpoint_R(s_jp_nom_R + s * (s_jp_crouch_R - s_jp_nom_R), dq_R, kp, kd, 0.0f);
+        if (elapsed >= s_jp_crouch_dur_s) {
             s_jp_phase    = JP_EXTEND;
             s_jp_phase_ms = millis();
         }
@@ -411,18 +483,39 @@ static void on_jumping() {
         float ramp_dn = param_get(PARAM_JUMP_RAMP_DOWN_RAD);
         float margin  = param_get(PARAM_JUMP_HARDSTOP_MARGIN);
         float w_max   = param_get(PARAM_JUMP_OMEGA_MAX);
-        float max_trq = param_get(PARAM_JUMP_TORQUE_MAX);
         float ext_kd  = param_get(PARAM_JUMP_EXTEND_KD);
 
-        // Torque softstart
-        float ramp_in = elapsed / param_get(PARAM_JUMP_RAMP_UP_S);
-        if (ramp_in > 1.0f) ramp_in = 1.0f;
+        // jump_torque_max is the reviewed ceiling; jump_effort (non-persistent,
+        // 0 every boot) is the dial that is actually swept during bring-up. The
+        // product is what reaches the motor, so an effort of 0 is a full no-op
+        // even with jump_enable stored at 1.
+        float max_trq = param_get(PARAM_JUMP_TORQUE_MAX) * param_get(PARAM_JUMP_EFFORT);
 
-        // Torque ramp-to-zero near extended limit
-        float ramp_out_L = dist_L / ramp_dn;
+        // How far each leg still has to go to reach the commanded extend target,
+        // stated forwards as an angle rather than backwards from the calibrated
+        // limit. Negative once past it.
+        float togo_L = param_get(PARAM_JUMP_EXTEND_ANGLE)
+                     - hip_measured_ext_angle(hm_L, hm_limits_L, dir_L);
+        float togo_R = param_get(PARAM_JUMP_EXTEND_ANGLE)
+                     - hip_measured_ext_angle(hm_R, hm_limits_R, dir_R);
+
+        // Torque onset at a fixed *rate*, so the time to reach the commanded
+        // torque scales with that torque. Under the old fixed softstart duration
+        // a harder push ramped in proportionally faster — the biggest jumps got
+        // the sharpest torque step, which is exactly backwards.
+        float ramp_in = 1.0f;
+        if (max_trq > 0.0f) {
+            ramp_in = elapsed * param_get(PARAM_JUMP_TORQUE_RATE) / max_trq;
+            if (ramp_in > 1.0f) ramp_in = 1.0f;
+        }
+
+        // Torque ramp-to-zero approaching the extend target
+        float ramp_out_L = togo_L / ramp_dn;
         if (ramp_out_L > 1.0f) ramp_out_L = 1.0f;
-        float ramp_out_R = dist_R / ramp_dn;
+        if (ramp_out_L < 0.0f) ramp_out_L = 0.0f;
+        float ramp_out_R = togo_R / ramp_dn;
         if (ramp_out_R > 1.0f) ramp_out_R = 1.0f;
+        if (ramp_out_R < 0.0f) ramp_out_R = 0.0f;
 
         // Speed taper: torque → 0 as hip velocity approaches omega_max
         float tap_L = 1.0f - fabsf(hip_dq_L) / w_max;
@@ -430,10 +523,24 @@ static void on_jumping() {
         float tap_R = 1.0f - fabsf(hip_dq_R) / w_max;
         if (tap_R < 0.0f) tap_R = 0.0f;
 
-        float tff_L = dir_L * max_trq * ramp_in * ramp_out_L * tap_L;
-        float tff_R = dir_R * max_trq * ramp_in * ramp_out_R * tap_R;
+        // Extension is -dir: seek_dir points toward the retract switch, so with
+        // dir=+1 define_limits() puts retracted at max_rad and extended at
+        // min_rad (see lim_L above, and hip_cmd_to_setpoints()) — extending
+        // means *decreasing* position, which needs negative torque.
+        //
+        // Until 2026-08-11 this read `dir_L *`, i.e. it pushed the leg INTO the
+        // retract stop for the whole of EXTEND. Nothing caught it: dist_L grows
+        // under the wrong sign so neither near_ext nor the hardstop cutoff can
+        // fire, and EXTEND runs at kp=0 so clamp_to_limits() has no position
+        // command to clamp. It stayed invisible only because jump_torque_max
+        // shipped at 0 and no jump had ever commanded torque.
+        float tff_L = -dir_L * max_trq * ramp_in * ramp_out_L * tap_L;
+        float tff_R = -dir_R * max_trq * ramp_in * ramp_out_R * tap_R;
 
-        // Layer 4: hard cutoff — zero torque if within absolute margin of limit
+        // Layer 4: hard cutoff — zero torque if within absolute margin of the
+        // *calibrated* extended limit. Independent of jump_extend_angle and
+        // deliberately lower-level than it, so an extend target set too high is
+        // still caught by the mechanism rather than by the operator.
         bool cutoff = false;
         if (dist_L < margin) { tff_L = 0.0f; cutoff = true; }
         if (dist_R < margin) { tff_R = 0.0f; cutoff = true; }
@@ -442,31 +549,57 @@ static void on_jumping() {
         hip_motors_set_setpoint_L(hip_q_L, 0.0f, 0.0f, ext_kd, tff_L);
         hip_motors_set_setpoint_R(hip_q_R, 0.0f, 0.0f, ext_kd, tff_R);
 
-        bool near_ext = (dist_L < ramp_dn && dist_R < ramp_dn);
+        bool near_ext = (togo_L <= 0.0f && togo_R <= 0.0f);
         bool timed_out = (elapsed >= param_get(PARAM_JUMP_EXTEND_TIMEOUT_S));
         if (near_ext || cutoff || timed_out) {
             s_jp_from_L   = hip_q_L;
             s_jp_from_R   = hip_q_R;
+
+            // Landing pose. A negative jump_retract_angle means "return to the
+            // pose we launched from" — the behaviour before the parameter
+            // existed, and still the default. The same inherit-by-sentinel
+            // convention standup_scoped() uses for 0. A real angle lets the
+            // landing pose be chosen independently of the launch height.
+            float ret_ang = param_get(PARAM_JUMP_RETRACT_ANGLE);
+            if (ret_ang < 0.0f) {
+                s_jp_ret_L = s_jp_nom_L;
+                s_jp_ret_R = s_jp_nom_R;
+            } else {
+                hip_ext_angle_to_setpoints(ret_ang, &s_jp_ret_L, &s_jp_ret_R);
+            }
+
+            // Only now is the tuck distance known — it depends on how far EXTEND
+            // actually got as well as on the target. Deriving the duration here
+            // is what makes jump_retract_speed mean a speed rather than, as the
+            // old hardcoded 0.20 s did, whatever speed that distance implied.
+            float retract_travel = fmaxf(fabsf(s_jp_ret_L - s_jp_from_L),
+                                         fabsf(s_jp_ret_R - s_jp_from_R));
+            s_jp_retract_dur_s = jump_phase_duration_s(
+                retract_travel, param_get(PARAM_JUMP_RETRACT_SPEED));
             s_jp_phase    = JP_RETRACT;
             s_jp_phase_ms = millis();
         }
     }
     else if (s_jp_phase == JP_RETRACT) {
-        float alpha = elapsed / JUMP_RETRACT_TIME_S;
-        if (alpha > 1.0f) alpha = 1.0f;
-        float dq_L = (s_jp_nom_L - s_jp_from_L) / JUMP_RETRACT_TIME_S;
-        float dq_R = (s_jp_nom_R - s_jp_from_R) / JUMP_RETRACT_TIME_S;
-        hip_motors_set_setpoint_L(s_jp_from_L + alpha * (s_jp_nom_L - s_jp_from_L), dq_L, kp, kd, 0.0f);
-        hip_motors_set_setpoint_R(s_jp_from_R + alpha * (s_jp_nom_R - s_jp_from_R), dq_R, kp, kd, 0.0f);
-        if (elapsed >= JUMP_RETRACT_TIME_S) {
+        float u = (s_jp_retract_dur_s > 0.0f) ? (elapsed / s_jp_retract_dur_s) : 1.0f;
+        if (u > 1.0f) u = 1.0f;
+        float s    = standup_min_jerk_position(u);
+        float rate = standup_min_jerk_rate(u, s_jp_retract_dur_s);
+        float dq_L = (s_jp_ret_L - s_jp_from_L) * rate;
+        float dq_R = (s_jp_ret_R - s_jp_from_R) * rate;
+        hip_motors_set_setpoint_L(s_jp_from_L + s * (s_jp_ret_L - s_jp_from_L), dq_L, kp, kd, 0.0f);
+        hip_motors_set_setpoint_R(s_jp_from_R + s * (s_jp_ret_R - s_jp_from_R), dq_R, kp, kd, 0.0f);
+        if (elapsed >= s_jp_retract_dur_s) {
             s_jp_phase    = JP_DONE;
             s_jp_phase_ms = millis();   // starts the JUMP_SETTLE_MS hold jump_done() waits on
         }
     }
     else {
-        // JP_DONE: hold at Q_NOM with stiff position hold until jump_done() → RUNNING
-        hip_motors_set_setpoint_L(s_jp_nom_L, 0.0f, kp, kd, 0.0f);
-        hip_motors_set_setpoint_R(s_jp_nom_R, 0.0f, kp, kd, 0.0f);
+        // JP_DONE: stiff hold at the landing pose until jump_done() → RUNNING.
+        // This is where touchdown actually happens on a real hop, so it is the
+        // pose the robot lands on, not merely where it waits.
+        hip_motors_set_setpoint_L(s_jp_ret_L, 0.0f, kp, kd, 0.0f);
+        hip_motors_set_setpoint_R(s_jp_ret_R, 0.0f, kp, kd, 0.0f);
     }
 }
 // Hip hold used by the pre-LQR standup phases. `stiff` scales kp and the hip
@@ -815,6 +948,9 @@ static void on_estop() {
         s_hip_disarm_ramping = false;
         s_disarming_calibration = false;
         s_estop_hip_ramping = false;
+        // A fault raised mid-jump must not leave the phase machine mid-sequence
+        // for whatever state comes next.
+        s_jp_phase = JP_DONE;
         hip_motors_clear_setpoints();
         estop_cut_hip();
     }

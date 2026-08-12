@@ -1,0 +1,622 @@
+{
+  "0x0000": {
+    "name": "imu_enable",
+    "value": 1.0
+  },
+  "0x0003": {
+    "name": "buzzer_volume",
+    "value": 0.1
+  },
+  "0x0004": {
+    "name": "led_enable",
+    "value": 1.0
+  },
+  "0x0005": {
+    "name": "hip_l_enable",
+    "value": 1.0
+  },
+  "0x0006": {
+    "name": "hip_r_enable",
+    "value": 1.0
+  },
+  "0x0007": {
+    "name": "wheel_l_enable",
+    "value": 1.0
+  },
+  "0x0008": {
+    "name": "wheel_r_enable",
+    "value": 1.0
+  },
+  "0x0009": {
+    "name": "watchdog_enable",
+    "value": 0.0
+  },
+  "0x000A": {
+    "name": "loop_profile_enable",
+    "value": 0.0
+  },
+  "0x0120": {
+    "name": "calib_seek_speed",
+    "value": 0.17453292519943295
+  },
+  "0x0121": {
+    "name": "calib_move_speed",
+    "value": 0.17453292519943295
+  },
+  "0x0122": {
+    "name": "calib_seek_kp",
+    "value": 16.0
+  },
+  "0x0123": {
+    "name": "calib_kd",
+    "value": 0.05
+  },
+  "0x0124": {
+    "name": "calib_seek_trq_lim",
+    "value": 3.0
+  },
+  "0x0125": {
+    "name": "calib_move_trq_lim",
+    "value": 3.0
+  },
+  "0x0126": {
+    "name": "calib_backoff_rad",
+    "value": 0.017453292519943295
+  },
+  "0x0127": {
+    "name": "calib_range_l_rad",
+    "value": 1.4835298641951802
+  },
+  "0x0128": {
+    "name": "calib_range_r_rad",
+    "value": 1.4835298641951802
+  },
+  "0x0129": {
+    "name": "calib_seek_timeout",
+    "value": 30.0
+  },
+  "0x012A": {
+    "name": "calib_release_to",
+    "value": 5.0
+  },
+  "0x012B": {
+    "name": "calib_max_seek_rad",
+    "value": 2.0943951023931953
+  },
+  "0x012C": {
+    "name": "calib_max_rel_rad",
+    "value": 0.5235987755982988
+  },
+  "0x012D": {
+    "name": "calib_trq_trip_ms",
+    "value": 100.0
+  },
+  "0x012E": {
+    "name": "calib_move_kp",
+    "value": 32.0
+  },
+  "0x012F": {
+    "name": "calib_rampdown_s",
+    "value": 2.0
+  },
+  "0x0131": {
+    "name": "calib_bypass_en",
+    "value": 0.0
+  },
+  "0x0200": {
+    "name": "estop_hip_disable",
+    "value": 1.0
+  },
+  "0x0201": {
+    "name": "hip_running_kp",
+    "value": 41.72344947101603
+  },
+  "0x0202": {
+    "name": "hip_running_kd",
+    "value": 1.0841111173467626
+  },
+  "0x0203": {
+    "name": "hip_running_tff_ret",
+    "value": -0.7299726777849623
+  },
+  "0x0204": {
+    "name": "hip_running_ramp_s",
+    "value": 1.0
+  },
+  "0x0205": {
+    "name": "hip_cmd_rate_lim",
+    "value": 0.5
+  },
+  "0x0206": {
+    "name": "hip_running_tff_ext",
+    "value": -0.5196837646453158
+  },
+  "0x0300": {
+    "name": "wm_enc_timeout_ms",
+    "value": 20.0
+  },
+  "0x0301": {
+    "name": "wm_vel_slew_max",
+    "value": 1500.0
+  },
+  "0x0400": {
+    "name": "lqr_enable",
+    "value": 1.0
+  },
+  "0x0401": {
+    "name": "sim_pitch_rad",
+    "value": 0.0
+  },
+  "0x0402": {
+    "name": "lqr_torque_limit",
+    "value": 0.4
+  },
+  "0x0403": {
+    "name": "wm_vel_limit",
+    "value": 6.0
+  },
+  "0x0404": {
+    "name": "vel_pi_en",
+    "value": 1.0
+  },
+  "0x0405": {
+    "name": "vel_pi_kp",
+    "value": 0.07094730613021388
+  },
+  "0x0406": {
+    "name": "vel_pi_ki",
+    "value": 0.18855141381061916
+  },
+  "0x0407": {
+    "name": "vel_pi_kff",
+    "value": 0.10698404524504615
+  },
+  "0x0409": {
+    "name": "vel_pi_rate_lim",
+    "value": 0.5646525720868449
+  },
+  "0x040A": {
+    "name": "vel_pi_int_max",
+    "value": 1.157310366023564
+  },
+  "0x040B": {
+    "name": "v_cmd_ms",
+    "value": 0.0105
+  },
+  "0x040C": {
+    "name": "yaw_pi_en",
+    "value": 1.0
+  },
+  "0x040D": {
+    "name": "yaw_pi_kp",
+    "value": 0.07258921328442992
+  },
+  "0x040E": {
+    "name": "yaw_pi_ki",
+    "value": 0.02869663923787095
+  },
+  "0x040F": {
+    "name": "yaw_pi_torque_max",
+    "value": 0.057795158102727937
+  },
+  "0x0410": {
+    "name": "yaw_pi_int_max",
+    "value": 0.05093467720709124
+  },
+  "0x0411": {
+    "name": "omega_cmd_rds",
+    "value": -0.0029999940913754933
+  },
+  "0x0412": {
+    "name": "ff1_alpha",
+    "value": 0.025114818042492167
+  },
+  "0x0413": {
+    "name": "ff2_alpha",
+    "value": 0.004440060306680076
+  },
+  "0x0414": {
+    "name": "ff1_kt_hip",
+    "value": 1.0
+  },
+  "0x0415": {
+    "name": "jump_enable",
+    "value": 0.0
+  },
+  "0x0416": {
+    "name": "jump_torque_max",
+    "value": 7.0
+  },
+  "0x0419": {
+    "name": "jump_ramp_down",
+    "value": 0.07999995879196328
+  },
+  "0x041A": {
+    "name": "jump_omega_max",
+    "value": 12.307695365921093
+  },
+  "0x041B": {
+    "name": "jump_hs_margin",
+    "value": 0.06000005636043506
+  },
+  "0x041C": {
+    "name": "jump_kp",
+    "value": 80.0
+  },
+  "0x041D": {
+    "name": "jump_kd",
+    "value": 1.0
+  },
+  "0x041E": {
+    "name": "jump_ext_kd",
+    "value": 0.1
+  },
+  "0x041F": {
+    "name": "jump_ext_timeout",
+    "value": 0.2
+  },
+  "0x0420": {
+    "name": "enable_sim_pitch",
+    "value": 0.0
+  },
+  "0x0421": {
+    "name": "sim_pitch_rate",
+    "value": 0.0
+  },
+  "0x0422": {
+    "name": "enable_sim_prate",
+    "value": 0.0
+  },
+  "0x0423": {
+    "name": "pitch_watchdog_en",
+    "value": 1.0
+  },
+  "0x0424": {
+    "name": "lqr_k_pitch_ret",
+    "value": -1.247590851278172
+  },
+  "0x0425": {
+    "name": "lqr_k_rate_ret",
+    "value": -0.18539701743933554
+  },
+  "0x0426": {
+    "name": "lqr_k_pitch_ext",
+    "value": -0.9892072300801279
+  },
+  "0x0427": {
+    "name": "lqr_k_rate_ext",
+    "value": -0.45377122288299254
+  },
+  "0x0428": {
+    "name": "lqr_k_vel",
+    "value": -0.18042215247819443
+  },
+  "0x0429": {
+    "name": "run_wheel_bypass_en",
+    "value": 0.0
+  },
+  "0x042A": {
+    "name": "alpha_force_ret_en",
+    "value": 0.0
+  },
+  "0x042B": {
+    "name": "gui_motion_ctrl_en",
+    "value": 0.0
+  },
+  "0x042C": {
+    "name": "standup_enable",
+    "value": 1.0
+  },
+  "0x042D": {
+    "name": "standup_pitch_max",
+    "value": 1.3962634015954636
+  },
+  "0x042E": {
+    "name": "standup_pitch_min",
+    "value": -1.4000001515239835
+  },
+  "0x0431": {
+    "name": "standup_crouch_time",
+    "value": 2.0
+  },
+  "0x0432": {
+    "name": "standup_k_pitch",
+    "value": 0.0
+  },
+  "0x0433": {
+    "name": "standup_k_rate",
+    "value": 0.0
+  },
+  "0x0434": {
+    "name": "standup_torque_lim",
+    "value": 3.0
+  },
+  "0x0435": {
+    "name": "standup_vel_limit",
+    "value": 6.0
+  },
+  "0x0436": {
+    "name": "standup_cap_pitch",
+    "value": 0.08726646259971647
+  },
+  "0x0437": {
+    "name": "standup_cap_rate",
+    "value": 0.8726646259971648
+  },
+  "0x0438": {
+    "name": "standup_cap_hold",
+    "value": 0.15
+  },
+  "0x0439": {
+    "name": "standup_timeout",
+    "value": 3.0
+  },
+  "0x043A": {
+    "name": "standup_max_retries",
+    "value": 0.0
+  },
+  "0x043B": {
+    "name": "standup_retry_pause",
+    "value": 0.0
+  },
+  "0x043C": {
+    "name": "lqr_pitch_trim_ret",
+    "value": -0.12499995742905828
+  },
+  "0x043D": {
+    "name": "lqr_pitch_trim_ext",
+    "value": -0.06500007560154841
+  },
+  "0x043E": {
+    "name": "theta_max_fwd_ret",
+    "value": 0.5235987755982988
+  },
+  "0x043F": {
+    "name": "theta_max_bwd_ret",
+    "value": 0.13962634015954636
+  },
+  "0x0440": {
+    "name": "theta_max_fwd_ext",
+    "value": 0.5235987755982988
+  },
+  "0x0441": {
+    "name": "theta_max_bwd_ext",
+    "value": 0.13962634015954636
+  },
+  "0x0442": {
+    "name": "pitch_wd_fwd_ret",
+    "value": 0.6981317007977318
+  },
+  "0x0443": {
+    "name": "pitch_wd_bwd_ret",
+    "value": 0.3490658503988659
+  },
+  "0x0444": {
+    "name": "pitch_wd_fwd_ext",
+    "value": 0.6981317007977318
+  },
+  "0x0445": {
+    "name": "pitch_wd_bwd_ext",
+    "value": 0.3490658503988659
+  },
+  "0x0446": {
+    "name": "standup_div_fwd",
+    "value": 1.0
+  },
+  "0x0447": {
+    "name": "standup_div_bwd",
+    "value": 1.0
+  },
+  "0x0448": {
+    "name": "lqr_barrier_k",
+    "value": 0.9619823910389196
+  },
+  "0x0449": {
+    "name": "lqr_barrier_th_ret",
+    "value": 0.20944
+  },
+  "0x044A": {
+    "name": "lqr_barrier_th_ext",
+    "value": 0.20944
+  },
+  "0x044B": {
+    "name": "plant_id_en",
+    "value": 0.0
+  },
+  "0x044C": {
+    "name": "plant_id_amp",
+    "value": 0.0
+  },
+  "0x044D": {
+    "name": "plant_id_f0",
+    "value": 0.2
+  },
+  "0x044E": {
+    "name": "plant_id_f1",
+    "value": 10.0
+  },
+  "0x044F": {
+    "name": "plant_id_dur",
+    "value": 5.0
+  },
+  "0x0450": {
+    "name": "lqr_trim_curve",
+    "value": 0.0
+  },
+  "0x0500": {
+    "name": "radio_hip_cmd",
+    "value": 0.0
+  },
+  "0x0501": {
+    "name": "radio_vel_max",
+    "value": 0.5
+  },
+  "0x0502": {
+    "name": "radio_yaw_max",
+    "value": 1.000000357564167
+  },
+  "0x0503": {
+    "name": "live_tune_ch7_val",
+    "value": 0.0
+  },
+  "0x0504": {
+    "name": "live_tune_multi_en",
+    "value": 0.0
+  },
+  "0x0510": {
+    "name": "profile1_vel_max",
+    "value": 0.2
+  },
+  "0x0511": {
+    "name": "profile1_yaw_max",
+    "value": 0.5000001787820835
+  },
+  "0x0512": {
+    "name": "profile1_torque_lim",
+    "value": 0.2
+  },
+  "0x0513": {
+    "name": "profile2_vel_max",
+    "value": 0.5
+  },
+  "0x0514": {
+    "name": "profile2_yaw_max",
+    "value": 1.000000357564167
+  },
+  "0x0515": {
+    "name": "profile2_torque_lim",
+    "value": 0.15
+  },
+  "0x0516": {
+    "name": "profile3_vel_max",
+    "value": 0.75
+  },
+  "0x0517": {
+    "name": "profile3_yaw_max",
+    "value": 1.5000005363462507
+  },
+  "0x0518": {
+    "name": "profile3_torque_lim",
+    "value": 0.4
+  },
+  "0x0519": {
+    "name": "active_profile",
+    "value": 0.0
+  },
+  "0x051A": {
+    "name": "live_tune_latch",
+    "value": 0.0
+  },
+  "0x051B": {
+    "name": "live_tune_ch8_val",
+    "value": 0.0
+  },
+  "0x051C": {
+    "name": "roll_ctrl_en",
+    "value": 0.0
+  },
+  "0x051D": {
+    "name": "roll_kp",
+    "value": 0.7262917761959979
+  },
+  "0x051E": {
+    "name": "roll_kd",
+    "value": 0.01833100184721484
+  },
+  "0x051F": {
+    "name": "roll_offset_max",
+    "value": 0.3
+  },
+  "0x0520": {
+    "name": "roll_rate_lim",
+    "value": 0.1
+  },
+  "0x0521": {
+    "name": "roll_watchdog_en",
+    "value": 0.0
+  },
+  "0x0522": {
+    "name": "roll_watchdog_limit",
+    "value": 0.0
+  },
+  "0x0523": {
+    "name": "hip_roll_kp",
+    "value": 45.0
+  },
+  "0x0524": {
+    "name": "hip_roll_kd",
+    "value": 0.8023584642414807
+  },
+  "0x0525": {
+    "name": "roll_cmd_rad",
+    "value": 0.0
+  },
+  "0x0526": {
+    "name": "radio_roll_max",
+    "value": 0.1
+  },
+  "0x0527": {
+    "name": "profile1_roll_max",
+    "value": 0.05
+  },
+  "0x0528": {
+    "name": "profile2_roll_max",
+    "value": 0.1
+  },
+  "0x0529": {
+    "name": "profile3_roll_max",
+    "value": 0.17
+  },
+  "0x052A": {
+    "name": "roll_ki",
+    "value": 0.12327064325707725
+  },
+  "0x052B": {
+    "name": "roll_int_max",
+    "value": 0.14803605384332236
+  },
+  "0x052D": {
+    "name": "standup_ret_gains",
+    "value": 1.0
+  },
+  "0x052E": {
+    "name": "wheel_runaway_en",
+    "value": 1.0
+  },
+  "0x052F": {
+    "name": "standup_crouch_kpf",
+    "value": 0.5
+  },
+  "0x0530": {
+    "name": "standup_stiff_time",
+    "value": 1.0
+  },
+  "0x0531": {
+    "name": "jump_effort",
+    "value": 0.0
+  },
+  "0x0532": {
+    "name": "jump_crouch_angle",
+    "value": 0.15707963267948966
+  },
+  "0x0533": {
+    "name": "jump_crouch_speed",
+    "value": 3.0
+  },
+  "0x0534": {
+    "name": "jump_extend_angle",
+    "value": 1.3
+  },
+  "0x0535": {
+    "name": "jump_retract_speed",
+    "value": 6.0
+  },
+  "0x0536": {
+    "name": "jump_torque_rate",
+    "value": 300.0
+  },
+  "0x0537": {
+    "name": "jump_retract_angle",
+    "value": -1.0
+  }
+}

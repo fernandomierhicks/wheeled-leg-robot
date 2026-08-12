@@ -72,6 +72,14 @@ _ANGLE_PARAM_NAMES = frozenset({
     "theta_max_bwd_ext",
     "jump_ramp_down",
     "jump_hs_margin",
+    # Hip extension angles measured from the retract switch — the CROUCH,
+    # EXTEND and RETRACT targets. Degrees is the whole point of specifying them
+    # this way. jump_retract_angle's negative sentinel ("return to the pre-jump
+    # pose") converts to degrees harmlessly: -1 rad reads as -57.3 deg, still
+    # obviously not an angle you asked for.
+    "jump_crouch_angle",
+    "jump_extend_angle",
+    "jump_retract_angle",
     "standup_pitch_min",
     "standup_pitch_max",
     "standup_cap_pitch",
@@ -99,6 +107,9 @@ _ANGULAR_RATE_PARAM_NAMES = frozenset({
     "vel_pi_rate_lim",
     "omega_cmd_rds",
     "jump_omega_max",
+    # Peak hip speeds for the CROUCH and RETRACT ramps.
+    "jump_crouch_speed",
+    "jump_retract_speed",
     "sim_pitch_rate",
     "standup_cap_rate",
     "radio_yaw_max",
@@ -220,6 +231,18 @@ _ROLL_HIP_OVERRIDE_PARAM_IDS = frozenset({
     0x0523,  # PARAM_HIP_ROLL_KP
     0x0524,  # PARAM_HIP_ROLL_KD
 })
+# Exactly the roll case above, for the same reason: the jump effort dial and the
+# angle/speed trajectory params were allocated out of the 0x05xx block because
+# the original 0x0415-0x041F jump block was full, but schema.json declares all
+# of them GROUP_CONTROL and generated_param_table.inc carries that through. Left
+# to the (id >> 8) heuristic they resolve to COMMAND, which split the Jump panel
+# in two — a "Jump" under Control holding the nine original params and a second
+# "Jump" under Command holding the seven new ones, since _ensure_subgroup() keys
+# its containers on (group, subgroup).
+_JUMP_CONTROL_OVERRIDE_PARAM_IDS = frozenset(range(0x0531, 0x0538))
+# Full Jump membership, both ID blocks. Doubles as the subgroup membership below
+# so the two can never drift apart.
+_JUMP_PARAM_IDS = frozenset(range(0x0415, 0x0420)) | _JUMP_CONTROL_OVERRIDE_PARAM_IDS
 _BALANCE_TRIM_HIP_PARAM_IDS = frozenset({
     0x043C,  # PARAM_LQR_PITCH_TRIM_RET
     0x043D,  # PARAM_LQR_PITCH_TRIM_EXT
@@ -345,6 +368,8 @@ def _effective_group(param_id: int) -> int:
         return _GROUP_SYSTEM
     if param_id in _ROLL_CONTROL_OVERRIDE_PARAM_IDS:
         return 0x04  # GROUP_CONTROL
+    if param_id in _JUMP_CONTROL_OVERRIDE_PARAM_IDS:
+        return 0x04  # GROUP_CONTROL
     if param_id in _ROLL_HIP_OVERRIDE_PARAM_IDS:
         return 0x02  # GROUP_HIP
     if param_id in _BALANCE_TRIM_HIP_PARAM_IDS:
@@ -390,7 +415,8 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     (range(0x0404, 0x040C), 0x04, "Velocity PI"),
     (range(0x040C, 0x0412), 0x04, "Yaw PI"),
     (range(0x0412, 0x0415), 0x04, "Feedforward"),
-    (range(0x0415, 0x0420), 0x04, "Jump"),
+    # One panel spanning both ID blocks — see _JUMP_PARAM_IDS.
+    (_JUMP_PARAM_IDS, 0x04, "Jump"),
     (frozenset({0x0401, 0x0420, 0x0421, 0x0422}), 0x04, "Sim Injection"),
     (_ROLL_CONTROL_OVERRIDE_PARAM_IDS, 0x04, "Roll"),
     (range(0x043E, 0x0446), 0x04, "Pitch Envelope"),  # theta_max_*, pitch_wd_* (fwd/bwd x ret/ext)

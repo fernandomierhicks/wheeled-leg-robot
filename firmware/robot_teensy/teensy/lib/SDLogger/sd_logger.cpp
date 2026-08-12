@@ -131,7 +131,7 @@ static void emit_status(uint16_t idx, uint8_t status) {
 
 // Unlike emit_status() (an ack tied to whichever command asked for it), these
 // are unsolicited so a trigger source with no round-trip ack of its own — e.g.
-// the CH6 radio switch in teensy/src/main.cpp — still tells listeners (ESP32
+// the CH5 radio switch in teensy/src/main.cpp — still tells listeners (ESP32
 // display/LED) that a recording is genuinely active.
 static void emit_started(uint16_t idx, uint32_t duration_ms) {
     if (!g_sender) return;

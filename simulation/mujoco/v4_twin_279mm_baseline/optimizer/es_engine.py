@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 import multiprocessing
+from multiprocessing.dummy import Pool as ThreadPool
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -49,6 +50,7 @@ class ESConfig:
     restart_patience: int | None = None  # stagnant gens → random restart (None = patience // 2)
     max_restarts: int = 10          # cap on total restarts per run
     n_workers: int | None = None    # None → min(lambda_, cpu_count)
+    use_threads: bool = False       # avoid Windows spawn for frozen-input runs
     rng_seed: int | None = None
 
 
@@ -201,7 +203,8 @@ class ESOptimizer:
         self._print_banner(hours, max_iters)
 
         # ── Main loop ────────────────────────────────────────────────────────
-        with multiprocessing.Pool(processes=self.cfg.n_workers) as pool:
+        pool_class = ThreadPool if self.cfg.use_threads else multiprocessing.Pool
+        with pool_class(processes=self.cfg.n_workers) as pool:
             while True:
                 # Honour play/pause
                 if self.pause_fn is not None:

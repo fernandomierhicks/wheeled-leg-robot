@@ -1048,7 +1048,9 @@ static constexpr uint32_t RESCUE_REBOOT_CHIME_MS = 500;  // blocking pump so the
 
 // ── Live parameter tuning (live_tune.h) ────────────────────────────────────────
 // CH7/CH8 knob -> param mapping, grouped in threes by the CH5/CH6 switch
-// combination (see "gain-group select" in radio_update()):
+// combination. Reachable only with PARAM_LIVE_TUNE_MULTI_EN = 1 (LEGACY); in
+// the default SIMPLE mode CH5/CH6 are the SD-log and jump switches and live
+// tuning is inactive. See "gain-group select" in radio_update().
 //   group 0: CH5 down, CH6 up   -> LQR pitch/rate (retracted)
 //   group 1: CH5 up,   CH6 down -> vel_pi KP/KI
 //   group 2: CH5 down, CH6 down -> roll KP/KD
@@ -1109,11 +1111,13 @@ float live_tune_value(uint16_t persist_param_id) {
 // ── Radio interpretation ───────────────────────────────────────────────────────
 // CH10 > 1990: arm into RUNNING (requires prior calibration).
 // CH10 drop:   disarm back to STANDBY.
-// CH5  > 1990: trigger CALIBRATION only after a live, debounced CH5-low
-//               followed by a rising edge while in STANDBY.
-// CH5 drop:    gracefully cancel a radio-triggered calibration via DISARMING.
-// CH5/CH6 (while RUNNING): debounced switch combination selects which
-//               live-tune gain group CH7/CH8 drive -- see LIVE_TUNE_SLOTS.
+// Calibration stick combo (CH1/CH4 full up, CH2/CH3 full down): trigger
+//               CALIBRATION from STANDBY; re-enter it to cancel.
+// CH5  > 1990: start SD logging (SIMPLE mode); drop stops it.
+// CH6  > 1990: trigger a JUMP from RUNNING (SIMPLE mode), one per rising edge.
+// CH5/CH6 (while RUNNING, LEGACY mode only): debounced switch combination
+//               selects which live-tune gain group CH7/CH8 drive -- see
+//               LIVE_TUNE_SLOTS. In LEGACY mode CH5/CH6 drive nothing else.
 // CH3 1000–2000: maps to PARAM_RADIO_HIP_CMD as t ∈ [0,1].
 //   Left stale when radio is dead.
 
@@ -1281,22 +1285,14 @@ static void radio_update() {
             comm_log(LOG_LEVEL_INFO, "Radio: soft-clear ESTOP [0x%02X]", g_state.fault_code);
             stateMachine_request_soft_clear();
         } else if (g_state.state == STATE_STANDBY) {
-            if (ch5 > 1990) {
-                // CH5 up in RUNNING means "live pitch-trim mode"; refuse to arm
-                // into RUNNING with it already raised so the operator can't enter
-                // trim mode by accident on the same flip that arms.
-                comm_log(LOG_LEVEL_WARN,
-                         "Radio: arm denied — calibration switch (CH5) active; lower it before arming");
-                g_buzzer.play(ARM_IGNORED_MELODY, sizeof(ARM_IGNORED_MELODY) / sizeof(ARM_IGNORED_MELODY[0]));
-                s_profile_flash_rgb[0] = 255; s_profile_flash_rgb[1] = 0; s_profile_flash_rgb[2] = 255;
-                s_profile_flash_until_ms = millis() + 200;
-            } else {
-                bool accepted = stateMachine_request_running();
-                if (accepted) {
-                    s_arm_authority = ArmAuthority::RADIO;
-                    comm_log(LOG_LEVEL_INFO,
-                             "ARM authority=RADIO: live CH10 HIGH -> RUNNING");
-                }
+            // No CH5 interlock here any more: CH5 is the SD-log switch, and
+            // arming with a log already running is exactly the intended order
+            // ("start the log before arming").
+            bool accepted = stateMachine_request_running();
+            if (accepted) {
+                s_arm_authority = ArmAuthority::RADIO;
+                comm_log(LOG_LEVEL_INFO,
+                         "ARM authority=RADIO: live CH10 HIGH -> RUNNING");
             }
         } else {
             // stateMachine_request_running() only latches from STANDBY, so a flip
@@ -1334,31 +1330,50 @@ static void radio_update() {
         s_disarm_req_sent = true;
     }
 
-    // Debounce CH5 symmetrically. Loss of the radio link is neutral: it does
-    // not masquerade as an operator-requested calibration abort.
-    static constexpr uint8_t CALIB_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
-    static uint8_t s_calib_hi_ticks = 0;
-    static uint8_t s_calib_lo_ticks = 0;
-    static bool s_calib_switch_high = false;
-    // Startup/link acquisition is an unknown switch state, not an OFF state.
-    // Require a debounced low before accepting the next high edge so powering
-    // up or reconnecting with CH5 already high cannot start calibration.
-    static bool s_calib_low_seen = false;
-    static bool s_radio_calib_owned = false;
-    static bool s_radio_calib_entered = false;
+    // ── Calibration stick combo: STANDBY -> CALIBRATION, re-enter to cancel ───
+    // CH1 + CH4 pinned full up, CH2 + CH3 pinned full down — the exact mirror of
+    // the rescue combo above, so the two stick positions are mutually exclusive
+    // and can never be satisfied on the same tick. This replaces the old CH5
+    // switch, which is now the SD-log switch.
+    //
+    // Armed only in STANDBY (to start) and CALIBRATION (to cancel) —
+    // deliberately NOT in ESTOP, so in a fault state the rescue combo is the
+    // only live stick gesture and the two can't be confused under pressure.
+    //
+    // One-shot on the debounced rising edge. Re-entering the combo while a
+    // radio-started calibration is still running cancels it through DISARMING:
+    // a momentary combo has no "switch low" to fall back on, so this is the
+    // only radio-side abort. CALIB_COMBO_LOCKOUT_MS then blocks a second action
+    // for a second, so a stick glitch part-way through a deliberate hold can't
+    // start a calibration and immediately cancel it again.
+    //
+    // Every term is guarded by `alive`: channel() returns 0 on signal loss, so
+    // without it a dead radio would satisfy both stick-low tests for free.
+    // A dead radio reads as "combo released", which is inert — only rising
+    // edges act, so link loss can never imitate an operator request.
+    static constexpr uint8_t  CALIB_DEBOUNCE_TICKS  = 3;     // ~6 ms @ 500 Hz
+    static constexpr uint32_t CALIB_COMBO_LOCKOUT_MS = 1000;
+    static uint8_t  s_calib_hi_ticks = 0;
+    static uint8_t  s_calib_lo_ticks = 0;
+    static bool     s_calib_combo_held = false;
+    // Startup/link acquisition is an unknown stick position, not a released
+    // one. Require a debounced release before accepting the next rising edge
+    // so powering up or reconnecting with the sticks already in the combo
+    // cannot start a calibration.
+    static bool     s_calib_low_seen = false;
+    static uint32_t s_calib_lockout_until_ms = 0;
+    static bool     s_radio_calib_owned = false;
+    static bool     s_radio_calib_entered = false;
 
-    const bool calib_hi_raw = alive && (ch5 > 1990);
-    const bool calib_lo_raw = alive && (ch5 <= 1990);
-    if (calib_hi_raw) {
+    const bool calib_raw = alive &&
+                           g_ibus.channel(1) > 1990 && g_ibus.channel(4) > 1990 &&
+                           g_ibus.channel(2) < 1010 && g_ibus.channel(3) < 1010;
+    if (calib_raw) {
         if (s_calib_hi_ticks < CALIB_DEBOUNCE_TICKS) s_calib_hi_ticks++;
         s_calib_lo_ticks = 0;
-    } else if (calib_lo_raw) {
+    } else {
         if (s_calib_lo_ticks < CALIB_DEBOUNCE_TICKS) s_calib_lo_ticks++;
         s_calib_hi_ticks = 0;
-    } else {
-        s_calib_hi_ticks = 0;
-        s_calib_lo_ticks = 0;
-        s_calib_low_seen = false;
     }
 
     if (s_radio_calib_owned && g_state.state == STATE_CALIBRATION)
@@ -1369,43 +1384,64 @@ static void radio_update() {
         s_radio_calib_entered = false;
     }
 
-    if (s_calib_lo_ticks >= CALIB_DEBOUNCE_TICKS)
-        s_calib_low_seen = true;
+    if (s_calib_lo_ticks >= CALIB_DEBOUNCE_TICKS) {
+        s_calib_low_seen   = true;
+        s_calib_combo_held = false;
+    }
 
-    if (s_calib_hi_ticks >= CALIB_DEBOUNCE_TICKS &&
-        !s_calib_switch_high) {
-        s_calib_switch_high = true;
-        const bool valid_off_to_on_transition = s_calib_low_seen;
-        // Consume the gate on every rising edge. If that edge occurred outside
-        // STANDBY, the operator must switch OFF then ON again once ready.
+    if (s_calib_hi_ticks >= CALIB_DEBOUNCE_TICKS && !s_calib_combo_held) {
+        s_calib_combo_held = true;
+        const bool valid_edge = s_calib_low_seen;
+        // Consume the gate on every rising edge, so an edge taken outside
+        // STANDBY/CALIBRATION still costs the operator a release-and-retry.
         s_calib_low_seen = false;
-        if (valid_off_to_on_transition && g_state.state == STATE_STANDBY) {
-            comm_log(LOG_LEVEL_INFO, "Radio: calibration switch ACTIVE");
+        const bool locked_out = (int32_t)(millis() - s_calib_lockout_until_ms) < 0;
+        if (valid_edge && !locked_out && g_state.state == STATE_STANDBY) {
+            comm_log(LOG_LEVEL_INFO, "Radio: calibration combo -> CALIBRATION");
             if (stateMachine_request_calibration()) {
                 s_radio_calib_owned = true;
                 s_radio_calib_entered = false;
+                s_calib_lockout_until_ms = millis() + CALIB_COMBO_LOCKOUT_MS;
             }
-        } else if (!valid_off_to_on_transition &&
-                   g_state.state == STATE_STANDBY) {
+        } else if (valid_edge && !locked_out &&
+                   g_state.state == STATE_CALIBRATION && s_radio_calib_owned) {
             comm_log(LOG_LEVEL_WARN,
-                     "Radio: calibration ignored; switch OFF then ON");
-        }
-    }
-    if (s_calib_lo_ticks >= CALIB_DEBOUNCE_TICKS &&
-        s_calib_switch_high) {
-        s_calib_switch_high = false;
-        if (s_radio_calib_owned && g_state.state == STATE_CALIBRATION) {
-            comm_log(LOG_LEVEL_WARN,
-                     "Radio: calibration switch INACTIVE -> DISARMING");
+                     "Radio: calibration combo re-entered -> DISARMING");
             stateMachine_disarm_calibration();
             s_radio_calib_owned = false;
             s_radio_calib_entered = false;
+            s_calib_lockout_until_ms = millis() + CALIB_COMBO_LOCKOUT_MS;
+        } else if (!valid_edge && g_state.state == STATE_STANDBY) {
+            comm_log(LOG_LEVEL_WARN,
+                     "Radio: calibration combo ignored; release the sticks and re-enter");
         }
     }
 
-    // CH6: debounced level, symmetric with CH5's CALIB_DEBOUNCE_TICKS pattern
-    // above. What it *drives* depends on PARAM_LIVE_TUNE_MULTI_EN:
-    //   0 (SIMPLE, default) -> CH6 is the SD-log switch, handled just below.
+    // CH5: debounced level. What it *drives* depends on PARAM_LIVE_TUNE_MULTI_EN:
+    //   0 (SIMPLE, default) -> CH5 is the SD-log switch, handled just below.
+    //   1 (LEGACY)          -> CH5 only combines with CH6 for gain-group select.
+    static constexpr uint8_t CH5_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
+    static uint8_t s_ch5_hi_ticks = 0;
+    static uint8_t s_ch5_lo_ticks = 0;
+    static bool s_ch5_switch_high = false;
+    const bool ch5_hi_raw = alive && (ch5 > 1990);
+    const bool ch5_lo_raw = alive && (ch5 <= 1990);
+    if (ch5_hi_raw) {
+        if (s_ch5_hi_ticks < CH5_DEBOUNCE_TICKS) s_ch5_hi_ticks++;
+        s_ch5_lo_ticks = 0;
+    } else if (ch5_lo_raw) {
+        if (s_ch5_lo_ticks < CH5_DEBOUNCE_TICKS) s_ch5_lo_ticks++;
+        s_ch5_hi_ticks = 0;
+    } else {
+        s_ch5_hi_ticks = 0;
+        s_ch5_lo_ticks = 0;
+    }
+    if (s_ch5_hi_ticks >= CH5_DEBOUNCE_TICKS) s_ch5_switch_high = true;
+    if (s_ch5_lo_ticks >= CH5_DEBOUNCE_TICKS) s_ch5_switch_high = false;
+
+    // CH6: debounced level, symmetric with CH5's pattern above. What it
+    // *drives* depends on PARAM_LIVE_TUNE_MULTI_EN:
+    //   0 (SIMPLE, default) -> CH6 is the jump trigger, handled just below.
     //   1 (LEGACY)          -> CH6 only combines with CH5 for gain-group select.
     static constexpr uint8_t CH6_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
     static uint8_t s_ch6_hi_ticks = 0;
@@ -1426,11 +1462,11 @@ static void radio_update() {
     if (s_ch6_hi_ticks >= CH6_DEBOUNCE_TICKS) s_ch6_switch_high = true;
     if (s_ch6_lo_ticks >= CH6_DEBOUNCE_TICKS) s_ch6_switch_high = false;
 
-    // ── CH6 as the SD-log switch (SIMPLE mode only) ───────────────────────────
+    // ── CH5 as the SD-log switch (SIMPLE mode only) ───────────────────────────
     // Edge-triggered, not level-driven: re-issuing start every tick would hammer
-    // a logger that is already running. s_ch6_log_prev starts UNKNOWN so the
-    // first debounced reading only seeds it -- otherwise the `true` init above
-    // would look like a high->low edge at boot and stop a log nobody started.
+    // a logger that is already running. s_ch5_log_prev starts UNKNOWN so the
+    // first debounced reading only seeds it -- otherwise the init above would
+    // look like an edge at boot and start/stop a log nobody asked for.
     //
     // Start is gated to STANDBY/ESTOP, matching CMD_ID_LOG's own gate: opening a
     // log preallocates and can block the loop ~96 ms, which is not something to
@@ -1438,30 +1474,57 @@ static void radio_update() {
     // through RUNNING/JUMPING/STANDING_UP; only final close is deferred until
     // the robot returns to a non-energetic state.
     if (param_get(PARAM_LIVE_TUNE_MULTI_EN) < 0.5f) {
-        static int8_t s_ch6_log_prev = -1;              // -1 unknown, 0 low, 1 high
-        const int8_t ch6_now = s_ch6_switch_high ? 1 : 0;
-        if (s_ch6_log_prev < 0) {
-            s_ch6_log_prev = ch6_now;                   // seed, never act on it
-        } else if (ch6_now != s_ch6_log_prev) {
-            s_ch6_log_prev = ch6_now;
-            if (ch6_now == 1) {
+        static int8_t s_ch5_log_prev = -1;              // -1 unknown, 0 low, 1 high
+        const int8_t ch5_now = s_ch5_switch_high ? 1 : 0;
+        if (s_ch5_log_prev < 0) {
+            s_ch5_log_prev = ch5_now;                   // seed, never act on it
+        } else if (ch5_now != s_ch5_log_prev) {
+            s_ch5_log_prev = ch5_now;
+            if (ch5_now == 1) {
                 if (g_state.state == STATE_STANDBY || g_state.state == STATE_ESTOP) {
                     const bool started = sd_logger_start(0);   // 0 = until stopped
                     forgive_sd_blocking_stall();
                     if (started) {
                         g_buzzer.play(LOG_START_CHIRP, 1);
-                        comm_log(LOG_LEVEL_INFO, "Radio: CH6 up -> SD logging STARTED");
+                        comm_log(LOG_LEVEL_INFO, "Radio: CH5 up -> SD logging STARTED");
                     } else {
-                        comm_log(LOG_LEVEL_WARN, "Radio: CH6 up -> SD log start FAILED");
+                        comm_log(LOG_LEVEL_WARN, "Radio: CH5 up -> SD log start FAILED");
                     }
                 } else {
                     comm_log(LOG_LEVEL_WARN,
-                             "Radio: CH6 up ignored -- start the log before arming");
+                             "Radio: CH5 up ignored -- start the log before arming");
                 }
             } else if (sd_logger_is_active()) {
                 sd_logger_stop();
                 forgive_sd_blocking_stall();
-                comm_log(LOG_LEVEL_INFO, "Radio: CH6 down -> SD logging STOPPED");
+                comm_log(LOG_LEVEL_INFO, "Radio: CH5 down -> SD logging STOPPED");
+            }
+        }
+    }
+
+    // ── CH6 as the jump trigger (SIMPLE mode only) ────────────────────────────
+    // One jump per debounced low->high edge: the switch must be dropped and
+    // raised again for the next one, so holding it high does not hop repeatedly.
+    // stateMachine_request_jump() is the real gate -- it refuses unless
+    // PARAM_JUMP_ENABLE is set and the state is exactly RUNNING, and logs its
+    // own reason -- so all this has to do is not re-request while held.
+    //
+    // s_ch6_jump_prev seeds UNKNOWN for the same reason the log switch does:
+    // the `true` init above would otherwise read as an edge at boot.
+    if (param_get(PARAM_LIVE_TUNE_MULTI_EN) < 0.5f) {
+        static int8_t s_ch6_jump_prev = -1;             // -1 unknown, 0 low, 1 high
+        const int8_t ch6_now = s_ch6_switch_high ? 1 : 0;
+        if (s_ch6_jump_prev < 0) {
+            s_ch6_jump_prev = ch6_now;                  // seed, never act on it
+        } else if (ch6_now != s_ch6_jump_prev) {
+            s_ch6_jump_prev = ch6_now;
+            if (ch6_now == 1) {
+                if (stateMachine_request_jump()) {
+                    comm_log(LOG_LEVEL_INFO, "Radio: CH6 up -> JUMP");
+                } else {
+                    comm_log(LOG_LEVEL_WARN,
+                             "Radio: CH6 up -> jump refused (state=%d)", (int)g_state.state);
+                }
             }
         }
     }
@@ -1567,19 +1630,19 @@ static void radio_update() {
     // see LIVE_TUNE_SLOTS above for the group table and knob-direction
     // convention, and live_tune.h for the safety rationale (pickup, latch).
     //
-    // SIMPLE (default): CH5 up alone arms group 0, which is the LQR retracted
-    // pitch/rate pair -- the only group worth a knob during single-leg-height
-    // tuning. CH6 is spent on SD logging instead of group select. Groups 1 and 2
-    // are unreachable here by design, not deleted; flip the param to get them.
+    // SIMPLE (default): live tuning is OFF. CH5 is spent on SD logging and CH6
+    // on the jump trigger, so there is no switch left to select a group with and
+    // the CH7/CH8 knobs are inert. The groups are not deleted, just unreachable;
+    // flip the param to get them back.
     //
-    // LEGACY: the original three-group combination scheme.
+    // LEGACY: the original three-group combination scheme, and the only mode in
+    // which CH5/CH6 mean gain group rather than log/jump. Bench-only by nature —
+    // a tuning session gives up radio logging and jumping to get the knobs.
     int8_t live_tune_group = -1;
     if (param_get(PARAM_LIVE_TUNE_MULTI_EN) >= 0.5f) {
-        if (!s_calib_switch_high && s_ch6_switch_high)       live_tune_group = 0;
-        else if (s_calib_switch_high && !s_ch6_switch_high)  live_tune_group = 1;
-        else if (!s_calib_switch_high && !s_ch6_switch_high) live_tune_group = 2;
-    } else if (s_calib_switch_high) {
-        live_tune_group = 0;
+        if (!s_ch5_switch_high && s_ch6_switch_high)       live_tune_group = 0;
+        else if (s_ch5_switch_high && !s_ch6_switch_high)  live_tune_group = 1;
+        else if (!s_ch5_switch_high && !s_ch6_switch_high) live_tune_group = 2;
     }
     bool live_tune_active = (g_state.state == STATE_RUNNING) && (live_tune_group >= 0);
     static constexpr float LIVE_TUNE_PICKUP_EPS = 0.01f;

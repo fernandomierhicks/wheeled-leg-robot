@@ -165,7 +165,7 @@ static volatile bool     g_banner_force_redraw  = false;
 // forward_to_teensy() — optimistic, immediate feedback for GUI-issued starts,
 // no round-trip ack needed; (2) LOG_INFO_STARTED/STOPPED from on_teensy_packet()
 // — authoritative, straight from sd_logger_start()/stop() on the Teensy, so
-// triggers with no command of their own (e.g. the CH6 radio switch) are still
+// triggers with no command of their own (e.g. the CH5 radio switch) are still
 // reflected. A duration-bound recording (the common case — see tuning.md's
 // Test Protocol) auto-stops firmware-side with no explicit STOP command ever
 // sent (mirrors sd_logger.cpp's own g_stop_deadline_ms), so g_recording_active
@@ -1029,7 +1029,7 @@ static void on_teensy_packet(uint8_t type, uint8_t version, uint8_t /*source*/,
             g_log_xfer_active = false;
         } else if (info_type == LOG_INFO_STARTED && len >= sizeof(LogInfoPayload)) {
             // Authoritative signal straight from sd_logger_start() — covers
-            // triggers with no command of their own to snoop (CH6 radio
+            // triggers with no command of their own to snoop (CH5 radio
             // switch) and also confirms/corrects the optimistic deadline the
             // CMD_ID_LOG snoop above already set for GUI-issued starts.
             uint32_t duration_ms;

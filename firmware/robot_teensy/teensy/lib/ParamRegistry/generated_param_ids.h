@@ -67,8 +67,6 @@
 #define PARAM_FF1_KT_HIP                           0x0414
 #define PARAM_JUMP_ENABLE                          0x0415
 #define PARAM_JUMP_TORQUE_MAX                      0x0416
-#define PARAM_JUMP_CROUCH_TIME_S                   0x0417
-#define PARAM_JUMP_RAMP_UP_S                       0x0418
 #define PARAM_JUMP_RAMP_DOWN_RAD                   0x0419
 #define PARAM_JUMP_OMEGA_MAX                       0x041A
 #define PARAM_JUMP_HARDSTOP_MARGIN                 0x041B
@@ -76,6 +74,13 @@
 #define PARAM_JUMP_KD                              0x041D
 #define PARAM_JUMP_EXTEND_KD                       0x041E
 #define PARAM_JUMP_EXTEND_TIMEOUT_S                0x041F
+#define PARAM_JUMP_EFFORT                          0x0531
+#define PARAM_JUMP_CROUCH_ANGLE                    0x0532
+#define PARAM_JUMP_CROUCH_SPEED                    0x0533
+#define PARAM_JUMP_EXTEND_ANGLE                    0x0534
+#define PARAM_JUMP_RETRACT_SPEED                   0x0535
+#define PARAM_JUMP_RETRACT_ANGLE                   0x0537
+#define PARAM_JUMP_TORQUE_RATE                     0x0536
 #define PARAM_ENABLE_SIM_PITCH_RAD                 0x0420
 #define PARAM_SIM_PITCH_RATE_RAD_S                 0x0421
 #define PARAM_ENABLE_SIM_PITCH_RATE                0x0422

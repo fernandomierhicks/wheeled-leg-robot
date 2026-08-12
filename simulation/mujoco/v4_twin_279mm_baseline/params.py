@@ -293,7 +293,7 @@ class S8Bump:
 
 @dataclass(frozen=True)
 class BatteryParams:
-    """6S LiPo battery model (1800 mAh, 50C cont / 100C burst, 275 g)."""
+    """6S LiPo battery model (1800 mAh, 50C cont / 100C burst, 276 g)."""
     capacity_Ah: float = 1.8
     V_full: float = 25.2           # [V] 4.2 V/cell × 6
     V_nom: float = 24.0            # [V] operating voltage (assumed fully charged, ~4.0 V/cell)
@@ -320,6 +320,17 @@ class HipMotorParams:
     impedance_torque_limit: float = 5.0   # [N·m] S8 impedance cap
     position_Kp: float = 50.0      # [N·m/rad] position servo stiffness
     position_Kd: float = 3.0       # [N·m·s/rad] position servo damping
+    # Plant-side conversion from the torque value reported/commanded through
+    # the MIT protocol to torque delivered at the simulated hip joint.  These
+    # are not controller gains.  Unity is the unfitted protocol assumption;
+    # the robot-match report may replace them from static sag/load evidence.
+    torque_scale_ret: float = 1.0
+    torque_scale_ext: float = 1.0
+
+    def torque_scale(self, alpha: float) -> float:
+        a = min(1.0, max(0.0, float(alpha)))
+        return self.torque_scale_ret + a * (
+            self.torque_scale_ext - self.torque_scale_ret)
 
     @property
     def Kt_output(self) -> float:
@@ -340,6 +351,10 @@ class WheelMotorParams:
     """Maytech MTO5065-70-HA-C direct drive."""
     KV: float = 70.0               # [RPM/V]
     current_limit: float = 50.0    # [A] ODESC limit
+    # Torque constant stored in ODrive.  Torque-mode commands are converted to
+    # current with this value, so it need not equal the motor's physical Kt.
+    odrive_torque_constant: float = field(
+        default_factory=lambda: 9.55 / 70.0)  # [N·m/A]
 
     @property
     def Kt(self) -> float:
@@ -350,6 +365,18 @@ class WheelMotorParams:
     def torque_limit(self) -> float:
         """Peak torque [N·m] = Kt × I_max."""
         return self.Kt * self.current_limit
+
+    @property
+    def command_torque_scale(self) -> float:
+        """Physical shaft torque per ODrive input-torque unit.
+
+        ODrive converts an input torque to q-axis current using its configured
+        torque constant.  The physical motor then produces current times its
+        actual Kt, giving this ratio.
+        """
+        if self.odrive_torque_constant <= 0.0:
+            return 1.0
+        return self.Kt / self.odrive_torque_constant
 
     def omega_noload(self, v_batt: float) -> float:
         """No-load speed [rad/s] at given battery voltage."""
@@ -391,16 +418,32 @@ class RobotGeometry:
     F_Z_A: float = +0.037537        # [m] F Z relative to A
     A_Z: float = -0.0235            # [m] hip shaft A below body centre; unverified
 
-    # Catalog/CAD mass prior. T0.1 replaces the aggregate values with scale data.
-    # Tube masses use 6061 density=2700 kg/m^3 and the v4 centreline lengths.
-    m_box: float = 0.985            # [kg] itemised COMPONENTS.md body contents
-    m_femur: float = 0.020684097    # [kg] 14x1 mm tube, A-C=187.577 mm
-    m_tibia: float = 0.028617429    # [kg] 16x1 mm tube, C-W chord + C-E stub
-    m_coupler: float = 0.012942497  # [kg] 10x1 mm tube, F-E=169.536 mm
-    m_bearing: float = 0.0175       # [kg] equivalent lump; 8 lumps = 140 g BOM total
-    wheel_motor_mass: float = 0.450 # [kg] Maytech MTO5065 catalog mass
-    wheel_print_mass: float = 0.070 # [kg] BOM prior; v4 wheel has not been re-sliced
-    m_wheel: float = 0.520          # [kg] translating assembly prior per side
+    # 2026-08-09 as-built scale measurements. The complete robot was 3.242 kg
+    # without its 0.276 kg battery. Known parts account for 2.589 kg, including
+    # the existing 0.260 kg catalog value for each AK45; the 0.653 kg remainder
+    # (fasteners, shafts, mounts, wiring, etc.) is carried as an effective mass
+    # on the femur bodies because that placement best matches the two valid
+    # static balance plateaus. Measured printed-link masses remain explicit.
+    m_box: float = 0.505             # [kg] electronics/body box, no battery
+    m_battery: float = 0.276         # [kg] removable 6S battery
+    box_cg_x: float = 0.0            # [m] electronics-box CoM; +X is forward
+    box_cg_z: float = 0.0            # [m] electronics-box CoM; +Z is upward
+    battery_cg_x: float = 0.010      # [m] front-most position within chassis
+    battery_cg_z: float = -0.034     # [m] bottom-most position within chassis
+    measured_femur_mass: float = 0.040   # [kg] PLA femur, each
+    measured_tibia_mass: float = 0.085   # [kg] PLA dogleg, each
+    measured_coupler_mass: float = 0.035 # [kg] PLA coupler, each
+    unassigned_mass: float = 0.653       # [kg] whole-robot residual
+    m_femur: float = 0.3665          # [kg] effective each: 40 g + 326.5 g residual
+    m_tibia: float = 0.085           # [kg] effective each
+    m_coupler: float = 0.035         # [kg] effective each
+    m_bearing: float = 0.018         # [kg] measured 6804 bearing
+    bearings_per_leg: int = 8        # 4 on coupler + 4 on tibia
+    wheel_motor_mass: float = 0.418  # [kg] measured Maytech motor, each
+    wheel_tpu_mass: float = 0.029    # [kg] measured TPU tyre, each
+    wheel_rim_mass: float = 0.031    # [kg] measured PLA rim, each
+    wheel_print_mass: float = 0.060  # [kg] TPU + PLA, each
+    m_wheel: float = 0.478           # [kg] complete translating wheel assembly
 
     wheel_r: float = 0.056          # [m] wheel radius (112 mm OD)
     leg_y: float = 0.1430           # [m] Y-offset of leg plane from body centre
@@ -408,15 +451,20 @@ class RobotGeometry:
 
     @property
     def body_mass_excluding_wheels(self) -> float:
-        """Catalog/CAD body prior using the same eight bearing lumps as MuJoCo."""
-        return (self.m_box
+        """As-built body mass including battery but excluding both wheels."""
+        return (self.m_box + self.m_battery
                 + 2.0 * (self.motor_mass + self.m_femur + self.m_tibia
                          + self.m_coupler)
-                + 8.0 * self.m_bearing)
+                + 2.0 * self.bearings_per_leg * self.m_bearing)
+
+    @property
+    def total_mass_without_battery(self) -> float:
+        """Measured complete-robot mass with the removable battery absent."""
+        return self.body_mass_excluding_wheels - self.m_battery + 2.0 * self.m_wheel
 
     @property
     def total_mass(self) -> float:
-        """Catalog/CAD whole-robot prior, including both wheel assemblies."""
+        """As-built whole-robot mass including the battery and both wheels."""
         return self.body_mass_excluding_wheels + 2.0 * self.m_wheel
 
     # CAD hard stops in the firmware physical convention: zero is a horizontal
@@ -455,8 +503,12 @@ class RobotGeometry:
             L_femur=self.L_femur, L_stub=self.L_stub, L_tibia=self.L_tibia,
             w_perp=self.w_perp, Lc=self.Lc,
             F_X=self.F_X, F_Z=self.F_Z, A_Z=self.A_Z,
-            m_box=self.m_box, m_femur=self.m_femur, m_tibia=self.m_tibia,
-            m_coupler=self.m_coupler, m_bearing=self.m_bearing, m_wheel=self.m_wheel,
+            m_box=self.m_box, m_battery=self.m_battery,
+            box_cg_x=self.box_cg_x, box_cg_z=self.box_cg_z,
+            battery_cg_x=self.battery_cg_x, battery_cg_z=self.battery_cg_z,
+            m_femur=self.m_femur, m_tibia=self.m_tibia,
+            m_coupler=self.m_coupler, m_bearing=self.m_bearing,
+            bearings_per_leg=self.bearings_per_leg, m_wheel=self.m_wheel,
         )
 
 
@@ -478,6 +530,10 @@ class SimParams:
     limits: HardwareLimits = field(default_factory=HardwareLimits)
     thresholds: MetricThresholds = field(default_factory=MetricThresholds)
     scenarios: ScenarioTimings = field(default_factory=ScenarioTimings)
+    # Exact firmware parameter snapshot used by the firmware-equivalent path.
+    # Tuples keep the top-level parameter object immutable/hash-friendly.
+    firmware_params: Tuple[Tuple[str, float], ...] = ()
+    robot_match_source: str = "base CAD/catalog priors"
     s5_bumps: Tuple[S5Bump, ...] = field(default_factory=lambda: (
         S5Bump(0.8, 0.01), S5Bump(2.0, 0.03), S5Bump(3.5, 0.01),
         S5Bump(-0.8, 0.03), S5Bump(-2.0, 0.01),

@@ -2460,8 +2460,7 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
 
         # Half of body weight on one leg (gravity load)
         g = 9.81
-        m_total = (_rg['m_box'] + 2 * _rg['m_femur'] + 2 * _rg['m_tibia']
-                   + 2 * _rg['m_coupler'] + 2 * _rg['m_wheel'])
+        m_total = _rg['m_total']
         W_leg = m_total * g / 2.0  # weight per leg
 
         # IK to get pivot positions
@@ -2909,8 +2908,10 @@ def _robot_geom_dict(params) -> dict:
         L_femur=r.L_femur, L_stub=r.L_stub, L_tibia=r.L_tibia,
         Lc=r.Lc, F_X=r.F_X, F_Z=r.F_Z, A_Z=r.A_Z,
         wheel_r=r.wheel_r, leg_y=r.leg_y,
-        m_box=r.m_box, m_femur=r.m_femur, m_tibia=r.m_tibia,
+        m_box=r.m_box, m_battery=r.m_battery,
+        m_femur=r.m_femur, m_tibia=r.m_tibia,
         m_coupler=r.m_coupler, m_wheel=r.m_wheel,
+        m_total=r.total_mass,
         Kt_hip=m.hip.Kt_output, Kt_wheel=m.wheel.Kt,
         I_max_hip=params.limits.max_motor_current_hip,
         I_max_wheel=params.limits.max_motor_current_wheel,
@@ -2968,6 +2969,9 @@ def sandbox(rng_seed: int = 0):
 
     params = DEFAULT_PARAMS
     robot = params.robot
+    _firmware_limits = dict(params.firmware_params)
+    _joy_vel_max = _firmware_limits["profile3_vel_max"]
+    _joy_yaw_max = _firmware_limits["profile3_yaw_max"]
     world = sandbox_world()
 
     print("  Building sandbox arena ...")
@@ -3187,8 +3191,8 @@ def sandbox(rng_seed: int = 0):
                 raw_w = _joy_axes.get(2, 0.0)   # right stick X
                 raw_h = _joy_axes.get(3, 0.0)   # right stick Y
 
-                _v_desired[0] = (-raw_v * 3.0) if abs(raw_v) > JOY_DEADZONE else 0.0
-                _omega_desired[0] = (-raw_w * 5.0) if abs(raw_w) > JOY_DEADZONE else 0.0
+                _v_desired[0] = (-raw_v * _joy_vel_max) if abs(raw_v) > JOY_DEADZONE else 0.0
+                _omega_desired[0] = (-raw_w * _joy_yaw_max) if abs(raw_w) > JOY_DEADZONE else 0.0
                 if abs(raw_h) > JOY_DEADZONE:
                     clamped_h = max(-JOY_HIP_SATURATION, min(JOY_HIP_SATURATION, raw_h))
                     _hip_pct[0] = (JOY_HIP_SATURATION + clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0
@@ -3347,6 +3351,9 @@ def run_unified(initial_scenario: str = "sandbox",
 
     params = DEFAULT_PARAMS
     robot  = params.robot
+    _firmware_limits = dict(params.firmware_params)
+    _joy_vel_max = _firmware_limits["profile3_vel_max"]
+    _joy_yaw_max = _firmware_limits["profile3_yaw_max"]
 
     # ── Gamepad init (once, survives all switches) ────────────────────────────
     JOY_DEADZONE = 0.08
@@ -3450,11 +3457,16 @@ def run_unified(initial_scenario: str = "sandbox",
     user_quit = False
 
     while not user_quit:
-        # Reload params.py on every world rebuild so optimizer changes are picked up
+        # Reload the base dataclasses and robot-match layer on every world
+        # rebuild so exported firmware values and optimizer changes are picked up.
         import importlib
         import v4_twin_279mm_baseline.params as _params_mod
+        import v4_twin_279mm_baseline.robot_match as _robot_match_mod
+        import v4_twin_279mm_baseline.defaults as _defaults_mod
         importlib.reload(_params_mod)
-        params = _params_mod.SimParams()
+        importlib.reload(_robot_match_mod)
+        importlib.reload(_defaults_mod)
+        params = _defaults_mod.DEFAULT_PARAMS
 
         cfg, world, title = _resolve(current_key)
 
@@ -3673,8 +3685,8 @@ def run_unified(initial_scenario: str = "sandbox",
                     raw_v = _joy_axes.get(1, 0.0)
                     raw_w = _joy_axes.get(2, 0.0)
                     raw_h = _joy_axes.get(3, 0.0)
-                    _v_desired[0]     = (-raw_v * 3.0) if abs(raw_v) > JOY_DEADZONE else 0.0
-                    _omega_desired[0] = (-raw_w * 5.0) if abs(raw_w) > JOY_DEADZONE else 0.0
+                    _v_desired[0] = (-raw_v * _joy_vel_max) if abs(raw_v) > JOY_DEADZONE else 0.0
+                    _omega_desired[0] = (-raw_w * _joy_yaw_max) if abs(raw_w) > JOY_DEADZONE else 0.0
                     if abs(raw_h) > JOY_DEADZONE:
                         clamped_h = max(-JOY_HIP_SATURATION, min(JOY_HIP_SATURATION, raw_h))
                         _hip_pct[0] = (JOY_HIP_SATURATION + clamped_h) / (2.0 * JOY_HIP_SATURATION) * 100.0

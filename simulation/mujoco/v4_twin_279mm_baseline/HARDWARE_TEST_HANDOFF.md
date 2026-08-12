@@ -7,43 +7,87 @@ Work through the tests one at a time. Do not start a dynamic test until its
 setup, physical restraints, ESTOP access, expected range, and abort condition
 have been reviewed together.
 
-## First test: T0.1 mass inventory
+## T0.1 mass inventory — complete from 2026-08-09 scale data
 
-This is the safest starting point and needs no powered robot.
+The twin now closes to 3.242 kg without the 0.276 kg battery and 3.518 kg in
+driving configuration. Each wheel assembly is 0.478 kg. Body mass excluding
+wheels is 2.562 kg. Individual measured values and the explicit 0.653 kg
+unweighed residual are recorded in `components/COMPONENTS.md` and
+`robot_match.json`.
 
-Purpose: replace the source-based `PlantParams.body_mass_kg=1.769488` prior and
-the 520 g removable-wheel prior with as-built scale measurements. Both remain
-explicitly provisional.
+The residual is currently assigned to the femur bodies as an equivalent
+inertial placement because that best fits the available static log plateaus.
+This closes total mass but does not identify true mass distribution.
 
-Equipment: a scale with at least 1 g resolution (or record its resolution if
-coarser), a tray/tare container if loose parts cannot sit securely, and a way to
-record each item.
+## Next test: T0.2 CG measurement
 
-Procedure:
+Use the measured 3.518 kg driving mass and the actual available scales to plan
+the two-support weight-split measurement. The highest-value result is CG versus
+leg-height alpha; it will replace the fitted battery/residual placement without
+requiring any powered balance test.
 
-1. Power the robot off and disconnect the battery.
-2. Weigh the complete assembled robot with battery and all wiring in the exact
-   intended driving configuration. Record the value and scale resolution.
-3. If possible, separately weigh left wheel assembly, right wheel assembly,
-   battery, body/electronics box, each femur, each tibia/dogleg, and each
-   coupler. Do not disassemble anything merely to obtain a component mass.
-4. Repeat the complete-robot measurement three times after lifting and
-   replacing it on the scale.
-5. Record the three totals and any component values in a message or CSV. Also
-   note anything intentionally absent (covers, fasteners, payload, etc.).
+## Controller lock and offline replay
 
-Acceptance: the three complete totals should span no more than twice the scale
-resolution. If they do, reposition the robot and repeat before changing the
-twin.
+Plant fitting did not change controller gains. The current twin is locked to
+all 155 values in `software/gui/parameter_exports/Default gains.json` with
+SHA-256 `d5dcda03206f705eb5442e2dc90d2004474293d48015b2586681b063825a427e`.
+The direct replay separately uses the exact parameter sidecar captured with the
+run (hash `e5a5dc827750d38dd07eea0e8bbf4ef505623e07c0f03e26adcf58f0209d990d`).
+The meaningful historical-sidecar/current-export differences are
+`jump_ext_timeout=0.15/0.2`, `jump_torque_max=0/7`, `roll_ki=0/0.1`, and
+`roll_offset_max=0.15/0.30` (run/export). Jump was inactive in the reference
+balance run, and roll control was disabled in both snapshots.
 
-After T0.1, the next hands-on test is T0.2 CG measurement. It should be planned
-from the measured mass and actual available scales rather than improvised now.
+The reference WLOG now replays directly through MuJoCo with 100% RUNNING-command
+coverage. In 2 s closed-loop reset windows, pitch RMSE is 2.11 degrees,
+wheel-speed RMSE is 0.136 m/s, yaw-rate RMSE is 0.221 rad/s, and local
+wheel/yaw-dead-reckoned XY RMSE is 0.102 m. This supports similar short-horizon
+response, not calibrated long-distance path prediction; WLOG contains no
+independent global position.
+
+Hip sag/load fitting is plant-side only. The provisional reported-to-physical
+joint-torque scale is 1.25 at retraction and 0.5927 at extension while the
+logged hip gains/feedforward remain fixed. The retraction value hits its fit
+bound, so this curve must not be treated as measured gearbox efficiency.
+
+## Simulation-only robust gain candidate
+
+The offline MuJoCo optimizer tuned 27 parameters across the LQR, velocity,
+yaw, running hip, roll/differential hip, and FF1/FF2 loops. It did not change
+the plant, trims, watchdogs, torque limits, command limits, or jump controller.
+The final candidate passed all 49 combinations of seven scenarios and seven
+plant variations with zero falls or policy failures. Robust fitness improved
+from 2.6854 to 1.3070, and worst pitch RMS improved from 7.82 to 2.94 degrees.
+
+The GUI-compatible candidate is
+`software/gui/parameter_exports/Robust_balance_candidate_2026-08-11.json`
+(155 parameters, SHA-256
+`195f3d6b2ca125e00d22b56c4b9d64ae6d974c68ad2f6a057111d119d347cdd1`).
+It has not been sent to the robot. Do not apply it as a batch while the fitted
+CG, pitch inertia, wheel torque scale/delay, friction, and hip transmission are
+still provisional.
+
+The simulated high-gain boundary agrees qualitatively with the real report:
+the candidate passes its LQR scale sweep at 0.5x and 1.0x, but 1.5x already
+exceeds the 35 degree/s pitch-rate RMS guard in 11 cases and exceeds 50% wheel
+torque saturation in one case. Larger factors fail more cases. Do not increase
+the candidate LQR gains further.
+
+The apparent workaround is coordinated tuning, not simply raising LQR gains:
+the optimizer increased hip damping, reduced velocity proportional action,
+added velocity feedforward, and reduced static hip feedforward while increasing
+pitch feedback. The hip changes are the least transferable part because the
+hip plant is fitted from only two loaded equilibrium anchors. Complete T0.2,
+T1.1, T2.1/T2.2, and T2.3/T2.4 before treating this set as a hardware candidate.
+When hardware validation is eventually authorized, first review a dry-run diff
+and use restraint/ESTOP with one controller group at a time.
 
 ## Build and offline status
 
 - Protocol generation/check: pass.
 - Generated twin params check: pass.
-- Twin + SIL tests: 26 pass.
+- Twin + SIL + shared log-analysis tests: 50 pass.
+- Complete GUI suite: 84 tests and 26 subtests pass.
 - Teensy 4.1 release build: pass.
 - ESP32 release build: pass.
 - GUI WLOG decoder and metrics on twin output: pass.

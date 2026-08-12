@@ -932,46 +932,20 @@
       "flags": [
         "persistent"
       ],
-      "description": "Master gate for jump sequence: 0 = no-op, 1 = execute."
+      "description": "Master gate. 0 = SET_MODE(JUMPING) and the CH6 trigger are both refused and the state is never entered. 1 = armed. Independent of jump_effort, which must ALSO be non-zero for any push to happen."
     },
     {
       "symbol": "PARAM_JUMP_TORQUE_MAX",
       "id": 1046,
       "group": "GROUP_CONTROL",
       "name": "jump_torque_max",
-      "default": 0.0,
+      "default": 7.0,
       "min": 0.0,
       "max": 8.0,
       "flags": [
         "persistent"
       ],
-      "description": "Max hip feedforward torque during EXTEND [N·m]; ramp up from 0. Full scale is the AK45-10 MIT torque range (±8 N·m); larger values cannot be encoded."
-    },
-    {
-      "symbol": "PARAM_JUMP_CROUCH_TIME_S",
-      "id": 1047,
-      "group": "GROUP_CONTROL",
-      "name": "jump_crouch_time",
-      "default": 0.3,
-      "min": 0.05,
-      "max": 1.0,
-      "flags": [
-        "persistent"
-      ],
-      "description": "CROUCH phase duration [s]."
-    },
-    {
-      "symbol": "PARAM_JUMP_RAMP_UP_S",
-      "id": 1048,
-      "group": "GROUP_CONTROL",
-      "name": "jump_ramp_up",
-      "default": 0.05,
-      "min": 0.005,
-      "max": 0.5,
-      "flags": [
-        "persistent"
-      ],
-      "description": "EXTEND torque softstart duration [s]."
+      "description": "EXTEND hip torque CEILING [N·m]. Commanded torque is jump_torque_max * jump_effort, and during EXTEND kp=0, so that product is the ONLY thing holding the leg up. Increase -> harder push available. Decrease -> weaker push, but NOT a gentler jump: below roughly 3.5 N·m the leg cannot support the robot and collapses onto the retract stop instead of extending. Default 7.0 is the AK45-10 peak; set it once and sweep jump_effort instead. Above 8 cannot be encoded by the MIT protocol."
     },
     {
       "symbol": "PARAM_JUMP_RAMP_DOWN_RAD",
@@ -984,7 +958,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Torque→zero zone near the extended limit [rad]."
+      "description": "Torque taper WIDTH approaching jump_extend_angle [rad; GUI shows deg]. Torque scales linearly from full at (jump_extend_angle - this) down to zero exactly at jump_extend_angle, so the push eases off instead of stopping dead. Increase -> torque eases off earlier and over a longer distance: softer arrival, less shock into the linkage, slightly lower jump. Decrease -> full torque held closer to the target then cut abruptly: higher jump, harsher stop."
     },
     {
       "symbol": "PARAM_JUMP_OMEGA_MAX",
@@ -997,7 +971,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Hip velocity above which feedforward torque fades to 0 [rad/s]. Compared against reported hip velocity, whose full scale is the AK45-10 MIT speed range (±20 rad/s)."
+      "description": "Hip speed at which EXTEND torque has faded to ZERO [rad/s; GUI shows deg/s]. Torque is multiplied by (1 - |hip speed| / this), so the faster the leg swings the less torque it gets - a stand-in for the motor's real torque-speed droop, and the cleanest single knob for capping jump height. Peak vertical speed is roughly this * 0.19 m per rad. Increase -> torque sustained to higher leg speeds, faster extension, higher jump. Decrease -> torque cuts out sooner, lower jump; down near 2-3 rad/s the leg barely moves at all."
     },
     {
       "symbol": "PARAM_JUMP_HARDSTOP_MARGIN",
@@ -1010,7 +984,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Hard cutoff margin from the configured extended hip software limit [rad]."
+      "description": "Hard cutoff distance from the CALIBRATED EXTENDED LIMIT [rad; GUI shows deg]. Torque is zeroed outright - and EXTEND ends - whenever either hip comes within this of that limit. A mechanical backstop independent of jump_extend_angle, so a mis-set extend target cannot drive the linkage into its stop, which sits essentially on the 4-bar singularity. Increase -> bigger safety buffer, push stops further out, less usable stroke. Decrease -> more stroke available, less protection against overshoot at speed."
     },
     {
       "symbol": "PARAM_JUMP_KP",
@@ -1023,7 +997,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Position gain for CROUCH/RETRACT phases."
+      "description": "Hip position gain for CROUCH, RETRACT and the JP_DONE landing hold. NOT used in EXTEND, where kp is forced to 0. Increase -> tighter tracking of the crouch and tuck ramps and a stiffer landing, but a bigger stiffness step away from hip_running_kp on entry and more impact transmitted to the body. Decrease -> softer and more compliant, with more sag under the leg's static load (sag = holding torque / kp)."
     },
     {
       "symbol": "PARAM_JUMP_KD",
@@ -1036,7 +1010,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Damping for CROUCH/RETRACT phases."
+      "description": "Hip damping for CROUCH, RETRACT and JP_DONE. Increase -> better damped, less overshoot and ringing at the ends of the ramps, but more resistance to fast motion. Decrease -> livelier response, may ring against jump_kp."
     },
     {
       "symbol": "PARAM_JUMP_EXTEND_KD",
@@ -1049,20 +1023,109 @@
       "flags": [
         "persistent"
       ],
-      "description": "Small damping during EXTEND (electrical damping only)."
+      "description": "Hip damping during EXTEND only, where kp=0 makes this the sole feedback term. Increase -> more resistance to the leg accelerating: gentler, lower jump, less slam into the extend end. Decrease -> freer acceleration, higher jump, harsher arrival. Keep it small - it subtracts directly from the push."
     },
     {
       "symbol": "PARAM_JUMP_EXTEND_TIMEOUT_S",
       "id": 1055,
       "group": "GROUP_CONTROL",
       "name": "jump_ext_timeout",
-      "default": 0.15,
+      "default": 0.2,
       "min": 0.05,
       "max": 1.0,
       "flags": [
         "persistent"
       ],
-      "description": "Max time in EXTEND before forced RETRACT [s]."
+      "description": "Maximum time in EXTEND before RETRACT is forced [s]. A phase CAP, not a target: EXTEND normally ends on reaching jump_extend_angle or the hard cutoff. Increase -> the push may run longer, so more of the stroke is used and the jump is higher, provided torque has not already tapered away. Decrease -> the push is truncated early, lower jump. Also feeds the overrun budget, so raising it moves the FAULT_JUMP_TIMEOUT deadline with it."
+    },
+    {
+      "symbol": "PARAM_JUMP_EFFORT",
+      "id": 1329,
+      "group": "GROUP_CONTROL",
+      "name": "jump_effort",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "Fraction of jump_torque_max actually commanded during EXTEND - the one dial to sweep during bring-up. Increase -> harder push. Decrease -> weaker push, and once the product drops below roughly 3.5 N·m the leg collapses rather than extending, so this is NOT a safety dial once the robot is on the ground. NOT a vertical speed: there is no flight-state estimator, so nothing can close a loop on takeoff velocity. Non-persistent and inert at 0, so every boot comes up unable to jump even with jump_enable stored at 1."
+    },
+    {
+      "symbol": "PARAM_JUMP_CROUCH_ANGLE",
+      "id": 1330,
+      "group": "GROUP_CONTROL",
+      "name": "jump_crouch_angle",
+      "default": 0.15708,
+      "min": 0.0,
+      "max": 1.4835,
+      "flags": [
+        "persistent"
+      ],
+      "description": "CROUCH target, as hip extension angle from the retract switch [rad; GUI shows deg]. 0 = at the switch, fully retracted. Decrease -> deeper crouch: more stroke to push through and a higher jump, but closer to the retract hard stop and a bigger drop to get there. Increase -> shallower crouch, gentler entry, less stroke and a lower jump. Replaces the old jump_crouch_time, whose distance was not a parameter at all, so the crouch speed silently depended on the ride height you launched from."
+    },
+    {
+      "symbol": "PARAM_JUMP_CROUCH_SPEED",
+      "id": 1331,
+      "group": "GROUP_CONTROL",
+      "name": "jump_crouch_speed",
+      "default": 3.0,
+      "min": 0.2,
+      "max": 15.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "PEAK hip speed during CROUCH [rad/s; GUI shows deg/s]. Duration is derived as 1.875 * travel / this, the 1.875 being the minimum-jerk profile's peak-to-mean rate ratio. Increase -> quicker crouch; a fast drop preloads the jump but is a much larger disturbance to the balance loop. Decrease -> slower and gentler, easier to watch and to balance through, but the whole sequence lengthens and the overrun budget grows with it."
+    },
+    {
+      "symbol": "PARAM_JUMP_EXTEND_ANGLE",
+      "id": 1332,
+      "group": "GROUP_CONTROL",
+      "name": "jump_extend_angle",
+      "default": 1.3,
+      "min": 0.0,
+      "max": 1.4835,
+      "flags": [
+        "persistent"
+      ],
+      "description": "EXTEND target, as hip extension angle from the retract switch [rad; GUI shows deg]. Torque tapers to zero over the last jump_ramp_down before it, and the phase ends on reaching it. Increase -> longer push, more stroke used, higher jump, finishing closer to the extended limit. Decrease -> shorter push, lower jump. jump_hs_margin is a separate lower-level cutoff, so setting this too high is still caught by the mechanism rather than by the operator."
+    },
+    {
+      "symbol": "PARAM_JUMP_RETRACT_SPEED",
+      "id": 1333,
+      "group": "GROUP_CONTROL",
+      "name": "jump_retract_speed",
+      "default": 6.0,
+      "min": 0.2,
+      "max": 15.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "PEAK hip speed during RETRACT, the tuck back to the landing pose [rad/s; GUI shows deg/s]. Duration derived as 1.875 * travel / this. Increase -> faster tuck, legs up sooner in flight, landing pose reached earlier. Decrease -> slower tuck; slower than the flight time and the robot lands mid-ramp instead of in the settled pose. Replaces a hardcoded 0.20 s whose speed depended on how far EXTEND happened to travel."
+    },
+    {
+      "symbol": "PARAM_JUMP_RETRACT_ANGLE",
+      "id": 1335,
+      "group": "GROUP_CONTROL",
+      "name": "jump_retract_angle",
+      "default": -1.0,
+      "min": -1.0,
+      "max": 1.4835,
+      "flags": [
+        "persistent"
+      ],
+      "description": "RETRACT target - the pose the robot tucks to and LANDS on, since touchdown happens partway into the JP_DONE hold [rad; GUI shows deg]. NEGATIVE means \"return to the pre-jump pose\", the default and the behaviour before this parameter existed; the same inherit-by-sentinel convention standup_torque_lim and standup_vel_limit use for 0. Increase -> lands more extended, leaving leg travel to absorb the impact but a higher CG to catch. Decrease -> lands more retracted and more stable, with less suspension travel left. The RUNNING handoff re-seeds the hip rate limiter from the measured pose, so CH3 slews back in rather than stepping."
+    },
+    {
+      "symbol": "PARAM_JUMP_TORQUE_RATE",
+      "id": 1334,
+      "group": "GROUP_CONTROL",
+      "name": "jump_torque_rate",
+      "default": 300.0,
+      "min": 10.0,
+      "max": 2000.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "EXTEND torque onset RATE [N·m/s]. Time to reach the commanded torque is jump_torque_max * jump_effort / this. Increase -> sharper onset, more of the phase spent at full push, higher jump, bigger shock into the linkage. Decrease -> softer onset, gentler on the mechanism, less of the phase at full torque. Replaces jump_ramp_up, a fixed softstart duration, which had it backwards: at fixed time a bigger push ramped in proportionally faster."
     },
     {
       "symbol": "PARAM_ENABLE_SIM_PITCH_RAD",
@@ -1919,7 +1982,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Selects what the CH5/CH6 switches do while RUNNING. 0 (default) = SIMPLE: CH5 up alone enables live tuning on gain group 0 (lqr_k_pitch_ret on CH7, lqr_k_rate_ret on CH8), and CH6 becomes the SD-log switch -- flip up to start recording, down to stop. 1 = LEGACY: the original three-group scheme where CH5+CH6 combinations pick group 0/1/2 (CH5 down+CH6 up, CH5 up+CH6 down, both down; both up = inactive) and CH6 does not touch SD logging. Groups 1 and 2 (vel_pi and roll gains) are only reachable in LEGACY mode -- nothing was removed, it is behind this flag. A log must still be STARTED in STANDBY/ESTOP (opening one preallocates and blocks ~96 ms), but recording then continues through RUNNING."
+      "description": "Selects what the CH5/CH6 switches do. 0 (default) = SIMPLE: CH5 is the SD-log switch (flip up to start recording, down to stop) and CH6 is the jump trigger (one jump per rising edge, RUNNING only, still gated by jump_enable); live tuning is entirely inactive because no switch is free to select a gain group. 1 = LEGACY: the original three-group scheme where CH5+CH6 combinations pick group 0/1/2 (CH5 down+CH6 up, CH5 up+CH6 down, both down; both up = inactive) while RUNNING, and neither switch touches SD logging or jumping -- a tuning session trades both away for the knobs, so it is bench-only. All three gain groups (lqr_k_pitch_ret/lqr_k_rate_ret, vel_pi, roll) are reachable only in LEGACY mode -- nothing was removed, it is behind this flag. A log must still be STARTED in STANDBY/ESTOP (opening one preallocates and blocks ~96 ms), but recording then continues through RUNNING."
     },
     {
       "symbol": "PARAM_ROLL_CTRL_EN",

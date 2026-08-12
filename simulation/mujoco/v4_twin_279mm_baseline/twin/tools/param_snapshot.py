@@ -3,10 +3,31 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Mapping
 
 from ..params_control import PARAMS_BY_ID, PARAMS_BY_NAME, validate_values
+
+
+def _normalise_wire_value(name: str, value: float) -> float:
+    """Clamp only float32-sized endpoint round-off from robot/GUI exports.
+
+    Parameter values cross a float32 wire/storage boundary before the GUI writes
+    JSON.  A value configured at a schema endpoint can therefore come back a few
+    ulps outside that endpoint (for example ``-1.4000001515`` for a ``-1.4``
+    minimum).  Keep rejecting real out-of-range values, but do not reject a
+    snapshot produced by the project's own GUI.
+    """
+    definition = PARAMS_BY_NAME[name]
+    tolerance = 1e-6 * max(1.0, abs(definition.min), abs(definition.max))
+    if value < definition.min and math.isclose(
+            value, definition.min, rel_tol=0.0, abs_tol=tolerance):
+        return definition.min
+    if value > definition.max and math.isclose(
+            value, definition.max, rel_tol=0.0, abs_tol=tolerance):
+        return definition.max
+    return value
 
 
 def snapshot_from_live(items: list[dict], source: str = "robot") -> dict:
@@ -51,7 +72,7 @@ def load_snapshot(path: Path, *, require_schema_match: bool = True) -> dict[str,
         expected = next(key for key, value in PARAMS_BY_NAME.items() if value.id == param_id)
         if name != expected:
             raise ValueError(f"{path}: {id_text} is {expected!r}, not {name!r}")
-        values[name] = float(item["value"])
+        values[name] = _normalise_wire_value(name, float(item["value"]))
     validate_values(values)
     return values
 

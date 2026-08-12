@@ -23,7 +23,7 @@ DT = 0.002
 BACKWARD_TARGET_MARGIN_RAD = math.radians(3.0)
 L_EFF_RET = 0.098915
 L_EFF_EXT = 0.363396
-M_BODY = 1.6380  # firmware value; intentionally provisional pending T0.1
+M_BODY = 2.5620  # firmware value; 2026-08-09 scale inventory, battery in / wheels out
 WHEEL_R = 0.056
 MOTOR_TRQ_MAX = 7.0
 
@@ -36,6 +36,10 @@ GAIN_ALLOWLIST = frozenset({
     "theta_max_bwd_ret", "theta_max_fwd_ext", "theta_max_bwd_ext",
     "yaw_pi_kp", "yaw_pi_ki", "yaw_pi_torque_max", "yaw_pi_int_max",
     "roll_kp", "roll_kd", "roll_ki", "roll_int_max",
+    "hip_running_kp", "hip_running_kd",
+    "hip_running_tff_ret", "hip_running_tff_ext",
+    "hip_roll_kp", "hip_roll_kd",
+    "ff1_alpha", "ff2_alpha",
 })
 
 
@@ -150,6 +154,20 @@ class FirmwareController:
         self.roll_fault_start_s: float | None = None
         self.wheel_fault_start_s: float | None = None
         self.plant_id_start_s: float | None = None
+
+    def enter_running(self, time_s: float, hip_alpha: float,
+                      *, ramp_complete: bool = False) -> None:
+        """Enter RUNNING explicitly, optionally after the stand-up ramp.
+
+        A normal robot arm reaches RUNNING through STANDING_UP, where hip
+        feedforward has already ramped in.  Starting a simulation directly in
+        RUNNING should be able to represent that state without spending its
+        first second with an artificial zero-feedforward hip transient.
+        """
+        self.reset(time_s, hip_alpha)
+        if ramp_complete:
+            self.arm_time_s -= max(0.0, self.params["hip_running_ramp_s"])
+        self._state = "RUNNING"
 
     def _on_state(self, state: str, time_s: float, hip_alpha: float) -> None:
         state = state.upper()

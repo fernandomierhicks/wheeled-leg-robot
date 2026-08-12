@@ -15,18 +15,23 @@ import random
 
 @dataclass(frozen=True)
 class PlantParams:
-    # Catalog/CAD prior from RobotGeometry; replace with T0.1 scale data.
-    body_mass_kg: float = 1.769488
+    # 2026-08-09 scale inventory: 3.242 kg without the 0.276 kg battery,
+    # 3.518 kg driving mass. Wheels are 0.478 kg each.
+    body_mass_kg: float = 2.562
     body_inertia_axle_kgm2: float = 0.0650
-    cg_x_m: float = 0.0250
+    # Whole-system equivalent chosen to reproduce the midpoint of the exported
+    # trim schedule. Full MuJoCo uses the linkage-aware fitted box CoM instead.
+    cg_x_m: float = 0.0171
     cg_z_m: float = 0.1800
-    wheel_mass_kg: float = 0.520
+    wheel_mass_kg: float = 0.478
     # Geometric placeholder only: the motor's stationary/rotating mass split is
     # unknown, so T1.3 must replace this despite the improved translating mass.
-    wheel_inertia_kgm2: float = 0.5 * 0.520 * 0.056**2
+    wheel_inertia_kgm2: float = 0.5 * 0.478 * 0.056**2
     wheel_radius_m: float = 0.056
     wheel_kt_nm_per_a: float = 9.55 / 70.0
-    wheel_torque_scale: float = 1.0
+    # Physical 70 KV Kt / latest saved ODrive torque_constant (provisional
+    # until a live config read and T2.1 blocked-wheel test).
+    wheel_torque_scale: float = (9.55 / 70.0) / 0.03999999910593033
     wheel_viscous_nm_per_rad_s: float = 0.001
     wheel_coulomb_nm: float = 0.002
     ground_rolling_nm: float = 0.01
@@ -54,8 +59,6 @@ class PlantParams:
 
 
 PROVISIONAL_FIELDS = {
-    "body_mass_kg": "T0.1 mass inventory",
-    "wheel_mass_kg": "T0.1 removable wheel-assembly mass",
     "body_inertia_axle_kgm2": "T1.1 locked-wheel pendulum swing",
     "cg_x_m": "T0.2 two-scale CG measurement",
     "cg_z_m": "T0.2 side-on CG measurement",

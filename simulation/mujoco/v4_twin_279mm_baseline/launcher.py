@@ -21,7 +21,15 @@ _MUJOCO_DIR = str(Path(__file__).resolve().parent.parent)
 if _MUJOCO_DIR not in sys.path:
     sys.path.insert(0, _MUJOCO_DIR)
 
-from v4_twin_279mm_baseline.viz.visualizer import run_unified
+try:
+    from v4_twin_279mm_baseline.viz.visualizer import run_unified
+except ModuleNotFoundError as exc:
+    requirements = Path(__file__).resolve().parent.parent / "requirements.txt"
+    raise SystemExit(
+        f"Missing simulator dependency: {exc.name}\n\n"
+        "Install the MuJoCo environment with:\n"
+        f'  "{sys.executable}" -m pip install -r "{requirements}"\n'
+    ) from exc
 
 SCENARIOS = [
     ("s01_lqr_pitch_step",        "S1 — LQR Pitch Step"),

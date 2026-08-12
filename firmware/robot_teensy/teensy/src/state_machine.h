@@ -20,8 +20,14 @@ bool stateMachine_request_calibration();
 // Gracefully cancel an active radio-triggered calibration through DISARMING.
 bool stateMachine_disarm_calibration();
 
-// Request entry into STATE_JUMPING (3 s jump sequence). Only from STATE_RUNNING.
-// Plays a fanfare, then auto-returns to STATE_RUNNING. Called when CH6 goes 1000→2000.
+// Request entry into STATE_JUMPING. Only from STATE_RUNNING, and only with
+// jump_enable set. Plays a fanfare, runs the CROUCH/EXTEND/RETRACT phase
+// machine, then auto-returns to STATE_RUNNING (~0.95 s with default phase
+// params — not the flat 3 s the old fixed timer gave).
+//
+// Two callers, both in main.cpp: the CMD_ID_SET_MODE handler (GUI/API) and
+// radio_update()'s CH6 rising edge (SIMPLE live-tune mode only — in LEGACY mode
+// CH6 is gain-group select and does not jump).
 bool stateMachine_request_jump();
 
 // Called by the command handler to request a reset out of ESTOP back to

@@ -256,13 +256,15 @@ the **hard stops** at −57° … +28° (85.0°) the travel is **276.62 mm**. Us
 276.62 for anything the firmware can actually command; 279.95 is a
 design-envelope number.
 
-**Two inputs are still unverified and both are flagged in the source:**
+**One geometry input is still unverified and is flagged in the source:**
 
 - `A_Z = −23.5 mm` (hip axis below body centre) is inherited from baseline-1
   and has not been re-measured on the v4 box. `L_EFF_RET`/`L_EFF_EXT` shift
   1:1 with it.
-- `M_BODY = 1.638 kg` was not re-derived for the longer v4 links. Only FF2
-  depends on it.
+
+`M_BODY = 2.562 kg` now comes from the 2026-08-09 scale inventory: 3.518 kg
+driving mass minus two 0.478 kg wheel assemblies. Only FF2 depends on it, and
+the current `Default gains.json` keeps FF2 disabled.
 
 **`WHEEL_R` also scales reported speed.** `wheel_vel_avg_ms` is
 `turns/s × 2π × WHEEL_R`, so the same physical speed now reads 0.747× what it
@@ -547,9 +549,10 @@ with it cleared, which is what replaces the boot-to-safe guarantee.
 
 **Jump phase budget and overrun fault** — `JUMPING` used to exit on a flat
 3000 ms timer regardless of what the phase machine was doing. That was safe
-only by arithmetic coincidence: the three phase budgets at their schema maxima
-(`jump_crouch_time` 1.0 + `jump_ext_timeout` 1.0 + retract 0.2 = 2.2 s) happened
-to fit inside 3 s, so raising one bound or adding a phase would have silently
+only by arithmetic coincidence: the three phase budgets at their then-schema
+maxima (the since-retired `jump_crouch_time` 1.0 + `jump_ext_timeout` 1.0 +
+a hardcoded 0.2 s retract = 2.2 s) happened to fit inside 3 s, so raising one
+bound or adding a phase would have silently
 started handing off to `RUNNING` mid-extension with the hips still under a
 torque command. The two concerns are now separate: `jump_done()` requires the
 phase machine to actually reach `JP_DONE` and hold the nominal pose stiffly for
@@ -560,6 +563,143 @@ succeeding. Its transition is registered *before* `jump_done` so an overrun can
 never lose the race. With `jump_enable=0` (the default) or invalid calibration
 limits, the sequence retires straight to `JP_DONE` and exits normally, exactly
 as before — an unarmed jump is a no-op, not a fault.
+
+**The jump has never been run on hardware, and until 2026-08-11 it could not
+have worked.** `JUMPING` is reached through a GUI/API `SET_MODE(JUMPING)` or, as
+of 2026-08-11, the CH6 rising edge in `radio_update()` (SIMPLE live-tune mode
+only) — both in `main.cpp`, and both still gated by `jump_enable`, which
+defaults to 0.
+
+**The EXTEND torque sign was inverted.** `tff` was computed as
+`dir * jump_torque_max * …`, but `dir` is `CALIB_*_SEEK_DIR`, which points
+*toward the retract switch*. With `dir = +1`, `define_limits()` puts retracted at
+`max_rad` and extended at `min_rad` — the same convention `hip_cmd_to_setpoints()`
+uses and the same one EXTEND's own `lim_*` already followed — so extending means
+**decreasing** position and needs **negative** torque. The push was aimed into
+the retract stop for the entire phase. Three things then conspired to hide it:
+`dist` *grows* under the wrong sign, so neither the `jump_ramp_down` taper nor
+the `jump_hs_margin` cutoff can fire; EXTEND runs at `kp = 0`, so
+`clamp_to_limits()` has no position command to clamp; and `jump_torque_max`
+shipped at `0`, so no jump ever commanded torque in the first place. It is now
+`-dir * …`. **Confirm the direction on a stand before jumping on the ground** —
+during `jump_state == 1`, `gain_sched_alpha` must *increase*.
+
+**`jump_effort` is the dial; `jump_torque_max` is the ceiling.** EXTEND commands
+`jump_torque_max × jump_effort`. Set the ceiling once from a torque/thermal
+argument and leave it; sweep `jump_effort` ∈ [0,1] to bring a jump up. Unlike
+every other jump parameter it is **non-persistent**, so it reads 0 after every
+boot and the robot always comes up unable to push even with `jump_enable`
+stored at 1 — the same contract the `plant_id_*` hooks have, for the same
+reason. It is deliberately *not* named for a vertical speed: there is no
+flight-state estimator, so nothing can close a loop on takeoff velocity, and
+this is open-loop push effort.
+
+**Note the jump is a threshold, not a proportion.** During EXTEND `kp = 0`, so
+the commanded `tff` is the *entire* hip torque — `hip_running_tff` is not
+applied. Holding the robot up at a crouched pose already takes roughly
+3.5–4 N·m per hip, so anything below that collapses the leg instead of
+extending it and there is no jump at all, at any effort. `jump_torque_max`
+defaults to **7.0**, the AK45-10 peak, which puts the useful band of
+`jump_effort` at roughly **0.6–1.0**. A lower ceiling does not give a gentler
+jump; it gives no jump.
+
+**Phases are specified as angle + speed, not duration.** `jump_crouch_time` and
+`jump_ramp_up` are retired (IDs `0x0417`/`0x0418` are dead — the param store
+skips unknown IDs on load, so an old store is fine). A duration says nothing
+about where the leg ends up or how fast it is moving when it gets there, and the
+crouch was worse than merely unintuitive: its *distance* was not a parameter at
+all — it always went to the calibrated retracted endpoint — so the same
+`jump_crouch_time` meant a completely different crouch speed depending on the
+ride height you launched from. Two jumps from different heights were two
+different manoeuvres, and none of them were repeatable.
+
+| Parameter | Unit | What it sets |
+|---|---|---|
+| `jump_crouch_angle` | rad (GUI: deg) | CROUCH target, as hip extension from the retract switch |
+| `jump_crouch_speed` | rad/s (GUI: deg/s) | **peak** hip speed getting there |
+| `jump_extend_angle` | rad (GUI: deg) | how far EXTEND pushes, stated forwards |
+| `jump_retract_angle` | rad (GUI: deg) | the landing pose; **negative = return to the pre-jump pose** |
+| `jump_retract_speed` | rad/s (GUI: deg/s) | **peak** hip speed of the tuck back |
+| `jump_torque_rate` | N·m/s | EXTEND torque onset rate |
+
+Phase durations are now *derived*: `1.875 × travel / peak_speed`, the 1.875
+being the quintic minimum-jerk profile's peak-to-mean rate ratio (asserted in
+`test_control_math.cpp`). CROUCH and RETRACT use `standup_min_jerk_position()`
+/ `standup_min_jerk_rate()` from `standup_safety.h` — the same helpers
+STANDING_UP's CROUCH uses — instead of the linear ramps they had, so both ends
+of both ramps now start and stop with zero commanded velocity and acceleration.
+Speeds are specified as **peak** because that is what the motor and the balance
+disturbance actually see; average would understate both by nearly 2×.
+
+`jump_torque_rate` replaces `jump_ramp_up` for the same class of reason: a fixed
+softstart *duration* means a harder push ramps in proportionally faster, so the
+most violent jumps got the sharpest torque step. A rate makes onset time scale
+with the torque being commanded.
+
+Two consequences worth knowing. The overrun budget still derives from the live
+params, but now from `travel / speed` — and because RETRACT's travel is unknown
+until EXTEND ends, entry budgets its worst case (a tuck across the whole span)
+while the real duration is computed at the EXTEND→RETRACT transition. And
+`jump_extend_angle` is stated forwards while `jump_hs_margin` still measures
+backwards from the calibrated extended limit; the margin is deliberately the
+lower-level guard, so an extend target set too high is still caught by the
+mechanism rather than by the operator.
+
+**`jump_retract_angle` is the landing pose, and it is where touchdown actually
+happens** — on a real hop the robot is still airborne through RETRACT and lands
+partway into the `JP_DONE` settle hold, so this is the pose it lands *on*, not
+merely the one it waits at. Negative (the default, −1) means "return to the pose
+we launched from", reproducing the behaviour from before the parameter existed;
+`standup_torque_lim`/`standup_vel_limit` use the same inherit-by-sentinel idea
+with 0. Setting a real angle decouples the landing pose from the launch height —
+e.g. land more extended to leave suspension travel for the impact.
+
+That decoupling needed a fix at the RUNNING handoff. `on_running()` calls
+`controlLoop_reset()`, which invalidates the hip rate-limiter shadow, so the
+first RUNNING tick re-seeds it from the raw CH3 stick — stepping the legs from
+the landing pose to the stick position in one tick at full stiffness. That was
+invisible while RETRACT always returned to the pre-jump pose, because the step
+was zero by construction. A jump landing now seeds the shadow from the
+*measured* pose (`controlLoop_reset_hip_ramp()`) and immediately forces the gain
+ramp complete (`controlLoop_complete_hip_ramp()`) so the landing stiffness is
+not thrown away — the same pairing, for the same reason, as STANDING_UP's
+capture. CH3 then slews back in at `hip_cmd_rate_lim` with no step.
+
+**The wheel loop runs unchanged through every phase.** A version that zeroed
+wheel torque across EXTEND/RETRACT was written and then removed: crouched,
+`l_eff` is ~0.09 m and the inverted pendulum's time constant is ~0.1 s, so a
+0.4 s window of free wheels multiplies any pitch error by ~50× — an
+every-attempt fall risk traded against a benefit that only materialises if the
+robot actually leaves the ground. Revisit it only once there is genuine
+liftoff/landing detection to gate on, so the wheels are released when *airborne*
+rather than whenever a phase machine says so. **There is still no flight or
+landing detection**, nor per-leg asymmetry faults or per-phase deadlines.
+
+**Expect a small hop, and don't trust the old numbers.** At 3.518 kg total
+(`params.py`), an average leg Jacobian of `dz/dq ≈ 0.19 m/rad`
+((`L_EFF_EXT − L_EFF_RET`)/80°) and a *measured* ~4 N·m static hip hold at
+α ≈ 0.05, gravity alone consumes most of the AK45-10's 7 N·m peak at the crouch.
+That leaves roughly 3 N·m per hip net, ~9 m/s² of body acceleration, and the
+`jump_omega_max` taper collapsing torque past ~10 rad/s — so **5–10 cm**, in
+line with the twin's recorded ~70 mm (`flip_analysis.py`). The 283 mm design
+target there and the 282.65 mm optimizer result are **pre-v4 and invalid**
+(`COMPONENTS.md`). Thermally the push is a non-issue: 0.15 s at 7 N·m is ~7 J of
+copper loss against a ~30 s winding time constant. It is the *crouch hold* that
+sits above the 2.5 N·m continuous rating, not the jump.
+
+Bring-up ladder, one step per log, reviewing `jump_state`, `hip_l/r_torque_nm`,
+`hip_l/r_pos_rad`, `gain_sched_alpha`, `wheel_vel_avg_ms` and `pitch` between
+each. Suspended sign check first at `jump_effort` 0.05 — during
+`jump_state == 1`, `gain_sched_alpha` must **increase**. Then, given the
+threshold behaviour above, the ground ladder is 0.5 → 0.6 → 0.7 → 0.8 → 0.9 →
+1.0 against the 7.0 N·m ceiling; expect nothing at all below ~0.6. The most
+likely first failure is `FAULT_PITCH_WATCHDOG` on landing — flight is
+~0.2–0.3 s against the watchdog's 200 ms debounce. Measure that before deciding
+whether to mask anything.
+
+One cosmetic leftover: `JUMP_MELODY` is ~2.6 s against a state that now lasts
+~0.95 s, so the fanfare plays on into `RUNNING`. The buzzer is non-blocking, so
+this is noise in the literal sense only.
 
 **CAN TX is no longer write-and-hope** — `FlexCAN_T4::write()` returns 1 for
 "placed in a hardware mailbox" and -1 for "all mailboxes busy, queued to the
@@ -671,6 +811,11 @@ static const LiveTuneSlot LIVE_TUNE_SLOTS[] = {
 };
 ```
 
+**Gated behind `live_tune_multi_en = 1` (LEGACY).** In the default SIMPLE mode
+CH5 is the SD-log switch and CH6 is the jump trigger, so no switch is free to
+select a group and the knobs are inert. In LEGACY mode CH5/CH6 give up both of
+those functions, which is why it is bench-only.
+
 Active while `RUNNING` with CH5+CH6 selecting a group (CH5 down + CH6 up ->
 group 0, CH5 up + CH6 down -> group 1, both down -> group 2, both up -> no
 group / tuning inactive). Two safety properties, independent of which params
@@ -762,13 +907,13 @@ Full FSM diagram: `teensy/state_machine.md`.
 | Value | Name | Description |
 |---|---|---|
 | 0 | `STATE_STARTUP` | Boot checks: waits for IMU NOMINAL + hip CAN heartbeats |
-| 1 | `STATE_CALIBRATION` | Hip retract-switch homing — only from STANDBY; lowering CH5 after a radio start cancels through DISARMING |
+| 1 | `STATE_CALIBRATION` | Hip retract-switch homing — only from STANDBY; re-entering the calibration stick combo after a radio start cancels through DISARMING |
 | 2 | `STATE_STANDBY` | Idle, motors energised but zero torque |
 | 3 | `STATE_RUNNING` | Active balancing — LQR + vel/yaw PI — requires calibration valid |
 | 4 | `STATE_ESTOP` | Fault latch — see fault table below |
 | 5 | `STATE_MANUAL` | GUI direct control (MIT frames); watchdog 500 ms |
 | 6 | `STATE_CMD_REJECT` | ~1 s transient: buzzer + red blink, auto-returns to prior state |
-| 7 | `STATE_JUMPING` | ~3 s jump sequence from RUNNING; auto-returns to RUNNING |
+| 7 | `STATE_JUMPING` | Launch sequence from RUNNING (~0.9 s at default phase params); auto-returns to RUNNING. Triggered by GUI/API `SET_MODE` or the CH6 rising edge in SIMPLE live-tune mode |
 | 8 | `STATE_STANDING_UP` | Arm-time settling window — crouch to a fixed leg height, stiffen the hips, balance with the pitch watchdog masked, then RUNNING |
 | 9 | `STATE_DISARMING` | Normal active-state or radio-calibration exit: wheel IDLE immediately, hip torque ramps safely to zero, then STANDBY |
 

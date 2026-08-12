@@ -12,36 +12,45 @@ Angular momentum is conserved in flight: L = I * omega = const
 """
 import math
 import sys
+from pathlib import Path
+
+_MUJOCO_DIR = str(Path(__file__).resolve().parent.parent)
+if _MUJOCO_DIR not in sys.path:
+    sys.path.insert(0, _MUJOCO_DIR)
+from v4_twin_279mm_baseline.defaults import DEFAULT_PARAMS
 
 # ── Robot parameters ─────────────────────────────────────────────────────
-# From params.py (SimParams defaults)
+# From the robot-matched defaults; do not duplicate the mass ledger here.
+_robot = DEFAULT_PARAMS.robot
+_motors = DEFAULT_PARAMS.motors
+_battery = DEFAULT_PARAMS.battery
 
 # Masses
-m_box = 0.477        # [kg] body + electronics
-m_motor_hip = 0.260  # [kg] AK45-10 each, x2
-m_femur = 0.0192     # [kg] each, x2
-m_tibia = 0.0183     # [kg] each, x2
-m_coupler = 0.01153  # [kg] each, x2
-m_bearing = 0.012    # [kg] each, x2
-m_wheel = 0.270      # [kg] wheel assembly each, x2
+m_box = _robot.m_box + _robot.m_battery
+m_motor_hip = _robot.motor_mass
+m_femur = _robot.m_femur
+m_tibia = _robot.m_tibia
+m_coupler = _robot.m_coupler
+m_bearing = _robot.bearings_per_leg * _robot.m_bearing  # total per leg
+m_wheel = _robot.m_wheel
 
 # Geometry
-L_femur = 0.17378    # [m]
-L_tibia = 0.12939    # [m]
-L_stub = 0.03513     # [m]
-wheel_r = 0.075      # [m]
-A_Z = -0.0235        # [m] hip motor Z offset
-leg_y = 0.1430       # [m] leg Y offset
+L_femur = _robot.L_femur
+L_tibia = _robot.L_tibia
+L_stub = _robot.L_stub
+wheel_r = _robot.wheel_r
+A_Z = _robot.A_Z
+leg_y = _robot.leg_y
 
 # Motor specs
-wheel_KV = 70.0      # [RPM/V]
-wheel_I_max = 50.0   # [A]
-wheel_Kt = 9.55 / wheel_KV   # [N.m/A]
+wheel_KV = _motors.wheel.KV
+wheel_I_max = _motors.wheel.current_limit
+wheel_Kt = _motors.wheel.Kt
 wheel_tau_max = wheel_Kt * wheel_I_max  # [N.m] per wheel
-V_batt = 24.0        # [V]
+V_batt = _battery.V_nom
 omega_noload = wheel_KV * V_batt * 2 * math.pi / 60  # [rad/s]
 
-hip_tau_max = 7.0     # [N.m] AK45-10 peak
+hip_tau_max = _motors.hip.torque_limit
 
 # Derived
 m_leg = m_femur + m_tibia + m_coupler + m_bearing  # one side
@@ -86,8 +95,8 @@ print()
 # For retracted pose, wheel is much closer.
 # From Q_EXT = -1.43 rad and Q_RET = -0.787 rad:
 
-Q_EXT = -1.43161
-Q_RET = -0.78705
+Q_EXT = _robot.Q_EXT
+Q_RET = _robot.Q_RET
 
 # Approximate wheel distance from body CoG for each pose
 # Extended: femur points down-ish, wheel at ~full leg length
