@@ -82,6 +82,22 @@ function playTone(f, d, p, fl, inc) S.played[#S.played + 1] = { tone = f } end
 function playHaptic(d, p, fl) S.played[#S.played + 1] = { haptic = d } end
 function playNumber() end
 
+-- Lua telemetry queue. EdgeTX pushes any CRSF frame type it does not natively
+-- decode here (crossfire.cpp, `default:` -> pushTelemetryDataToQueues); the
+-- HUD drains it looking for the robot's private 0x24 frame.
+S.crsfQueue = {}
+
+function crossfireTelemetryPop()
+  local item = table.remove(S.crsfQueue, 1)
+  if item == nil then return nil end
+  return item.cmd, item.data
+end
+
+function crossfireTelemetryPush(cmd, data)
+  S.crsfQueue[#S.crsfQueue + 1] = { cmd = cmd, data = data }
+  return true
+end
+
 function loadScript(path, mode, env)
   local f = io.open(S.root .. path, "r")
   if not f then error("loadScript: no such file " .. path) end

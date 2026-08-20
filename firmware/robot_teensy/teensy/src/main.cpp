@@ -13,14 +13,16 @@
 #include "RgbLed.h"
 #include "Buzzer.h"
 #include "param_registry.h"
-#include "IBus.h"
+#include "Crsf.h"
+#include "CrsfTelem.h"
 #include "sd_logger.h"
 #include "limit_switches.h"
 #include "live_tune.h"
 
 CommLink g_comm(Serial5, COMM_SRC_TEENSY);     // ESP32 UART bridge
 CommLink g_comm_usb(Serial, COMM_SRC_TEENSY);  // direct PC USB
-IBus     g_ibus(Serial4);                       // FlySky RC receiver, pin 16
+Crsf     g_rc(Serial4);                        // ELRS/CRSF RC link, RX pin 16 / TX pin 17
+CrsfTelemetry g_rc_telem;                      // return-path telemetry scheduler
 RgbLed   g_led(PIN_LED_R, PIN_LED_G, PIN_LED_B);
 Buzzer   g_buzzer(PIN_BUZZER);
 
@@ -284,10 +286,10 @@ static void on_command(uint8_t type, uint8_t version, uint8_t source,
         // Routed through the identical req_running() gate in state_machine.cpp — same
         // IMU/calibration/motor-enable checks apply, no separate/weaker path.
         if (target == STATE_RUNNING) {
-            if (g_ibus.alive()) {
+            if (g_rc.alive()) {
                 comm_log(LOG_LEVEL_WARN,
                          "ARM rejected: GUI requested RUNNING while radio ONLINE (CH10=%u); radio owns arming",
-                         (unsigned)g_ibus.channel(10));
+                         (unsigned)g_rc.channel(10));
                 accepted = false;
             } else {
                 accepted = stateMachine_request_running();
@@ -694,8 +696,9 @@ void setup() {
     sd_logger_set_sender(sd_logger_send);
     if (sd_logger_begin()) comm_log(LOG_LEVEL_INFO, "SD logger ready");
     else                   comm_log(LOG_LEVEL_WARN, "SD logger: no card detected");
-    g_ibus.begin();
-    comm_log(LOG_LEVEL_INFO, "IBus RX ready (Serial4)");
+    g_rc.begin(CRSF_BAUD);
+    comm_log(LOG_LEVEL_INFO, "CRSF ready (Serial4 @ %lu, RX pin %d / TX pin 17)",
+             (unsigned long)CRSF_BAUD, PIN_IBUS_RX);
 
     if (imu_en) {
         // Blocking: STARTUP is the one phase that doesn't need to hold the
@@ -830,8 +833,12 @@ static void fill_telemetry(TelemetryPayload& t) {
     t.test_val         = sinf(2.0f * (float)M_PI * 2.0f * millis() / 1000.0f);
     t.hip_l_torque_nm  = g_state.hip_l_torque_nm;
     t.hip_r_torque_nm  = g_state.hip_r_torque_nm;
-    for (uint8_t i = 1; i <= IBUS_NUM_CH; i++) t.ibus_ch[i - 1] = g_ibus.channel(i);
-    t.ibus_alive       = g_ibus.alive() ? 1 : 0;
+    // ibus_ch/ibus_alive keep their wire names: they are the protocol-agnostic
+    // RC mirror, and renaming them would churn schema.json, the GUI and the twin
+    // for no behavioural gain. Bound by the payload (14), not by CRSF's 16.
+    constexpr uint8_t RC_MIRROR_CH = (uint8_t)(sizeof(t.ibus_ch) / sizeof(t.ibus_ch[0]));
+    for (uint8_t i = 1; i <= RC_MIRROR_CH; i++) t.ibus_ch[i - 1] = g_rc.channel(i);
+    t.ibus_alive       = g_rc.alive() ? 1 : 0;
     t.wm_l_vel_turns_s = wm_L.vel_turns_s;
     t.wm_r_vel_turns_s = wm_R.vel_turns_s;
     t.wm_l_pos_turns   = wm_L.pos_turns;
@@ -920,6 +927,58 @@ static void send_telemetry(bool prof) {
         g_comm_usb.send(COMM_TYPE_TELEM_B, TELEM_VERSION, tp + TELEM_A_LEN, TELEM_B_LEN);
     }
     if (prof) prof_mark(s_prof_max.telem_usb, t0);
+}
+
+// ── Radio (CRSF) telemetry ────────────────────────────────────────────────────
+// The return half of the link. Gathers the same values fill_telemetry() reads,
+// but only the handful worth a slice of radio bandwidth — see CrsfTelem.h.
+//
+// Two fields are NOT instrumented yet and are sent as zero rather than
+// omitted, because BATTERY_SENSOR and the custom frame each carry their fields
+// together:
+//
+//   * bus current. Nothing on the robot measures it today, so EdgeTX will
+//     create a Curr sensor that reads 0.0 A. Do not trust it, and do not build
+//     a low-current alarm on it, until an actual shunt or an ODrive current
+//     readback feeds this.
+//   * vel_glitch_count. wheel_safety.h filters glitches but never counts them,
+//     so the HUD's GLCH field and its "wheel glitches rising" callout stay at
+//     zero. Wiring a counter through is a small, separate change.
+//
+// Pack voltage is real: it is the ODrive bus voltage, which is the pack.
+static void crsf_telemetry_tick() {
+    CrsfTelemSources s;
+
+    bool sim_pitch_active = param_get(PARAM_ENABLE_SIM_PITCH_RAD) >= 0.5f;
+    s.pitch_rad = imu_pitch();
+    s.roll_rad  = sim_pitch_active ? 0.0f : imu_roll();
+    s.yaw_rad   = sim_pitch_active ? 0.0f : imu_yaw();
+
+    // Whichever wheel controller is actually reporting; they share the pack.
+    float vbus = wm_L.ok ? wm_L.vbus : (wm_R.ok ? wm_R.vbus : 0.0f);
+    s.pack_volts = vbus;
+    s.pack_amps  = 0.0f;                       // not instrumented — see above
+    // 6S: 25.2 V full, 19.8 V empty. V_nom for this robot is the 24.0 V
+    // fully-charged working assumption, not the 22.2 V LiPo textbook nominal.
+    float pct = (vbus - 19.8f) / (25.2f - 19.8f) * 100.0f;
+    s.pack_pct = (uint8_t)(vbus < 1.0f ? 0 : (pct < 0 ? 0 : (pct > 100 ? 100 : pct)));
+
+    s.robot_state      = (uint8_t)g_state.state;
+    s.fault_code       = g_state.fault_code;
+    s.jump_state       = g_state.jump_state;
+    s.standup_state    = g_state.standup_state;
+    s.gain_sched_alpha = g_state.gain_sched_alpha;
+    s.active_profile   = (uint8_t)param_get(PARAM_ACTIVE_PROFILE);
+    s.health_flags     = build_health_flags();
+    s.hip_l_torque_nm  = g_state.hip_l_torque_nm;
+    s.hip_r_torque_nm  = g_state.hip_r_torque_nm;
+    s.wheel_vel_avg_ms = g_state.wheel_vel_avg_ms;
+
+    uint32_t esp32_age = millis() - s_last_esp32_status_ms;
+    s.esp32_link_ok    = (s_last_esp32_status_ms != 0 && esp32_age < 1000) ? 1 : 0;
+    s.vel_glitch_count = 0;                    // not instrumented — see above
+
+    g_rc_telem.tick(g_rc, millis(), s);
 }
 
 // ── LED ───────────────────────────────────────────────────────────────────────
@@ -1031,7 +1090,7 @@ static void read_sensors(bool prof) {
     }
 
     t0 = micros();
-    g_ibus.update();
+    g_rc.update();
     if (prof) prof_mark(s_prof_max.ibus, t0);
 }
 
@@ -1122,10 +1181,10 @@ float live_tune_value(uint16_t persist_param_id) {
 //   Left stale when radio is dead.
 
 static void radio_update() {
-    bool alive = g_ibus.alive();
-    uint16_t ch10 = g_ibus.channel(10);
-    uint16_t ch5  = g_ibus.channel(5);
-    uint16_t ch6  = g_ibus.channel(6);
+    bool alive = g_rc.alive();
+    uint16_t ch10 = g_rc.channel(10);
+    uint16_t ch5  = g_rc.channel(5);
+    uint16_t ch6  = g_rc.channel(6);
 
     bool energetic = g_state.state == STATE_RUNNING || g_state.state == STATE_JUMPING ||
                      g_state.state == STATE_STANDING_UP;
@@ -1203,8 +1262,8 @@ static void radio_update() {
     const bool rescue_arm_state  = (g_state.state == STATE_STANDBY || g_state.state == STATE_ESTOP);
     const bool rescue_hold_state = rescue_arm_state || (g_state.state == STATE_STARTUP);
     const bool rescue_raw = alive &&
-                            g_ibus.channel(3) > 1990 && g_ibus.channel(2) > 1990 &&
-                            g_ibus.channel(1) < 1010 && g_ibus.channel(4) < 1010;
+                            g_rc.channel(3) > 1990 && g_rc.channel(2) > 1990 &&
+                            g_rc.channel(1) < 1010 && g_rc.channel(4) < 1010;
     if (rescue_raw && (s_rescue_held ? rescue_hold_state : rescue_arm_state)) {
         if (s_rescue_ticks < RESCUE_DEBOUNCE_TICKS) s_rescue_ticks++;
     } else {
@@ -1366,8 +1425,8 @@ static void radio_update() {
     static bool     s_radio_calib_entered = false;
 
     const bool calib_raw = alive &&
-                           g_ibus.channel(1) > 1990 && g_ibus.channel(4) > 1990 &&
-                           g_ibus.channel(2) < 1010 && g_ibus.channel(3) < 1010;
+                           g_rc.channel(1) > 1990 && g_rc.channel(4) > 1990 &&
+                           g_rc.channel(2) < 1010 && g_rc.channel(3) < 1010;
     if (calib_raw) {
         if (s_calib_hi_ticks < CALIB_DEBOUNCE_TICKS) s_calib_hi_ticks++;
         s_calib_lo_ticks = 0;
@@ -1547,19 +1606,19 @@ static void radio_update() {
     }
 
     if (alive) {
-        float t = constrain((g_ibus.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);  // CH3 (1-indexed)
+        float t = constrain((g_rc.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);  // CH3 (1-indexed)
         param_force_set(PARAM_RADIO_HIP_CMD, t);
 
         // CH1: roll setpoint for the active-suspension roll controller. Ungated by
         // gui_motion_ctrl (that override only covers v/omega). Sign bench-verified.
-        float roll_norm = constrain((g_ibus.channel(1) - 1500.0f) / 500.0f, -1.0f, 1.0f);
+        float roll_norm = constrain((g_rc.channel(1) - 1500.0f) / 500.0f, -1.0f, 1.0f);
         param_force_set(PARAM_ROLL_CMD_RAD, roll_norm * param_get(PARAM_RADIO_ROLL_MAX));
 
         if (!gui_motion_ctrl) {
-            float vel_norm = constrain((g_ibus.channel(2) - 1500.0f) / 500.0f, -1.0f, 1.0f);
+            float vel_norm = constrain((g_rc.channel(2) - 1500.0f) / 500.0f, -1.0f, 1.0f);
             param_force_set(PARAM_V_CMD_MS, vel_norm * param_get(PARAM_RADIO_VEL_MAX));
 
-            float yaw_norm = -constrain((g_ibus.channel(4) - 1500.0f) / 500.0f, -1.0f, 1.0f);  // inverted: stick left -> robot yaws left
+            float yaw_norm = -constrain((g_rc.channel(4) - 1500.0f) / 500.0f, -1.0f, 1.0f);  // inverted: stick left -> robot yaws left
             param_force_set(PARAM_OMEGA_CMD_RDS, yaw_norm * param_get(PARAM_RADIO_YAW_MAX));
         }
 
@@ -1570,7 +1629,7 @@ static void radio_update() {
         static const uint16_t PROFILE_ROLL[]   = {PARAM_PROFILE_1_ROLL_MAX,   PARAM_PROFILE_2_ROLL_MAX,   PARAM_PROFILE_3_ROLL_MAX};
         static uint8_t s_last_profile = 255;   // force apply on first packet
         static float   s_trq_target   = -1.0f; // <0 = no pending slew
-        uint16_t ch9 = g_ibus.channel(9);
+        uint16_t ch9 = g_rc.channel(9);
         uint8_t profile = (ch9 < 1333) ? 0 : (ch9 < 1667) ? 1 : 2;
         if (profile != s_last_profile) {
             s_last_profile = profile;
@@ -1650,7 +1709,7 @@ static void radio_update() {
         const LiveTuneSlot& slot = LIVE_TUNE_SLOTS[i];
         bool slot_active = live_tune_active && (slot.group == (uint8_t)live_tune_group);
         if (!slot_active) { s_live_tune_picked_up[i] = false; continue; }
-        uint16_t raw = g_ibus.channel(slot.ibus_channel);
+        uint16_t raw = g_rc.channel(slot.ibus_channel);
         float knob_val = slot.range_min + constrain((raw - 1000.0f) / 1000.0f, 0.0f, 1.0f)
                                             * (slot.range_max - slot.range_min);
         param_force_set(slot.live_param_id, knob_val);  // telemetry mirror, always kept live
@@ -1883,6 +1942,11 @@ void loop() {
         }
     }
     if (prof) prof_mark(s_prof_max.telem, t0);
+
+    // Radio telemetry, the return half of the CRSF link. Rate-limits itself to
+    // one frame every 25 ms; see CrsfTelem.h for the budget and why it is not
+    // simply a mirror of TelemetryPayload.
+    crsf_telemetry_tick();
 
     if (prof && millis() - s_prof_last_ms >= 1000) {
         s_prof_last_ms = millis();

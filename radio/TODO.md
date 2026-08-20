@@ -63,23 +63,26 @@ panels; the case opens with four hex screws. ~20 minutes.
 
 ## Phase A — the blocking change: iBUS → CRSF
 
-Everything downstream depends on this. Plan §0.
+**Firmware done.** `teensy/src/crsf_protocol.h`, `Crsf.h`, and the 24 call
+sites in `main.cpp` are ported and building; 26 native tests cover the
+failsafe rules. What remains needs hardware.
 
+- [x] CRSF parser replacing `IBus`, interface-compatible so every safety call
+      site kept its shape.
+- [x] Failsafe parity: `alive()` false on timeout, on LQ 0, and before warm-up;
+      `channel()` returns 0, not the last value. Tested, including that a dead
+      link cannot satisfy either stick combo or arm.
+- [x] Ticks normalised to microseconds at the boundary; every `> 1990` /
+      `< 1010` literal in `main.cpp` untouched, with a test asserting ~30 ticks
+      of margin above the arm threshold.
 - [ ] Buy an ELRS receiver matched to the band you bind on. The LR1121 does
       2.4 GHz *or* 900 MHz — 900 is the better choice for a ground robot
       behind furniture and legs; 2.4 for lower latency.
 - [ ] Wire to a Teensy UART using **both** TX and RX. `Serial4` RX is already
       committed; its TX pin is the natural pairing. Confirm nothing else
       claims it in `config.h`.
-- [ ] Replace the `IBus` object with a CRSF parser (`0xC8` sync, CRC-8 poly
-      `0xD5`, type `0x16` for 16×11-bit channels).
-- [ ] **Preserve the failsafe semantics exactly.** `alive()` must go false on
-      link timeout, and `channel()` must return **0, not the last value**,
-      when not alive. Both the rescue-combo gate and `radio_update()`'s
-      disarm interlock depend on it. Write the unit test before wiring a
-      motor.
-- [ ] Normalise CRSF ticks (172–1811) to microseconds **at the boundary**.
-      Leave every `> 1990` / `< 1010` literal in `main.cpp` alone.
+- [ ] Set the receiver's own failsafe to **no pulses**, never "hold". The
+      firmware's whole safety story assumes a dead link looks dead.
 - [ ] Bind, then verify each channel lands on the intended function via the
       read-only `PARAM_IBUS_CH*` mirrors — with the GUI **No Motors** preset
       set (`hip_l/r_enable=0`, `wheel_l/r_enable=0`, `calib_bypass_en=1`,
@@ -93,17 +96,27 @@ Everything downstream depends on this. Plan §0.
 
 ## Phase B — native telemetry, then the HUD lights up
 
-- [ ] Emit the four standard CRSF frames: `ATTITUDE` (0x1E), `FLIGHT_MODE`
-      (0x21), `BATTERY_SENSOR` (0x08), `LINK_STATISTICS` (0x14). Verify
-      scaling against `radio/src/telemetry/crossfire.cpp`.
-- [ ] Confirm EdgeTX discovers `Ptch`, `Roll`, `Yaw`, `RxBt`, `Curr`, `Bat%`,
-      `RQly`, `1RSS`, `TPWR`. The HUD picks them up with no changes.
-- [ ] Emit one custom frame carrying `Stat`, `Flt`, `Alph`, `HipL`, `HipR`,
-      `WVel`, `Jump`, `SUp`, `Hlth`, `Glch`, `E32`, `Prof`. **~10 fields at
-      5–10 Hz — do not mirror the 247-byte payload at 50 Hz.** The `.wlog` on
-      the robot stays the authoritative record.
-- [ ] Names must match the `SENSOR` table at the top of
-      `sdcard/WIDGETS/WLRHUD/telem.lua`, or change that table.
+**Firmware and HUD done.** Scaling was read out of EdgeTX's own
+`crossfire.cpp` rather than assumed, and the HUD decodes both paths.
+
+- [x] Emit `ATTITUDE` (0x1E), `BATTERY_SENSOR` (0x08) and `FLIGHT_MODE`
+      (0x21). `LINK_STATISTICS` (0x14) is *consumed*, not emitted — the
+      receiver sends it, and uplink LQ feeds the liveness rule.
+- [x] Private frame 0x24 for the robot numerics, ~350 B/s total.
+- [x] HUD decodes 0x24 via `crossfireTelemetryPop()`, and falls back to the
+      `FLIGHT_MODE` text for state and fault when it is absent.
+- [ ] **Verify ExpressLRS actually relays frame type 0x24.** This is the one
+      unknown in Phase B. If it does not, state, fault, attitude and pack all
+      still work off the standard frames, and only the extra numerics are
+      lost. Fallbacks: a standard frame type, or MAVLink-over-CRSF.
+- [ ] Confirm EdgeTX discovers `Ptch`, `Roll`, `Yaw`, `RxBt`, `Bat%`, `FM`,
+      `RQly`, `1RSS`, `TPWR`.
+- [ ] **Leave the `Ptch`/`Roll`/`Yaw` sensor unit at RAD.** The wire carries
+      radians and the HUD converts; switching the sensor to degrees makes
+      EdgeTX convert too and the HUD double-counts.
+- [ ] Instrument bus current, so `Curr` stops reading a flat 0.0 A.
+- [ ] Count wheel-velocity glitches in `wheel_safety.h` so `GLCH` and the
+      "wheel glitches rising" callout do something.
 - [ ] Inject a deliberate fault and confirm the radio speaks the right one at
       the right tier.
 - [ ] Confirm the HUD stops saying NO ROBOT TELEMETRY and every reading shows

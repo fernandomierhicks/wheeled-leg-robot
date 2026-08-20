@@ -31,17 +31,80 @@ STUB = Path(__file__).resolve().parent / "edgetx_stub.lua"
 
 # Sensor sets. "native" is what EdgeTX creates on its own from the standard
 # CRSF frames; "robot" is the custom frame that firmware does not emit yet.
+# EdgeTX creates the ATTITUDE sensors with unit RADIANS, so getValue() returns
+# radians and the widget converts. Feeding degrees here would test the wrong
+# scale and hide a real bug.
 NATIVE = {
-    "Ptch": -6.1, "Roll": 3.0, "Yaw": 12.0,
+    "Ptch": -0.1064, "Roll": 0.0524, "Yaw": 0.2094,   # -6.1, 3.0, 12.0 degrees
     "RxBt": 24.1, "Curr": 4.2, "Bat%": 82.0,
     "RQly": 99.0, "1RSS": -71.0, "TPWR": 100.0,
 }
+# The robot-specific numerics no longer arrive as sensors. They ride a private
+# CRSF frame (type 0x24) that EdgeTX hands to Lua, so the harness has to encode
+# and push real bytes -- exactly the path the widget decodes.
+WLR_FRAME_ID = 0x24
+
 ROBOT = {
-    "Stat": 3.0, "Flt": 0.0, "Alph": 0.42,
-    "HipL": 2.7, "HipR": 2.9, "WVel": 0.55,
-    "Jump": 0.0, "SUp": 0.0, "Hlth": 127.0,
-    "Glch": 0.0, "E32": 1.0, "Prof": 1.0,
+    "state": 3, "fault": 0, "jump": 0, "standup": 0, "alpha": 0.42,
+    "profile": 1, "health": 127, "hip_l": 2.7, "hip_r": 2.9,
+    "wheel": 0.55, "esp32": 1, "glitch": 0,
 }
+
+
+def _be16(v):
+    v = int(round(v))
+    if v < 0:
+        v += 65536
+    return [(v >> 8) & 0xFF, v & 0xFF]
+
+
+def encode_wlr(f):
+    """Mirror of crsf_build_wlr_state() in teensy/src/crsf_protocol.h."""
+    d = [
+        int(f["state"]) & 0xFF,
+        int(f["fault"]) & 0xFF,
+        int(f["jump"]) & 0xFF,
+        int(f["standup"]) & 0xFF,
+        max(0, min(255, int(round(f["alpha"] * 200)))),
+        int(f["profile"]) & 0xFF,
+        (int(f["health"]) >> 8) & 0xFF,
+        int(f["health"]) & 0xFF,
+    ]
+    d += _be16(f["hip_l"] * 100)
+    d += _be16(f["hip_r"] * 100)
+    d += _be16(f["wheel"] * 100)
+    d += [int(f["esp32"]) & 0xFF, min(255, int(f["glitch"])) & 0xFF]
+    assert len(d) == 16, len(d)
+    return d
+
+
+def flight_mode_text(f, faults):
+    """What crsf_telemetry_tick() would put in the FLIGHT_MODE frame."""
+    code = int(f["fault"])
+    if code:
+        return "!" + faults.get(code, "FAULT")
+    return STATE_NAMES.get(int(f["state"]), "?")
+
+
+STATE_NAMES = {
+    0: "STARTUP", 1: "CALIBRATION", 2: "STANDBY", 3: "RUNNING", 4: "ESTOP",
+    5: "MANUAL", 6: "CMD_REJECT", 7: "JUMPING", 8: "STANDING_UP", 9: "DISARMING",
+}
+# Matches FAULT_FLIGHTMODE_NAMES in protocol/generate_protocol.py.
+FAULT_SHORT = {
+    1: "IMUERR", 2: "HIPINIT", 3: "HIPFB", 4: "HIPJUMP", 5: "CALTIME",
+    6: "HUMAN", 8: "PITCHWD", 9: "RUNAWAY", 10: "IMULOST", 11: "WHLFB",
+    12: "WHLINIT", 13: "STANDUP", 14: "ROLLWD", 15: "JUMPTO",
+}
+
+
+def push_wlr(lua, S, fields, with_frame=True):
+    """Queue one 0x24 frame and set the matching FLIGHT_MODE text."""
+    S.sensors["FM"] = flight_mode_text(fields, FAULT_SHORT)
+    if not with_frame:
+        return
+    payload = lua.table(*encode_wlr(fields))
+    lua.globals().crossfireTelemetryPush(WLR_FRAME_ID, payload)
 
 ZONES = [
     ("full screen 480x320", 0, 0, 480, 320, True),
@@ -97,7 +160,8 @@ def set_sensors(lua, S, table):
         lua.globals().S.sensors[k] = v
 
 
-def run_widget(lua, S, scenario, sensors, rssi, zones=ZONES, frames=6):
+def run_widget(lua, S, scenario, sensors, rssi, robot=None, with_frame=True,
+               zones=ZONES, frames=6):
     """Load main.lua fresh, build at each zone, and run several frames."""
     problems = []
     src = (SD / "WIDGETS" / "WLRHUD" / "main.lua").read_text(encoding="utf-8")
@@ -132,6 +196,8 @@ def run_widget(lua, S, scenario, sensors, rssi, zones=ZONES, frames=6):
             widget["update"](wgt, opts)
             for f in range(frames):
                 S.time = S.time + 20          # 200 ms per frame
+                if robot is not None:
+                    push_wlr(lua, S, robot, with_frame)
                 widget["refresh"](wgt, None, None)
                 widget["background"](wgt)
                 S.callRefs()
@@ -175,28 +241,32 @@ def short(path):
 # frozen sensor set never exercises any of them. This walks the robot through a
 # session and asserts the radio said the right things at the right moments.
 FLIGHT = [
-    # (label, sensor overrides, sounds that must be heard during this step)
-    ("boot into standby", {"Stat": 2.0, "Flt": 0.0}, []),
-    ("calibrate",         {"Stat": 1.0}, ["st_calib"]),
-    ("arm and run",       {"Stat": 3.0}, ["st_run"]),
-    ("jump",              {"Stat": 7.0, "Jump": 1.0}, ["st_jump"]),
-    ("back to running",   {"Stat": 3.0, "Jump": 0.0}, ["st_run"]),
+    # (label, robot overrides, native overrides, expected sounds,
+    #  needs_private_frame)
+    ("boot into standby", {"state": 2, "fault": 0}, {}, [], False),
+    ("calibrate",         {"state": 1}, {}, ["st_calib"], False),
+    ("arm and run",       {"state": 3}, {}, ["st_run"], False),
+    ("jump",              {"state": 7, "jump": 1}, {}, ["st_jump"], False),
+    ("back to running",   {"state": 3, "jump": 0}, {}, ["st_run"], False),
     # Pitch watchdog: REPOSITION tier, so two-tone plus the spoken fault.
-    ("pitch watchdog",    {"Stat": 4.0, "Flt": 8.0}, ["t_repos", "f_pitchw"]),
-    ("rescue to standby", {"Stat": 2.0, "Flt": 0.0}, ["st_stby"]),
+    ("pitch watchdog",    {"state": 4, "fault": 8}, {}, ["t_repos", "f_pitchw"], False),
+    ("rescue to standby", {"state": 2, "fault": 0}, {}, ["st_stby"], False),
     # Hardware dropout: REBOOT tier, siren.
-    ("hip feedback lost", {"Stat": 4.0, "Flt": 3.0}, ["t_siren", "f_hipfb"]),
-    ("esp32 drops",       {"Stat": 4.0, "E32": 0.0}, ["w_esp"]),
-    ("battery critical",  {"RxBt": 19.1}, ["w_batcrt"]),
+    ("hip feedback lost", {"state": 4, "fault": 3}, {}, ["t_siren", "f_hipfb"], False),
+    # esp32_link_ok rides only the private frame -- there is nowhere to put it
+    # in FLIGHT_MODE -- so this callout is expected to be silent without it.
+    ("esp32 drops",       {"state": 4, "esp32": 0}, {}, ["w_esp"], True),
+    ("battery critical",  {}, {"RxBt": 19.1}, ["w_batcrt"], False),
 ]
 
 
-def run_flight(lua, S):
+def run_flight(lua, S, with_frame=True):
     problems, spoken = [], set()
     src = (SD / "WIDGETS" / "WLRHUD" / "main.lua").read_text(encoding="utf-8")
     widget = lua.eval("load([==[%s]==], 'WLRHUD/main.lua')" % src)()
 
-    sensors = dict(NATIVE, **ROBOT)
+    sensors = dict(NATIVE)
+    robot = dict(ROBOT)
     set_sensors(lua, S, sensors)
     S.rssi = 71
     S.reset()
@@ -211,14 +281,17 @@ def run_flight(lua, S):
     # of announcing it -- loading a widget should not shout at you.
     for _ in range(2):
         S.time = S.time + 20
+        push_wlr(lua, S, robot, with_frame)
         widget["refresh"](wgt, None, None)
 
-    for label, overrides, expect in FLIGHT:
-        sensors.update(overrides)
+    for label, r_over, n_over, expect, needs_frame in FLIGHT:
+        robot.update(r_over)
+        sensors.update(n_over)
         set_sensors(lua, S, sensors)
         lua.execute("S.played = {}")
         for _ in range(3):
             S.time = S.time + 30
+            push_wlr(lua, S, robot, with_frame)
             widget["refresh"](wgt, None, None)
             S.callRefs()
 
@@ -228,6 +301,8 @@ def run_flight(lua, S):
             if f is not None:
                 heard.add(short(f))
                 spoken.add(f)
+        if needs_frame and not with_frame:
+            continue          # this callout has no FLIGHT_MODE equivalent
         for want in expect:
             if want not in heard:
                 problems.append(
@@ -256,34 +331,46 @@ def main():
         return 1
     print("syntax ok: %d files" % len(list(SD.rglob("*.lua"))))
 
+    # (label, native sensors, rssi, robot fields or None, custom frame relays?)
     scenarios = [
-        ("no link at all", {}, 0),
-        ("link up, no robot telemetry", dict(NATIVE), 71),
-        ("running normally", dict(NATIVE, **ROBOT), 71),
+        ("no link at all", {}, 0, None, True),
+        ("link up, no robot telemetry", dict(NATIVE), 71, None, True),
+        ("running normally", dict(NATIVE), 71, dict(ROBOT), True),
+        # The degradation that matters: ExpressLRS relays ATTITUDE, BATTERY and
+        # FLIGHT_MODE for certain, but whether it relays our private 0x24 frame
+        # is unverified. If it does not, state and fault must still reach the
+        # HUD through the FLIGHT_MODE text.
+        ("custom frame does not relay", dict(NATIVE), 71, dict(ROBOT), False),
     ]
     # One scenario per fault tier, so every branch of the banner and of the
     # annunciator's tier table gets executed.
     for code, label in ((6, "SOFT"), (8, "REPOSITION"), (4, "GUI_FIX"),
                         (3, "REBOOT"), (99, "unknown fault code")):
-        s = dict(NATIVE, **ROBOT)
-        s["Stat"], s["Flt"] = 4.0, float(code)
-        scenarios.append(("fault %d (%s)" % (code, label), s, 71))
+        r = dict(ROBOT, state=4, fault=code)
+        scenarios.append(("fault %d (%s)" % (code, label),
+                          dict(NATIVE), 71, r, True))
+        # And the same fault arriving only as FLIGHT_MODE text.
+        scenarios.append(("fault %d (%s), text only" % (code, label),
+                          dict(NATIVE), 71, r, False))
+    # A run of the flight with the private frame suppressed, proving the
+    # annunciator still speaks off the FLIGHT_MODE text alone.
     # Extremes: the arithmetic paths that clamp, and the states that switch
     # the phase line on.
-    edge = dict(NATIVE, **ROBOT)
-    edge.update({"Ptch": -47.0, "Roll": 61.0, "Alph": 1.4, "WVel": -3.3,
-                 "HipL": 9.9, "HipR": -0.0, "RxBt": 19.2, "RQly": 12.0,
-                 "Hlth": 0.0, "Glch": 812.0, "E32": 0.0, "Stat": 7.0,
-                 "Jump": 4.0, "Prof": 2.0})
-    scenarios.append(("saturated / degraded", edge, 3))
-    up = dict(NATIVE, **ROBOT)
-    up.update({"Stat": 8.0, "SUp": 3.0})
-    scenarios.append(("standing up", up, 71))
+    edge_native = dict(NATIVE)
+    # Attitude arrives in RADIANS on the wire; the widget converts. Feeding
+    # degrees here would silently test the wrong scale.
+    edge_native.update({"Ptch": -0.82, "Roll": 1.06, "RxBt": 19.2, "RQly": 12.0})
+    edge_robot = dict(ROBOT, alpha=1.4, wheel=-3.3, hip_l=9.9, hip_r=-0.0,
+                      health=0, glitch=812, esp32=0, state=7, jump=4, profile=2)
+    scenarios.append(("saturated / degraded", edge_native, 3, edge_robot, True))
+    scenarios.append(("standing up", dict(NATIVE), 71,
+                      dict(ROBOT, state=8, standup=3), True))
 
     failures = []
     all_played = set()
-    for label, sensors, rssi in scenarios:
-        found, built, played = run_widget(lua, S, label, sensors, rssi)
+    for label, sensors, rssi, robot, with_frame in scenarios:
+        found, built, played = run_widget(lua, S, label, sensors, rssi,
+                                          robot, with_frame)
         all_played |= played
         status = "FAIL" if found else "ok  "
         shape = "  ".join("%s=%d" % (k.split()[0], v)
@@ -292,12 +379,14 @@ def main():
               % (status, label, shape, len(played)))
         failures.extend(found)
 
-    found, spoken = run_flight(lua, S)
-    failures.extend(found)
-    all_played |= spoken
-    print("%s  %-28s  sounds: %s"
-          % ("FAIL" if found else "ok  ", "state/fault transitions",
-             ", ".join(sorted(short(s) for s in spoken))))
+    for label, with_frame in (("state/fault transitions", True),
+                              ("transitions, FM text only", False)):
+        found, spoken = run_flight(lua, S, with_frame)
+        failures.extend(found)
+        all_played |= spoken
+        print("%s  %-28s  sounds: %s"
+              % ("FAIL" if found else "ok  ", label,
+                 ", ".join(sorted(short(x) for x in spoken))))
 
     if failures:
         print("\n%d problem(s):" % len(failures), file=sys.stderr)

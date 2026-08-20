@@ -102,11 +102,48 @@ local function faultOf()
 end
 
 local function inFault()
-  return faultOf() ~= 0
+  if faultOf() ~= 0 then return true end
+  return telem.faultFromMode() ~= nil
 end
 
 local function noRobot()
   return not telem.robotTelemetry()
+end
+
+-- State and fault reach the radio twice: as numbers in the private 0x24 frame,
+-- and as text in FLIGHT_MODE. The text is the one guaranteed to relay, so it
+-- is the fallback whenever the private frame is absent -- which is the
+-- expected state until that relay is confirmed on hardware.
+local function stateLabel()
+  local s = stateOf()
+  if s ~= nil then return def.state(s).short end
+  local name = telem.stateNameFromMode()
+  if name ~= nil then return name end
+  local f = telem.faultFromMode()
+  if f ~= nil then return "ESTOP" end
+  return "NO LINK"
+end
+
+local function stateColour()
+  local s = stateOf()
+  if inFault() then return C.warn end
+  if s ~= nil then return lcd.RGB(def.state(s).colour) end
+  local name = telem.stateNameFromMode()
+  if name ~= nil then
+    for id, entry in pairs(def.states) do
+      if entry.name == name then return lcd.RGB(entry.colour) end
+    end
+    return C.text
+  end
+  return C.off
+end
+
+-- Fault name for display: the numeric code when we have it, otherwise the
+-- short name the firmware put in FLIGHT_MODE.
+local function faultLabel()
+  local c = faultOf()
+  if c ~= 0 then return def.fault(c).name end
+  return telem.faultFromMode() or "NONE"
 end
 
 -- ---------------------------------------------------------------------------
@@ -149,25 +186,11 @@ local function stateChip(x, y, w, h)
   return {
     { type = "rectangle", x = x, y = y, w = w, h = h, rounded = math.floor(h / 2),
       thickness = 2, filled = false,
-      color = function()
-        local s = stateOf()
-        if s == nil then return C.off end
-        if inFault() then return C.warn end
-        return lcd.RGB(def.state(s).colour)
-      end },
+      color = stateColour },
     { type = "label", x = x, y = y + math.floor((h - 16) / 2), w = w,
       align = CENTER, font = BOLD,
-      text = function()
-        local s = stateOf()
-        if s == nil then return "NO LINK" end
-        return def.state(s).short
-      end,
-      color = function()
-        local s = stateOf()
-        if s == nil then return C.off end
-        if inFault() then return C.warn end
-        return lcd.RGB(def.state(s).colour)
-      end },
+      text = stateLabel,
+      color = stateColour },
   }
 end
 
@@ -445,7 +468,7 @@ local function buildFaultBanner(root, L)
   p:rectangle({ x = 0, y = 0, w = w, h = A.h, rounded = 6, thickness = 2,
                 filled = false, color = C.warn })
   p:label({ x = 14, y = 10, font = BOLD, color = C.warn,
-            text = function() return def.fault(faultOf()).name end })
+            text = faultLabel })
   p:label({ x = 14, y = 32, w = w - 28, font = SMLSIZE, color = C.text,
             text = function()
               local d = def.fault(faultOf()).desc or ""
@@ -540,7 +563,7 @@ local function buildCompact(root, L)
   -- The fault name always gets the bottom line, whatever else got dropped.
   root:label({ x = 4, y = L.h - 16, w = L.w - 8, font = SMLSIZE,
                color = C.warn, visible = inFault,
-               text = function() return def.fault(faultOf()).name end })
+               text = faultLabel })
   root:label({ x = 4, y = L.h - 16, w = L.w - 8, font = SMLSIZE,
                color = C.amber, visible = noRobot,
                text = "no robot telemetry" })

@@ -141,8 +141,26 @@ function M.tick(a, t, now)
   end
   if not linked then return end
 
+  -- State and fault reach us twice: as numbers in the private 0x24 frame, and
+  -- as text in FLIGHT_MODE. Only the text is guaranteed to relay through
+  -- ExpressLRS, so fall back to it. Without this the annunciator goes
+  -- completely silent on a link that carries the standard frames only -- which
+  -- would lose spoken faults, the single most valuable thing here.
   local state = t.live("state", nil)
   local fault = t.live("fault", nil)
+
+  if state == nil then
+    local nm = t.stateNameFromMode()
+    if nm ~= nil then state = a.def.fmState[nm] end
+  end
+  if fault == nil then
+    local fm = t.faultFromMode()
+    if fm ~= nil then
+      fault = a.def.fmFault[fm] or 255      -- unknown name: still annunciate
+    elseif t.stateNameFromMode() ~= nil then
+      fault = 0                             -- text says a state, so no fault
+    end
+  end
 
   -- State transitions get the canonical callout, matching the LED/Neopixel
   -- colour table so audio and light always agree about what the robot is doing.
@@ -173,7 +191,7 @@ function M.tick(a, t, now)
 
   -- "GUI went quiet" and "robot went quiet" are different problems and need to
   -- be distinguishable without a laptop.
-  local esp = t.live("esp32", nil)
+  local esp = t.live("esp32", nil)   -- custom frame only; nil is normal
   if esp ~= nil then
     local ok = esp > 0.5
     if a.esp32 == nil then

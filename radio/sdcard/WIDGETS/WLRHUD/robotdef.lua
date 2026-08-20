@@ -59,6 +59,40 @@ M.faults = {
         desc="jump landing or handoff was not captured before its live phase timeout, or the complete jump exceeded its computed phase budget" },
 }
 
+-- Reverse maps for the CRSF FLIGHT_MODE text sensor. State and fault
+-- reach the radio twice: as numbers in the private 0x24 frame, and as
+-- text here. The text is the half guaranteed to relay through ELRS, so
+-- these let the HUD and the annunciator keep working on it alone.
+M.fmState = {
+  ["STARTUP"] = 0,
+  ["CALIBRATION"] = 1,
+  ["STANDBY"] = 2,
+  ["RUNNING"] = 3,
+  ["ESTOP"] = 4,
+  ["MANUAL"] = 5,
+  ["CMD_REJECT"] = 6,
+  ["JUMPING"] = 7,
+  ["STANDING_UP"] = 8,
+  ["DISARMING"] = 9,
+}
+
+M.fmFault = {
+  ["IMUERR"] = 1,
+  ["HIPINIT"] = 2,
+  ["HIPFB"] = 3,
+  ["HIPJUMP"] = 4,
+  ["CALTIME"] = 5,
+  ["HUMAN"] = 6,
+  ["PITCHWD"] = 8,
+  ["RUNAWAY"] = 9,
+  ["IMULOST"] = 10,
+  ["WHLFB"] = 11,
+  ["WHLINIT"] = 12,
+  ["STANDUP"] = 13,
+  ["ROLLWD"] = 14,
+  ["JUMPTO"] = 15,
+}
+
 M.jumpPhase    = { "CROUCH", "EXTEND", "RETRACT", "LANDING", "HANDOFF" }
 M.standupPhase = { "CROUCH", "RECOVER", "PAUSE", "STIFFEN" }
 

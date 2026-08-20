@@ -119,6 +119,56 @@ def _cpp_float(value: float) -> str:
     return text + "f"
 
 
+# Maximum characters EdgeTX will show from a CRSF FLIGHT_MODE frame. It
+# truncates at min(16, len) with the payload starting at offset 3, so 13
+# characters plus the terminator survive. See crsf_protocol.h.
+CRSF_FLIGHTMODE_MAX = 13
+
+# Fault abbreviations for that frame. Full symbols like
+# FAULT_WHEEL_FEEDBACK_LOST are 19 characters and would be cut mid-word on the
+# radio, which is the one place you read them while the robot is on the floor.
+FAULT_FLIGHTMODE_NAMES = {
+    "FAULT_NONE":                "OK",
+    "FAULT_IMU_ERROR":           "IMUERR",
+    "FAULT_HIP_INIT_TIMEOUT":    "HIPINIT",
+    "FAULT_HIP_FEEDBACK_LOST":   "HIPFB",
+    "FAULT_HIP_LARGE_POS_CMD":   "HIPJUMP",
+    "FAULT_CALIBRATION_TIMEOUT": "CALTIME",
+    "FAULT_HUMAN_ESTOP":         "HUMAN",
+    "FAULT_PITCH_WATCHDOG":      "PITCHWD",
+    "FAULT_WHEEL_RUNAWAY":       "RUNAWAY",
+    "FAULT_IMU_LOST":            "IMULOST",
+    "FAULT_WHEEL_FEEDBACK_LOST": "WHLFB",
+    "FAULT_WHEEL_INIT_TIMEOUT":  "WHLINIT",
+    "FAULT_STANDUP_FAILED":      "STANDUP",
+    "FAULT_ROLL_WATCHDOG":       "ROLLWD",
+    "FAULT_JUMP_TIMEOUT":        "JUMPTO",
+}
+
+
+def _check_flightmode_names(schema) -> None:
+    """A fault the radio cannot name is a fault you walk back to the laptop for."""
+    known = {item["symbol"] for item in schema["faults"]}
+    missing = sorted(known - set(FAULT_FLIGHTMODE_NAMES))
+    if missing:
+        raise SystemExit(
+            "FAULT_FLIGHTMODE_NAMES in generate_protocol.py has no entry for: "
+            + ", ".join(missing)
+            + "\nAdd a short name (max %d chars) for each." % CRSF_FLIGHTMODE_MAX)
+    # The '!' prefix the firmware adds costs one character.
+    too_long = sorted(n for n in FAULT_FLIGHTMODE_NAMES.values()
+                      if len(n) + 1 > CRSF_FLIGHTMODE_MAX)
+    if too_long:
+        raise SystemExit(
+            "these fault names exceed %d characters once prefixed with '!': %s"
+            % (CRSF_FLIGHTMODE_MAX, ", ".join(too_long)))
+    for item in schema["states"]:
+        if len(item["name"]) > CRSF_FLIGHTMODE_MAX:
+            raise SystemExit(
+                "state name %r exceeds the %d-character FLIGHT_MODE limit"
+                % (item["name"], CRSF_FLIGHTMODE_MAX))
+
+
 def render(schema: dict) -> dict[Path, str]:
     for section in ("states", "faults", "commands", "groups", "parameters"):
         items = schema[section]
@@ -141,6 +191,34 @@ def render(schema: dict) -> dict[Path, str]:
         for item in schema[section]:
             ids.append(f"#define {item['symbol']:<36} {_hex(item['id'])}")
         ids.append("")
+
+    # C++ name tables for the CRSF FLIGHT_MODE frame. EdgeTX truncates that
+    # frame at 13 characters (crossfire.cpp: min(16, len), payload starts at 3),
+    # so faults need an abbreviation that state names do not. The abbreviations
+    # live here rather than in schema.json to keep the schema — and its six
+    # other generated artifacts — untouched, but they are validated against it
+    # below, so a new fault fails the generator instead of silently reaching the
+    # radio as "FAULT 12".
+    cpp_names = ["#pragma once", "#include <stdint.h>", "",
+             "// Human-readable names for the CRSF FLIGHT_MODE telemetry frame.",
+             "// Kept to %d characters so EdgeTX does not truncate them."
+             % CRSF_FLIGHTMODE_MAX, ""]
+    max_state = max(item["id"] for item in schema["states"]) + 1
+    cpp_names.append("static const char* const STATE_NAMES[%d] = {" % max_state)
+    by_state = {item["id"]: item["name"] for item in schema["states"]}
+    for i in range(max_state):
+        cpp_names.append('    /* %2d */ "%s",' % (i, by_state.get(i, "?")))
+    cpp_names += ["};", ""]
+
+    max_fault = max(item["id"] for item in schema["faults"]) + 1
+    cpp_names.append("// Short fault names. Prefixed with '!' by the caller so a fault is")
+    cpp_names.append("// unmistakable on the radio's FM field at a glance.")
+    cpp_names.append("static const char* const FAULT_SHORT_NAMES[%d] = {" % max_fault)
+    by_fault = {item["id"]: item["symbol"] for item in schema["faults"]}
+    for i in range(max_fault):
+        sym = by_fault.get(i)
+        cpp_names.append('    /* %2d */ "%s",' % (i, FAULT_FLIGHTMODE_NAMES[sym] if sym else "?"))
+    cpp_names += ["};", ""]
 
     state = ["#pragma once", "#include <stdint.h>", "", "typedef enum : uint8_t {"]
     state += [f"    {item['symbol']:<24} = {item['id']}," for item in schema["states"]]
@@ -199,6 +277,7 @@ def render(schema: dict) -> dict[Path, str]:
     return {
         ROBOT / "shared/generated_protocol_ids.h": banner + "\n".join(ids),
         ROBOT / "teensy/src/generated_robot_state.h": banner + "\n".join(state),
+        ROBOT / "teensy/src/generated_names.h": banner + "\n".join(cpp_names),
         ROBOT / "teensy/lib/ParamRegistry/generated_param_ids.h": banner + "\n".join(param_ids),
         ROBOT / "teensy/lib/ParamRegistry/generated_param_table.inc": banner + "\n".join(table),
         ROOT / "software/gui/tabs/generated_protocol.py": "\n".join(py),
@@ -217,6 +296,7 @@ def main() -> int:
             raise SystemExit("schema.json already exists; refusing to overwrite")
         SCHEMA_PATH.write_text(json.dumps(bootstrap(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    _check_flightmode_names(schema)
     stale = []
     for path, content in render(schema).items():
         if args.check:

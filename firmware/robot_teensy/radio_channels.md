@@ -1,7 +1,24 @@
 # Radio Channel Map
 
-**TX Profile:** `ROBOT_03`  
+**Link:** ExpressLRS / CRSF, 420000 baud, `Serial4` (RX pin 16, **TX pin 17**).
+Bidirectional -- telemetry rides the return path. See
+`teensy/src/crsf_protocol.h` for the wire format and, more importantly, its
+FAILSAFE CONTRACT.
+
+**TX Profile:** `WLR ROBOT` on the RadioMaster TX15 (`radio/sdcard/MODELS/`).
 **Reversals:** none
+
+> **"Up" is ambiguous, so read this once.** Below, "C5 up" means the *channel*
+> is high (~2000 us). On the TX15 that is produced by pushing the switch
+> **down** -- the model maps every switch so that up = channel low = safe, and
+> the power-on switch warning enforces it. See `radio/CHANNELS.md`.
+
+### Signal loss
+
+`channel()` returns **0**, not the last value, whenever the link is not alive,
+and `alive()` goes false on any of: no frame within 100 ms, uplink link
+quality at 0 while frames still arrive, or fewer than 5 good frames since
+boot. Set the receiver's own failsafe to **no pulses**, never "hold".
 
 ---
 

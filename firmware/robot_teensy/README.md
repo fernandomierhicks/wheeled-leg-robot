@@ -17,6 +17,7 @@ Two-microcontroller architecture for a wheeled-leg balancing robot.
 │  wheel_motors.cpp  ← ODrive/ODESC (CAN3)                       │
 │  IMU.cpp           ← BNO086 (SPI)                               │
 │  main.cpp          ← scheduler, radio, telemetry, LED, buzzer   │
+│  Crsf.h/crsf_protocol.h ← CRSF RC link + radio telemetry        │
 └──────────────────────────────┬──────────────────────────────────┘
                                │ UART 4 Mbaud (CommLink framed)
                                │ telemetry @ 50 Hz (split TELEM_A + TELEM_B)
@@ -54,7 +55,7 @@ do not operate the robot on an untrusted network.
 - CAN3 @ 1 Mbps → ODrive wheel motors
 - SPI0 → BNO086 IMU (CS=D10, INT=D9, RST=D6)
 - Serial2/3 → AK45 UART encoder readback
-- Serial4 RX → FlySky iBUS RC receiver
+- Serial4 ↔ ExpressLRS/CRSF RC link @ 420000 (RX pin 16, TX pin 17) — bidirectional: RC in, telemetry out
 - Serial5 ↔ ESP32 (CommLink UART)
 
 ## Directory layout
@@ -127,6 +128,66 @@ all three IMU rates, hip position/speed/torque, and wheel speed/torque authority
 Current logs use the firmware's live `LANDING` phase. Acceleration plots remain
 for older captures but read zero with the integrated-only production IMU; older
 V12 captures infer touchdown from their historical acceleration/gyro evidence.
+
+## Radio link (CRSF) and radio telemetry
+
+The RC link is ExpressLRS speaking CRSF on `Serial4`, replacing FlySky iBUS.
+The point of the swap is that CRSF is **bidirectional**, which is what makes
+telemetry and the on-radio HUD possible at all.
+
+`teensy/src/crsf_protocol.h` is Arduino-free on purpose so its failsafe rules
+can be unit-tested natively:
+
+```
+cd teensy && pio test -e windows_crsf     # or native_crsf on Linux/macOS
+```
+
+Read the FAILSAFE CONTRACT comment in that file before changing anything in
+it. The short version, and the reason those tests exist:
+
+- `alive()` goes false on link timeout, on uplink LQ hitting 0 while frames
+  keep arriving, and until 5 good frames have been seen since boot.
+- `channel()` returns **0**, not the last value, whenever the link is not
+  alive. The rescue and calibration combos both test two channels for
+  `< 1010`; a driver that held the last value would let a radio that died with
+  the sticks near a corner satisfy half of a combo for free.
+
+Set the receiver's own failsafe to **no pulses**, never "hold".
+
+CRSF ticks are normalised to microseconds at the boundary, so every threshold
+in `main.cpp` (`> 1990`, `< 1010`) is unchanged. Full deflection lands at
+988/2012 us with ~30 ticks of margin above the arm threshold, which a test
+asserts — ELRS endpoints occasionally land short and that silently breaks
+arming.
+
+### What goes back to the radio
+
+About 350 bytes/s, scheduled in `teensy/src/CrsfTelem.h`. Deliberately not a
+mirror of `TelemetryPayload` — the `.wlog` stays the authoritative record.
+
+| Frame | Rate | Carries |
+|---|---|---|
+| `ATTITUDE` 0x1E | 10 Hz | pitch, roll, yaw (radians × 10000) |
+| `WLR_STATE` 0x24 | 10 Hz | state, fault, alpha, hip torques, wheel vel, health flags, phases |
+| `BATTERY_SENSOR` 0x08 | 5 Hz | pack volts, percent |
+| `FLIGHT_MODE` 0x21 | 5 Hz | state name, or `!FAULT` while in ESTOP |
+
+The first, third and fourth become EdgeTX sensors automatically. 0x24 is a
+private type that EdgeTX hands to Lua, which the `WLRHUD` widget decodes.
+
+**State and fault deliberately travel twice** — as numbers in 0x24 and as text
+in `FLIGHT_MODE`. ExpressLRS is known to relay the standard frames; whether it
+relays an arbitrary private type is **not yet verified on hardware**. If it
+does not, the HUD and the spoken fault callouts keep working off the text.
+
+Two fields are **not instrumented** and are sent as zero: bus current (nothing
+measures it, so EdgeTX's `Curr` sensor reads 0.0 A — do not build an alarm on
+it) and `vel_glitch_count` (`wheel_safety.h` filters glitches but never counts
+them).
+
+Name tables for `FLIGHT_MODE` are generated into `teensy/src/generated_names.h`
+by `protocol/generate_protocol.py`; a new fault fails the generator rather than
+reaching the radio as an unnamed code.
 
 ## Flashing (PlatformIO / GUI)
 
