@@ -1743,10 +1743,10 @@ static void check_imu_state() {
         case ImuState::NOMINAL:
             comm_log(LOG_LEVEL_INFO,  "IMU: NOMINAL");                   break;
         case ImuState::DEGRADED:
-            comm_log(LOG_LEVEL_WARN,  "IMU: degraded — %.0f%% loss",
+            comm_log(LOG_LEVEL_WARN,  "IMU: degraded/recovering — %.0f%% loss",
                      imu_packet_loss() * 100.0f);                        break;
         case ImuState::ERROR:
-            comm_log(LOG_LEVEL_ERROR, "IMU: failed to connect — giving up until reboot");  break;
+            comm_log(LOG_LEVEL_ERROR, "IMU: recovery failed — automatic retry pending");  break;
         default: break;
     }
 }

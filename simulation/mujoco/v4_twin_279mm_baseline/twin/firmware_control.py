@@ -57,6 +57,8 @@ class ControlInput:
     hip_l_torque_nm: float = 0.0
     hip_r_torque_nm: float = 0.0
     state: str = "RUNNING"
+    velocity_offset_ms: float = 0.0
+    jump_handoff_active: bool = False
 
 
 @dataclass(frozen=True)
@@ -176,7 +178,9 @@ class FirmwareController:
             if self._state in controlled:
                 self.params["plant_id_en"] = 0.0
                 self.plant_id_start_s = None
-            if state == "RUNNING":
+            # JUMPING -> RUNNING is a continuous controller handoff in the
+            # firmware. Preserve the PI/rate-limit state instead of re-arming.
+            if state == "RUNNING" and self._state not in controlled:
                 self.reset(time_s, hip_alpha)
             self._state = state
 
@@ -198,7 +202,9 @@ class FirmwareController:
                     return "ROLL_WATCHDOG"
             else:
                 self.roll_fault_start_s = None
-        if (abs(sample.wheel_l_turns_s) > 2.0 * soft_wheel_limit or
+        runaway_enabled = self.params.get("wheel_runaway_en", 1.0) >= 0.5
+        if runaway_enabled and (
+                abs(sample.wheel_l_turns_s) > 2.0 * soft_wheel_limit or
                 abs(sample.wheel_r_turns_s) > 2.0 * soft_wheel_limit):
             self.wheel_fault_start_s = self.wheel_fault_start_s or now
             if now - self.wheel_fault_start_s > 0.050:
@@ -223,7 +229,8 @@ class FirmwareController:
         pos_l = pos_r = alpha_to_hip_q(self.hip_cmd_rlt, self.robot)
         hip_kp = p["hip_running_kp"]
         hip_kd = p["hip_running_kd"]
-        if sample.state.upper() == "RUNNING" and p["roll_ctrl_en"] >= 0.5:
+        if ((sample.state.upper() == "RUNNING" or sample.jump_handoff_active)
+                and p["roll_ctrl_en"] >= 0.5):
             dmax = p["roll_rate_lim"] * DT
             self.roll_sp_rlt += _clamp(p["roll_cmd_rad"] - self.roll_sp_rlt, -dmax, dmax)
             roll_err = self.roll_sp_rlt - sample.roll_rad
@@ -255,6 +262,8 @@ class FirmwareController:
         barrier_th = _schedule(p["lqr_barrier_th_ret"], p["lqr_barrier_th_ext"], alpha)
         pitch_trim = _schedule(p["lqr_pitch_trim_ret"], p["lqr_pitch_trim_ext"], alpha)
         soft_limit = p["wm_vel_limit"]
+        if sample.jump_handoff_active and p["jmp_handoff_vel_lim"] > 0.0:
+            soft_limit = p["jmp_handoff_vel_lim"]
         fault = self._watchdogs(sample, pitch, sched_fwd, sched_bwd, soft_limit)
         if fault:
             return ControlOutput(gain_sched_alpha=alpha, wheel_vel_avg_ms=vel_avg_ms,
@@ -263,7 +272,7 @@ class FirmwareController:
         theta_ref = 0.0
         theta_max_fwd = 0.0
         theta_max_bwd = 0.0
-        v_desired = p["v_cmd_ms"]
+        v_desired = p["v_cmd_ms"] + sample.velocity_offset_ms
         if p["vel_pi_en"] >= 0.5:
             v_err = v_desired - vel_avg_ms
             if v_desired * self.prev_v_desired < 0.0:
@@ -300,8 +309,13 @@ class FirmwareController:
 
         k_pitch = _schedule(p["lqr_k_pitch_ret"], p["lqr_k_pitch_ext"], alpha)
         k_rate = _schedule(p["lqr_k_rate_ret"], p["lqr_k_rate_ext"], alpha)
+        if sample.jump_handoff_active:
+            k_pitch *= p["jmp_handoff_kp_mul"]
+            k_rate *= p["jmp_handoff_kr_mul"]
         v_ref = v_desired if p["vel_pi_en"] >= 0.5 else 0.0
         velocity_term = p["lqr_k_vel"] * (vel_avg_ms - v_ref)
+        if sample.jump_handoff_active:
+            velocity_term *= p["jmp_handoff_kv_mul"]
         velocity_term = backward_velocity_term_guard(
             velocity_term, pitch, barrier_th, sched_bwd)
         tau_sym = -(k_pitch * (pitch - theta_ref - pitch_trim)
@@ -328,6 +342,8 @@ class FirmwareController:
             self.plant_id_start_s = None
 
         torque_limit = p["lqr_torque_limit"]
+        if sample.jump_handoff_active and p["jmp_handoff_torque"] > 0.0:
+            torque_limit = p["jmp_handoff_torque"]
         tau_sym = _clamp(tau_sym, -torque_limit, torque_limit)
         l_eff = _schedule(L_EFF_RET, L_EFF_EXT, alpha)
         ff2 = p["ff2_alpha"] * M_BODY * 9.81 * l_eff * math.sin(pitch) if p["ff2_alpha"] > 0.0 else 0.0

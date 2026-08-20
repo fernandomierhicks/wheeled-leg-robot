@@ -86,7 +86,7 @@ def test_robust_mujoco_search_is_schema_bounded_and_dry_run_pushable():
     assert {change["name"] for change in changes} == set(INTEGRATED_SPACE.names)
     assert len(candidate) == len(PARAMS_BY_NAME)
     assert control_snapshot_sha256(candidate) == (
-        "195f3d6b2ca125e00d22b56c4b9d64ae6d974c68ad2f6a057111d119d347cdd1"
+        "9248a7c574614d31577a05aa98bd618369a60ab1919a76231ed9d510fee0fb55"
     )
 
 

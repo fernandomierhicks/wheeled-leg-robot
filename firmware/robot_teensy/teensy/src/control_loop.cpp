@@ -106,6 +106,8 @@ static constexpr float WHEEL_R      = 0.056f;     // [m] wheel radius (112 mm OD
 static float s_vel_integral    = 0.0f;
 static float s_prev_v_desired  = 0.0f;
 static float s_theta_ref_rlt   = 0.0f;  // rate-limited theta_ref
+static float s_velocity_command_offset_ms = 0.0f;
+static bool  s_jump_handoff_active = false;
 
 // Rate-limited RUNNING hip-height command, in the same normalized [0,1]
 // extension space as PARAM_RADIO_HIP_CMD/hip_cmd_to_setpoints(). Invalid
@@ -200,6 +202,8 @@ void controlLoop_reset() {
     s_hip_cmd_rlt_valid   = false;
     s_plant_id_active     = false;
     s_hip_override_active = false;
+    s_velocity_command_offset_ms = 0.0f;
+    s_jump_handoff_active = false;
 }
 
 // STANDING_UP-scoped authority overrides. The catch needs far more wheel torque
@@ -213,15 +217,52 @@ void controlLoop_reset() {
 // the same off-by-default contract every other standup param has. These are the
 // params originally reserved for the removed inline catch law; this is what
 // they now do.
-static float standup_scoped(uint16_t standup_param, float running_value) {
-    if (g_state.state != STATE_STANDING_UP) return running_value;
-    float v = param_get(standup_param);
-    return (v > 0.0f) ? v : running_value;
+static float authority_scoped(uint16_t standup_param,
+                              uint16_t jump_handoff_param,
+                              float running_value) {
+    if (g_state.state == STATE_STANDING_UP) {
+        float v = param_get(standup_param);
+        return (v > 0.0f) ? v : running_value;
+    }
+    if (s_jump_handoff_active) {
+        float v = param_get(jump_handoff_param);
+        return (v > 0.0f) ? v : running_value;
+    }
+    return running_value;
 }
 
+// Not routed through authority_scoped(): that helper's jump branch keys off
+// s_jump_handoff_active, true only for LANDING/HANDOFF. The wheel loop runs
+// unchanged through CROUCH/EXTEND/RETRACT too (see on_jumping()), and airborne
+// wheels are genuinely unloaded there, so they need real headroom before the
+// soft governor and the 2x runaway watchdog react — jmp_handoff_vel_lim is the
+// wrong number for that (it's deliberately tight because a HANDOFF-phase
+// runaway means the wheel is back on the ground). A real jump on 2026-08-13
+// tripped FAULT_WHEEL_RUNAWAY at wm_r=-12.97 turns/s against the plain 12.0
+// (2x wm_vel_limit=6.0) ceiling that used to apply through all of JUMPING —
+// mid-RETRACT, before landing could even be evaluated.
 float controlLoop_wheel_vel_limit() {
-    return standup_scoped(PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S,
-                          param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S));
+    if (g_state.state == STATE_STANDING_UP) {
+        float v = param_get(PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S);
+        return (v > 0.0f) ? v : param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
+    }
+    if (s_jump_handoff_active) {
+        float v = param_get(PARAM_JUMP_HANDOFF_WHEEL_VEL_LIMIT);
+        return (v > 0.0f) ? v : param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
+    }
+    if (g_state.state == STATE_JUMPING) {
+        float v = param_get(PARAM_JUMP_AIRBORNE_WHEEL_VEL_LIMIT);
+        return (v > 0.0f) ? v : param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
+    }
+    return param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
+}
+
+void controlLoop_set_velocity_command_offset(float offset_ms) {
+    s_velocity_command_offset_ms = offset_ms;
+}
+
+void controlLoop_set_jump_handoff_active(bool active) {
+    s_jump_handoff_active = active;
 }
 
 void controlLoop_set_hip_override(float t) {
@@ -394,11 +435,12 @@ void controlLoop_run() {
     // ── Roll controller (active suspension) ───────────────────────────────────
     // PD on roll angle/rate → a differential hip position offset (+ on one leg,
     // − on the other), held with a soft (backdrivable) kp so obstacles can
-    // back-drive the legs. RUNNING only; off by default, in which case the hips
-    // are held symmetrically with the running gains exactly as before.
+    // back-drive the legs. Active in RUNNING and the jump landing/handoff; off
+    // by default, in which case hips use symmetric running gains as before.
     float hip_kp = param_get(PARAM_HIP_RUNNING_KP);
     float hip_kd = param_get(PARAM_HIP_RUNNING_KD);
-    if (g_state.state == STATE_RUNNING && param_get(PARAM_ROLL_CTRL_EN) >= 0.5f) {
+    if ((g_state.state == STATE_RUNNING || s_jump_handoff_active) &&
+        param_get(PARAM_ROLL_CTRL_EN) >= 0.5f) {
         float roll      = imu_roll();
         float roll_rate = imu_roll_rate();
 
@@ -607,9 +649,9 @@ void controlLoop_run() {
     // spins the wheels past 2x the governor. It is persistent, so main.cpp
     // logs a loud WARN at boot whenever it comes back off flash cleared.
     //
-    // The trip follows whichever limit is actually in force, so raising
-    // standup_vel_limit for an energetic catch doesn't ESTOP the moment the
-    // wheels pass 2x the (lower) RUNNING governor they aren't being held to.
+    // The trip follows whichever limit is actually in force, so raising a
+    // standup or jump-handoff limit for an energetic catch doesn't ESTOP the
+    // moment wheels pass 2x the lower RUNNING governor they aren't held to.
     float wheel_vel_limit = controlLoop_wheel_vel_limit();
     if (param_get(PARAM_WHEEL_RUNAWAY_EN) >= 0.5f) {
         float hard_limit = wheel_vel_limit * 2.0f;
@@ -640,12 +682,17 @@ void controlLoop_run() {
     float k_rate_ext  = param_get(PARAM_LQR_K_RATE_EXT);
     float k_pitch = k_pitch_ret + alpha * (k_pitch_ext - k_pitch_ret);
     float k_rate  = k_rate_ret  + alpha * (k_rate_ext  - k_rate_ret);
+    if (s_jump_handoff_active) {
+        k_pitch *= param_get(PARAM_JUMP_HANDOFF_K_PITCH_MULT);
+        k_rate  *= param_get(PARAM_JUMP_HANDOFF_K_RATE_MULT);
+    }
 
     // Effective pendulum length (linear interpolation from IK values)
     float l_eff = L_EFF_RET + alpha * (L_EFF_EXT - L_EFF_RET);
 
     // ── Phase 3: Velocity PI ──────────────────────────────────────────────────
-    float v_desired = param_get(PARAM_V_CMD_MS);
+    float v_desired = param_get(PARAM_V_CMD_MS) + s_velocity_command_offset_ms;
+    g_state.v_ref = v_desired;
     float theta_ref = 0.0f;
 
     if (param_get(PARAM_VEL_PI_EN) >= 0.5f) {
@@ -716,9 +763,9 @@ void controlLoop_run() {
     s_prev_v_desired = v_desired;
 
     g_state.theta_ref        = theta_ref;
-    // g_state.v_ref is set every tick in main.cpp's radio_update(), not here —
-    // it needs to stay live in STANDBY too (controlLoop_run() only runs in
-    // RUNNING/JUMPING), same as v_cmd_ms/omega_cmd_rds.
+    // main.cpp keeps g_state.v_ref live in non-controlled states. Here it is
+    // overwritten with the effective command so telemetry and the direct LQR
+    // velocity term both include a jump nudge while it is active.
 
     // ── Phase 4: Yaw PI ───────────────────────────────────────────────────────
     float tau_yaw = 0.0f;
@@ -754,6 +801,9 @@ void controlLoop_run() {
     float pitch_term    = k_pitch * x0;
     float rate_term     = k_rate * x1;
     float velocity_term = param_get(PARAM_LQR_K_VEL) * x2;
+    if (s_jump_handoff_active) {
+        velocity_term *= param_get(PARAM_JUMP_HANDOFF_K_VEL_MULT);
+    }
 
     // Balance-priority guard: past the backward barrier threshold, remove
     // only the part of the direct velocity term that opposes recovery,
@@ -806,11 +856,12 @@ void controlLoop_run() {
         s_plant_id_active = false;
     }
 
-    // Clamp to adjustable test limit (standup_torque_lim replaces it during
-    // STANDING_UP when set — see standup_scoped()). MOTOR_TRQ_MAX below is
-    // still the hard ceiling either way.
-    float torque_limit = standup_scoped(PARAM_STANDUP_TORQUE_LIMIT,
-                                        param_get(PARAM_LQR_TORQUE_LIMIT));
+    // Clamp to the state-scoped authority limit. STANDING_UP and the jump
+    // handoff may each override the normal LQR limit; MOTOR_TRQ_MAX below is
+    // still the hard ceiling in every state.
+    float torque_limit = authority_scoped(PARAM_STANDUP_TORQUE_LIMIT,
+                                          PARAM_JUMP_HANDOFF_TORQUE_LIMIT,
+                                          param_get(PARAM_LQR_TORQUE_LIMIT));
     if (g_state.tau_sym >  torque_limit) g_state.tau_sym =  torque_limit;
     if (g_state.tau_sym < -torque_limit) g_state.tau_sym = -torque_limit;
 
@@ -838,7 +889,7 @@ void controlLoop_run() {
     float tau_R = 0.0f;
 
     if (param_get(PARAM_LQR_ENABLE) >= 0.5f) {
-        float soft_limit = wheel_vel_limit;  // standup-scoped, see above
+        float soft_limit = wheel_vel_limit;  // state-scoped, see above
 
         // Mix: symmetric + yaw differential + symmetric FF terms
         // Driving the left wheel harder than the right yaws the robot right (-Z),

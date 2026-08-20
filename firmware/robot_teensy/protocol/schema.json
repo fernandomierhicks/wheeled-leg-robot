@@ -126,7 +126,7 @@
     {
       "symbol": "FAULT_JUMP_TIMEOUT",
       "id": 15,
-      "description": "jump sequence overran its computed phase budget without reaching JP_DONE"
+      "description": "jump landing or handoff was not captured before its live phase timeout, or the complete jump exceeded its computed phase budget"
     }
   ],
   "commands": [
@@ -997,7 +997,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Hip position gain for CROUCH, RETRACT and the JP_DONE landing hold. NOT used in EXTEND, where kp is forced to 0. Increase -> tighter tracking of the crouch and tuck ramps and a stiffer landing, but a bigger stiffness step away from hip_running_kp on entry and more impact transmitted to the body. Decrease -> softer and more compliant, with more sag under the leg's static load (sag = holding torque / kp)."
+      "description": "Hip position gain for CROUCH and RETRACT. NOT used in EXTEND, where kp is forced to 0, or after live landing detection, where the normal RUNNING hip controller takes over. Increase -> tighter tracking of the crouch and tuck ramps, but a bigger stiffness step away from hip_running_kp on entry. Decrease -> softer tracking with more sag under the leg's static load (sag = holding torque / kp)."
     },
     {
       "symbol": "PARAM_JUMP_KD",
@@ -1010,7 +1010,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "Hip damping for CROUCH, RETRACT and JP_DONE. Increase -> better damped, less overshoot and ringing at the ends of the ramps, but more resistance to fast motion. Decrease -> livelier response, may ring against jump_kp."
+      "description": "Hip damping for CROUCH and RETRACT. Increase -> better damped, less overshoot and ringing at the ends of the ramps, but more resistance to fast motion. Decrease -> livelier response, may ring against jump_kp. LANDING and HANDOFF use the normal RUNNING hip controller."
     },
     {
       "symbol": "PARAM_JUMP_EXTEND_KD",
@@ -1043,11 +1043,13 @@
       "id": 1329,
       "group": "GROUP_CONTROL",
       "name": "jump_effort",
-      "default": 0.0,
+      "default": 1.0,
       "min": 0.0,
       "max": 1.0,
-      "flags": [],
-      "description": "Fraction of jump_torque_max actually commanded during EXTEND - the one dial to sweep during bring-up. Increase -> harder push. Decrease -> weaker push, and once the product drops below roughly 3.5 N·m the leg collapses rather than extending, so this is NOT a safety dial once the robot is on the ground. NOT a vertical speed: there is no flight-state estimator, so nothing can close a loop on takeoff velocity. Non-persistent and inert at 0, so every boot comes up unable to jump even with jump_enable stored at 1."
+      "flags": [
+        "persistent"
+      ],
+      "description": "Fraction of jump_torque_max actually commanded during EXTEND - the one dial to sweep during bring-up. Increase -> harder push. Decrease -> weaker push, and once the product drops below roughly 3.5 N·m the leg collapses rather than extending, so this is NOT a safety dial once the robot is on the ground. NOT a vertical speed: this remains an open-loop push effort. Persistent; defaults to 1.0. jump_enable remains the independent boot-safe master gate and defaults to 0."
     },
     {
       "symbol": "PARAM_JUMP_CROUCH_ANGLE",
@@ -1102,6 +1104,19 @@
       "description": "PEAK hip speed during RETRACT, the tuck back to the landing pose [rad/s; GUI shows deg/s]. Duration derived as 1.875 * travel / this. Increase -> faster tuck, legs up sooner in flight, landing pose reached earlier. Decrease -> slower tuck; slower than the flight time and the robot lands mid-ramp instead of in the settled pose. Replaces a hardcoded 0.20 s whose speed depended on how far EXTEND happened to travel."
     },
     {
+      "symbol": "PARAM_JUMP_RETRACT_TORQUE_LIMIT_NM",
+      "id": 1357,
+      "group": "GROUP_CONTROL",
+      "name": "jump_retract_torque",
+      "default": 7.0,
+      "min": 0.1,
+      "max": 8.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Commanded hip-feedback torque ceiling during RETRACT [N*m]. Firmware predicts kp*(q_cmd-q)+kd*(dq_cmd-dq) independently for each hip and scales kp/kd together when it exceeds this value. This preserves the damping ratio and avoids the approximately 8 N*m demand produced by an abrupt EXTEND-to-RETRACT velocity reversal. It is not a motor current limit: external impact or back-driving can still make measured shaft torque exceed it. Default 7 N*m; the matched jump retained its 2.5 cm clearance target at 7, while 6 delayed the tuck enough to reduce clearance below 2 cm."
+    },
+    {
       "symbol": "PARAM_JUMP_RETRACT_ANGLE",
       "id": 1335,
       "group": "GROUP_CONTROL",
@@ -1112,7 +1127,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "RETRACT target - the pose the robot tucks to and LANDS on, since touchdown happens partway into the JP_DONE hold [rad; GUI shows deg]. NEGATIVE means \"return to the pre-jump pose\", the default and the behaviour before this parameter existed; the same inherit-by-sentinel convention standup_torque_lim and standup_vel_limit use for 0. Increase -> lands more extended, leaving leg travel to absorb the impact but a higher CG to catch. Decrease -> lands more retracted and more stable, with less suspension travel left. The RUNNING handoff re-seeds the hip rate limiter from the measured pose, so CH3 slews back in rather than stepping."
+      "description": "RETRACT target - the pose the robot tucks to and lands on while live contact detection remains armed [rad; GUI shows deg]. NEGATIVE means \"return to the pre-jump pose\", the default and the behaviour before this parameter existed. Increase -> lands more extended, leaving leg travel to absorb the impact but a higher CG to catch. Decrease -> lands more retracted and more stable, with less suspension travel left. Landing re-seeds the hip rate limiter from the measured pose, so CH3 slews back in rather than stepping after handoff."
     },
     {
       "symbol": "PARAM_JUMP_TORQUE_RATE",
@@ -1126,6 +1141,279 @@
         "persistent"
       ],
       "description": "EXTEND torque onset RATE [N·m/s]. Time to reach the commanded torque is jump_torque_max * jump_effort / this. Increase -> sharper onset, more of the phase spent at full push, higher jump, bigger shock into the linkage. Decrease -> softer onset, gentler on the mechanism, less of the phase at full torque. Replaces jump_ramp_up, a fixed softstart duration, which had it backwards: at fixed time a bigger push ramped in proportionally faster."
+    },
+    {
+      "symbol": "PARAM_JUMP_NUDGE_FWD_VEL_MS",
+      "id": 1336,
+      "group": "GROUP_CONTROL",
+      "name": "jump_nudge_fwd_vel",
+      "default": 0.15,
+      "min": 0.0,
+      "max": 1.5,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Forward velocity added to the pilot's live v_cmd_ms during the final jump_nudge_fwd_dur seconds of CROUCH [m/s]. The pilot command is not replaced: effective command = stick command + this offset. 0 disables the nudge. Default 0.15 m/s."
+    },
+    {
+      "symbol": "PARAM_JUMP_NUDGE_FWD_DURATION_S",
+      "id": 1337,
+      "group": "GROUP_CONTROL",
+      "name": "jump_nudge_fwd_dur",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Duration of the forward velocity nudge immediately before CROUCH hands off to EXTEND [s]. If longer than the computed crouch trajectory, the nudge covers the whole crouch. 0 disables it. Default 0.10 s."
+    },
+    {
+      "symbol": "PARAM_JUMP_AIRBORNE_ACCEL_Z_MS2",
+      "id": 1338,
+      "group": "GROUP_CONTROL",
+      "name": "jump_air_accel_z",
+      "default": -3.0,
+      "min": -20.0,
+      "max": 0.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Retired compatibility parameter; ignored by firmware. Landing detection is gyro-only and the production IMU configuration disables linear acceleration. The ID remains reserved so stored parameter sets and protocol clients do not shift."
+    },
+    {
+      "symbol": "PARAM_JUMP_LANDING_ACCEL_Z_MS2",
+      "id": 1339,
+      "group": "GROUP_CONTROL",
+      "name": "jump_land_accel_z",
+      "default": 1.5,
+      "min": -5.0,
+      "max": 20.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Retired compatibility parameter; ignored by firmware. Landing detection is gyro-only and the production IMU configuration disables linear acceleration. The ID remains reserved so stored parameter sets and protocol clients do not shift."
+    },
+    {
+      "symbol": "PARAM_JUMP_LANDING_GYRO_IMPULSE_RADS",
+      "id": 1340,
+      "group": "GROUP_CONTROL",
+      "name": "jump_land_gyro_imp",
+      "default": 2.5,
+      "min": 0.2,
+      "max": 20.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Landing threshold: sum of 3-axis gyro-vector changes over the fixed 12 ms impact window [rad/s]. Only fresh IMU reports count and at least two changes are required, rejecting held control-tick values and a lone bad sample. 2.5 detected both reference landings at 0.560/0.570 s after the jump command."
+    },
+    {
+      "symbol": "PARAM_JUMP_LANDING_MIN_AIR_S",
+      "id": 1341,
+      "group": "GROUP_CONTROL",
+      "name": "jump_land_min_air",
+      "default": 0.16,
+      "min": 0.02,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Touchdown detector blanking time measured from RETRACT entry [s]. It prevents EXTEND/takeoff and early retraction gyro impulses from declaring landing. Default 0.16 s leaves 50 ms before the earliest reference landing (0.21-0.22 s after RETRACT)."
+    },
+    {
+      "symbol": "PARAM_JUMP_LANDING_TIMEOUT_S",
+      "id": 1342,
+      "group": "GROUP_CONTROL",
+      "name": "jump_land_timeout",
+      "default": 1.0,
+      "min": 0.2,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Maximum time from RETRACT entry to a live touchdown detection [s]. RETRACT continues toward/holds its landing pose while waiting. Expiry raises FAULT_JUMP_TIMEOUT instead of blindly handing an unconfirmed flight to RUNNING."
+    },
+    {
+      "symbol": "PARAM_JUMP_HANDOFF_K_PITCH_MULT",
+      "id": 1343,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_handoff_kp_mul",
+      "default": 1.5,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Multiplier on the normal alpha-scheduled LQR pitch gain during jump HANDOFF. 1 = RUNNING gain; greater than 1 gives a harder post-impact pitch catch without retuning steady running. Default 1.5."
+    },
+    {
+      "symbol": "PARAM_JUMP_HANDOFF_K_RATE_MULT",
+      "id": 1344,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_handoff_kr_mul",
+      "default": 1.5,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Multiplier on the normal alpha-scheduled LQR pitch-rate gain during jump HANDOFF. Increase for more impact damping; too high can make the catch noisy or torque-limited. Default 1.5."
+    },
+    {
+      "symbol": "PARAM_JUMP_HANDOFF_K_VEL_MULT",
+      "id": 1345,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_handoff_kv_mul",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Multiplier on lqr_k_vel during jump HANDOFF. Default 1 keeps the normal velocity term while pitch/rate recovery gains are raised. Reduce if wheel-speed error fights attitude recovery immediately after impact."
+    },
+    {
+      "symbol": "PARAM_JUMP_HANDOFF_TORQUE_LIMIT",
+      "id": 1346,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_handoff_torque",
+      "default": 0.6,
+      "min": 0.0,
+      "max": 7.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "HANDOFF-scoped replacement for lqr_torque_limit [N*m], applied to tau_sym and the mixed per-wheel output. 0 inherits the RUNNING/profile value; MOTOR_TRQ_MAX remains the hard ceiling. Default 0.6 N*m."
+    },
+    {
+      "symbol": "PARAM_JUMP_HANDOFF_WHEEL_VEL_LIMIT",
+      "id": 1347,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_handoff_vel_lim",
+      "default": 10.0,
+      "min": 0.0,
+      "max": 20.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "HANDOFF-scoped wheel soft-governor threshold [turns/s], also used as the runaway watchdog baseline while handoff is active. 0 inherits wm_vel_limit. The reference jumps exceeded the 6 turns/s RUNNING governor for 0.13-0.17 s, so default 10 preserves braking authority through the catch."
+    },
+    {
+      "symbol": "PARAM_JUMP_HANDOFF_CAPTURE_PITCH_RAD",
+      "id": 1348,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_handoff_pitch",
+      "default": 0.05,
+      "min": 0.02,
+      "max": 0.4,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Absolute trim-relative LQR pitch error required for HANDOFF capture [rad], together with jmp_handoff_rate and both wheels inside the normal RUNNING governor. Default 0.05 rad."
+    },
+    {
+      "symbol": "PARAM_JUMP_HANDOFF_CAPTURE_RATE_RADS",
+      "id": 1349,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_handoff_rate",
+      "default": 1.0,
+      "min": 0.1,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Absolute pitch-rate threshold for jump HANDOFF capture [rad/s]."
+    },
+    {
+      "symbol": "PARAM_JUMP_HANDOFF_CAPTURE_HOLD_S",
+      "id": 1350,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_handoff_hold_s",
+      "default": 0.15,
+      "min": 0.02,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Continuous time inside the jump HANDOFF pitch/rate/normal-wheel-speed capture band before returning to RUNNING [s]."
+    },
+    {
+      "symbol": "PARAM_JUMP_HANDOFF_TIMEOUT_S",
+      "id": 1351,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_handoff_timeout",
+      "default": 1.5,
+      "min": 0.2,
+      "max": 5.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Maximum time allowed for post-landing HANDOFF to enter and hold its capture band [s]. Expiry raises FAULT_JUMP_TIMEOUT rather than enabling the steady RUNNING limits on an unrecovered robot."
+    },
+    {
+      "symbol": "PARAM_JUMP_ARM_MAX_FWD_SPEED_MS",
+      "id": 1352,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_arm_fwd_ms",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Jump-request-time gate: refuse stateMachine_request_jump() if measured forward wheel_vel_avg_ms exceeds this [m/s]. Checked once at arm, not enforced during the jump. Deliberately looser than jmp_arm_bwd_ms — some forward speed helps the launch, same idea as jump_nudge_fwd_vel."
+    },
+    {
+      "symbol": "PARAM_JUMP_ARM_MAX_BWD_SPEED_MS",
+      "id": 1353,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_arm_bwd_ms",
+      "default": 0.15,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Jump-request-time gate: refuse stateMachine_request_jump() if measured backward speed (-wheel_vel_avg_ms) exceeds this [m/s, magnitude]. Checked once at arm, not enforced during the jump. Tighter than jmp_arm_fwd_ms since backward speed does not help a jump and more often means the robot is already being pushed around."
+    },
+    {
+      "symbol": "PARAM_JUMP_ARM_MAX_YAW_RATE_RADS",
+      "id": 1354,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_arm_yaw_rate",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 6.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Jump-request-time gate: refuse stateMachine_request_jump() if |imu_yaw_rate()| exceeds this [rad/s]. Checked once at arm, not enforced during the jump. Rejects arming while the robot is actively turning/spinning."
+    },
+    {
+      "symbol": "PARAM_JUMP_ARM_MAX_ROLL_RAD",
+      "id": 1355,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_arm_roll",
+      "default": 0.12,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Jump-request-time gate: refuse stateMachine_request_jump() if |imu_roll()| exceeds this [rad, magnitude]. Checked once at arm, not enforced during the jump. Deliberately tighter than roll_watchdog_limit (a mid-flight trip threshold, off by default) — this just keeps a jump from launching while already leaning hard sideways."
+    },
+    {
+      "symbol": "PARAM_JUMP_AIRBORNE_WHEEL_VEL_LIMIT",
+      "id": 1356,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_air_vel_lim",
+      "default": 22.0,
+      "min": 0.0,
+      "max": 30.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "CROUCH/EXTEND/RETRACT-scoped wheel soft-governor threshold [turns/s]; the runaway watchdog trips at 2x this while airborne, same relationship jmp_handoff_vel_lim has to LANDING/HANDOFF. 0 inherits wm_vel_limit. Wheels are unloaded and legitimately spin fast in the air, unlike jmp_handoff_vel_lim's post-landing on-ground case, so this wants real headroom: added 2026-08-13 after a genuine airborne RETRACT (accel_z dipped to -28 m/s2) tripped FAULT_WHEEL_RUNAWAY at wm_r=-12.97 turns/s against the plain 12.0 (2x wm_vel_limit=6.0) ceiling that used to apply through the whole pre-landing sequence."
     },
     {
       "symbol": "PARAM_ENABLE_SIM_PITCH_RAD",
@@ -1995,7 +2283,7 @@
       "flags": [
         "persistent"
       ],
-      "description": "1 = enable the roll controller: a PD loop on roll angle/rate that adds a differential hip position offset (extend one leg, retract the other) to level/lean the body. Active only in RUNNING. Default off — with it off the hips are held symmetrically exactly as before."
+      "description": "1 = enable the roll controller: a PD loop on roll angle/rate that adds a differential hip position offset (extend one leg, retract the other) to level/lean the body. Active in RUNNING and the post-contact jump LANDING/HANDOFF recovery, but not during jump launch/flight. Default off — with it off the hips are held symmetrically exactly as before."
     },
     {
       "symbol": "PARAM_ROLL_KP",

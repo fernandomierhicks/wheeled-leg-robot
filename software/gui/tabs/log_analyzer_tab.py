@@ -14,9 +14,13 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QPushButton,
-    QSplitter, QVBoxLayout, QWidget,
+    QScrollArea, QSplitter, QVBoxLayout, QWidget,
 )
 
+from analysis.jump_analysis import (
+    CURRENT_PHASE_NAMES, LEGACY_PHASE_NAMES, analyze_jumps, jump_focus_mask,
+    phase_name,
+)
 from analysis.param_sidecar import (
     ParamSidecar, active_profile_series, load_host_param_sidecar, load_matching_sidecar,
 )
@@ -30,8 +34,8 @@ from .theme import BG, BLUE, BORDER, DIM, GREEN, ORANGE, RED, SURFACE, TEXT, WHI
 
 pg.setConfigOptions(antialias=True, background=BG, foreground=TEXT)
 
-_FLAVORS = ["Overview", "LQR", "Vel-PI", "Yaw-PI", "Hip", "Torque / Current",
-            "Gain schedule", "Leg-height sweep"]
+_FLAVORS = ["Overview", "Jumping", "LQR", "Vel-PI", "Yaw-PI", "Hip",
+            "Torque / Current", "Gain schedule", "Leg-height sweep"]
 
 _HF_VEL_PI_SAT = 1 << 7
 _HF_YAW_PI_SAT = 1 << 8
@@ -205,7 +209,11 @@ class LogAnalyzerTab(QWidget):
         self._charts_layout = QVBoxLayout(chart_frame)
         self._charts_layout.setContentsMargins(0, 0, 0, 0)
         self._charts_layout.setSpacing(5)
-        body.addWidget(chart_frame)
+        chart_scroll = QScrollArea()
+        chart_scroll.setWidgetResizable(True)
+        chart_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        chart_scroll.setWidget(chart_frame)
+        body.addWidget(chart_scroll)
 
         meta_frame = QFrame()
         meta_frame.setStyleSheet(
@@ -216,9 +224,14 @@ class LogAnalyzerTab(QWidget):
         meta_title.setStyleSheet(f"color: {TEXT}; font-weight: bold; font-size: 13px;")
         self._meta_layout.addWidget(meta_title)
         self._meta_layout.addStretch()
-        meta_frame.setMinimumWidth(285)
-        meta_frame.setMaximumWidth(390)
-        body.addWidget(meta_frame)
+        meta_scroll = QScrollArea()
+        meta_scroll.setWidgetResizable(True)
+        meta_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        meta_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        meta_scroll.setWidget(meta_frame)
+        meta_scroll.setMinimumWidth(285)
+        meta_scroll.setMaximumWidth(390)
+        body.addWidget(meta_scroll)
         body.setSizes([760, 330])
         outer.addWidget(body, 1)
 
@@ -291,6 +304,7 @@ class LogAnalyzerTab(QWidget):
         plot.showGrid(x=True, y=True, alpha=0.12)
         plot.setLabel("left", axis_text, units=units or None, color=DIM)
         plot.getAxis("left").enableAutoSIPrefix(auto_si_prefix)
+        plot.setMinimumHeight(165)
         plot.addLegend(offset=(5, 5), verSpacing=-2)
         is_first = not self._plots
         if self._plots:
@@ -500,6 +514,9 @@ class LogAnalyzerTab(QWidget):
                 ("Active profile", self._profile_text(),
                  "Speed profile reported by telemetry."),
             ])
+
+        elif flavor == "Jumping":
+            self._draw_jumping(t, fields, run)
 
         elif flavor == "LQR":
             pitch_deg = np.degrees(fields["pitch_rad"])
@@ -812,6 +829,327 @@ class LogAnalyzerTab(QWidget):
 
         self._finish_plots()
         self._update_status(t, health, metrics)
+
+    # ── Jumping ────────────────────────────────────────────────────────────
+
+    def _draw_jumping(self, t: np.ndarray, fields: dict, run):
+        """Draw phase-aligned launch, flight, landing, and recovery evidence."""
+        def sidecar_or(name: str, default: float) -> float:
+            value = self._sidecar_value(name)
+            return default if value is None else value
+
+        air_accel = sidecar_or("jump_air_accel_z", -3.0)
+        land_accel = sidecar_or("jump_land_accel_z", 1.5)
+        gyro_impulse = sidecar_or("jump_land_gyro_imp", 2.5)
+        min_air_s = sidecar_or("jump_land_min_air", 0.16)
+        modern_hint = (
+            True if self._params is not None
+            and "jmp_handoff_timeout" in self._params.names else None
+        )
+        episodes = analyze_jumps(
+            t, fields, modern_phases=modern_hint,
+            airborne_accel_z=air_accel, landing_accel_z=land_accel,
+            gyro_impulse=gyro_impulse, min_air_s=min_air_s,
+        )
+
+        if not episodes:
+            plot = self._new_plot("Jumping", "Jump phase")
+            text = pg.TextItem("No JUMPING episode is present in this log.",
+                               color=DIM, anchor=(0.5, 0.5))
+            plot.addItem(text)
+            text.setPos(float(t[len(t) // 2]) if len(t) else 0.0, 0.0)
+            self._set_meta_rows([(
+                "Jumping episodes", "none found",
+                "Load a capture containing robot_state=JUMPING (7). Start the SD log "
+                "in STANDBY before commanding a jump.")])
+            return
+
+        jump_mask = np.asarray(fields["robot_state"], dtype=np.int64) == 7
+        focus = jump_focus_mask(t, episodes, before_s=0.25, after_s=0.75)
+
+        # Plot only the focused samples. Feeding a long WLOG to every curve with
+        # most rows replaced by NaN creates very large Qt painter paths and can
+        # crash pyqtgraph's Windows renderer. Keep one NaN separator after each
+        # focus interval so separate attempts never get joined by a line.
+        plot_mask = focus.copy()
+        if plot_mask.size > 1:
+            plot_mask[1:] |= focus[:-1] & ~focus[1:]
+        plot_indices = np.flatnonzero(plot_mask)
+        plot_t = t[plot_indices]
+
+        def focused(values, jump_only: bool = False) -> np.ndarray:
+            values = np.asarray(values, dtype=np.float64)
+            visible = jump_mask if jump_only else focus
+            return np.where(visible[plot_indices], values[plot_indices], np.nan)
+
+        def parameter_series(name: str, default: float) -> np.ndarray:
+            values = self._param_series(name)
+            if values is None:
+                return np.full(t.size, default, dtype=np.float64)
+            return np.asarray(values, dtype=np.float64)
+
+        phase_events: list[tuple[float, str, str]] = []
+        landing_events: list[tuple[float, str, str]] = []
+        for episode in episodes:
+            for phase, index in episode.phase_entries:
+                name = phase_name(phase, episode.modern_phases)
+                label = f"J{episode.number} {name}"
+                phase_events.append((float(t[index]), label, label))
+            if episode.landing_index is not None:
+                offset = float(t[episode.landing_index] - t[episode.i0])
+                label = f"J{episode.number} touchdown"
+                landing_events.append((
+                    float(t[episode.landing_index]), label,
+                    f"{label} at +{offset:.3f} s ({episode.landing_source})"))
+
+        def add_jump_markers(plot: pg.PlotWidget, show_labels: bool = False):
+            self._add_event_markers(
+                plot, phase_events, WHITE, "Jump phase",
+                "Jump phase transition", style=Qt.PenStyle.DotLine,
+                width=1.0, show_labels=show_labels)
+            self._add_event_markers(
+                plot, landing_events, RED, "Touchdown",
+                "Landing detection", style=Qt.PenStyle.DashDotLine,
+                width=1.5, show_labels=show_labels)
+
+        # Phase timeline. Phase zero is a real CROUCH, not an inactive value;
+        # robot_state is therefore the mask that distinguishes it outside jumps.
+        phase_plot = self._new_plot("Jump phase timeline", "Phase")
+        phase_values = focused(fields["jump_state"], jump_only=True)
+        self._curve(phase_plot, plot_t, phase_values, BLUE,
+                    "Jump phase — firmware phase code", 2.0)
+        names = (CURRENT_PHASE_NAMES if any(e.modern_phases for e in episodes)
+                 else LEGACY_PHASE_NAMES)
+        phase_plot.getAxis("left").setTicks([[(code, name) for code, name in names.items()]])
+        phase_plot.setYRange(-0.35, max(names) + 0.35, padding=0)
+        add_jump_markers(phase_plot, show_labels=True)
+
+        # Pilot command + final-crouch nudge and wheel-derived response.
+        velocity_plot = self._new_plot(
+            "Forward command, nudge, and measured motion", "Velocity", "m/s",
+            auto_si_prefix=False)
+        self._curve(velocity_plot, plot_t, focused(fields["v_ref"]), GREEN,
+                    "Effective velocity target — pilot command plus active jump nudge (m/s)", 1.6)
+        self._curve(velocity_plot, plot_t, focused(fields["wheel_vel_avg"]), BLUE,
+                    "Wheel-derived velocity — meaningful on the floor, free-spin proxy in flight (m/s)", 1.4)
+        add_jump_markers(velocity_plot)
+
+        # Full attitude and the exact LQR target. Watchdog/barrier references
+        # are reconstructed with the logged gain-schedule alpha when available.
+        attitude_plot = self._new_plot(
+            "Body attitude, balance target, and pitch safety bounds", "Angle", "°",
+            auto_si_prefix=False)
+        pitch_deg = np.degrees(fields["pitch_rad"])
+        roll_deg = np.degrees(fields["roll_rad"])
+        target_deg = np.degrees(fields["theta_ref"] + fields["pitch_trim_rad"])
+        self._curve(attitude_plot, plot_t, focused(pitch_deg), BLUE,
+                    "Pitch — measured body angle (°)", 1.7)
+        self._curve(attitude_plot, plot_t, focused(roll_deg), RED,
+                    "Roll — measured lateral body angle (°)", 1.35)
+        self._curve(attitude_plot, plot_t, focused(target_deg), GREEN,
+                    "LQR target — θref plus applied pitch trim (°)", 1.35)
+
+        alpha = (np.asarray(fields["gain_sched_alpha"], dtype=np.float64)
+                 if "gain_sched_alpha" in fields else np.zeros(t.size))
+        wd_fwd_ret = self._param_series("pitch_wd_fwd_ret")
+        wd_bwd_ret = self._param_series("pitch_wd_bwd_ret")
+        wd_fwd = wd_bwd = None
+        if wd_fwd_ret is not None:
+            wd_fwd_ext = self._param_series("pitch_wd_fwd_ext")
+            wd_fwd = np.asarray(wd_fwd_ret) + alpha * (
+                np.asarray(wd_fwd_ext if wd_fwd_ext is not None else wd_fwd_ret)
+                - np.asarray(wd_fwd_ret))
+            self._curve(attitude_plot, plot_t, focused(np.degrees(wd_fwd)), ORANGE,
+                        "Forward pitch watchdog — live scheduled threshold (°)",
+                        1.0, Qt.PenStyle.DashLine)
+        if wd_bwd_ret is not None:
+            wd_bwd_ext = self._param_series("pitch_wd_bwd_ext")
+            wd_bwd = np.asarray(wd_bwd_ret) + alpha * (
+                np.asarray(wd_bwd_ext if wd_bwd_ext is not None else wd_bwd_ret)
+                - np.asarray(wd_bwd_ret))
+            self._curve(attitude_plot, plot_t, focused(-np.degrees(wd_bwd)), ORANGE,
+                        "Backward pitch watchdog — live scheduled threshold (°)",
+                        1.0, Qt.PenStyle.DashLine)
+        barrier_ret = self._param_series("lqr_barrier_th_ret")
+        if barrier_ret is not None:
+            barrier_ext = self._param_series("lqr_barrier_th_ext")
+            barrier = np.asarray(barrier_ret) + alpha * (
+                np.asarray(barrier_ext if barrier_ext is not None else barrier_ret)
+                - np.asarray(barrier_ret))
+            self._curve(attitude_plot, plot_t, focused(-np.degrees(barrier)), YELLOW,
+                        "Backward recovery barrier — extra LQR torque begins here (°)",
+                        1.0, Qt.PenStyle.DotLine)
+        add_jump_markers(attitude_plot)
+
+        rates_plot = self._new_plot(
+            "IMU angular rates", "Angular rate", "°/s", auto_si_prefix=False)
+        self._curve(rates_plot, plot_t, focused(np.degrees(fields["pitch_rate_rads"])), BLUE,
+                    "Pitch rate — rotation about the wheel axle (°/s)", 1.5)
+        self._curve(rates_plot, plot_t, focused(np.degrees(fields["roll_rate_rads"])), RED,
+                    "Roll rate — lateral rotation (°/s)", 1.2)
+        self._curve(rates_plot, plot_t, focused(np.degrees(fields["yaw_rate_rads"])), GREEN,
+                    "Yaw rate — heading rotation (°/s)", 1.2)
+        add_jump_markers(rates_plot)
+
+        accel_plot = self._new_plot(
+            "IMU gravity-removed linear acceleration", "Acceleration", "m/s²",
+            auto_si_prefix=False)
+        self._curve(accel_plot, plot_t, focused(fields["accel_x_ms2"]), BLUE,
+                    "Body-X acceleration — forward (+) / backward (−) (m/s²)", 1.2)
+        self._curve(accel_plot, plot_t, focused(fields["accel_y_ms2"]), GREEN,
+                    "Body-Y acceleration — left (+) / right (−) (m/s²)", 1.2)
+        self._curve(accel_plot, plot_t, focused(fields["accel_z_ms2"]), RED,
+                    "Body-Z acceleration — landing detector input (m/s²)", 1.5)
+        self._curve(accel_plot, plot_t, focused(parameter_series("jump_air_accel_z", air_accel)),
+                    ORANGE, "Airborne latch threshold — jump_air_accel_z (m/s²)",
+                    1.0, Qt.PenStyle.DashLine)
+        self._curve(accel_plot, plot_t, focused(parameter_series("jump_land_accel_z", land_accel)),
+                    YELLOW, "Landing rebound threshold — jump_land_accel_z (m/s²)",
+                    1.0, Qt.PenStyle.DashLine)
+        add_jump_markers(accel_plot)
+
+        hip_pos_plot = self._new_plot("Hip position and command", "Hip angle", "°")
+        self._curve(hip_pos_plot, plot_t, focused(np.degrees(fields["hip_l_pos_rad"])), BLUE,
+                    "Left hip measured position (°)", 1.5)
+        self._curve(hip_pos_plot, plot_t, focused(np.degrees(fields["hip_l_cmd_pos_rad"])),
+                    GREEN, "Left hip commanded position (°)", 1.1, Qt.PenStyle.DashLine)
+        self._curve(hip_pos_plot, plot_t, focused(np.degrees(fields["hip_r_pos_rad"])), RED,
+                    "Right hip measured position (°)", 1.5)
+        self._curve(hip_pos_plot, plot_t, focused(np.degrees(fields["hip_r_cmd_pos_rad"])),
+                    ORANGE, "Right hip commanded position (°)", 1.1, Qt.PenStyle.DashLine)
+        add_jump_markers(hip_pos_plot)
+
+        hip_vel_plot = self._new_plot("Hip extension/retraction rates", "Hip rate", "°/s")
+        self._curve(hip_vel_plot, plot_t, focused(np.degrees(fields["hip_l_vel_rads"])), BLUE,
+                    "Left hip measured velocity (°/s)", 1.35)
+        self._curve(hip_vel_plot, plot_t, focused(np.degrees(fields["hip_r_vel_rads"])), RED,
+                    "Right hip measured velocity (°/s)", 1.35)
+        add_jump_markers(hip_vel_plot)
+
+        hip_torque_plot = self._new_plot("Hip launch and landing effort", "Hip torque", "N·m")
+        self._curve(hip_torque_plot, plot_t, focused(fields["hip_l_torque_nm"]), BLUE,
+                    "Left hip measured torque (N·m)", 1.4)
+        self._curve(hip_torque_plot, plot_t, focused(fields["hip_r_torque_nm"]), RED,
+                    "Right hip measured torque (N·m)", 1.4)
+        self._limit_pair(
+            hip_torque_plot, plot_t, focused(np.full(t.size, HIP_TORQUE_LIMIT_NM)), YELLOW,
+            "Hip positive protocol limit (N·m)", "Hip negative protocol limit (N·m)")
+        add_jump_markers(hip_torque_plot)
+
+        wheel_speed_plot = self._new_plot("Wheel speed and recovery authority", "Wheel speed", "turns/s")
+        self._curve(wheel_speed_plot, plot_t, focused(fields["wm_l_vel_turns_s"]), BLUE,
+                    "Left wheel velocity — ODrive feedback (turns/s)", 1.4)
+        self._curve(wheel_speed_plot, plot_t, focused(fields["wm_r_vel_turns_s"]), GREEN,
+                    "Right wheel velocity — ODrive feedback (turns/s)", 1.4)
+        normal_wheel_limit = parameter_series("wm_vel_limit", 6.0)
+        handoff_wheel_limit = parameter_series("jmp_handoff_vel_lim", np.nan)
+        self._limit_pair(
+            wheel_speed_plot, plot_t, focused(normal_wheel_limit), YELLOW,
+            "RUNNING wheel governor upper limit (turns/s)",
+            "RUNNING wheel governor lower limit (turns/s)")
+        if np.any(np.isfinite(handoff_wheel_limit)):
+            inherited = np.where(handoff_wheel_limit > 0.0,
+                                 handoff_wheel_limit, normal_wheel_limit)
+            self._limit_pair(
+                wheel_speed_plot, plot_t, focused(inherited), ORANGE,
+                "Jump-handoff wheel governor upper limit (turns/s)",
+                "Jump-handoff wheel governor lower limit (turns/s)",
+                Qt.PenStyle.DashDotLine)
+        health = fields["health_flags"].astype(np.int64)
+        self._add_regions(wheel_speed_plot, t, focus & ((health & _HF_WM_L_VEL_LIMITED) != 0),
+                          BLUE, "Left-wheel governor active")
+        self._add_regions(wheel_speed_plot, t, focus & ((health & _HF_WM_R_VEL_LIMITED) != 0),
+                          GREEN, "Right-wheel governor active")
+        add_jump_markers(wheel_speed_plot)
+
+        wheel_torque_plot = self._new_plot("Wheel balance and yaw torque", "Wheel torque", "N·m")
+        self._curve(wheel_torque_plot, plot_t, focused(fields["whl_tau_l"]), BLUE,
+                    "Left wheel final commanded torque (N·m)", 1.45)
+        self._curve(wheel_torque_plot, plot_t, focused(fields["whl_tau_r"]), GREEN,
+                    "Right wheel final commanded torque (N·m)", 1.45)
+        self._curve(wheel_torque_plot, plot_t, focused(fields["tau_sym"]), ORANGE,
+                    "Symmetric LQR torque — pitch/reaction-wheel contribution (N·m)", 1.1)
+        self._curve(wheel_torque_plot, plot_t, focused(fields["tau_yaw"]), YELLOW,
+                    "Differential yaw torque contribution (N·m)", 1.0)
+        handoff_torque = self._param_series("jmp_handoff_torque")
+        if handoff_torque is not None:
+            running_torque = self._profile_limit("torque_lim")
+            inherited = np.asarray(handoff_torque)
+            if running_torque is not None:
+                inherited = np.where(inherited > 0.0, inherited, running_torque)
+            self._limit_pair(
+                wheel_torque_plot, plot_t, focused(inherited), RED,
+                "Jump-handoff positive torque authority (N·m)",
+                "Jump-handoff negative torque authority (N·m)",
+                Qt.PenStyle.DashDotLine)
+        add_jump_markers(wheel_torque_plot)
+
+        # Compact per-attempt report. These numbers use exactly the same sample
+        # indices as the phase/landing markers above.
+        rows: list[tuple[str, str, str]] = [(
+            "Jumping episodes", str(len(episodes)),
+            "Curves include 0.25 s before each request and 0.75 s after each exit. "
+            "Gaps between attempts remain on the shared time axis."), (
+            "Landing detector",
+            f"az {air_accel:g}/{land_accel:g} · gyro {gyro_impulse:g}",
+            f"Airborne/landing Z thresholds [m/s²], gyro impulse [rad/s], and "
+            f"{min_air_s:.2f} s launch blanking. Legacy logs use offline inference; "
+            "new logs use the live LANDING phase."),
+        ]
+
+        minimum_pitch_index = int(np.nanargmin(np.where(jump_mask, fields["pitch_rad"], np.nan)))
+        watchdog_margin = None
+        if wd_bwd is not None:
+            watchdog_margin = np.degrees(wd_bwd[minimum_pitch_index]) - abs(pitch_deg[minimum_pitch_index])
+
+        for episode in episodes:
+            local = slice(episode.i0, episode.i1 + 1)
+            start = float(t[episode.i0])
+            entries = " · ".join(
+                f"{phase_name(phase, episode.modern_phases)} +{t[index] - start:.3f}s"
+                for phase, index in episode.phase_entries)
+            if episode.landing_index is None:
+                landing_text = "no touchdown"
+                landing_detail = episode.landing_source
+            else:
+                li = episode.landing_index
+                landing_text = f"land +{t[li] - start:.3f}s"
+                landing_detail = (
+                    f"{episode.landing_source}; pitch {pitch_deg[li]:+.2f}°, "
+                    f"roll {roll_deg[li]:+.2f}°, pitch rate "
+                    f"{np.degrees(fields['pitch_rate_rads'][li]):+.1f}°/s")
+            rows.append((
+                f"Jump {episode.number} · {t[episode.i0]:.3f}s",
+                landing_text,
+                f"{entries}. {landing_detail}. Minimum pitch "
+                f"{np.min(pitch_deg[local]):+.2f}°, max |roll| "
+                f"{np.max(np.abs(roll_deg[local])):.2f}°, max wheel speed "
+                f"{max(np.max(np.abs(fields['wm_l_vel_turns_s'][local])), np.max(np.abs(fields['wm_r_vel_turns_s'][local]))):.2f} turns/s, "
+                f"max hip torque {max(np.max(np.abs(fields['hip_l_torque_nm'][local])), np.max(np.abs(fields['hip_r_torque_nm'][local]))):.2f} N·m."))
+
+        accel = np.column_stack((fields["accel_x_ms2"], fields["accel_y_ms2"], fields["accel_z_ms2"]))
+        fresh_accel = np.zeros(t.size, dtype=bool)
+        if t.size > 1:
+            fresh_accel[1:] = np.any(np.abs(np.diff(accel, axis=0)) > 1e-6, axis=1)
+        jump_duration = sum(max(0.0, float(t[e.i1] - t[e.i0])) for e in episodes)
+        fresh_count = int(np.count_nonzero(fresh_accel & jump_mask))
+        fresh_rate = fresh_count / jump_duration if jump_duration > 0.0 else 0.0
+        rows.extend([(
+            "Worst backward pitch",
+            f"{pitch_deg[minimum_pitch_index]:+.2f}°",
+            (f"Margin to the scheduled backward watchdog was {watchdog_margin:+.2f}°."
+             if watchdog_margin is not None else
+             "Pitch-watchdog parameters were unavailable, so margin cannot be reconstructed.")), (
+            "Fresh accel reports in JUMPING",
+            f"{fresh_count} · {fresh_rate:.1f} Hz",
+            "Estimated by changes in the held acceleration vector. A rate far below "
+            "the configured 50 Hz indicates an old report-dropping firmware or sensor/link trouble."),
+        ])
+        self._set_meta_rows(rows)
+
+        visible = np.flatnonzero(focus)
+        if visible.size and self._plots:
+            self._plots[0].setXRange(float(t[visible[0]]), float(t[visible[-1]]), padding=0.01)
 
     # ── Leg-height sweep ───────────────────────────────────────────────────
 

@@ -3,8 +3,10 @@
 ## Inputs
 
 - Firmware parameters: `software/gui/parameter_exports/Default gains.json`
-  (155 schema-validated values, locked in `robot_match.json` by SHA-256
-  `d5dcda03206f705eb5442e2dc90d2004474293d48015b2586681b063825a427e`).
+  (171 schema-validated values, locked in `robot_match.json` by SHA-256
+  `d4a963aa3ba747d6e317b5df08947dd6b4ad1511430bf620defec87437b3f3fe`).
+  Sixteen jump-only parameters were appended after the balance fit and were
+  inactive in this evidence.
 - Robot run: `data/logs/runs/20260810T045619_693178Z_SD_LOG0001/LOG0001.WLOG`
   and its parameter sidecar, decoded with the GUI's shared WLOG modules as
   required by `firmware/robot_teensy/AnalyzeLogClaude.md`.
@@ -17,7 +19,7 @@ No powered robot experiment was performed; scale measurements were supplied by
 the operator and incorporated offline.
 
 All 138 values present in the run's initial sidecar were reconciled against the
-155-value export; 136 names are common to both. Beyond float text rounding, the
+171-value export; 136 names are common to both. Beyond float text rounding, the
 meaningful differences are `jump_ext_timeout` (0.15/0.2), `jump_torque_max`
 (0/7), `roll_ki` (0/0.1), and `roll_offset_max` (0.15/0.3), shown as
 run/export. Jump was inactive in the reference run, and roll control was

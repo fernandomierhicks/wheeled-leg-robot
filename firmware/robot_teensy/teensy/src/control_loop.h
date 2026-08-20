@@ -12,11 +12,18 @@ void controlLoop_reset_hip_ramp();  // called on RUNNING entry, except when retu
 // re-entering the ordinary arm-in gain ramp.
 void controlLoop_complete_hip_ramp();
 
+// Ephemeral jump controls. The velocity offset is added to the pilot's live
+// v_cmd_ms (never replaces or persists it). Jump handoff keeps the ordinary
+// RUNNING stack but enables its scoped LQR-gain/authority overrides. Both are
+// cleared by controlLoop_reset().
+void controlLoop_set_velocity_command_offset(float offset_ms);
+void controlLoop_set_jump_handoff_active(bool active);
+
 // The wheel speed governor's limit currently in force [turns/s]: wm_vel_limit
-// normally, or the STANDING_UP-scoped standup_vel_limit override while that
-// state is active and the override is non-zero. Shared by the soft governor,
-// the runaway watchdog's 2x trip, and telemetry's velocity-limited health bits
-// so all three report the same number.
+// normally, the STANDING_UP-scoped standup_vel_limit, or the active jump
+// handoff's jmp_handoff_vel_lim. Zero overrides inherit the normal value.
+// Shared by the soft governor, runaway watchdog's 2x trip, and telemetry's
+// velocity-limited health bits so all three report the same number.
 float controlLoop_wheel_vel_limit();
 
 // Hip height override: while set, controlLoop_run() holds the legs at this

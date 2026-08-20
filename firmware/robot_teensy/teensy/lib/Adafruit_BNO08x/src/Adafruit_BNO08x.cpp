@@ -44,7 +44,31 @@ static int8_t _int_pin, _reset_pin;
 static Adafruit_I2CDevice *i2c_dev = NULL; ///< Pointer to I2C bus interface
 static HardwareSerial *uart_dev = NULL;
 
-static sh2_SensorValue_t *_sensor_value = NULL;
+// sh2_service() may decode several reports from one SHTP packet. Upstream's
+// single output pointer was overwritten by every callback, so only the last
+// report in that packet survived. With 400 Hz GRV/gyro alongside the 50 Hz
+// linear-acceleration report, the supposedly 50 Hz acceleration stream reached
+// the application at only ~2.5 Hz in LOG0015. Keep all decoded reports in a
+// small FIFO and let getSensorEvent() drain them across control ticks.
+// SH2 accepts a 384-byte incoming payload. The four reports used by this
+// project are 10-14 bytes apiece, so 48 slots retain every report from a
+// maximally packed payload after a delayed poll.
+static constexpr uint8_t SENSOR_EVENT_QUEUE_LEN = 48;
+static sh2_SensorValue_t _sensor_event_queue[SENSOR_EVENT_QUEUE_LEN];
+static uint8_t _sensor_event_head = 0;
+static uint8_t _sensor_event_tail = 0;
+static uint8_t _sensor_event_count = 0;
+static uint32_t _sensor_event_overflows = 0;
+static uint32_t _sensor_decode_errors = 0;
+static uint32_t _transport_errors = 0;
+// SPI reads use one header transaction followed by one full-payload
+// transaction. The BNO086 advances the SHTP channel sequence for both, so
+// successfully delivered payloads normally advance by two.
+static constexpr uint8_t SHTP_CHANNEL_COUNT = 8;
+static constexpr uint8_t GYRO_RV_SHTP_CHANNEL = 5;
+static bool _spi_rx_seq_valid[SHTP_CHANNEL_COUNT] = {};
+static uint8_t _spi_rx_next_seq[SHTP_CHANNEL_COUNT] = {};
+static uint32_t _spi_rx_sequence_gaps[SHTP_CHANNEL_COUNT] = {};
 static bool _reset_occurred = false;
 
 static int i2chal_write(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len);
@@ -59,7 +83,7 @@ static int uarthal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len,
 static void uarthal_close(sh2_Hal_t *self);
 static int uarthal_open(sh2_Hal_t *self);
 
-static bool spihal_wait_for_int(void);
+static bool spihal_wait_for_int(uint32_t timeout_us);
 static int spihal_write(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len);
 static int spihal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len,
                        uint32_t *t_us);
@@ -189,6 +213,9 @@ bool Adafruit_BNO08x::begin_SPI(uint8_t cs_pin, uint8_t int_pin,
 bool Adafruit_BNO08x::_init(int32_t sensor_id) {
   int status;
 
+  clearSensorEvents();
+  _reset_occurred = false;
+
   hardwareReset();
 
   // Open SH2 interface (also registers non-sensor event handler.)
@@ -197,10 +224,35 @@ bool Adafruit_BNO08x::_init(int32_t sensor_id) {
     return false;
   }
 
+  // This board has PS0 and PS1 bridged high for SPI selection, so the BNO086
+  // WAKE input is not available to the Teensy. Once boot advertisements are
+  // drained the hub can sleep before the first host command. The old HAL made
+  // that command appear to work by silently resetting the chip after a 500 ms
+  // timeout. Make the reset-as-wake handshake explicit and bounded instead:
+  // service exactly until SH2 observes RESET, then transmit while the hub is
+  // awake. Continuous enabled reports keep it awake after initialization.
+  hardwareReset();
+  const uint32_t wake_start_us = micros();
+  while (digitalRead(_int_pin) != LOW &&
+         (uint32_t)(micros() - wake_start_us) < 500000UL) {}
+  if (digitalRead(_int_pin) != LOW) {
+    _transport_errors++;
+    sh2_close();
+    return false;
+  }
+  // Match the successful transaction ordering from the characterization
+  // driver: service one boot transfer, then issue the host command before the
+  // no-WAKE wiring lets the hub return to sleep.
+  sh2_service();
+  _reset_occurred = false;
+
   // Check connection partially by getting the product id's
   memset(&prodIds, 0, sizeof(prodIds));
   status = sh2_getProdIds(&prodIds);
   if (status != SH2_OK) {
+    // sh2_open() owns the library's sole SHTP instance. Release it on every
+    // post-open failure so a later begin_SPI() is a real retry.
+    sh2_close();
     return false;
   }
 
@@ -214,7 +266,11 @@ bool Adafruit_BNO08x::_init(int32_t sensor_id) {
  * @brief Reset the device using the Reset pin
  *
  */
-void Adafruit_BNO08x::hardwareReset(void) { hal_hardwareReset(); }
+void Adafruit_BNO08x::hardwareReset(void) {
+  clearSensorEvents();
+  _reset_occurred = false;
+  hal_hardwareReset();
+}
 
 /**
  * @brief Check if a reset has occured
@@ -236,18 +292,54 @@ bool Adafruit_BNO08x::wasReset(void) {
  * @return false: No new report available to fill
  */
 bool Adafruit_BNO08x::getSensorEvent(sh2_SensorValue_t *value) {
-  _sensor_value = value;
-
-  value->timestamp = 0;
-
-  sh2_service();
-
-  if (value->timestamp == 0 && value->sensorId != SH2_GYRO_INTEGRATED_RV) {
-    // no new events
-    return false;
+  // A poll with no ready interrupt must be a fast false result. Upstream calls
+  // sh2_service() unconditionally, and its SPI HAL can otherwise turn "no
+  // sample yet" into a long control-loop stall.
+  if (_sensor_event_count == 0) {
+    if (spi_dev != NULL && digitalRead(_int_pin) != LOW) return false;
+    sh2_service();
   }
+  if (_sensor_event_count == 0) return false;
 
+  *value = _sensor_event_queue[_sensor_event_tail];
+  _sensor_event_tail = (uint8_t)((_sensor_event_tail + 1) % SENSOR_EVENT_QUEUE_LEN);
+  _sensor_event_count--;
   return true;
+}
+
+bool Adafruit_BNO08x::hasQueuedSensorEvent(void) {
+  return _sensor_event_count > 0;
+}
+
+void Adafruit_BNO08x::clearSensorEvents(void) {
+  _sensor_event_head = 0;
+  _sensor_event_tail = 0;
+  _sensor_event_count = 0;
+}
+
+uint32_t Adafruit_BNO08x::sensorEventOverflowCount(void) {
+  return _sensor_event_overflows;
+}
+
+uint32_t Adafruit_BNO08x::sensorDecodeErrorCount(void) {
+  return _sensor_decode_errors;
+}
+
+uint32_t Adafruit_BNO08x::transportErrorCount(void) {
+  return _transport_errors;
+}
+
+uint32_t Adafruit_BNO08x::gyroRvSequenceGapCount(void) {
+  return _spi_rx_sequence_gaps[GYRO_RV_SHTP_CHANNEL];
+}
+
+void Adafruit_BNO08x::resetDiagnostics(void) {
+  _sensor_event_overflows = 0;
+  _sensor_decode_errors = 0;
+  _transport_errors = 0;
+  memset(_spi_rx_seq_valid, 0, sizeof(_spi_rx_seq_valid));
+  memset(_spi_rx_next_seq, 0, sizeof(_spi_rx_next_seq));
+  memset(_spi_rx_sequence_gaps, 0, sizeof(_spi_rx_sequence_gaps));
 }
 
 /**
@@ -259,14 +351,14 @@ bool Adafruit_BNO08x::getSensorEvent(sh2_SensorValue_t *value) {
  * @return true: success false: failure
  */
 bool Adafruit_BNO08x::enableReport(sh2_SensorId_t sensorId,
-                                   uint32_t interval_us) {
+                                   uint32_t interval_us, bool always_on) {
   static sh2_SensorConfig_t config;
 
   // These sensor options are disabled or not used in most cases
   config.changeSensitivityEnabled = false;
   config.wakeupEnabled = false;
   config.changeSensitivityRelative = false;
-  config.alwaysOnEnabled = false;
+  config.alwaysOnEnabled = always_on;
   config.changeSensitivity = 0;
   config.batchInterval_us = 0;
   config.sensorSpecific = 0;
@@ -542,22 +634,22 @@ static int uarthal_write(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len) {
 static int spihal_open(sh2_Hal_t *self) {
   // Serial.println("SPI HAL open");
 
-  spihal_wait_for_int();
-
-  return 0;
+  // Startup is the one legitimate long wait: the BNO08x needs about 90 ms of
+  // internal initialization after reset. Runtime reads never use this budget.
+  if (spihal_wait_for_int(500000UL)) return 0;
+  _transport_errors++;
+  return -1;
 }
 
-static bool spihal_wait_for_int(void) {
+static bool spihal_wait_for_int(uint32_t timeout_us) {
   // Tight spin instead of delay(1)-per-poll — eliminates up to ~2 ms dead
   // time per SHTP read (header + payload each wait for INT); see
   // components/characterization/IMU_Adafruit/IMU_adafruit.MD.
   uint32_t start = micros();
-  while ((micros() - start) < 500000) {  // 500 ms timeout, same budget as before
+  while ((micros() - start) < timeout_us) {
     if (!digitalRead(_int_pin))
       return true;
   }
-  hal_hardwareReset();
-
   return false;
 }
 
@@ -571,11 +663,13 @@ static int spihal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len,
 
   uint16_t packet_size = 0;
 
-  if (!spihal_wait_for_int()) {
-    return 0;
-  }
+  // H_INTN high means there is no packet ready. Synchronous SH2 operations
+  // call this repeatedly, so this path must be immediate and non-destructive.
+  if (digitalRead(_int_pin) != LOW) return 0;
+  if (t_us) *t_us = micros();
 
   if (!spi_dev->read(pBuffer, 4, 0x00)) {
+    _transport_errors++;
     return 0;
   }
 
@@ -592,16 +686,32 @@ static int spihal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len,
   Serial.println(len);
   */
 
-  if (packet_size > len) {
+  if (packet_size < 4 || packet_size > len) {
+    _transport_errors++;
     return 0;
   }
 
-  if (!spihal_wait_for_int()) {
+  // The payload-ready handshake is normally measured in microseconds. Bound
+  // a failed transfer so it cannot wedge the real-time loop.
+  if (!spihal_wait_for_int(5000UL)) {
+    _transport_errors++;
     return 0;
   }
 
   if (!spi_dev->read(pBuffer, packet_size, 0x00)) {
+    _transport_errors++;
     return 0;
+  }
+
+  const uint8_t channel = pBuffer[2];
+  const uint8_t sequence = pBuffer[3];
+  if (channel < SHTP_CHANNEL_COUNT) {
+    if (_spi_rx_seq_valid[channel] && sequence != _spi_rx_next_seq[channel]) {
+      const uint8_t gap = (uint8_t)(sequence - _spi_rx_next_seq[channel]);
+      if (gap < 64) _spi_rx_sequence_gaps[channel] += gap;
+    }
+    _spi_rx_seq_valid[channel] = true;
+    _spi_rx_next_seq[channel] = sequence + 2;
   }
 
   return packet_size;
@@ -611,11 +721,23 @@ static int spihal_write(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len) {
   // Serial.print("SPI HAL write packet size: ");
   // Serial.println(len);
 
-  if (!spihal_wait_for_int()) {
-    return 0;
+  // Writes occur during initialization/report setup. Never hide a hardware
+  // reset down in the HAL; return failure so the driver can recover coherently.
+  // A healthy runtime write normally starts immediately, but boot-time
+  // product-ID traffic can leave the hub busy for tens of milliseconds. Keep
+  // a finite 100 ms ceiling: long enough for the real device, far below the
+  // former unbounded SHTP retry.
+  if (!spihal_wait_for_int(100000UL)) {
+    _transport_errors++;
+    // SHTP treats zero as "busy, retry indefinitely". A bounded timeout is a
+    // real transport failure and must be negative so txProcess() can unwind.
+    return -1;
   }
 
-  spi_dev->write(pBuffer, len);
+  if (!spi_dev->write(pBuffer, len)) {
+    _transport_errors++;
+    return -1;
+  }
 
   return len;
 }
@@ -638,7 +760,7 @@ static void hal_hardwareReset(void) {
 }
 
 static uint32_t hal_getTimeUs(sh2_Hal_t *self) {
-  uint32_t t = millis() * 1000;
+  uint32_t t = micros();
   // Serial.printf("I2C HAL get time: %d\n", t);
   return t;
 }
@@ -648,6 +770,7 @@ static void hal_callback(void *cookie, sh2_AsyncEvent_t *pEvent) {
   if (pEvent->eventId == SH2_RESET) {
     // Serial.println("Reset!");
     _reset_occurred = true;
+    memset(_spi_rx_seq_valid, 0, sizeof(_spi_rx_seq_valid));
   }
 }
 
@@ -657,10 +780,22 @@ static void sensorHandler(void *cookie, sh2_SensorEvent_t *event) {
 
   // Serial.println("Got an event!");
 
-  rc = sh2_decodeSensorEvent(_sensor_value, event);
+  sh2_SensorValue_t value;
+  rc = sh2_decodeSensorEvent(&value, event);
   if (rc != SH2_OK) {
-    Serial.println("BNO08x - Error decoding sensor event");
-    _sensor_value->timestamp = 0;
+    _sensor_decode_errors++;
     return;
   }
+
+  // Preserve the newest evidence if an unexpectedly large packet overflows
+  // the FIFO. Normal packets are far smaller than 48 reports, and IMU.cpp
+  // drains up to sixteen reports per 500 Hz tick.
+  if (_sensor_event_count == SENSOR_EVENT_QUEUE_LEN) {
+    _sensor_event_tail = (uint8_t)((_sensor_event_tail + 1) % SENSOR_EVENT_QUEUE_LEN);
+    _sensor_event_count--;
+    _sensor_event_overflows++;
+  }
+  _sensor_event_queue[_sensor_event_head] = value;
+  _sensor_event_head = (uint8_t)((_sensor_event_head + 1) % SENSOR_EVENT_QUEUE_LEN);
+  _sensor_event_count++;
 }

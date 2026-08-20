@@ -624,6 +624,7 @@ class ControllersTab(QWidget):
         ff2       = info.get("ff2_out", 0.0)
         flags    = info.get("health_flags", 0)
         jump     = info.get("jump_state", 0)
+        jump_active = info.get("state_name") == "JUMPING"
         loop     = info.get("loop_count", 0)
 
         # Angular quantities arrive in radians (firmware units) — display in
@@ -666,7 +667,7 @@ class ControllersTab(QWidget):
         self._v_ff2.set(ff2)
 
         # ── Diagnostic cells ──────────────────────────────────────────────────
-        self._v_jump.set(int(jump), "d", GREEN if jump > 0 else TEXT)
+        self._v_jump.set(int(jump), "d", GREEN if jump_active else TEXT)
         self._v_loop.set(int(loop), "d")
 
         # ── Chart series readouts (always current, independent of Live toggle) ─

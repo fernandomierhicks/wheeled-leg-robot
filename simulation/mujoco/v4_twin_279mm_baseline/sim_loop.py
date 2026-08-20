@@ -288,9 +288,8 @@ class SimController:
                                           m_spring=params.gains.knee_spring.m_spring)
         self.vel_pi = VelocityPI(params.gains.velocity_pi, self.dt_ctrl)
         self.yaw_pi_ctrl = YawPI(params.gains.yaw_pi, self.dt_ctrl)
-        # Normal balance/drive/yaw uses the actual Teensy control equations.
-        # The copied design controllers below remain only for the not-yet-
-        # identified jump phase and its historical visualization scenarios.
+        # Balance/drive/yaw uses the Teensy equations; JumpController supplies
+        # the production phase state and modifiers around the same wheel loop.
         self.firmware_ctrl = FirmwareController(
             params=dict(params.firmware_params), robot=robot)
         # AK telemetry reports the MIT torque quantity, while MuJoCo receives
@@ -344,7 +343,8 @@ class SimController:
         # Ring buffer of last n_sens symmetric torque commands (oldest → newest)
         self._tau_hist = collections.deque([0.0] * n_sens, maxlen=max(n_sens, 1))
 
-        self.jump_ctrl = JumpController(robot, params.gains.jump, self.dt_ctrl)
+        self.jump_ctrl = JumpController(
+            robot, self.firmware_ctrl.params, self.dt_ctrl)
 
         self.battery = BatteryModel(params.battery)
         self.battery.reset()
@@ -382,9 +382,14 @@ class SimController:
         self._patch_gains_subfield("suspension", field, value)
 
     def update_jump_gain(self, field: str, value: float):
-        """Hot-swap a single JumpGains field; also updates jump_ctrl.gains live."""
-        new_gains = self._patch_gains_subfield("jump", field, value)
-        self.jump_ctrl.gains = new_gains
+        """Hot-swap a firmware jump parameter by schema name."""
+        aliases = {
+            "max_torque": "jump_torque_max",
+            "omega_max": "jump_omega_max",
+            "ramp_down_rad": "jump_ramp_down",
+            "extend_timeout_s": "jump_ext_timeout",
+        }
+        self.firmware_ctrl.set_param(aliases.get(field, field), value)
 
     def update_robot_geom(self, field: str, value: float):
         """Hot-swap Q_EXT or Q_RET and recompute LQR gain table."""
@@ -400,8 +405,10 @@ class SimController:
             v_target_ms, omega_target, roll_target_rad,
             use_lqr, use_velocity_pi, use_yaw_pi,
             use_roll_leveling, use_suspension, use_ff1, use_ff2,
-            az_imu, ax_imu, ay_imu, gx_imu, gy_imu, gz_imu, pitch_ff):
-        """Run one non-jump tick through the firmware-equivalent controller."""
+            az_imu, ax_imu, ay_imu, gx_imu, gy_imu, gz_imu, pitch_ff,
+            state="RUNNING", velocity_offset_ms=0.0,
+            jump_handoff_active=False):
+        """Run one tick through the firmware-equivalent balance controller."""
         params = self.params
         robot = params.robot
         roll_true, roll_rate = get_roll_and_rate(data, self.box_bid, self.d_roll)
@@ -429,7 +436,9 @@ class SimController:
             wheel_r_turns_s=float(data.qvel[self.d_whl_R]) / (2.0 * math.pi),
             hip_alpha=float(alpha),
             hip_l_torque_nm=self.hip_reported_torque_L,
-            hip_r_torque_nm=self.hip_reported_torque_R, state="RUNNING",
+            hip_r_torque_nm=self.hip_reported_torque_R, state=state,
+            velocity_offset_ms=float(velocity_offset_ms),
+            jump_handoff_active=bool(jump_handoff_active),
         ))
         tau_l_cmd = output.tau_l if use_lqr else 0.0
         tau_r_cmd = output.tau_r if use_lqr else 0.0
@@ -479,7 +488,9 @@ class SimController:
         return dict(
             t=data.time, pitch=pitch_true, pitch_rate=pitch_rate_true,
             pitch_ff=pitch_ff, roll=roll_true, roll_rate=roll_rate,
-            wheel_vel=wheel_vel, v_target=v_target_ms, v_measured=v_measured_ms,
+            wheel_vel=wheel_vel,
+            v_target=v_target_ms + velocity_offset_ms,
+            v_measured=v_measured_ms,
             theta_ref=output.theta_ref, tau_sym=output.tau_sym,
             tau_yaw=output.tau_yaw, tau_ff1=output.ff1_out,
             tau_ff2=output.ff2_out, theta_ff4=0.0,
@@ -511,7 +522,7 @@ class SimController:
             mode="FIRMWARE_BALANCE", az_imu=az_imu, ax_imu=ax_imu,
             ay_imu=ay_imu, gx_imu=gx_imu, gy_imu=gy_imu, gz_imu=gz_imu,
             susp_scale=1.0, gain_sched_alpha=output.gain_sched_alpha,
-            firmware_fault=output.fault,
+            pitch_trim=output.pitch_trim, firmware_fault=output.fault,
         )
 
     # ── THE control tick — called by run() and sandbox() ─────────────────────
@@ -546,6 +557,7 @@ class SimController:
         if q_hip_target is None:
             q_hip_target = robot.Q_NOM
         q_hip_target = float(np.clip(q_hip_target, robot.Q_EXT, robot.Q_RET))
+        running_hip_target = q_hip_target
 
         # ── Sensors ──────────────────────────────────────────────────────────
         pitch_true, pitch_rate_true = get_pitch_and_rate(
@@ -562,6 +574,13 @@ class SimController:
         hip_q_avg  = (data.qpos[self.s_hip_L] + data.qpos[self.s_hip_R]) / 2.0
         pitch_ff   = get_equilibrium_pitch(robot, hip_q_avg,
                                            m_spring=params.gains.knee_spring.m_spring)
+        rotation = np.asarray(data.xmat[self.box_bid]).reshape(3, 3)
+        gravity_body = rotation.T @ np.asarray([0.0, 0.0, 9.81])
+        linear_accel = (
+            ax_imu - float(gravity_body[0]),
+            ay_imu - float(gravity_body[1]),
+            az_imu - float(gravity_body[2]),
+        )
 
         # ── Velocity reference + direction-reversal guard ────────────────────
         v_ref_rads = v_target_ms / robot.wheel_r
@@ -580,7 +599,7 @@ class SimController:
             hip_dq_avg = (data.qvel[self.d_hip_L] + data.qvel[self.d_hip_R]) / 2.0
             mode_out = self.jump_ctrl.update(
                 data.time, hip_q_avg, hip_dq_avg,
-                az_imu, params.gains.suspension, _pitch_d)
+                linear_accel, (gx_imu, gy_imu, gz_imu))
             q_hip_target = mode_out.q_hip_target
             dq_hip_target = mode_out.dq_hip_target
         else:
@@ -602,8 +621,80 @@ class SimController:
                 x_pred += self._BdPow[k].ravel() * tau
             _pitch_d, _pitch_rate_d, _wheel_vel_d = x_pred
 
-        # The v4 twin's normal path is the schema-driven firmware controller.
-        # Keep the copied jump controller isolated until its plant is identified.
+        # Jump phases wrap the schema-driven firmware balance controller, just
+        # as STATE_JUMPING wraps controlLoop_run() on the Teensy.
+        if jump_active and mode_out is not None:
+            if mode_out.mode == RobotMode.LANDING:
+                self.firmware_ctrl.hip_cmd_rlt = hip_q_to_alpha(hip_q_avg, robot)
+                self.firmware_ctrl.arm_time_s = -1e6
+
+            tick = self._tick_firmware_balance(
+                model, data, pitch_true=pitch_true,
+                pitch_rate_true=pitch_rate_true, pitch_noisy=pitch,
+                pitch_rate_noisy=pitch_rate, pitch_delayed=_pitch_d,
+                pitch_rate_delayed=_pitch_rate_d, wheel_vel=wheel_vel,
+                wheel_vel_delayed=_wheel_vel_d, hip_q_avg=hip_q_avg,
+                q_hip_target=running_hip_target, v_target_ms=v_target_ms,
+                omega_target=omega_target, roll_target_rad=roll_target_rad,
+                use_lqr=use_lqr, use_velocity_pi=use_velocity_pi,
+                use_yaw_pi=use_yaw_pi, use_roll_leveling=use_roll_leveling,
+                use_suspension=use_suspension, use_ff1=use_ff1,
+                use_ff2=use_ff2, az_imu=az_imu, ax_imu=ax_imu,
+                ay_imu=ay_imu, gx_imu=gx_imu, gy_imu=gy_imu,
+                gz_imu=gz_imu, pitch_ff=pitch_ff,
+                state=("RUNNING" if mode_out.mode == RobotMode.BALANCE
+                       else "JUMPING"),
+                velocity_offset_ms=mode_out.velocity_offset_ms,
+                jump_handoff_active=mode_out.handoff_active)
+
+            if mode_out.hip_mode in ("position", "torque_override"):
+                if mode_out.hip_mode == "position":
+                    kp = self.firmware_ctrl.params["jump_kp"]
+                    kd = self.firmware_ctrl.params["jump_kd"]
+                    reported_l = (kp * (mode_out.q_hip_target - data.qpos[self.s_hip_L])
+                                  + kd * (mode_out.dq_hip_target - data.qvel[self.d_hip_L]))
+                    reported_r = (kp * (mode_out.q_hip_target - data.qpos[self.s_hip_R])
+                                  + kd * (mode_out.dq_hip_target - data.qvel[self.d_hip_R]))
+                else:
+                    kd = self.firmware_ctrl.params["jump_ext_kd"]
+                    reported_l = mode_out.hip_torque_override - kd * data.qvel[self.d_hip_L]
+                    reported_r = mode_out.hip_torque_override - kd * data.qvel[self.d_hip_R]
+                limit = params.motors.hip.torque_limit
+                if mode_out.hip_torque_limit_nm is not None:
+                    limit = min(limit, mode_out.hip_torque_limit_nm)
+                reported_l = float(np.clip(reported_l, -limit, limit))
+                reported_r = float(np.clip(reported_r, -limit, limit))
+                scale = params.motors.hip.torque_scale(hip_q_to_alpha(hip_q_avg, robot))
+                self.hip_reported_torque_L = reported_l
+                self.hip_reported_torque_R = reported_r
+                data.ctrl[self.act_hip_L] = reported_l * scale
+                data.ctrl[self.act_hip_R] = reported_r * scale
+                tick.update(
+                    tau_hip_L=reported_l, tau_hip_R=reported_r,
+                    tau_hip_physical_L=float(data.ctrl[self.act_hip_L]),
+                    tau_hip_physical_R=float(data.ctrl[self.act_hip_R]),
+                    q_nom_L=mode_out.q_hip_target,
+                    q_nom_R=mode_out.q_hip_target)
+
+            wheel_l_tps = float(data.qvel[self.d_whl_L]) / (2.0 * math.pi)
+            wheel_r_tps = float(data.qvel[self.d_whl_R]) / (2.0 * math.pi)
+            self.jump_ctrl.post_control(
+                data.time, pitch=float(_pitch_d),
+                pitch_rate=float(_pitch_rate_d),
+                wheel_l_turns_s=wheel_l_tps,
+                wheel_r_turns_s=wheel_r_tps,
+                theta_ref=float(tick["theta_ref"]),
+                pitch_trim=float(tick["pitch_trim"]))
+            tick.update(
+                mode=mode_out.mode.name,
+                jump_fault=self.jump_ctrl.fault_reason or tick.get("firmware_fault"),
+                landing_source=mode_out.landing_source,
+                airborne_seen=mode_out.airborne_seen,
+                ax_linear=linear_accel[0], ay_linear=linear_accel[1],
+                az_linear=linear_accel[2],
+                fell=(tick["fell"] or mode_out.failed))
+            return tick
+
         if not jump_active:
             return self._tick_firmware_balance(
                 model, data, pitch_true=pitch_true,
@@ -756,10 +847,11 @@ class SimController:
                 if not use_suspension:
                     data.ctrl[act_hip] = 0.0
                     continue
-                data.ctrl[act_hip] = hip_position_torque(
+                hip_torque = hip_position_torque(
                     data.qpos[s_hip], data.qvel[d_hip],
                     q_hip_target, params.motors.hip,
                     dq_target=dq_hip_target)
+                data.ctrl[act_hip] = hip_torque
 
         # ── Knee spring (conditional torsional spring) ─────────────────────
         if use_knee_spring:
@@ -983,6 +1075,7 @@ def run(params: SimParams, scenario: ScenarioConfig,
 
     # Yaw error start
     yaw_err_start = getattr(params.scenarios, 'yaw_err_start', 1.0)
+    jump_triggered = False
 
     # ── Simulation loop ─────────────────────────────────────────────────────
     step = 0
@@ -996,9 +1089,10 @@ def run(params: SimParams, scenario: ScenarioConfig,
             dq_hip_tgt  = hip_vel_fn(data.time) if hip_vel_fn else 0.0
 
             # ── Jump trigger ──────────────────────────────────────────────
-            if (scenario.jump_time is not None and
+            if (scenario.jump_time is not None and not jump_triggered and
                     data.time >= scenario.jump_time):
                 ctrl.jump_ctrl.trigger()
+                jump_triggered = True
 
             tick = ctrl.tick(
                 model, data,

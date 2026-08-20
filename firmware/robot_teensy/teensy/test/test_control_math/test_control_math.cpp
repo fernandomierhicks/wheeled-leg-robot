@@ -1,6 +1,8 @@
 #include <unity.h>
 
 #include "control_safety.h"
+#include "jump_landing.h"
+#include "jump_retract.h"
 #include "standup_safety.h"
 #include "wheel_safety.h"
 #include "velocity_pi_anti_windup.h"
@@ -162,6 +164,70 @@ static void test_standup_target_must_match_backoff_used_by_calibration() {
         -0.0872665f, 0.0872665f, 0.2617994f, 1.0f, -1.0f));
 }
 
+static void test_jump_landing_gyro_needs_two_fresh_events() {
+    JumpLandingDetector d{};
+    jump_landing_reset(&d, 2000, 2000, 0.0f, 0.0f, 0.0f);
+    TEST_ASSERT_FALSE(jump_landing_update(
+        &d, 2110, 2110, 0.0f, 1.6f, 0.0f, 0.10f, 2.5f));
+    TEST_ASSERT_FALSE(d.landed);  // one large sample can be corruption
+
+    // A held sensor value spans some 500 Hz control ticks. Even if callers
+    // present different rates, an unchanged report timestamp cannot add an
+    // event or make the one physical sample look like two.
+    TEST_ASSERT_FALSE(jump_landing_update(
+        &d, 2112, 2110, 0.8f, 2.8f, 0.0f, 0.10f, 2.5f));
+    TEST_ASSERT_EQUAL_UINT8(1, d.gyro_event_count);
+
+    TEST_ASSERT_TRUE(jump_landing_update(
+        &d, 2116, 2116, 0.8f, 2.8f, 0.0f, 0.10f, 2.5f));
+    TEST_ASSERT_TRUE(d.landed);
+}
+
+static void test_jump_landing_blanking_rejects_launch_impulse() {
+    JumpLandingDetector d{};
+    jump_landing_reset(&d, 3000, 3000, 0.0f, 0.0f, 0.0f);
+    TEST_ASSERT_FALSE(jump_landing_update(
+        &d, 3020, 3020, 0.0f, -2.0f, 0.0f, 0.10f, 2.5f));
+    TEST_ASSERT_FALSE(jump_landing_update(
+        &d, 3026, 3026, 1.0f, -3.5f, 0.0f, 0.10f, 2.5f));
+    // By the time blanking expires, the launch events have aged out of the
+    // 12 ms gyro window and cannot trigger a delayed false landing.
+    TEST_ASSERT_FALSE(jump_landing_update(
+        &d, 3100, 3100, 1.0f, -3.5f, 0.0f, 0.10f, 2.5f));
+}
+
+static void test_jump_retract_brake_preserves_entry_and_stops_smoothly() {
+    const JumpRetractSample entry = jump_retract_brake_sample(
+        -1.20f, -7.0f, 0.0f, 0.015f);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -1.20f, entry.position);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -7.0f, entry.velocity);
+
+    const JumpRetractSample stop = jump_retract_brake_sample(
+        -1.20f, -7.0f, 0.015f, 0.015f);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -1.2525f, stop.position);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, stop.velocity);
+}
+
+static void test_jump_retract_brake_shortens_before_extended_margin() {
+    const float duration = jump_retract_axis_brake_duration(
+        -1.37f, -7.0f, -1.4835f, 1.0f, 0.0873f, 0.015f);
+    const JumpRetractSample stop = jump_retract_brake_sample(
+        -1.37f, -7.0f, duration, duration);
+    TEST_ASSERT_TRUE(duration < 0.015f);
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, -1.3962f, stop.position);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, stop.velocity);
+}
+
+static void test_jump_retract_feedback_scale_enforces_command_ceiling() {
+    const float scale = jump_retract_feedback_gain_scale(
+        -1.20f, -7.0f, -1.18f, -5.0f, 120.0f, 1.0f, 3.0f);
+    const float predicted = scale * (120.0f * 0.02f + 1.0f * 2.0f);
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 3.0f, predicted);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f,
+        jump_retract_feedback_gain_scale(
+            -1.20f, -7.0f, -1.20f, -7.0f, 120.0f, 1.0f, 3.0f));
+}
+
 static void test_wheel_glitch_filter_passes_plausible_change() {
     uint8_t run = 0;
     // 1500 turns/s^2 over one 2 ms tick allows 3.0 turns/s of change.
@@ -231,6 +297,11 @@ int main(int, char**) {
     RUN_TEST(test_standup_stiffen_ramp_spans_crouch_fraction_to_full);
     RUN_TEST(test_standup_minimum_jerk_trajectory_has_smooth_endpoints);
     RUN_TEST(test_standup_target_must_match_backoff_used_by_calibration);
+    RUN_TEST(test_jump_landing_gyro_needs_two_fresh_events);
+    RUN_TEST(test_jump_landing_blanking_rejects_launch_impulse);
+    RUN_TEST(test_jump_retract_brake_preserves_entry_and_stops_smoothly);
+    RUN_TEST(test_jump_retract_brake_shortens_before_extended_margin);
+    RUN_TEST(test_jump_retract_feedback_scale_enforces_command_ceiling);
     RUN_TEST(test_wheel_glitch_filter_passes_plausible_change);
     RUN_TEST(test_wheel_glitch_filter_rejects_impossible_jump);
     RUN_TEST(test_wheel_glitch_filter_fails_open_after_max_consecutive);

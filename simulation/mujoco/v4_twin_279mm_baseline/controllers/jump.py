@@ -1,30 +1,33 @@
-"""jump.py — Jump state machine controller (Phase 1: constant gains).
+"""Firmware-equivalent jump phase machine for the v4 MuJoCo twin.
 
-Six-state machine: BALANCE → CROUCH → EXTEND → RETRACT → FLYING → LANDING → SETTLED → BALANCE.
-Only the EXTEND phase overrides hip torque; other phases use impedance or position servo.
-All balance controllers (LQR, VelocityPI, YawPI) run unchanged throughout.
+The controller mirrors ``teensy/src/state_machine.cpp``:
 
-Hip mode per phase:
-  BALANCE / LANDING / SETTLED → "impedance"  (soft suspension + roll leveling)
-  CROUCH                      → "position"   (stiff PD servo Q_NOM → Q_RET)
-  EXTEND                      → "torque_override" (explosive extension Q_RET → Q_EXT)
-  RETRACT                     → "position"   (stiff PD servo Q_EXT → Q_NOM, tuck in air)
-  FLYING                      → "impedance"  (soft suspension at Q_NOM, cushion landing)
+    BALANCE -> CROUCH -> EXTEND -> RETRACT -> LANDING -> HANDOFF -> BALANCE
 
-Liftoff detection is position-based (no IMU dependency):
-  EXTEND → RETRACT: hip reaches Q_EXT (within ramp_down_rad).
-  RETRACT → FLYING: hip reaches Q_NOM (within retract_done_rad).
-Landing is still detected from IMU az spike (real-robot compatible).
-
-Suspension softening is owned by this state machine:
-  susp_scale = freefall_scale during FLYING, ramping back to 1.0 during LANDING.
+CROUCH and RETRACT use minimum-jerk trajectories whose durations are derived
+from travel and configured peak speed.  EXTEND uses rate-ramped, position- and
+speed-tapered torque.  Landing uses the same acceleration latch plus rolling
+multi-sample gyro impulse as the firmware.  HANDOFF leaves the normal balance
+controller active with its jump-specific authority and capture settings.
 """
-import math
+
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional
+import math
+from typing import Mapping, Optional
 
-from v4_twin_279mm_baseline.params import RobotGeometry, JumpGains, SuspensionGains
+from v4_twin_279mm_baseline.params import RobotGeometry
+
+
+MIN_JERK_PEAK_OVER_MEAN = 1.875
+PHASE_MIN_S = 0.020
+GYRO_WINDOW_S = 0.012
+GYRO_MIN_EVENTS = 2
+GYRO_EVENT_EPS = 0.01
+OVERRUN_MARGIN_S = 0.5
+RETRACT_BRAKE_NOMINAL_S = 0.015
 
 
 class RobotMode(Enum):
@@ -32,248 +35,317 @@ class RobotMode(Enum):
     CROUCH = auto()
     EXTEND = auto()
     RETRACT = auto()
-    FLYING = auto()
     LANDING = auto()
-    SETTLED = auto()
+    HANDOFF = auto()
+    FAULT = auto()
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModeOutput:
     mode: RobotMode
-    hip_mode: str                          # "impedance" | "position" | "torque_override"
-    hip_torque_override: Optional[float]   # None except during EXTEND
-    q_hip_target: float                    # Hip position / impedance equilibrium target
-    dq_hip_target: float                   # Hip velocity feed-forward (position mode only)
-    susp_scale: float = 1.0               # K_s / B_s multiplier for adaptive suspension
+    hip_mode: str
+    hip_torque_override: Optional[float]
+    q_hip_target: float
+    dq_hip_target: float
+    susp_scale: float = 1.0
+    velocity_offset_ms: float = 0.0
+    handoff_active: bool = False
+    landing_source: str = ""
+    airborne_seen: bool = False
+    failed: bool = False
+    hip_torque_limit_nm: Optional[float] = None
+
+
+def _minimum_jerk(u: float) -> tuple[float, float]:
+    """Return unit position and unit-time derivative for a quintic profile."""
+    u = min(1.0, max(0.0, float(u)))
+    position = u * u * u * (10.0 + u * (-15.0 + 6.0 * u))
+    derivative = 30.0 * u * u * (1.0 - u) * (1.0 - u)
+    return position, derivative
+
+
+def _phase_duration(travel_rad: float, peak_speed_rad_s: float) -> float:
+    if peak_speed_rad_s <= 0.0:
+        return PHASE_MIN_S
+    return max(PHASE_MIN_S,
+               MIN_JERK_PEAK_OVER_MEAN * abs(travel_rad) / peak_speed_rad_s)
+
+
+def _retract_brake_sample(start_q: float, start_dq: float,
+                          elapsed_s: float, duration_s: float) -> tuple[float, float]:
+    """Velocity-continuous EXTEND-to-RETRACT braking blend."""
+    if duration_s <= 0.0:
+        return float(start_q), 0.0
+    u = min(1.0, max(0.0, float(elapsed_s) / float(duration_s)))
+    velocity_scale = 1.0 - 3.0 * u * u + 2.0 * u * u * u
+    position_integral = u - u ** 3 + 0.5 * u ** 4
+    return (float(start_q) + float(start_dq) * duration_s * position_integral,
+            float(start_dq) * velocity_scale)
+
+
+def _retract_brake_duration(start_q: float, start_dq: float,
+                            extended_limit: float, hardstop_margin: float) -> float:
+    if start_dq >= 0.0 or abs(start_dq) < 1e-9:
+        return RETRACT_BRAKE_NOMINAL_S
+    safe_extended = float(extended_limit) + float(hardstop_margin)
+    remaining = float(start_q) - safe_extended
+    if remaining <= 0.0:
+        return 0.0
+    return min(RETRACT_BRAKE_NOMINAL_S, 2.0 * remaining / abs(float(start_dq)))
 
 
 class JumpController:
-    """Jump state machine — controls hip trajectory and torque override.
+    """Stateful port of the production jump phase logic."""
 
-    Liftoff is detected when az_imu drops below suspension.freefall_az_threshold
-    (held for liftoff_debounce_s).  Landing is detected when az_imu spikes above
-    suspension.landing_az_threshold.  No ground-truth wheel heights are used.
-
-    Suspension softening is managed here: susp_scale is returned in ModeOutput so
-    sim_loop does not need a separate adaptive-suspension block.
-
-    Usage:
-        jc = JumpController(robot, gains, dt)
-        jc.trigger()                   # start CROUCH
-        out = jc.update(t, hip_q_avg, hip_dq_avg, az, suspension, pitch)
-    """
-
-    def __init__(self, robot: RobotGeometry, gains: JumpGains, dt: float):
+    def __init__(self, robot: RobotGeometry, params: Mapping[str, float], dt: float):
         self.robot = robot
-        self.gains = gains
-        self.dt = dt
-
+        self.params = params
+        self.dt = float(dt)
         self._mode = RobotMode.BALANCE
         self._triggered = False
-
-        # CROUCH state
-        self._crouch_start: float = 0.0
-        self._q_crouch_start: float = robot.Q_NOM
-
-        # EXTEND state
-        self._extend_start: float = 0.0
-
-        # RETRACT state
-        self._retract_start: float = 0.0
-        self._retract_start_q: float = robot.Q_EXT
-
-        # FLYING start time — guards against false landing detection immediately after liftoff
-        self._flying_start: float = 0.0
-
-        # LANDING → SETTLED pitch settle timer
-        self._settle_timer: float = 0.0
-        self._landing_start: float = 0.0
-
-        # Hold angle for FLYING/LANDING
-        self._hold_angle: float = robot.Q_NOM
-
-        # Adaptive suspension state (merged from sim_loop)
-        self._susp_scale: float = 1.0
-        self._ramp_elapsed: float = -1.0    # -1 = not ramping; ≥0 = seconds into ramp
-        self._ramp_start_scale: float = 1.0
+        self._phase_start = 0.0
+        self._jump_start = 0.0
+        self._deadline = math.inf
+        self._nominal_q = robot.Q_NOM
+        self._crouch_q = robot.Q_NOM
+        self._crouch_duration = PHASE_MIN_S
+        self._retract_from_q = robot.Q_EXT
+        self._retract_from_dq = 0.0
+        self._retract_turn_q = robot.Q_EXT
+        self._retract_brake_duration = 0.0
+        self._retract_q = robot.Q_NOM
+        self._retract_duration = PHASE_MIN_S
+        self._airborne_seen = False
+        self._landing_source = ""
+        self._previous_rates: tuple[float, float, float] | None = None
+        self._gyro_events: list[tuple[float, float]] = []
+        self._capture_since: float | None = None
+        self._fault_reason = ""
+        self._phase_entries: list[tuple[str, float]] = []
 
     @property
     def mode(self) -> RobotMode:
         return self._mode
 
-    def trigger(self):
-        """Start jump sequence (idempotent after first call)."""
+    @property
+    def complete(self) -> bool:
+        return self._mode == RobotMode.BALANCE and not self._triggered
+
+    @property
+    def fault_reason(self) -> str:
+        return self._fault_reason
+
+    @property
+    def phase_entries(self) -> tuple[tuple[str, float], ...]:
+        return tuple(self._phase_entries)
+
+    def trigger(self) -> None:
         if not self._triggered:
             self._triggered = True
 
+    def _p(self, name: str) -> float:
+        return float(self.params[name])
+
+    def _set_mode(self, mode: RobotMode, now: float) -> None:
+        self._mode = mode
+        self._phase_start = float(now)
+        self._phase_entries.append((mode.name, float(now - self._jump_start)))
+
+    def _extension_target(self, extension_angle: float) -> float:
+        # Firmware encoder zero is the retract switch.  MuJoCo uses the CAD
+        # frame whose retract switch is robot.Q_RET; both have the same sign.
+        return self.robot.Q_RET - float(extension_angle)
+
+    def _begin(self, now: float, hip_q: float) -> None:
+        self._jump_start = float(now)
+        self._nominal_q = float(hip_q)
+        self._crouch_q = self._extension_target(self._p("jump_crouch_angle"))
+        self._crouch_duration = _phase_duration(
+            self._crouch_q - self._nominal_q, self._p("jump_crouch_speed"))
+        budget = (self._crouch_duration + self._p("jump_ext_timeout")
+                  + self._p("jump_land_timeout")
+                  + self._p("jmp_handoff_timeout") + OVERRUN_MARGIN_S)
+        self._deadline = now + budget
+        self._fault_reason = ""
+        self._landing_source = ""
+        self._capture_since = None
+        self._phase_entries = []
+        self._set_mode(RobotMode.CROUCH, now)
+
+    def _reset_landing(self, rates: tuple[float, float, float]) -> None:
+        self._airborne_seen = False
+        self._landing_source = ""
+        self._previous_rates = tuple(float(value) for value in rates)
+        self._gyro_events = []
+
+    def _landing_update(self, now: float, accel_xyz: tuple[float, float, float],
+                        rates: tuple[float, float, float]) -> bool:
+        accel_contact = False
+        accel_z = float(accel_xyz[2])
+        if accel_z <= self._p("jump_air_accel_z"):
+            self._airborne_seen = True
+        if self._airborne_seen and accel_z >= self._p("jump_land_accel_z"):
+            accel_contact = True
+
+        if self._previous_rates is not None:
+            delta = math.sqrt(sum(
+                (float(value) - previous) ** 2
+                for value, previous in zip(rates, self._previous_rates)))
+            if delta > GYRO_EVENT_EPS:
+                self._gyro_events.append((float(now), delta))
+        self._previous_rates = tuple(float(value) for value in rates)
+        cutoff = now - GYRO_WINDOW_S
+        self._gyro_events = [event for event in self._gyro_events
+                             if event[0] >= cutoff]
+        gyro_contact = (len(self._gyro_events) >= GYRO_MIN_EVENTS
+                        and sum(value for _time, value in self._gyro_events)
+                        >= self._p("jump_land_gyro_imp"))
+        eligible = now - self._phase_start >= self._p("jump_land_min_air")
+        if not eligible or not (accel_contact or gyro_contact):
+            return False
+        if accel_contact and gyro_contact:
+            self._landing_source = "accel + gyro"
+        elif accel_contact:
+            self._landing_source = "accel rebound"
+        else:
+            self._landing_source = "gyro impulse"
+        return True
+
     def update(self, t: float, hip_q_avg: float, hip_dq_avg: float,
-               az: float, suspension: SuspensionGains,
-               pitch: float) -> ModeOutput:
-        """Advance state machine and return hip control output.
+               accel_xyz: tuple[float, float, float],
+               gyro_xyz: tuple[float, float, float]) -> ModeOutput:
+        """Advance launch/contact phases before the balance-controller tick."""
+        now = float(t)
+        if self._mode == RobotMode.BALANCE and self._triggered:
+            self._begin(now, hip_q_avg)
 
-        Parameters
-        ----------
-        az : float
-            Delayed, noisy IMU vertical specific force [m/s²].
-            ≈ 0 in free-fall, ≈ 9.81 on ground, spikes on landing impact.
-        suspension : SuspensionGains
-            Provides freefall_az_threshold, landing_az_threshold, freefall_scale,
-            landing_ramp_s for both phase detection and gain softening.
-        """
-        robot = self.robot
-        gains = self.gains
+        if self._mode not in (RobotMode.BALANCE, RobotMode.FAULT) and now > self._deadline:
+            self._fault_reason = "jump phase overrun"
+            self._set_mode(RobotMode.FAULT, now)
 
-        # ── State transitions ────────────────────────────────────────────
-        if self._mode == RobotMode.BALANCE:
-            if self._triggered:
-                self._mode = RobotMode.CROUCH
-                self._crouch_start = t
-                self._q_crouch_start = hip_q_avg
+        elapsed = now - self._phase_start
+        p = self.params
 
-        elif self._mode == RobotMode.CROUCH:
-            if t - self._crouch_start >= gains.crouch_time:
-                self._mode = RobotMode.EXTEND
-                self._extend_start = t
-                self._liftoff_timer = 0.0
-
-        elif self._mode == RobotMode.EXTEND:
-            # Retract immediately once hip enters the ramp-down zone near Q_EXT
-            if hip_q_avg <= robot.Q_EXT + gains.ramp_down_rad:
-                self._mode = RobotMode.RETRACT
-                self._retract_start = t
-                self._retract_start_q = hip_q_avg
-            # Timeout: abort jump if hip never reached Q_EXT
-            if t - self._extend_start >= gains.extend_timeout_s:
-                self._mode = RobotMode.SETTLED
-
-        elif self._mode == RobotMode.RETRACT:
-            # FLYING once hip is back near Q_NOM
-            if hip_q_avg >= robot.Q_NOM - gains.retract_done_rad:
-                self._mode = RobotMode.FLYING
-                self._flying_start = t
-                self._hold_angle = hip_q_avg
-
-        elif self._mode == RobotMode.FLYING:
-            # Landing: az spikes above threshold (impact), but only after min airborne time
-            if (az > suspension.landing_az_threshold
-                    and t - self._flying_start >= gains.min_airborne_s):
-                self._mode = RobotMode.LANDING
-                self._hold_angle = hip_q_avg
-                self._settle_timer = 0.0
-                self._landing_start = t
-
-        elif self._mode == RobotMode.LANDING:
-            if abs(math.degrees(pitch)) < gains.settle_pitch_deg:
-                self._settle_timer += self.dt
-                if self._settle_timer >= gains.settle_time_s:
-                    self._mode = RobotMode.SETTLED
-            else:
-                self._settle_timer = 0.0
-            # Timeout: force settle if pitch won't stabilise
-            if t - self._landing_start >= gains.landing_timeout_s:
-                self._mode = RobotMode.SETTLED
-
-        elif self._mode == RobotMode.SETTLED:
-            # Immediate transition back to BALANCE
-            self._mode = RobotMode.BALANCE
-            self._triggered = False
-
-        # ── Adaptive suspension scale ────────────────────────────────────
-        if self._mode == RobotMode.FLYING:
-            self._susp_scale = suspension.freefall_scale
-            self._ramp_elapsed = -1.0
-        elif self._mode == RobotMode.LANDING:
-            if self._ramp_elapsed < 0.0:
-                # First tick in LANDING — start ramp from current (freefall) scale
-                self._ramp_elapsed = 0.0
-                self._ramp_start_scale = self._susp_scale
-            self._ramp_elapsed += self.dt
-            t_norm = min(1.0, self._ramp_elapsed / suspension.landing_ramp_s)
-            self._susp_scale = (self._ramp_start_scale
-                                + (1.0 - self._ramp_start_scale) * t_norm)
-            if t_norm >= 1.0:
-                self._susp_scale = 1.0
-                self._ramp_elapsed = -1.0
-        else:
-            # BALANCE, CROUCH, EXTEND, RETRACT, SETTLED — nominal
-            self._susp_scale = 1.0
-            self._ramp_elapsed = -1.0
-
-        # ── Compute outputs per mode ─────────────────────────────────────
         if self._mode == RobotMode.CROUCH:
-            alpha = min(1.0, (t - self._crouch_start) / gains.crouch_time)
-            q_target = self._q_crouch_start + (robot.Q_RET - self._q_crouch_start) * alpha
-            dq_target = (robot.Q_RET - self._q_crouch_start) / gains.crouch_time
+            if elapsed >= self._crouch_duration:
+                self._set_mode(RobotMode.EXTEND, now)
+                elapsed = 0.0
+            else:
+                s, ds_du = _minimum_jerk(elapsed / self._crouch_duration)
+                travel = self._crouch_q - self._nominal_q
+                remaining = self._crouch_duration - elapsed
+                nudge = (self._p("jump_nudge_fwd_vel")
+                         if self._p("jump_nudge_fwd_dur") > 0.0
+                         and remaining <= self._p("jump_nudge_fwd_dur") else 0.0)
+                return ModeOutput(
+                    RobotMode.CROUCH, "position", None,
+                    self._nominal_q + s * travel,
+                    travel * ds_du / self._crouch_duration,
+                    velocity_offset_ms=nudge)
+
+        if self._mode == RobotMode.EXTEND:
+            target = self._extension_target(self._p("jump_extend_angle"))
+            to_go = hip_q_avg - target
+            distance_to_limit = hip_q_avg - self.robot.Q_EXT
+            cutoff = distance_to_limit < self._p("jump_hs_margin")
+            near_target = to_go <= 0.0
+            timed_out = elapsed >= self._p("jump_ext_timeout")
+            if near_target or cutoff or timed_out:
+                self._retract_from_q = float(hip_q_avg)
+                self._retract_from_dq = float(hip_dq_avg)
+                angle = self._p("jump_retract_angle")
+                self._retract_q = (self._nominal_q if angle < 0.0
+                                   else self._extension_target(angle))
+                self._retract_brake_duration = _retract_brake_duration(
+                    self._retract_from_q, self._retract_from_dq,
+                    self.robot.Q_EXT, self._p("jump_hs_margin"))
+                self._retract_turn_q, _stopped = _retract_brake_sample(
+                    self._retract_from_q, self._retract_from_dq,
+                    self._retract_brake_duration, self._retract_brake_duration)
+                self._retract_duration = _phase_duration(
+                    self._retract_q - self._retract_turn_q,
+                    self._p("jump_retract_speed"))
+                self._set_mode(RobotMode.RETRACT, now)
+                self._reset_landing(gyro_xyz)
+                elapsed = 0.0
+            else:
+                maximum = self._p("jump_torque_max") * self._p("jump_effort")
+                ramp_in = (1.0 if maximum <= 0.0 else
+                           min(1.0, elapsed * self._p("jump_torque_rate") / maximum))
+                ramp_out = min(1.0, max(0.0, to_go / self._p("jump_ramp_down")))
+                speed_taper = max(0.0, 1.0 - abs(hip_dq_avg) / self._p("jump_omega_max"))
+                torque = -maximum * ramp_in * ramp_out * speed_taper
+                return ModeOutput(
+                    RobotMode.EXTEND, "torque_override", torque,
+                    target, 0.0)
+
+        if self._mode == RobotMode.RETRACT:
+            if self._landing_update(now, accel_xyz, gyro_xyz):
+                self._set_mode(RobotMode.LANDING, now)
+                elapsed = 0.0
+            elif elapsed >= self._p("jump_land_timeout"):
+                self._fault_reason = "landing not detected"
+                self._set_mode(RobotMode.FAULT, now)
+            else:
+                if elapsed < self._retract_brake_duration:
+                    q_cmd, dq_cmd = _retract_brake_sample(
+                        self._retract_from_q, self._retract_from_dq,
+                        elapsed, self._retract_brake_duration)
+                else:
+                    return_elapsed = elapsed - self._retract_brake_duration
+                    s, ds_du = _minimum_jerk(return_elapsed / self._retract_duration)
+                    travel = self._retract_q - self._retract_turn_q
+                    q_cmd = self._retract_turn_q + s * travel
+                    dq_cmd = travel * ds_du / self._retract_duration
+                return ModeOutput(
+                    RobotMode.RETRACT, "position", None,
+                    q_cmd, dq_cmd,
+                    landing_source=self._landing_source,
+                    airborne_seen=self._airborne_seen,
+                    hip_torque_limit_nm=self._p("jump_retract_torque"))
+
+        if self._mode == RobotMode.LANDING:
+            # Firmware exposes LANDING for one 500 Hz telemetry tick, while the
+            # ordinary hip/balance controller already owns the outputs.
+            if elapsed >= self.dt:
+                self._set_mode(RobotMode.HANDOFF, now)
+
+        if self._mode in (RobotMode.LANDING, RobotMode.HANDOFF):
             return ModeOutput(
-                mode=RobotMode.CROUCH,
-                hip_mode="position",
-                hip_torque_override=None,
-                q_hip_target=q_target,
-                dq_hip_target=dq_target,
-                susp_scale=self._susp_scale,
-            )
-
-        elif self._mode == RobotMode.EXTEND:
-            # Torque-speed limited output (ported from archive 4bar_jump_sim.py)
-            ramp_in = min(1.0, (t - self._extend_start) / gains.ramp_up_s)
-
-            ramp_out = 1.0
-            if hip_q_avg < robot.Q_EXT + gains.ramp_down_rad:
-                ramp_out = max(0.0, (hip_q_avg - robot.Q_EXT) / gains.ramp_down_rad)
-
-            speed_limit = max(0.0, 1.0 - abs(hip_dq_avg) / gains.omega_max)
-            torque = -gains.max_torque * ramp_in * ramp_out * speed_limit
-
+                self._mode, "running", None, self._nominal_q, 0.0,
+                handoff_active=True, landing_source=self._landing_source,
+                airborne_seen=self._airborne_seen)
+        if self._mode == RobotMode.FAULT:
             return ModeOutput(
-                mode=RobotMode.EXTEND,
-                hip_mode="torque_override",
-                hip_torque_override=torque,
-                q_hip_target=robot.Q_EXT,
-                dq_hip_target=0.0,
-                susp_scale=self._susp_scale,
-            )
+                RobotMode.FAULT, "running", None, self._nominal_q, 0.0,
+                landing_source=self._landing_source,
+                airborne_seen=self._airborne_seen, failed=True)
+        return ModeOutput(RobotMode.BALANCE, "running", None,
+                          self._nominal_q, 0.0)
 
-        elif self._mode == RobotMode.RETRACT:
-            alpha = min(1.0, (t - self._retract_start) / gains.retract_time)
-            q_target = self._retract_start_q + (robot.Q_NOM - self._retract_start_q) * alpha
-            dq_target = (robot.Q_NOM - self._retract_start_q) / gains.retract_time
-            return ModeOutput(
-                mode=RobotMode.RETRACT,
-                hip_mode="position",
-                hip_torque_override=None,
-                q_hip_target=q_target,
-                dq_hip_target=dq_target,
-                susp_scale=self._susp_scale,
-            )
-
-        elif self._mode == RobotMode.FLYING:
-            # Soft impedance at Q_NOM — cushion landing
-            return ModeOutput(
-                mode=RobotMode.FLYING,
-                hip_mode="impedance",
-                hip_torque_override=None,
-                q_hip_target=robot.Q_NOM,
-                dq_hip_target=0.0,
-                susp_scale=self._susp_scale,
-            )
-
-        elif self._mode == RobotMode.LANDING:
-            return ModeOutput(
-                mode=RobotMode.LANDING,
-                hip_mode="impedance",
-                hip_torque_override=None,
-                q_hip_target=robot.Q_NOM,
-                dq_hip_target=0.0,
-                susp_scale=self._susp_scale,
-            )
-
+    def post_control(self, t: float, *, pitch: float, pitch_rate: float,
+                     wheel_l_turns_s: float, wheel_r_turns_s: float,
+                     theta_ref: float, pitch_trim: float) -> None:
+        """Apply firmware HANDOFF capture after the balance tick."""
+        if self._mode != RobotMode.HANDOFF:
+            return
+        now = float(t)
+        in_band = (
+            abs(pitch - theta_ref - pitch_trim) < self._p("jmp_handoff_pitch")
+            and abs(pitch_rate) < self._p("jmp_handoff_rate")
+            and abs(wheel_l_turns_s) <= self._p("wm_vel_limit")
+            and abs(wheel_r_turns_s) <= self._p("wm_vel_limit")
+        )
+        if in_band:
+            if self._capture_since is None:
+                self._capture_since = now
+            if now - self._capture_since >= self._p("jmp_handoff_hold_s"):
+                self._mode = RobotMode.BALANCE
+                self._triggered = False
+                self._phase_entries.append(("RUNNING", now - self._jump_start))
         else:
-            # BALANCE or SETTLED — impedance (soft suspension + roll leveling)
-            return ModeOutput(
-                mode=self._mode,
-                hip_mode="impedance",
-                hip_torque_override=None,
-                q_hip_target=robot.Q_NOM,
-                dq_hip_target=0.0,
-                susp_scale=self._susp_scale,
-            )
+            self._capture_since = None
+        if (self._mode == RobotMode.HANDOFF
+                and now - self._phase_start >= self._p("jmp_handoff_timeout")):
+            self._fault_reason = "handoff not captured"
+            self._set_mode(RobotMode.FAULT, now)

@@ -47,7 +47,43 @@ Two changes in `Adafruit_BNO08x.cpp`:
 
 ## Conclusions
 
-- **~400 Hz is the BNO086's hard ceiling** for any single report type via the Hillcrest SH2 report scheduler. Both GRV and raw gyro converge to this limit once SPI overhead is removed.
+- **~400 Hz is the measured ceiling for these standard-channel reports on this
+  UNO R4 test setup.** It is not a ceiling for the BNO086's separate
+  Gyro-Integrated Rotation Vector channel; the production Teensy follow-up
+  below measured 490 Hz from that channel.
 - **SPI clock was the bottleneck for GRV** (326 -> 400 Hz), but not for raw gyro (already at the 400 Hz cap at 1 MHz).
-- **Cannot reach 500 Hz** with the Adafruit/SH2 report path. Exceeding 400 Hz would require bypassing the SH2 report scheduler or using a different IMU.
-- **ARVR Calibrated Gyro** (SH2_ARVR_STABILIZED_GRV) returns zero events — the Adafruit library does not appear to support this report ID.
+- **`SH2_ARVR_STABILIZED_GRV` is an AR/VR-stabilized game rotation vector, not
+  a calibrated-gyro report.** The historical test label was incorrect; its
+  zero-event result says nothing about `SH2_GYROSCOPE_CALIBRATED` support.
+
+## Production Teensy follow-up (2026-08-13)
+
+The robot test polls SPI at its real 500 Hz control cadence and enables every
+stream together. Removing the unused magnetometer Rotation Vector raised the
+proven production rates to 191.0 Hz Game Rotation Vector, 191.0 Hz calibrated
+gyro, and 12.3 Hz linear acceleration. It passed the 150 ms no-poll test, forced
+hardware-reset recovery, and a 10-second soak without spontaneous recovery or
+transport/decode/queue errors.
+
+`SH2_GYRO_INTEGRATED_RV` was then tested as a possible lower-latency replacement
+for the separate quaternion and gyro reports:
+
+| Integrated request | Measured quaternion + gyro | Measured linear accel | Outcome |
+|---:|---:|---:|---|
+| 500 Hz | 490.0 Hz | 0 Hz | rejected; a repeated run also stalled/reset |
+| 400 Hz | 399.3 Hz | 0.7 Hz | stable, but starves jump acceleration |
+| 250 Hz | 400.0 Hz | 0.7 Hz | request was not honored as 250 Hz |
+| 400 Hz, acceleration disabled | 399.7 Hz | 0 Hz | passed 60-second robustness test |
+
+The dedicated report is fast: its host-transfer-to-driver age averaged
+0.18-0.26 ms, versus 5.42 ms for production attitude and 3.42 ms for production
+gyro. It was also noisier at rest and carries no per-report sequence field;
+the Teensy driver now checks its dedicated SHTP channel sequence instead.
+CEVA documents that enabling it can lengthen other fusion-output periods, and
+the physical result made linear-acceleration landing unusable. With acceleration
+explicitly disabled, however, it passed initialization, a 150 ms polling pause,
+forced-reset recovery, and a 60-second soak with 25,188 paired reports and zero
+sequence gaps or spontaneous recovery. On 2026-08-13 the robot intentionally
+adopted gyro-only landing and promoted this 400 Hz integrated-only configuration
+to production for the dynamic closed-loop trial. The 191 Hz three-stream mode
+remains available as a legacy A/B test environment.

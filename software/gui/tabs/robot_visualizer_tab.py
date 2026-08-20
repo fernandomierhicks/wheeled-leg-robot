@@ -160,8 +160,8 @@ _ODRIVE_IDLE   = 1
 _WM_MODE_LABELS = {0: "IDLE", 1: "VEL", 2: "POS", 3: "TRQ"}
 
 # ── Jump state labels ─────────────────────────────────────────────────────────
-_JUMP_STATE_LABELS = {0: "IDLE", 1: "CROUCH", 2: "LAUNCH", 3: "AIRBORNE",
-                      4: "LAND", 5: "RECOVER", 6: "DONE"}
+_JUMP_STATE_LABELS = {0: "CROUCH", 1: "EXTEND", 2: "RETRACT",
+                      3: "LANDING", 4: "HANDOFF"}
 
 
 # ── 4-bar IK ─────────────────────────────────────────────────────────────────
@@ -1547,7 +1547,9 @@ class RobotVisualizerTab(QWidget):
         yaw_pi_sat  = bool(health_flags & (1 << _HF_YAW_PI_SAT))
         ff1_active  = (abs(ff1_out) > 0.001)
         ff2_active  = (abs(ff2_out) > 0.001)
-        jump_active = (jump_state > 0)
+        # Phase 0 is CROUCH, so jump_state alone cannot distinguish an active
+        # crouch from the default value outside JUMPING. Use the outer state.
+        jump_active = (state == "JUMPING")
 
         self._ctrl_leds["LQR"].set_state("green" if lqr_active else "gray")
         self._ctrl_leds["VelPI"].set_state("yellow" if vel_pi_sat else

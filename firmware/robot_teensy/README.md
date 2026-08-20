@@ -120,6 +120,14 @@ again. To load a specific `.wlog` or host `jsonl` first, use
 `software/gui/CLAUDE.md` under **Remote control / automation** and in
 `software/gui/tools/robot_ctl.py`.
 
+Select the **Jumping** analyzer view for a phase-aligned launch and recovery
+report. It focuses the plots around every `JUMPING` episode and shows phase and
+touchdown markers alongside the effective forward command/nudge, body attitude,
+all three IMU rates, hip position/speed/torque, and wheel speed/torque authority.
+Current logs use the firmware's live `LANDING` phase. Acceleration plots remain
+for older captures but read zero with the integrated-only production IMU; older
+V12 captures infer touchdown from their historical acceleration/gyro evidence.
+
 ## Flashing (PlatformIO / GUI)
 
 ```
@@ -547,52 +555,27 @@ falls to the pitch watchdog alone. It is **persistent**, so a disable survives
 a power cycle; `setup()` logs an unconditional `WARN` on any boot that comes up
 with it cleared, which is what replaces the boot-to-safe guarantee.
 
-**Jump phase budget and overrun fault** — `JUMPING` used to exit on a flat
-3000 ms timer regardless of what the phase machine was doing. That was safe
-only by arithmetic coincidence: the three phase budgets at their then-schema
-maxima (the since-retired `jump_crouch_time` 1.0 + `jump_ext_timeout` 1.0 +
-a hardcoded 0.2 s retract = 2.2 s) happened to fit inside 3 s, so raising one
-bound or adding a phase would have silently
-started handing off to `RUNNING` mid-extension with the hips still under a
-torque command. The two concerns are now separate: `jump_done()` requires the
-phase machine to actually reach `JP_DONE` and hold the nominal pose stiffly for
-`JUMP_SETTLE_MS` (300 ms), while `s_jump_deadline_ms` is derived at entry from
-the same live params it guards (+ `JUMP_OVERRUN_MARGIN_S` 0.5 s) and is a pure
-safety net — overrunning it raises `FAULT_JUMP_TIMEOUT` instead of quietly
-succeeding. Its transition is registered *before* `jump_done` so an overrun can
-never lose the race. With `jump_enable=0` (the default) or invalid calibration
-limits, the sequence retires straight to `JP_DONE` and exits normally, exactly
-as before — an unarmed jump is a no-op, not a fault.
+**Jump phase machine and overrun fault** — `JUMPING` is
+`CROUCH → EXTEND → RETRACT → LANDING → HANDOFF → RUNNING`. The former flat
+3000 ms state timer and blind `JP_DONE` settle have been removed. CROUCH and
+RETRACT durations follow their live angle/speed settings, EXTEND has its own
+cap, landing must be detected before `jump_land_timeout`, and HANDOFF must
+capture before `jmp_handoff_timeout`. A complete budget derived from those
+settings plus `JUMP_OVERRUN_MARGIN_S` remains as a final scheduling guard.
+Any phase timeout raises `FAULT_JUMP_TIMEOUT`; it never silently hands an
+unfinished jump to RUNNING. With `jump_enable=0` or invalid hip calibration,
+the request remains a no-op rather than a fault.
 
-**The jump has never been run on hardware, and until 2026-08-11 it could not
-have worked.** `JUMPING` is reached through a GUI/API `SET_MODE(JUMPING)` or, as
-of 2026-08-11, the CH6 rising edge in `radio_update()` (SIMPLE live-tune mode
-only) — both in `main.cpp`, and both still gated by `jump_enable`, which
-defaults to 0.
+`JUMPING` is reached through GUI/API `SET_MODE(JUMPING)` or the CH6 rising edge
+in SIMPLE live-tune mode. Both remain gated by persistent `jump_enable`, whose
+default is 0. The two hardware jumps in `LOG0015.WLOG` are the current reference
+captures.
 
-**The EXTEND torque sign was inverted.** `tff` was computed as
-`dir * jump_torque_max * …`, but `dir` is `CALIB_*_SEEK_DIR`, which points
-*toward the retract switch*. With `dir = +1`, `define_limits()` puts retracted at
-`max_rad` and extended at `min_rad` — the same convention `hip_cmd_to_setpoints()`
-uses and the same one EXTEND's own `lim_*` already followed — so extending means
-**decreasing** position and needs **negative** torque. The push was aimed into
-the retract stop for the entire phase. Three things then conspired to hide it:
-`dist` *grows* under the wrong sign, so neither the `jump_ramp_down` taper nor
-the `jump_hs_margin` cutoff can fire; EXTEND runs at `kp = 0`, so
-`clamp_to_limits()` has no position command to clamp; and `jump_torque_max`
-shipped at `0`, so no jump ever commanded torque in the first place. It is now
-`-dir * …`. **Confirm the direction on a stand before jumping on the ground** —
-during `jump_state == 1`, `gain_sched_alpha` must *increase*.
-
-**`jump_effort` is the dial; `jump_torque_max` is the ceiling.** EXTEND commands
-`jump_torque_max × jump_effort`. Set the ceiling once from a torque/thermal
-argument and leave it; sweep `jump_effort` ∈ [0,1] to bring a jump up. Unlike
-every other jump parameter it is **non-persistent**, so it reads 0 after every
-boot and the robot always comes up unable to push even with `jump_enable`
-stored at 1 — the same contract the `plant_id_*` hooks have, for the same
-reason. It is deliberately *not* named for a vertical speed: there is no
-flight-state estimator, so nothing can close a loop on takeoff velocity, and
-this is open-loop push effort.
+**`jump_effort` is persistent and defaults to 1.0.** EXTEND commands
+`jump_torque_max × jump_effort`. `jump_torque_max` remains the reviewed ceiling;
+`jump_effort` is the scale factor. It is deliberately not named for a vertical
+speed because extension is still open loop. The independent `jump_enable=0`
+default is the boot-safe arming gate.
 
 **Note the jump is a threshold, not a proportion.** During EXTEND `kp = 0`, so
 the commanded `tff` is the *entire* hip torque — `hip_running_tff` is not
@@ -620,7 +603,17 @@ different manoeuvres, and none of them were repeatable.
 | `jump_extend_angle` | rad (GUI: deg) | how far EXTEND pushes, stated forwards |
 | `jump_retract_angle` | rad (GUI: deg) | the landing pose; **negative = return to the pre-jump pose** |
 | `jump_retract_speed` | rad/s (GUI: deg/s) | **peak** hip speed of the tuck back |
+| `jump_retract_torque` | N·m | commanded hip-feedback torque ceiling during RETRACT |
 | `jump_torque_rate` | N·m/s | EXTEND torque onset rate |
+| `jump_nudge_fwd_vel` | m/s | forward offset added to the pilot's live velocity command |
+| `jump_nudge_fwd_dur` | s | how long that offset is active immediately before EXTEND |
+
+At EXTEND→RETRACT, firmware carries the measured hip position and velocity into
+a 15 ms smooth braking blend before reversing toward the landing pose. The
+blend shortens automatically near the calibrated extended limit. During all of
+RETRACT, `jump_retract_torque` (default 7 N·m) scales `jump_kp`/`jump_kd`
+together to cap the predicted feedback request; it is not a motor current limit,
+so impact or external back-driving can still report more torque.
 
 Phase durations are now *derived*: `1.875 × travel / peak_speed`, the 1.875
 being the quintic minimum-jerk profile's peak-to-mean rate ratio (asserted in
@@ -636,44 +629,59 @@ softstart *duration* means a harder push ramps in proportionally faster, so the
 most violent jumps got the sharpest torque step. A rate makes onset time scale
 with the torque being commanded.
 
-Two consequences worth knowing. The overrun budget still derives from the live
-params, but now from `travel / speed` — and because RETRACT's travel is unknown
-until EXTEND ends, entry budgets its worst case (a tuck across the whole span)
-while the real duration is computed at the EXTEND→RETRACT transition. And
-`jump_extend_angle` is stated forwards while `jump_hs_margin` still measures
-backwards from the calibrated extended limit; the margin is deliberately the
-lower-level guard, so an extend target set too high is still caught by the
-mechanism rather than by the operator.
+The forward nudge is active only during the final `jump_nudge_fwd_dur` seconds
+of CROUCH. The effective request is always `stick velocity + jump_nudge_fwd_vel`;
+the nudge never replaces the operator command. A zero velocity or duration
+disables it. Defaults are 0.15 m/s and 0.10 s.
 
-**`jump_retract_angle` is the landing pose, and it is where touchdown actually
-happens** — on a real hop the robot is still airborne through RETRACT and lands
-partway into the `JP_DONE` settle hold, so this is the pose it lands *on*, not
-merely the one it waits at. Negative (the default, −1) means "return to the pose
-we launched from", reproducing the behaviour from before the parameter existed;
-`standup_torque_lim`/`standup_vel_limit` use the same inherit-by-sentinel idea
-with 0. Setting a real angle decouples the landing pose from the launch height —
-e.g. land more extended to leave suspension travel for the impact.
+**Live landing detection is gyro-only.** Starting at RETRACT, it sums changes
+in the full 3-axis gyro vector over a fixed 12 ms window.
+`jump_land_gyro_imp` must be exceeded by at least two fresh IMU reports, so a
+held 400 Hz value spanning multiple 500 Hz control ticks and a lone corrupted
+sample cannot trigger it. The detector is blanked for `jump_land_min_air` after
+RETRACT begins, rejecting the launch impulse. Defaults are a 2.5 rad/s gyro
+threshold, 0.16 s blanking, and 1.0 s timeout. `jump_air_accel_z` and
+`jump_land_accel_z` remain reserved for parameter-file/protocol compatibility
+but have no effect.
+The 0.16 s blanking window leaves about 50 ms before the earliest reference
+touchdown and rejects early-tuck rotation, which can otherwise look like contact
+while both wheels are airborne. The gyro detector
+found both reference contacts 0.560/0.570 s after the jump request and
+0.224/0.210 s after RETRACT began.
 
-That decoupling needed a fix at the RUNNING handoff. `on_running()` calls
-`controlLoop_reset()`, which invalidates the hip rate-limiter shadow, so the
-first RUNNING tick re-seeds it from the raw CH3 stick — stepping the legs from
-the landing pose to the stick position in one tick at full stiffness. That was
-invisible while RETRACT always returned to the pre-jump pose, because the step
-was zero by construction. A jump landing now seeds the shadow from the
-*measured* pose (`controlLoop_reset_hip_ramp()`) and immediately forces the gain
-ramp complete (`controlLoop_complete_hip_ramp()`) so the landing stiffness is
-not thrown away — the same pairing, for the same reason, as STANDING_UP's
-capture. CH3 then slews back in at `hip_cmd_rate_lim` with no step.
+The detector consumes only fresh gyro report timestamps. This matters because
+the production BNO086 report arrives at 400 Hz while the control loop runs at
+500 Hz: held values are ignored rather than counted as extra impact evidence.
 
-**The wheel loop runs unchanged through every phase.** A version that zeroed
-wheel torque across EXTEND/RETRACT was written and then removed: crouched,
-`l_eff` is ~0.09 m and the inverted pendulum's time constant is ~0.1 s, so a
-0.4 s window of free wheels multiplies any pitch error by ~50× — an
-every-attempt fall risk traded against a benefit that only materialises if the
-robot actually leaves the ground. Revisit it only once there is genuine
-liftoff/landing detection to gate on, so the wheels are released when *airborne*
-rather than whenever a phase machine says so. **There is still no flight or
-landing detection**, nor per-leg asymmetry faults or per-phase deadlines.
+**LANDING and HANDOFF use the normal running controller with scoped recovery
+authority.** LANDING is an explicit telemetry phase at contact. HANDOFF keeps
+the same velocity, yaw, roll, hip, scheduled LQR, barrier, feedforward, and
+wheel-governor code as RUNNING, while applying only these temporary overrides:
+
+| Parameter | Default | HANDOFF effect |
+|---|---:|---|
+| `jmp_handoff_kp_mul` | 1.5 | multiplies scheduled LQR pitch gain |
+| `jmp_handoff_kr_mul` | 1.5 | multiplies scheduled pitch-rate gain |
+| `jmp_handoff_kv_mul` | 1.0 | multiplies direct wheel-velocity gain |
+| `jmp_handoff_torque` | 0.6 N·m | temporary symmetric/per-wheel torque limit; 0 inherits RUNNING |
+| `jmp_handoff_vel_lim` | 10 turns/s | temporary wheel governor/runaway baseline; 0 inherits RUNNING |
+| `jmp_handoff_pitch` | 0.05 rad | trim-relative pitch-error capture band |
+| `jmp_handoff_rate` | 1.0 rad/s | pitch-rate capture band |
+| `jmp_handoff_hold_s` | 0.15 s | continuous time in the full capture band |
+| `jmp_handoff_timeout` | 1.5 s | recovery deadline before `FAULT_JUMP_TIMEOUT` |
+
+Both wheels must also return inside the normal `wm_vel_limit` before capture.
+At landing the hip command limiter is seeded from measured pose, so CH3 slews
+back in without a position step. The controller state is intentionally carried
+across HANDOFF→RUNNING; only the temporary authority overrides are removed.
+
+**The ground-tuned wheel loop remains active through CROUCH/EXTEND/RETRACT.**
+Zero wheel torque there is unsafe when a weak attempt never leaves the floor:
+at the crouched effective length the open-loop inverted-pendulum time constant
+is about 0.1 s. The detector now supplies the timing required for a future
+airborne reaction-wheel controller, but the present firmware does not switch to
+one; free-spinning wheel velocity is still interpreted by the ground LQR as
+forward velocity.
 
 **Expect a small hop, and don't trust the old numbers.** At 3.518 kg total
 (`params.py`), an average leg Jacobian of `dz/dq ≈ 0.19 m/rad`
@@ -697,9 +705,8 @@ likely first failure is `FAULT_PITCH_WATCHDOG` on landing — flight is
 ~0.2–0.3 s against the watchdog's 200 ms debounce. Measure that before deciding
 whether to mask anything.
 
-One cosmetic leftover: `JUMP_MELODY` is ~2.6 s against a state that now lasts
-~0.95 s, so the fanfare plays on into `RUNNING`. The buzzer is non-blocking, so
-this is noise in the literal sense only.
+`JUMP_MELODY` is non-blocking; depending on landing and recovery time it may
+continue after RUNNING resumes.
 
 **CAN TX is no longer write-and-hope** — `FlexCAN_T4::write()` returns 1 for
 "placed in a hardware mailbox" and -1 for "all mailboxes busy, queued to the
@@ -738,7 +745,8 @@ ever fire after that had *also* failed. Mount failure now means "run on
 compiled defaults and say so".
 
 **Roll controller (active suspension)** — off by default (`roll_ctrl_en`). In
-RUNNING only, a PI-D loop on roll angle/rate (`roll_kp`, `roll_ki`, `roll_kd`) produces a
+RUNNING and the post-contact jump LANDING/HANDOFF, a PI-D loop on roll
+angle/rate (`roll_kp`, `roll_ki`, `roll_kd`) produces a
 differential hip position offset (`+offset` one leg, `−offset` the other,
 clamped to `roll_offset_max` and to calibrated hip travel) that levels/leans the
 body about +X. The setpoint comes from radio **CH1**, scaled by the active
@@ -961,7 +969,7 @@ Set in `g_state.fault_code` before entering `STATE_ESTOP`. Non-zero only while i
 | `0x0C` | `FAULT_WHEEL_INIT_TIMEOUT` | No CAN reply from wheel motors within 2 s of boot | REBOOT |
 | `0x0D` | `FAULT_STANDUP_FAILED` | Standup denied (pitch out of recoverable range) or exhausted retries/diverged | REPOSITION |
 | `0x0E` | `FAULT_ROLL_WATCHDOG` | `|roll| > roll_watchdog_limit` for > 200 ms (lateral tip guard) | REPOSITION |
-| `0x0F` | `FAULT_JUMP_TIMEOUT` | JUMPING overran its computed phase budget without reaching `JP_DONE` | REPOSITION |
+| `0x0F` | `FAULT_JUMP_TIMEOUT` | Landing/handoff timed out, or JUMPING overran its computed live phase budget | REPOSITION |
 
 **Severity tiers:** SOFT → ESTOP→STANDBY directly; REPOSITION → reposition robot then reset; GUI_FIX → fix param in GUI then reset; REBOOT → power-cycle required.
 

@@ -618,5 +618,9 @@
   "0x0537": {
     "name": "jump_retract_angle",
     "value": 0.8726646259971648
+  },
+  "0x054D": {
+    "name": "jump_retract_torque",
+    "value": 7.0
   }
 }

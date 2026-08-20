@@ -1644,13 +1644,14 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
     _hb_jump.setSpacing(12)
 
     _jump_defs = [
-        ("crouch_s",    "crouch_time",    0.01, 2.0,  0.01, 3, _jg.get("crouch_time",    0.1)),
-        ("max_τ",       "max_torque",     0.0,  30.0, 0.5,  1, _jg.get("max_torque",     7.0)),
-        ("ramp_up_s",   "ramp_up_s",      0.0,  0.5,  0.005,3, _jg.get("ramp_up_s",      0.01)),
-        ("ramp_dn_rad", "ramp_down_rad",  0.0,  0.5,  0.01, 3, _jg.get("ramp_down_rad",  0.05)),
-        ("retract_s",   "retract_time",   0.01, 1.0,  0.01, 3, _jg.get("retract_time",   0.15)),
-        ("whl_hold",    "wheel_hold_gain",0.0,  2.0,  0.01, 3, _jg.get("wheel_hold_gain",0.15)),
-        ("whl_ff_τ",    "wheel_ff_torque",-20.0,0.0,  0.5,  1, _jg.get("wheel_ff_torque",-6.0)),
+        ("effort",      "jump_effort",        0.0, 1.0,    0.02, 2, _jg["jump_effort"]),
+        ("crouch_rad", "jump_crouch_angle",  0.0, 1.4835, 0.01, 3, _jg["jump_crouch_angle"]),
+        ("crouch_w",   "jump_crouch_speed",  0.2, 15.0,   0.1,  2, _jg["jump_crouch_speed"]),
+        ("extend_rad", "jump_extend_angle",  0.0, 1.4835, 0.01, 3, _jg["jump_extend_angle"]),
+        ("retract_w",  "jump_retract_speed", 0.2, 15.0,   0.1,  2, _jg["jump_retract_speed"]),
+        ("retract_Nm", "jump_retract_torque",0.1, 8.0,    0.1,  2, _jg["jump_retract_torque"]),
+        ("nudge_m/s",  "jump_nudge_fwd_vel", 0.0, 1.5,    0.01, 2, _jg["jump_nudge_fwd_vel"]),
+        ("nudge_s",    "jump_nudge_fwd_dur", 0.0, 1.0,    0.01, 2, _jg["jump_nudge_fwd_dur"]),
     ]
     for disp, fld, lo, hi, step, dec, default in _jump_defs:
         lbl = QtWidgets.QLabel(disp); lbl.setStyleSheet(_SPIN_LBL)
@@ -1745,10 +1746,8 @@ def _plot_process(data_q: mp.Queue, cmd_q: mp.Queue,
             val = round(math.radians(sb.value()), 6)
             src = _replace_field_in_class(src, "RobotGeometry", field_name, val)
 
-        # Jump gains
-        for field_name, (sb, _) in _jump_spinboxes.items():
-            val = round(sb.value(), 6)
-            src = _replace_field_in_class(src, "JumpGains", field_name, val)
+        # Jump controls are schema-backed firmware parameters.  They remain
+        # live-tweakable here but are not duplicated into legacy JumpGains.
 
         if src == original:
             print("  [Save] No changes detected — params.py unchanged.")
@@ -2875,12 +2874,16 @@ def _hip_limits_dict(params) -> dict:
 
 
 def _jump_gains_dict(params) -> dict:
-    """Extract JumpGains fields as a plain dict for passing to plot process."""
-    g = params.gains.jump
-    return dict(crouch_time=g.crouch_time, max_torque=g.max_torque,
-                ramp_up_s=g.ramp_up_s, ramp_down_rad=g.ramp_down_rad,
-                retract_time=g.retract_time, wheel_hold_gain=g.wheel_hold_gain,
-                wheel_ff_torque=g.wheel_ff_torque)
+    """Extract schema-backed firmware jump values for the live simulator."""
+    from v4_twin_279mm_baseline.twin.params_control import default_values
+    values = default_values()
+    values.update(dict(params.firmware_params))
+    names = (
+        "jump_effort", "jump_crouch_angle", "jump_crouch_speed",
+        "jump_extend_angle", "jump_retract_speed", "jump_retract_torque",
+        "jump_nudge_fwd_vel", "jump_nudge_fwd_dur",
+    )
+    return {name: values[name] for name in names}
 
 
 def _robot_geom_dict(params) -> dict:

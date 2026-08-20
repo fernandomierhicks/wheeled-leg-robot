@@ -1763,6 +1763,12 @@ int sh2_open(sh2_Hal_t *pHal,
         shtp_service(pSh2->pShtp);
         now_us = pSh2->pHal->getTimeUs(pSh2->pHal);
     }
+
+    if (!pSh2->resetComplete) {
+        shtp_close(pSh2->pShtp);
+        memset(pSh2, 0, sizeof(sh2_t));
+        return SH2_ERR_TIMEOUT;
+    }
     
     // No errors.
     return SH2_OK;

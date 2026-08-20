@@ -2083,7 +2083,10 @@ static void drawFooter(uint8_t state, bool active, bool rc_alive, uint32_t pkt_a
     bool yp_on  = (omega_cmd_rds != 0.0f);
     bool f1_on  = (ff1_out != 0.0f);
     bool f2_on  = (ff2_out != 0.0f);
-    bool jm_on  = (jump_state != 0);
+    // Jump phase 0 is CROUCH, so the phase byte cannot double as an active
+    // flag. The outer robot state is authoritative.
+    (void)jump_state;
+    bool jm_on  = (state == RS_JUMPING);
 
     const char* labels[6]  = {"LQ", "VP", "YP", "F1", "F2", "JM"};
     bool        states_[6] = {lqr_on, vp_on, yp_on, f1_on, f2_on, jm_on};

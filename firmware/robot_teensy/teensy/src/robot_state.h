@@ -31,7 +31,7 @@ typedef struct {
     float          applied_pitch_trim; // balance-point pitch offset used in LQR error [rad]
     float          ff1_out;           // hip reaction FF torque [N·m]      — Phase 6; 0 until then
     float          ff2_out;           // gravity compensation FF [N·m]     — Phase 6; 0 until then
-    uint8_t        jump_state;        // Jump FSM phase                    — Phase 7; 0 until then
+    uint8_t        jump_state;        // JUMPING: 0 crouch, 1 extend, 2 retract, 3 landing, 4 handoff
     uint8_t        standup_state;     // Standup FSM phase                 — 0 until then
 } RobotState;
 

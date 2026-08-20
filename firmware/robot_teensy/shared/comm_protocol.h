@@ -286,7 +286,7 @@ typedef struct __attribute__((packed)) {
     // V5 additions — diagnostics (8 bytes)
     uint16_t health_flags;       // packed health bits — see HEALTH_FLAG_* below
     uint8_t  imu_packet_loss_pct;// IMU link loss 0-100% (imu_packet_loss() × 100)
-    uint8_t  jump_state;         // Jump FSM phase (0=BALANCE/inactive) — Phase 7
+    uint8_t  jump_state;         // JUMPING phase: 0 crouch, 1 extend, 2 retract, 3 landing, 4 handoff
     uint32_t loop_count;         // control loop counter; GUI uses delta to detect dropped frames
     // V8 additions
     uint8_t  active_profile;     // speed profile selected by CH9 (0=slow, 1=normal, 2=fast)

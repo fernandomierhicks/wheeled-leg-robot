@@ -42,7 +42,6 @@
     ["JUMPING", "motor_feedback_fault", "ESTOP"],
     ["JUMPING", "running_imu_fault", "ESTOP"],
     ["JUMPING", "req_disarm_running", "DISARMING"],
-    ["JUMPING", "jump_overrun", "ESTOP"],
     ["JUMPING", "jump_done", "RUNNING"],
     ["STANDING_UP", "req_estop", "ESTOP"],
     ["STANDING_UP", "motor_feedback_fault", "ESTOP"],

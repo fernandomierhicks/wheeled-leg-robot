@@ -80,9 +80,18 @@ _ANGLE_PARAM_NAMES = frozenset({
     "jump_crouch_angle",
     "jump_extend_angle",
     "jump_retract_angle",
+    # Jump-arm-gate roll ceiling — same rad-magnitude-threshold shape as
+    # roll_offset_max below.
+    "jmp_arm_roll",
+    # Post-landing HANDOFF capture band — same shape as standup_cap_pitch.
+    "jmp_handoff_pitch",
     "standup_pitch_min",
     "standup_pitch_max",
     "standup_cap_pitch",
+    # In-progress RECOVER divergence bounds — looser companions to
+    # standup_pitch_min/max above, checked mid-attempt rather than at arm time.
+    "standup_div_fwd",
+    "standup_div_bwd",
     "lqr_pitch_trim_ret",
     "lqr_pitch_trim_ext",
     "lqr_trim_curve",
@@ -90,6 +99,10 @@ _ANGLE_PARAM_NAMES = frozenset({
     "pitch_wd_bwd_ret",
     "pitch_wd_fwd_ext",
     "pitch_wd_bwd_ext",
+    # Backward soft-limit barrier engagement angle, gain-scheduled ret/ext
+    # companion to the pitch-watchdog pair above.
+    "lqr_barrier_th_ret",
+    "lqr_barrier_th_ext",
     # A hip position offset, not a body angle — but it is still a direct angular
     # quantity in rad, so degrees read better than the 0.15 rad it defaults to.
     "roll_offset_max",
@@ -100,6 +113,10 @@ _ANGLE_PARAM_NAMES = frozenset({
     "profile1_roll_max",
     "profile2_roll_max",
     "profile3_roll_max",
+    # Live roll setpoint (= CH1_norm * radio_roll_max) and the watchdog that
+    # trips on it — same [rad] shape as the setpoint limits above.
+    "roll_cmd_rad",
+    "roll_watchdog_limit",
 })
 _ANGULAR_RATE_PARAM_NAMES = frozenset({
     "calib_seek_speed",
@@ -110,12 +127,23 @@ _ANGULAR_RATE_PARAM_NAMES = frozenset({
     # Peak hip speeds for the CROUCH and RETRACT ramps.
     "jump_crouch_speed",
     "jump_retract_speed",
+    # Jump-arm-gate yaw-rate ceiling.
+    "jmp_arm_yaw_rate",
+    # Post-landing HANDOFF capture band's rate half, paired with
+    # jmp_handoff_pitch above.
+    "jmp_handoff_rate",
+    # Sum of gyro-vector-change magnitudes over a 12 ms window, not a single
+    # instantaneous rate — but it is dimensionally rad/s (three rad/s deltas
+    # summed), and reads the same "5 deg/s-ish" way a rate threshold does.
+    "jump_land_gyro_imp",
     "sim_pitch_rate",
     "standup_cap_rate",
     "radio_yaw_max",
     "profile1_yaw_max",
     "profile2_yaw_max",
     "profile3_yaw_max",
+    # Slew-rate limit on roll_cmd_rad (angle set above) before the PD loop.
+    "roll_rate_lim",
 })
 _DISPLAY_UNIT_BY_PARAM = {
     **{_PARAM_BY_NAME[name]: "deg" for name in _ANGLE_PARAM_NAMES},
@@ -148,6 +176,7 @@ _GROUP_NAMES = {
     0x07: "Safety / Watchdog / Bypass",
     0x08: "Standing Up",
     0x09: "Diagnostics",
+    0x0A: "Jump",
 }
 _GROUP_COLORS = {
     0x00: "#888888",
@@ -160,6 +189,7 @@ _GROUP_COLORS = {
     0x07: RED,
     0x08: "#ff6644",
     0x09: YELLOW,
+    0x0A: "#ffaa44",
 }
 
 # Watchdog/bypass params live natively in System/Wheel/Control/Calibration
@@ -231,18 +261,56 @@ _ROLL_HIP_OVERRIDE_PARAM_IDS = frozenset({
     0x0523,  # PARAM_HIP_ROLL_KP
     0x0524,  # PARAM_HIP_ROLL_KD
 })
-# Exactly the roll case above, for the same reason: the jump effort dial and the
-# angle/speed trajectory params were allocated out of the 0x05xx block because
-# the original 0x0415-0x041F jump block was full, but schema.json declares all
-# of them GROUP_CONTROL and generated_param_table.inc carries that through. Left
-# to the (id >> 8) heuristic they resolve to COMMAND, which split the Jump panel
-# in two — a "Jump" under Control holding the nine original params and a second
-# "Jump" under Command holding the seven new ones, since _ensure_subgroup() keys
-# its containers on (group, subgroup).
-_JUMP_CONTROL_OVERRIDE_PARAM_IDS = frozenset(range(0x0531, 0x0538))
-# Full Jump membership, both ID blocks. Doubles as the subgroup membership below
-# so the two can never drift apart.
-_JUMP_PARAM_IDS = frozenset(range(0x0415, 0x0420)) | _JUMP_CONTROL_OVERRIDE_PARAM_IDS
+# Jump params live natively in GROUP_CONTROL (param_ids.h) but are pulled into
+# their own top-level group here, the same move Standing Up made above: 38
+# params (2026-08-13) across two non-contiguous id blocks — 0x0415-0x0419,
+# allocated first, and 0x0531-0x054D, allocated later once that block was full
+# — is too many to browse as one flat Control subsection. Split into six
+# subgroups below matching the CROUCH/EXTEND/RETRACT/LANDING/HANDOFF phase
+# table in state_machine.md, plus the request-time arm gate.
+#
+# The 0x05xx tail has grown three times since it was first allocated
+# (0x0531-0x0537) without a tracking range being extended to match, silently
+# dropping new members into Command each time: the landing/handoff block
+# (0x0538-0x0547), the arm-gate + airborne-wheel-limit block (0x0548-0x054C),
+# and the retract torque ceiling (0x054D). Re-verify the id span is still
+# contiguous/all-jump (grep schema.json for new ids) before extending it again.
+_GROUP_JUMP = 0x0A
+_JUMP_PARAM_IDS = frozenset(range(0x0415, 0x0420)) | frozenset(range(0x0531, 0x054E))
+_JUMP_ARM_GATE_PARAM_IDS = frozenset({
+    0x0415,  # PARAM_JUMP_ENABLE (master gate)
+    0x0548,  # PARAM_JUMP_ARM_MAX_FWD_SPEED_MS
+    0x0549,  # PARAM_JUMP_ARM_MAX_BWD_SPEED_MS
+    0x054A,  # PARAM_JUMP_ARM_MAX_YAW_RATE_RADS
+    0x054B,  # PARAM_JUMP_ARM_MAX_ROLL_RAD
+})
+_JUMP_CROUCH_PARAM_IDS = frozenset({
+    0x041C,  # PARAM_JUMP_KP  (shared with RETRACT's ramp — state_machine.md frames both as CROUCH's gains)
+    0x041D,  # PARAM_JUMP_KD  (shared with RETRACT's ramp)
+    0x0532,  # PARAM_JUMP_CROUCH_ANGLE
+    0x0533,  # PARAM_JUMP_CROUCH_SPEED
+    0x0538,  # PARAM_JUMP_NUDGE_FWD_VEL_MS
+    0x0539,  # PARAM_JUMP_NUDGE_FWD_DURATION_S
+})
+_JUMP_EXTEND_PARAM_IDS = frozenset({
+    0x0416,  # PARAM_JUMP_TORQUE_MAX
+    0x0419,  # PARAM_JUMP_RAMP_DOWN_RAD
+    0x041A,  # PARAM_JUMP_OMEGA_MAX
+    0x041B,  # PARAM_JUMP_HARDSTOP_MARGIN
+    0x041E,  # PARAM_JUMP_EXTEND_KD
+    0x041F,  # PARAM_JUMP_EXTEND_TIMEOUT_S
+    0x0531,  # PARAM_JUMP_EFFORT
+    0x0534,  # PARAM_JUMP_EXTEND_ANGLE
+    0x0536,  # PARAM_JUMP_TORQUE_RATE
+})
+_JUMP_RETRACT_PARAM_IDS = frozenset({
+    0x0535,  # PARAM_JUMP_RETRACT_SPEED
+    0x0537,  # PARAM_JUMP_RETRACT_ANGLE
+    0x054C,  # PARAM_JUMP_AIRBORNE_WHEEL_VEL_LIMIT (wheel spin-up ceiling — bites hardest here)
+    0x054D,  # PARAM_JUMP_RETRACT_TORQUE_LIMIT_NM
+})
+_JUMP_LANDING_PARAM_IDS = frozenset(range(0x053A, 0x053F))
+_JUMP_HANDOFF_PARAM_IDS = frozenset(range(0x053F, 0x0548))
 _BALANCE_TRIM_HIP_PARAM_IDS = frozenset({
     0x043C,  # PARAM_LQR_PITCH_TRIM_RET
     0x043D,  # PARAM_LQR_PITCH_TRIM_EXT
@@ -368,8 +436,8 @@ def _effective_group(param_id: int) -> int:
         return _GROUP_SYSTEM
     if param_id in _ROLL_CONTROL_OVERRIDE_PARAM_IDS:
         return 0x04  # GROUP_CONTROL
-    if param_id in _JUMP_CONTROL_OVERRIDE_PARAM_IDS:
-        return 0x04  # GROUP_CONTROL
+    if param_id in _JUMP_PARAM_IDS:
+        return _GROUP_JUMP
     if param_id in _ROLL_HIP_OVERRIDE_PARAM_IDS:
         return 0x02  # GROUP_HIP
     if param_id in _BALANCE_TRIM_HIP_PARAM_IDS:
@@ -415,8 +483,6 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     (range(0x0404, 0x040C), 0x04, "Velocity PI"),
     (range(0x040C, 0x0412), 0x04, "Yaw PI"),
     (range(0x0412, 0x0415), 0x04, "Feedforward"),
-    # One panel spanning both ID blocks — see _JUMP_PARAM_IDS.
-    (_JUMP_PARAM_IDS, 0x04, "Jump"),
     (frozenset({0x0401, 0x0420, 0x0421, 0x0422}), 0x04, "Sim Injection"),
     (_ROLL_CONTROL_OVERRIDE_PARAM_IDS, 0x04, "Roll"),
     (range(0x043E, 0x0446), 0x04, "Pitch Envelope"),  # theta_max_*, pitch_wd_* (fwd/bwd x ret/ext)
@@ -425,6 +491,15 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     # Standing-up safety and developer diagnostics.
     (_STANDUP_DIVERGENCE_PARAM_IDS, 0x08, "Divergence Limits"),
     (_PLANT_ID_PARAM_IDS, 0x09, "Plant Identification"),
+
+    # Jump — its own top-level group (_GROUP_JUMP), six subgroups matching
+    # the phase table in state_machine.md.
+    (_JUMP_ARM_GATE_PARAM_IDS, _GROUP_JUMP, "Arm Gate"),
+    (_JUMP_CROUCH_PARAM_IDS, _GROUP_JUMP, "Crouch"),
+    (_JUMP_EXTEND_PARAM_IDS, _GROUP_JUMP, "Extend"),
+    (_JUMP_RETRACT_PARAM_IDS, _GROUP_JUMP, "Retract"),
+    (_JUMP_LANDING_PARAM_IDS, _GROUP_JUMP, "Landing Detection"),
+    (_JUMP_HANDOFF_PARAM_IDS, _GROUP_JUMP, "Handoff"),
 
     # The roll members of these four sets were allocated later, out of the 0x052x
     # tail rather than next to their siblings, so they are listed explicitly —
@@ -451,7 +526,6 @@ _SUBGROUP_COLORS: dict[str, str] = {
     "Velocity PI":    "#bb77ee",
     "Yaw PI":         "#9966dd",
     "Feedforward":    "#ccaaff",
-    "Jump":           "#ffaa44",
     "Sim Injection":  "#88ddcc",
     "Roll":           "#55ccff",
     "Pitch Envelope": "#ff99aa",
@@ -463,6 +537,13 @@ _SUBGROUP_COLORS: dict[str, str] = {
     "Profile 1":      "#ffdd88",
     "Profile 2":      "#ffcc66",
     "Profile 3":      "#ffaa33",
+    # Jump subgroups — orange family, matching the top-level group color.
+    "Arm Gate":          "#ff8833",
+    "Crouch":            "#ffaa44",
+    "Extend":            "#ffc266",
+    "Retract":           "#ff9955",
+    "Landing Detection": "#ffb380",
+    "Handoff":           "#e68a00",
 }
 
 

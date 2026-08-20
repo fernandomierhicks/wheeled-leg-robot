@@ -29,8 +29,10 @@ requiring any powered balance test.
 ## Controller lock and offline replay
 
 Plant fitting did not change controller gains. The current twin is locked to
-all 155 values in `software/gui/parameter_exports/Default gains.json` with
-SHA-256 `d5dcda03206f705eb5442e2dc90d2004474293d48015b2586681b063825a427e`.
+all 171 values in `software/gui/parameter_exports/Default gains.json` with
+SHA-256 `d4a963aa3ba747d6e317b5df08947dd6b4ad1511430bf620defec87437b3f3fe`.
+The lock was extended after fitting with the 16 jump nudge/landing/handoff
+parameters; those parameters were inactive in the balance evidence.
 The direct replay separately uses the exact parameter sidecar captured with the
 run (hash `e5a5dc827750d38dd07eea0e8bbf4ef505623e07c0f03e26adcf58f0209d990d`).
 The meaningful historical-sidecar/current-export differences are
@@ -54,15 +56,16 @@ bound, so this curve must not be treated as measured gearbox efficiency.
 
 The offline MuJoCo optimizer tuned 27 parameters across the LQR, velocity,
 yaw, running hip, roll/differential hip, and FF1/FF2 loops. It did not change
-the plant, trims, watchdogs, torque limits, command limits, or jump controller.
+the plant, trims, watchdogs, torque limits, command limits, or jump controller;
+the export now carries the later jump parameters at their schema defaults.
 The final candidate passed all 49 combinations of seven scenarios and seven
 plant variations with zero falls or policy failures. Robust fitness improved
 from 2.6854 to 1.3070, and worst pitch RMS improved from 7.82 to 2.94 degrees.
 
 The GUI-compatible candidate is
 `software/gui/parameter_exports/Robust_balance_candidate_2026-08-11.json`
-(155 parameters, SHA-256
-`195f3d6b2ca125e00d22b56c4b9d64ae6d974c68ad2f6a057111d119d347cdd1`).
+(171 parameters, SHA-256
+`bc75f8ec9621624779c6e0a011b099ac71f3af275c38a137986ed29d4bbc5a6d`).
 It has not been sent to the robot. Do not apply it as a batch while the fitted
 CG, pitch inertia, wheel torque scale/delay, friction, and hip transmission are
 still provisional.

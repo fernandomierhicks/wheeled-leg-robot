@@ -1,7 +1,7 @@
 {
   "robot_match_report": "robot_match.json",
-  "same_firmware_parameter_count": 155,
-  "controller_snapshot_sha256": "d5dcda03206f705eb5442e2dc90d2004474293d48015b2586681b063825a427e",
+  "same_firmware_parameter_count": 177,
+  "controller_snapshot_sha256": "c4c3366e4925adad15aa03ab7df22996eaf473253dbee71e36b98513e6673ac7",
   "controller_fit_allowed": false,
   "wheel_command_to_physical_torque_scale": 3.4107143619496925,
   "wheel_physical_torque_limit_nm": 1.3642857142857143,

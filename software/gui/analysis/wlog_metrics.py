@@ -64,11 +64,14 @@ REJECT_PENALTY = 200.0  # matches sim's FALL_PENALTY / W_FALL magnitude
 # and the metrics below need. Add here before consuming a new telemetry field.
 _SCALAR_FIELDS = [
     "timestamp_ms", "pitch_rad", "pitch_rate_rads", "roll_rad", "roll_rate_rads",
-    "yaw_rad", "yaw_rate_rads", "wheel_vel_avg", "wm_l_vel_turns_s", "wm_r_vel_turns_s",
-    "hip_l_torque_nm", "hip_r_torque_nm", "whl_tau_l", "whl_tau_r",
+    "yaw_rad", "yaw_rate_rads", "accel_x_ms2", "accel_y_ms2", "accel_z_ms2",
+    "wheel_vel_avg", "wm_l_vel_turns_s", "wm_r_vel_turns_s",
+    "hip_l_torque_nm", "hip_r_torque_nm", "hip_l_vel_rads", "hip_r_vel_rads",
+    "whl_tau_l", "whl_tau_r",
     "hip_l_pos_rad", "hip_r_pos_rad", "hip_l_cmd_pos_rad", "hip_r_cmd_pos_rad",
     "theta_ref", "v_ref", "omega_cmd_rds", "tau_sym", "tau_yaw", "pitch_trim_rad",
-    "health_flags", "fault_code", "robot_state", "loop_count", "active_profile",
+    "health_flags", "fault_code", "robot_state", "jump_state", "standup_state",
+    "loop_count", "active_profile",
 ]
 
 # gain_sched_alpha is present in V10+ telemetry. It remains optional here so

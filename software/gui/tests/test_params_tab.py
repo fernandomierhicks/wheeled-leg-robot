@@ -29,8 +29,14 @@ class ParamsTabAngleDisplayTests(unittest.TestCase):
         # Bump this whenever the two sets change. It had drifted to a stale 33
         # against an actual 38 before the jump angle/speed params were added;
         # the real guard is the set equality below, this is just a tripwire that
-        # a name was added without being thought about.
-        self.assertEqual(len(names), 43)
+        # a name was added without being thought about. 55 as of 2026-08-13:
+        # +jmp_arm_roll, +jmp_arm_yaw_rate (jump arm-gate params), then a full
+        # audit of every [rad]/[rad/s] param in schema.json turned up 10 more
+        # that had never been added: +jmp_handoff_pitch, +jmp_handoff_rate,
+        # +jump_land_gyro_imp, +lqr_barrier_th_ret, +lqr_barrier_th_ext,
+        # +roll_cmd_rad, +roll_rate_lim, +roll_watchdog_limit, +standup_div_fwd,
+        # +standup_div_bwd.
+        self.assertEqual(len(names), 55)
         self.assertEqual(
             {PARAM_BY_NAME[name] for name in names},
             set(_DISPLAY_UNIT_BY_PARAM),

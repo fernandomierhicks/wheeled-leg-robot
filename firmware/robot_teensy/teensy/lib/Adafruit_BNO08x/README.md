@@ -38,3 +38,39 @@ a truly dead/disconnected one.
 
 See `lib/IMU/README.md` for how this project's own driver
 (`lib/IMU/IMU.cpp`) calls into this library.
+
+## Local patch: lossless, bounded SPI polling
+
+Upstream stores the destination pointer supplied to `getSensorEvent()` and lets
+every callback decoded by one `sh2_service()` call overwrite it. An SHTP packet
+can contain many reports, so this silently discarded all but the final report
+and could starve one of two independently enabled required streams. This copy
+queues 48 decoded reports, enough for the maximum 384-byte incoming payload,
+and exposes queue-overflow and decode-error counters.
+
+SPI polling also has explicit real-time behavior:
+
+- H_INTN high with no queued event returns `false` immediately;
+- the payload handshake is bounded to 5 ms and writes to 100 ms (measured boot
+  command traffic needs tens of milliseconds);
+- a HAL timeout is returned to the caller and never triggers a hidden reset;
+- transfer timestamps and SH2 time use `micros()` rather than millisecond
+  quantization;
+- the dedicated Gyro RV channel has SPI-aware SHTP sequence-gap diagnostics
+  (successful payloads normally advance by two because SPI reads use separate
+  header and full-payload transactions);
+- failed post-open initialization closes its SHTP instance so retries do not
+  exhaust the static instance pool.
+
+The initial H_INTN wait remains 500 ms because the BNO086's boot handshake is
+the one place a long wait is legitimate. Runtime reset/reconfiguration policy
+lives in `lib/IMU/IMU.cpp`, where the robot can leave its energetic state before
+the fixed 30 ms reset pulse occurs.
+
+The robot hardware holds PS0 high. That selects SPI at boot but prevents PS0
+from becoming the active-low WAKE signal required by the BNO08x protocol.
+`_init()` therefore performs an explicit reset-as-wake transaction before the
+product-ID request. `lib/IMU/IMU.cpp` does the same before report setup and
+stages later configuration writes only on sensor-originated interrupts. This
+replaces the old HAL behavior that silently reset the sensor after a timeout
+and could erase reports configured earlier in the same startup sequence.

@@ -3,14 +3,14 @@
   "generated_utc": "2026-08-12T04:18:10.947083+00:00",
   "control_export": "software/gui/parameter_exports/Default gains.json",
   "control_snapshot": {
-    "parameter_count": 155,
-    "sha256": "d5dcda03206f705eb5442e2dc90d2004474293d48015b2586681b063825a427e",
+    "parameter_count": 177,
+    "sha256": "c4c3366e4925adad15aa03ab7df22996eaf473253dbee71e36b98513e6673ac7",
     "fit_policy": "immutable during identification; only plant-side mass, CG, inertia, friction, delay, contact, and actuator conversions may vary"
   },
   "latest_wlog": "data/logs/runs/20260810T045619_693178Z_SD_LOG0001/LOG0001.WLOG",
   "odrive_snapshot": "components/characterization/odrive/USB GUI/savedPresets/Both axis working CS 3 and 4 .json",
   "parameter_reconciliation": {
-    "export_parameter_count": 155,
+    "export_parameter_count": 177,
     "log_sidecar_parameter_count": 138,
     "common_parameter_count": 136,
     "meaningful_initial_differences": [

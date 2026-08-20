@@ -52,8 +52,16 @@ public:
   void hardwareReset(void);
   bool wasReset(void);
 
-  bool enableReport(sh2_SensorId_t sensor, uint32_t interval_us = 10000);
+  bool enableReport(sh2_SensorId_t sensor, uint32_t interval_us = 10000,
+                    bool always_on = false);
   bool getSensorEvent(sh2_SensorValue_t *value);
+  bool hasQueuedSensorEvent(void);
+  void clearSensorEvents(void);
+  uint32_t sensorEventOverflowCount(void);
+  uint32_t sensorDecodeErrorCount(void);
+  uint32_t transportErrorCount(void);
+  uint32_t gyroRvSequenceGapCount(void);
+  void resetDiagnostics(void);
 
   sh2_ProductIds_t prodIds; ///< The product IDs returned by the sensor
 

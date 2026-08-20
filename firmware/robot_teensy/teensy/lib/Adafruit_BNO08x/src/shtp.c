@@ -688,7 +688,12 @@ void *shtp_open(sh2_Hal_t *pHal)
     pShtp->advertPhase = ADVERT_REQUESTED;
 
     // Open HAL
-    pHal->open(pHal);
+    if (pHal->open(pHal) != 0) {
+        // Release the static instance immediately. Ignoring HAL-open failure
+        // left SH2 operating on a transport that had never become ready.
+        memset(pShtp, 0, sizeof(shtp_t));
+        return 0;
+    }
 
     return pShtp;
 }

@@ -35,7 +35,7 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0C` | `FAULT_WHEEL_INIT_TIMEOUT` | no CAN reply from wheel motors within 2 s of boot |
 | `0x0D` | `FAULT_STANDUP_FAILED` | standup denied (pitch out of recoverable range) or exhausted retries/diverged |
 | `0x0E` | `FAULT_ROLL_WATCHDOG` | |roll| > roll_watchdog_limit for > 200 ms (lateral tip guard) |
-| `0x0F` | `FAULT_JUMP_TIMEOUT` | jump sequence overran its computed phase budget without reaching JP_DONE |
+| `0x0F` | `FAULT_JUMP_TIMEOUT` | jump landing or handoff was not captured before its live phase timeout, or the complete jump exceeded its computed phase budget |
 
 ## Commands
 
@@ -121,13 +121,35 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x041D` | `PARAM_JUMP_KD` | `jump_kd` | 1 | 0 … 5 | persistent |
 | `0x041E` | `PARAM_JUMP_EXTEND_KD` | `jump_ext_kd` | 0.1 | 0 … 5 | persistent |
 | `0x041F` | `PARAM_JUMP_EXTEND_TIMEOUT_S` | `jump_ext_timeout` | 0.2 | 0.05 … 1 | persistent |
-| `0x0531` | `PARAM_JUMP_EFFORT` | `jump_effort` | 0 | 0 … 1 | - |
+| `0x0531` | `PARAM_JUMP_EFFORT` | `jump_effort` | 1 | 0 … 1 | persistent |
 | `0x0532` | `PARAM_JUMP_CROUCH_ANGLE` | `jump_crouch_angle` | 0.15708 | 0 … 1.4835 | persistent |
 | `0x0533` | `PARAM_JUMP_CROUCH_SPEED` | `jump_crouch_speed` | 3 | 0.2 … 15 | persistent |
 | `0x0534` | `PARAM_JUMP_EXTEND_ANGLE` | `jump_extend_angle` | 1.3 | 0 … 1.4835 | persistent |
 | `0x0535` | `PARAM_JUMP_RETRACT_SPEED` | `jump_retract_speed` | 6 | 0.2 … 15 | persistent |
+| `0x054D` | `PARAM_JUMP_RETRACT_TORQUE_LIMIT_NM` | `jump_retract_torque` | 7 | 0.1 … 8 | persistent |
 | `0x0537` | `PARAM_JUMP_RETRACT_ANGLE` | `jump_retract_angle` | -1 | -1 … 1.4835 | persistent |
 | `0x0536` | `PARAM_JUMP_TORQUE_RATE` | `jump_torque_rate` | 300 | 10 … 2000 | persistent |
+| `0x0538` | `PARAM_JUMP_NUDGE_FWD_VEL_MS` | `jump_nudge_fwd_vel` | 0.15 | 0 … 1.5 | persistent |
+| `0x0539` | `PARAM_JUMP_NUDGE_FWD_DURATION_S` | `jump_nudge_fwd_dur` | 0.1 | 0 … 1 | persistent |
+| `0x053A` | `PARAM_JUMP_AIRBORNE_ACCEL_Z_MS2` | `jump_air_accel_z` | -3 | -20 … 0 | persistent |
+| `0x053B` | `PARAM_JUMP_LANDING_ACCEL_Z_MS2` | `jump_land_accel_z` | 1.5 | -5 … 20 | persistent |
+| `0x053C` | `PARAM_JUMP_LANDING_GYRO_IMPULSE_RADS` | `jump_land_gyro_imp` | 2.5 | 0.2 … 20 | persistent |
+| `0x053D` | `PARAM_JUMP_LANDING_MIN_AIR_S` | `jump_land_min_air` | 0.16 | 0.02 … 1 | persistent |
+| `0x053E` | `PARAM_JUMP_LANDING_TIMEOUT_S` | `jump_land_timeout` | 1 | 0.2 … 5 | persistent |
+| `0x053F` | `PARAM_JUMP_HANDOFF_K_PITCH_MULT` | `jmp_handoff_kp_mul` | 1.5 | 0 … 5 | persistent |
+| `0x0540` | `PARAM_JUMP_HANDOFF_K_RATE_MULT` | `jmp_handoff_kr_mul` | 1.5 | 0 … 5 | persistent |
+| `0x0541` | `PARAM_JUMP_HANDOFF_K_VEL_MULT` | `jmp_handoff_kv_mul` | 1 | 0 … 5 | persistent |
+| `0x0542` | `PARAM_JUMP_HANDOFF_TORQUE_LIMIT` | `jmp_handoff_torque` | 0.6 | 0 … 7 | persistent |
+| `0x0543` | `PARAM_JUMP_HANDOFF_WHEEL_VEL_LIMIT` | `jmp_handoff_vel_lim` | 10 | 0 … 20 | persistent |
+| `0x0544` | `PARAM_JUMP_HANDOFF_CAPTURE_PITCH_RAD` | `jmp_handoff_pitch` | 0.05 | 0.02 … 0.4 | persistent |
+| `0x0545` | `PARAM_JUMP_HANDOFF_CAPTURE_RATE_RADS` | `jmp_handoff_rate` | 1 | 0.1 … 5 | persistent |
+| `0x0546` | `PARAM_JUMP_HANDOFF_CAPTURE_HOLD_S` | `jmp_handoff_hold_s` | 0.15 | 0.02 … 1 | persistent |
+| `0x0547` | `PARAM_JUMP_HANDOFF_TIMEOUT_S` | `jmp_handoff_timeout` | 1.5 | 0.2 … 5 | persistent |
+| `0x0548` | `PARAM_JUMP_ARM_MAX_FWD_SPEED_MS` | `jmp_arm_fwd_ms` | 0.5 | 0 … 2 | persistent |
+| `0x0549` | `PARAM_JUMP_ARM_MAX_BWD_SPEED_MS` | `jmp_arm_bwd_ms` | 0.15 | 0 … 2 | persistent |
+| `0x054A` | `PARAM_JUMP_ARM_MAX_YAW_RATE_RADS` | `jmp_arm_yaw_rate` | 1 | 0 … 6 | persistent |
+| `0x054B` | `PARAM_JUMP_ARM_MAX_ROLL_RAD` | `jmp_arm_roll` | 0.12 | 0 … 1 | persistent |
+| `0x054C` | `PARAM_JUMP_AIRBORNE_WHEEL_VEL_LIMIT` | `jmp_air_vel_lim` | 22 | 0 … 30 | persistent |
 | `0x0420` | `PARAM_ENABLE_SIM_PITCH_RAD` | `enable_sim_pitch` | 0 | 0 … 1 | - |
 | `0x0421` | `PARAM_SIM_PITCH_RATE_RAD_S` | `sim_pitch_rate` | 0 | -10 … 10 | - |
 | `0x0422` | `PARAM_ENABLE_SIM_PITCH_RATE` | `enable_sim_prate` | 0 | 0 … 1 | - |
