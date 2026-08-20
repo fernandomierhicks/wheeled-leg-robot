@@ -8,6 +8,9 @@ still iBUS; the CRSF swap (plan §0) has not happened. This package is the
 radio-side half, staged and validated so it is ready the moment firmware
 catches up.
 
+**Next steps are in [TODO.md](TODO.md)** — what to do on the radio (needs
+nothing else powered), then the firmware phases.
+
 Target verified against the actual radio: **board `tx15`, EdgeTX `3.0.0`,
 SD card layout `3.0`, 480×320, stick mode 2, internal module already
 `TYPE_CROSSFIRE`.**
