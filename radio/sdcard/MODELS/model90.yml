@@ -1,0 +1,744 @@
+semver: 3.0.0
+header:
+  name: WLR ROBOT
+  bitmap: wlrrobot.png
+  labels: "Robot"
+  modelId:
+    0:
+      val: 1
+
+# ---------------------------------------------------------------------------
+# Wheeled-leg balancing robot -- channel map per firmware/robot_teensy/
+# radio_channels.md and tx15-robot-integration-plan.md section 1.
+#
+# POLARITY CONVENTION, and read this before touching a switch mix:
+#   switch UP   -> -100%  -> ~1000 us -> firmware sees the channel LOW  -> SAFE
+#   switch DOWN -> +100%  -> ~2000 us -> firmware sees the channel HIGH -> ACTIVE
+# Every two- and three-position function follows it, so "all switches up" is
+# always the inert configuration -- which is exactly what the switchWarning
+# block below enforces at power-on.
+#
+# Note that radio_channels.md says things like "C5 up = start recording". That
+# "up" means the CHANNEL is high, which on this transmitter is the switch's
+# DOWN position. Same signal, opposite word. Do not resolve the clash by
+# flipping a mix weight; resolve it by remembering that the firmware talks in
+# microseconds and the radio talks in switch positions.
+# ---------------------------------------------------------------------------
+
+# Inputs: mode 2. Hip height MUST be the non-centring throttle stick -- leg
+# height is a held pose, not a transient, and a self-centring stick would drop
+# the legs the moment you let go.
+inputNames:
+  0:
+    val: "Yaw"
+  1:
+    val: "Vel"
+  2:
+    val: "Hip"
+  3:
+    val: "Roll"
+
+expoData:
+  - mode: 3
+    chn: 0
+    srcRaw: "Rud"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    flightModes: 000000000
+    curve:
+      type: 1
+      value: 0
+    scale: 0
+    trimSource: 0
+    name: "Yaw"
+  - mode: 3
+    chn: 1
+    srcRaw: "Ele"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    flightModes: 000000000
+    curve:
+      type: 1
+      value: 0
+    scale: 0
+    trimSource: 0
+    name: "Vel"
+  # 30% expo on hip height. The useful resolution is in the middle of the
+  # travel, where the leg actually does most of its work, and this buys it
+  # without touching hip_cmd_rate_lim in firmware. If you want the fine end
+  # biased hard toward crouch instead, draw a 5-point curve on the radio
+  # (Model -> Curves) and point this expo at it -- that is a 30-second job on
+  # the touchscreen and much safer than hand-editing the curve point pool.
+  - mode: 3
+    chn: 2
+    srcRaw: "Thr"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    flightModes: 000000000
+    curve:
+      type: 1
+      value: 30
+    scale: 0
+    trimSource: 0
+    name: "Hip"
+  - mode: 3
+    chn: 3
+    srcRaw: "Ail"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    flightModes: 000000000
+    curve:
+      type: 1
+      value: 0
+    scale: 0
+    trimSource: 0
+    name: "Roll"
+
+mixData:
+  # CH1 roll setpoint -- right stick H. Self-centring is correct: release
+  # returns the body to level.
+  - destCh: 0
+    srcRaw: "I3"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Roll"
+  # CH2 forward velocity -- right stick V. Self-centring = release means stop.
+  - destCh: 1
+    srcRaw: "I1"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Vel"
+  # CH3 hip height -- left stick V, the throttle stick, non-centring.
+  - destCh: 2
+    srcRaw: "I2"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Hip"
+  # CH4 yaw rate -- left stick H, self-centring.
+  - destCh: 3
+    srcRaw: "I0"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Yaw"
+  # CH5 SD log. Down = channel high = start recording.
+  - destCh: 4
+    srcRaw: "SB"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Log"
+  # CH6 jump, rising edge. SE must be the MOMENTARY shoulder switch: the
+  # firmware triggers on a rising edge, and a latching switch left up here is
+  # a foot-gun you cannot see.
+  - destCh: 5
+    srcRaw: "SE"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Jump"
+  # CH7/CH8 live-tune knobs. The centre detent on these pots gives a
+  # repeatable midpoint reference during a pickup sweep.
+  - destCh: 6
+    srcRaw: "S1"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "TuneA"
+  - destCh: 7
+    srcRaw: "S2"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "TuneB"
+  # CH9 speed profile. Three profiles, three detents: up = 1 (slowest),
+  # middle = 2, down = 3 (fastest). Slowest is the up/rest position on purpose.
+  - destCh: 8
+    srcRaw: "SA"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Prof"
+  # CH10 ARM. SF must be the 2-POSITION LATCHING shoulder switch: index-finger
+  # reachable for an instant kill, and latching so it holds while you drive.
+  # Firmware arms only above 1990 us, so this needs the full +100% travel --
+  # verify real endpoints after the CRSF swap, because ELRS sometimes lands a
+  # few ticks short and arming then silently stops working.
+  - destCh: 9
+    srcRaw: "SF"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Arm"
+  # CH11 hard ESTOP -- top row, deliberate reach, level triggered. Today a
+  # radio-side stop needs the two-stick rescue combo, which is armed only in
+  # STANDBY/ESTOP; there is no single-motion panic input while running. This
+  # channel is that input, and it is inert until firmware reads it.
+  - destCh: 10
+    srcRaw: "SC"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Estop"
+  # CH12 spare -- earmarked for roll-controller enable (roll_ctrl_en).
+  - destCh: 11
+    srcRaw: "SD"
+    weight: 100
+    offset: 0
+    swtch: "NONE"
+    mltpx: ADD
+    carryTrim: 0
+    mixWarn: 0
+    flightModes: 000000000
+    curve:
+      type: 0
+      value: 0
+    delayPrec: 0
+    speedPrec: 0
+    delayUp: 0
+    delayDown: 0
+    speedUp: 0
+    speedDown: 0
+    name: "Spare"
+
+# Channel names only -- travel is left at the full +/-100% default. The
+# firmware thresholds are absolute microsecond values (>1990, <1010) and the
+# rescue and calibration combos need genuine full deflection, so clamping any
+# of CH1-CH4 or CH10 here would quietly break them.
+limitData:
+  0:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "ROLL"
+  1:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "VEL"
+  2:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "HIP"
+  3:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "YAW"
+  4:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "LOG"
+  5:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "JUMP"
+  6:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "TUNEA"
+  7:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "TUNEB"
+  8:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "PROF"
+  9:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "ARM"
+  10:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "ESTOP"
+  11:
+    min: 0
+    max: 0
+    ppmCenter: 0
+    offset: 0
+    symetrical: 0
+    revert: 0
+    curve: 0
+    name: "SPARE"
+
+# Logical switches. Channel-based only, on purpose: telemetry sensors do not
+# exist until the CRSF telemetry emitter lands in firmware, and a logical
+# switch pointed at a sensor that has never been discovered is a switch that
+# silently never fires.
+#   L1  armed        CH10 above centre
+#   L2  jump asked   CH6  above centre
+#   L3  estop asked  CH11 above centre
+logicalSw:
+  0:
+    func: FUNC_VPOS
+    def: "ch(9),50"
+    andsw: "NONE"
+    delay: 0
+    duration: 0
+  1:
+    func: FUNC_VPOS
+    def: "ch(5),50"
+    andsw: "NONE"
+    delay: 0
+    duration: 0
+  2:
+    func: FUNC_VPOS
+    def: "ch(10),50"
+    andsw: "NONE"
+    delay: 0
+    duration: 0
+
+# Special functions. Annunciation and logging only -- never control. Firmware
+# stays authoritative; TX-side logic that tries to disarm would just fight the
+# interlocks and produce behaviour nobody can explain afterwards.
+#
+# The tracks referenced here are the flat copies in /SOUNDS/en/ (6-char names)
+# because the Play Track picker cannot reliably reach into /SOUNDS/en/WLR/.
+# The Lua HUD uses the WLR/ folder with full paths and is unaffected.
+customFn:
+  0:
+    swtch: "L1"
+    func: PLAY_TRACK
+    def: "wlrarm,1,1x"
+  1:
+    swtch: "!L1"
+    func: PLAY_TRACK
+    def: "wlrdis,1,1x"
+  2:
+    swtch: "L3"
+    func: PLAY_TRACK
+    def: "wlrsir,1,1x"
+  3:
+    swtch: "L3"
+    func: HAPTIC
+    def: "3,1"
+  # Radio-side telemetry log at 1 Hz, started by the same switch that starts
+  # the robot's own .wlog. Two independent records with different clocks catch
+  # a whole class of "the log lied" bugs -- but only if they start together.
+  4:
+    swtch: "SBd"
+    func: LOGS
+    def: "10,1"
+  5:
+    swtch: "SBd"
+    func: PLAY_TRACK
+    def: "wlrlog,1,1x"
+  6:
+    swtch: "!SBd"
+    func: PLAY_TRACK
+    def: "wlrlgf,1,1x"
+
+timers:
+  0:
+    start: 0
+    swtch: "L1"
+    value: 0
+    mode: ON
+    countdownBeep: 0
+    minuteBeep: 1
+    persistent: 0
+    countdownStart: 0
+    showElapsed: 0
+    extraHaptic: 0
+    name: "ARMED"
+
+flightModeData:
+  0:
+    name: ""
+    swtch: "NONE"
+    fadeIn: 0
+    fadeOut: 0
+
+# Internal module = the LR1121 ELRS radio, speaking CRSF. Bidirectionality is
+# the whole reason for the iBUS -> CRSF swap: it is what makes telemetry and
+# an on-radio HUD possible at all.
+#
+# crsfArmingMode 0 keeps ELRS arming tied to the channel rather than to a
+# switch ELRS picks for itself. That matters here: the robot's arm interlock
+# lives in firmware on CH10, and a second arming authority inside the radio
+# link would be exactly the "two sources of truth" failure this project has
+# already decided to avoid. Leave it at 0 unless you have a reason.
+#
+# failsafeMode NOT_SET means the receiver keeps its own configured failsafe.
+# Do not set HOLD here. The firmware's whole safety story depends on a dead
+# link looking dead -- alive() going false and channel() returning 0, not the
+# last value. A receiver that holds the last frame would present a stale ARM
+# as a live one.
+moduleData:
+  0:
+    type: TYPE_CROSSFIRE
+    subType: 0
+    channelsStart: 0
+    channelsCount: 16
+    failsafeMode: NOT_SET
+    mod:
+      crsf:
+        telemetryBaudrate: 0
+        crsfArmingMode: 0
+        crsfArmingTrigger: "NONE"
+
+trainerData:
+  mode: OFF
+  channelsStart: 0
+  channelsCount: -8
+  frameLength: 0
+  delay: 0
+  pulsePol: 0
+
+# Refuse to finish booting unless every switch is in its inert position. This
+# is free protection the current stack does not have: today nothing stops you
+# powering up the transmitter with ARM already made.
+switchWarning:
+  SA:
+    pos: up
+  SB:
+    pos: up
+  SC:
+    pos: up
+  SD:
+    pos: up
+  SE:
+    pos: up
+  SF:
+    pos: up
+potsWarnMode: WARN_OFF
+potsWarnEnabled: 0
+
+# Throttle warning stays ON: the hip-height stick must be at the retracted end
+# before the radio will finish booting. Waking up with the legs commanded out
+# is not a state you want to discover by watching it happen.
+disableThrottleWarning: 0
+enableCustomThrottleWarning: 0
+customThrottleWarningPosition: 0
+throttleReversed: 0
+thrTrim: 0
+thrTrimSw: 0
+thrTraceSrc: "Thr"
+# The bring-up ladder in MODELS/WLRROBOT.txt is shown on model select and has
+# to be dismissed deliberately. The radio then refuses to let you skip reading
+# it, which is the point.
+displayChecklist: 1
+checklistInteractive: 0
+
+telemetryProtocol: 0
+disableTelemetryWarning: 0
+ignoreSensorIds: 0
+showInstanceIds: 0
+rssiSource: none
+rfAlarms:
+  warning: 45
+  critical: 42
+varioData:
+  source: 0
+  centerSilent: 0
+  centerMax: 0
+  centerMin: 0
+  min: 0
+  max: 0
+
+extendedLimits: 0
+extendedTrims: 0
+displayTrims: 0
+trimInc: 0
+beepANACenter: 0
+noGlobalFunctions: 0
+jitterFilter: GLOBAL
+
+# Screen 0: the HUD, full screen, chrome off so the widget owns all 480x320.
+# Turn "Top bar" on in Screen settings if you would rather see radio battery
+# and timers up there -- the HUD reflows to whatever zone it is given.
+# Screen 1: the outputs monitor. This is the screen the CRSF bring-up gate
+# needs -- verify every channel lands on its intended function here, torque
+# off, before any re-arm.
+screenData:
+  0:
+    LayoutId: "Layout1x1"
+    layoutData:
+      zones:
+        0:
+          widgetName: "WLR HUD"
+          widgetData:
+            options:
+              0:
+                type: Bool
+                value:
+                  boolValue: 1
+              1:
+                type: Color
+                value:
+                  color: COLIDX4
+      options:
+        0:
+          type: Bool
+          value:
+            boolValue: 0
+        1:
+          type: Bool
+          value:
+            boolValue: 0
+        2:
+          type: Bool
+          value:
+            boolValue: 0
+        3:
+          type: Bool
+          value:
+            boolValue: 0
+        4:
+          type: Bool
+          value:
+            boolValue: 0
+  1:
+    LayoutId: "Layout1x1"
+    layoutData:
+      zones:
+        0:
+          widgetName: "Outputs"
+          widgetData:
+            options:
+              0:
+                type: Signed
+                value:
+                  signedValue: 1
+              1:
+                type: Bool
+                value:
+                  boolValue: 0
+              2:
+                type: Color
+                value:
+                  color: COLIDX5
+              3:
+                type: Color
+                value:
+                  color: COLIDX0
+              4:
+                type: Color
+                value:
+                  color: COLIDX3
+      options:
+        0:
+          type: Bool
+          value:
+            boolValue: 1
+        1:
+          type: Bool
+          value:
+            boolValue: 0
+        2:
+          type: Bool
+          value:
+            boolValue: 0
+        3:
+          type: Bool
+          value:
+            boolValue: 1
+        4:
+          type: Bool
+          value:
+            boolValue: 0
+view: 0

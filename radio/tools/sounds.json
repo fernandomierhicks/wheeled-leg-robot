@@ -1,0 +1,104 @@
+{
+  "_comment": [
+    "Manifest for radio/tools/make_sounds.py. Every file lands in",
+    "sdcard/SOUNDS/en/WLR/ as 32 kHz 16-bit mono PCM, which is what EdgeTX",
+    "wants. Basenames are 8 characters or fewer so the Special Function",
+    "'Play Track' picker can browse them too, not just Lua playFile().",
+    "",
+    "The state and fault basenames are NOT free-form: they must match the",
+    "wav fields in WIDGETS/WLRHUD/robotdef.lua, which is generated from",
+    "firmware/robot_teensy/protocol/schema.json. make_sounds.py cross-checks",
+    "them and fails if they drift.",
+    "",
+    "Edit the 'say' strings freely -- they are only the words. Re-run",
+    "make_sounds.py after any change."
+  ],
+
+  "speech": {
+    "st_boot":  "starting up",
+    "st_calib": "calibrating",
+    "st_stby":  "standby",
+    "st_run":   "running",
+    "st_estop": "emergency stop",
+    "st_man":   "manual",
+    "st_rej":   "command rejected",
+    "st_jump":  "jumping",
+    "st_up":    "standing up",
+    "st_disar": "disarming",
+
+    "f_imuerr": "I M U error",
+    "f_hipini": "hip motors not responding",
+    "f_hipfb":  "hip feedback lost",
+    "f_hipjmp": "hip position jump",
+    "f_calib":  "calibration timeout",
+    "f_human":  "operator stop",
+    "f_pitchw": "pitch watchdog",
+    "f_runawy": "wheel runaway",
+    "f_imulos": "I M U lost",
+    "f_whlfb":  "wheel feedback lost",
+    "f_whlini": "wheel motors not responding",
+    "f_stndup": "stand up failed",
+    "f_rollw":  "roll watchdog",
+    "f_jumpto": "jump timeout",
+
+    "w_pitch":  "pitch",
+    "w_hiphot": "hips hot, reduce the hold",
+    "w_glitch": "wheel glitches rising",
+    "w_esp":    "robot link degraded",
+    "w_link":   "radio link weak",
+    "w_stale":  "telemetry stale",
+    "w_batlow": "battery low",
+    "w_batcrt": "battery critical",
+
+    "o_armed":  "armed",
+    "o_disarm": "disarmed",
+    "o_conn":   "robot connected",
+    "o_lost":   "robot lost",
+    "o_logon":  "logging",
+    "o_logoff": "log stopped",
+    "o_pickup": "picked up",
+    "o_latch":  "latched",
+    "o_nomtr":  "no motors preset",
+    "o_full":   "full robot preset"
+  },
+
+  "flat": {
+    "_comment": [
+      "Copies of a few sounds into /SOUNDS/en/ itself, named 6 characters or",
+      "fewer. EdgeTX Special Functions pick a track from the top of the",
+      "language folder, and cannot reliably reach into the WLR/ subfolder --",
+      "so the handful of sounds driven by Special Functions rather than by Lua",
+      "get a flat copy here. dest -> source basename.",
+      "",
+      "Every name is wlr-prefixed on purpose. The stock EdgeTX sound pack",
+      "already ships armed.wav and disarm.wav in this folder, and other models",
+      "on the radio use them. Copying over those would silently change what",
+      "an unrelated model says.",
+      "",
+      "Lua uses the WLR/ folder with full paths and is unaffected."
+    ],
+    "wlrarm": "o_armed",
+    "wlrdis": "o_disarm",
+    "wlrest": "st_estop",
+    "wlrlog": "o_logon",
+    "wlrlgf": "o_logoff",
+    "wlrsir": "t_siren"
+  },
+
+  "tones": {
+    "_comment": [
+      "Alert tones, synthesised. 'segs' is a list of segments:",
+      "  [freq_hz, ms]                     -- steady tone",
+      "  [freq_hz, ms, end_freq_hz]        -- linear sweep",
+      "  [0, ms]                           -- silence",
+      "'gain' scales the final peak (1.0 = -3 dBFS)."
+    ],
+    "t_soft":  { "segs": [[880, 90]], "gain": 0.7 },
+    "t_repos": { "segs": [[988, 110], [0, 40], [740, 160]], "gain": 0.85 },
+    "t_siren": { "segs": [[880, 130], [1319, 130], [880, 130], [1319, 130],
+                          [880, 130], [1319, 130]], "gain": 1.0 },
+    "t_alert": { "segs": [[600, 260, 1500]], "gain": 0.9 },
+    "t_ok":    { "segs": [[784, 70], [1047, 110]], "gain": 0.6 },
+    "t_stale": { "segs": [[520, 80], [0, 60], [520, 80]], "gain": 0.55 }
+  }
+}

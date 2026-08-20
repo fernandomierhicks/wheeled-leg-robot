@@ -1,0 +1,90 @@
+# TX15 control map
+
+Staged in `sdcard/MODELS/model90.yml`, model name **WLR ROBOT**. Derived from
+`firmware/robot_teensy/radio_channels.md` and `tx15-robot-integration-plan.md`
+§1. Verified against the radio's own hardware definition
+(`radio/src/targets/tx15/hal.h`) and its own `MODELS/model1.yml`.
+
+## The polarity rule, once
+
+| Switch position | Mix output | Pulse width | Firmware sees | Meaning |
+|---|---|---|---|---|
+| **up** | −100% | ~1000 µs | channel LOW | safe / inert |
+| middle (3-pos) | 0% | ~1500 µs | channel MID | — |
+| **down** | +100% | ~2000 µs | channel HIGH | active |
+
+Every switch function follows it, so **"all switches up" is always the inert
+configuration** — which is what the model's power-on switch warning enforces.
+
+> `radio_channels.md` says things like *"C5 up = start recording"*. That "up"
+> means the **channel** is high, which on this transmitter is the switch's
+> **down** position. Same signal, opposite word: the firmware talks in
+> microseconds, the radio talks in switch positions. Don't reconcile them by
+> flipping a mix weight — you'd break the "up = safe" invariant everywhere else.
+
+## Channels
+
+| CH | Control | Function | Notes |
+|---|---|---|---|
+| 1 | Right stick H (Ail → I3) | Roll setpoint | Self-centring: release returns to level. Only acts when `roll_ctrl_en=1` in RUNNING. |
+| 2 | Right stick V (Ele → I1) | Forward velocity | Self-centring: release means stop. |
+| 3 | **Left stick V** (Thr → I2) | Hip height | **Must** be the non-centring stick — leg height is a held pose. 30% expo. |
+| 4 | Left stick H (Rud → I0) | Yaw rate | Self-centring. |
+| 5 | **SB** 3-pos | SD log | Down = start recording. Also starts the radio's own `/LOGS` capture. |
+| 6 | **SE** momentary | Jump trigger | Rising edge. One jump per press. Inert unless `jump_enable=1`. |
+| 7 | **S1** pot | Live tune A | Centre detent = repeatable midpoint during a pickup sweep. |
+| 8 | **S2** pot | Live tune B | |
+| 9 | **SA** 3-pos | Speed profile | Up = 1 (slowest), mid = 2, down = 3. |
+| 10 | **SF** 2-pos latching | ARM | Down = armed. Needs > 1990 µs — verify real endpoints. |
+| 11 | **SC** 3-pos | Hard ESTOP | *Staged, inert until firmware reads it.* Plan §6 item 4. |
+| 12 | **SD** 3-pos | Spare / roll-ctrl enable | *Staged, inert.* |
+
+Inputs are declared in the radio's native RETA order (I0=Rud, I1=Ele, I2=Thr,
+I3=Ail) so the Inputs screen looks like every other model on this transmitter.
+
+## Hardware you still have to do
+
+The TX15 ships with alternative momentary and 2-position shoulder switches plus
+matching panels, and the case opens with four hex screws.
+
+- **SE → momentary.** Jump is edge-triggered. A latching switch here can sit
+  latched where you cannot see it.
+- **SF → 2-position latching.** ARM must hold while you drive, and be
+  index-finger reachable for an instant kill.
+
+After swapping, set each switch's type in **Radio settings → Hardware**, then
+re-check the model's switch warning. If your physical shoulder switches turn
+out to be different letters than SE/SF, change the two `srcRaw` values in the
+model — nothing else moves.
+
+## What the radio does *not* control
+
+Arm, disarm, ESTOP and the rescue combo are physical channels and firmware
+interlocks. The Lua HUD is an instrument: it reads and it speaks, it never
+writes. A script can be exited, starved, or crash, and none of those may be
+able to disarm a robot.
+
+TX-side logical switches and special functions here do **annunciation and
+logging only**. Firmware stays authoritative — TX-side logic that tried to
+auto-disarm would fight the interlocks and produce behaviour nobody can
+reconstruct afterwards.
+
+## Combos still work
+
+Both stick combos survive this mapping unchanged (mode 2):
+
+- **Rescue** (clear ESTOP / reboot): CH3 + CH2 full up, CH1 + CH4 full down.
+- **Calibration** (STANDBY → CALIBRATION): the exact mirror — CH1 + CH4 full
+  up, CH2 + CH3 full down.
+
+Verify after the CRSF swap that full deflection actually reaches the µs
+thresholds. ELRS endpoints occasionally land a few ticks short and the combos
+then silently stop working.
+
+## The six RGB function switches
+
+`hal.h` shows the TX15 also has **SG–SL**, six function switches with RGB LEDs
+(`FUNCTION_SWITCHES_WITH_RGB`). The integration plan predates this and doesn't
+account for them. Nothing is assigned to them yet — they're a genuinely good
+fit for mirroring robot state in peripheral vision (EdgeTX has an `RGB_LED`
+special function), or for latched bench toggles. Left free deliberately.

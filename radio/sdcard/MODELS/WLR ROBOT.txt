@@ -1,0 +1,115 @@
+WLR ROBOT -- BRING-UP CHECKLIST
+===============================
+Shown on model select. Filename must match
+the model NAME, spaces and all. Rename the
+model, rename this file.
+
+BEFORE POWERING THE ROBOT
+-------------------------
+[ ] All six switches UP.
+    Up = safe here, always.
+[ ] Left stick (hip height) fully DOWN.
+    The radio refuses to boot otherwise.
+[ ] SE is the MOMENTARY shoulder switch.
+    A latching switch on jump can sit
+    latched where you cannot see it.
+[ ] SF is the 2-POSITION LATCHING switch.
+[ ] Robot on a stand, wheels clear.
+
+FIRST LINK AFTER THE CRSF SWAP
+------------------------------
+Do the whole swap with torque OFF, using
+the GUI "No Motors" preset:
+    hip_l_enable      = 0
+    hip_r_enable      = 0
+    wheel_l_enable    = 0
+    wheel_r_enable    = 0
+    calib_bypass_en   = 1
+    run_wheel_bypass_en = 1
+
+[ ] Screen 2 (Outputs): move each control
+    and confirm it drives the channel it
+    is supposed to. Cross-check against
+    the PARAM_IBUS_CH* mirrors in the GUI.
+[ ] stress_test_arm.py green.
+[ ] Rescue combo reaches real endpoints:
+    C3+C2 full up, C1+C4 full down.
+    ELRS sometimes lands a few ticks short
+    and the combo then silently stops
+    arming. Check the microseconds, not
+    the stick position.
+[ ] Calibration combo, the exact mirror:
+    C1+C4 full up, C2+C3 full down.
+[ ] Pull RX power on the stand and confirm
+    the robot disarms. A dead radio must
+    never look like a valid arm command.
+
+BEFORE ENABLING JUMP
+--------------------
+jump_enable defaults to 0. Leave it there
+until all of this passes.
+
+[ ] Robot SUSPENDED, wheels off the floor.
+[ ] jump_effort = 0.05.
+[ ] Trigger one jump. Confirm
+    gain_sched_alpha INCREASES during
+    jump_state == 1 (extend).
+    If it decreases, the sign is wrong.
+    Stop. Do not raise effort.
+[ ] Only then walk the ladder:
+    0.5 -> 0.6 -> 0.7 -> 0.8 -> 0.9 -> 1.0
+    one step at a time, one jump each.
+
+EVERY SESSION
+-------------
+[ ] ODrive heartbeat confirmed on both
+    wheel axes.
+[ ] Teensy and ESP32 flashed TOGETHER.
+    A version mismatch is rejected at the
+    packet level and looks like a dead
+    link.
+[ ] Confirm new firmware is actually
+    running: timestamp_ms and loop_count
+    reset to small values. A stale board
+    still answers.
+[ ] SD log started BEFORE arming. Opening
+    a log preallocates and blocks ~96 ms,
+    so a start is refused outside
+    STANDBY/ESTOP. One G5 chirp confirms
+    it -- there is no LED cue, so check
+    buzzer_volume first.
+
+WATCH FOR, IN THE FIELD
+-----------------------
+Hips over 3.0 Nm for more than ~20 s in a
+crouch hold. 4.07 Nm settles near 143 C,
+past the Class B limit. The HUD says
+"hips hot" before that becomes a smell.
+
+vel_glitch_count climbing. A bench log hit
+14.6% of samples before a spurious runaway
+trip. You get a callout as it builds.
+
+Pitch tone rising in frequency. That is
+the watchdog getting closer, and it is the
+only warning you get before the ESTOP.
+
+IF IT FAULTS
+------------
+The radio speaks the fault and its tier:
+  SOFT       reset and carry on
+  REPOSITION pick it up, level it, reset
+  GUI_FIX    fix the param first
+  REBOOT     power-cycle, reset will not
+             clear it
+
+Rescue combo clears ESTOP from STANDBY or
+ESTOP only. Hold it 3 s for a full MCU
+reset.
+
+NOT WIRED YET
+-------------
+CH11 ESTOP and CH12 spare are staged on
+the radio but inert until firmware reads
+them. The HUD shows "NO ROBOT TELEMETRY"
+until the CRSF telemetry emitter lands.
