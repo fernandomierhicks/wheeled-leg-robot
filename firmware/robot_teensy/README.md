@@ -160,6 +160,28 @@ in `main.cpp` (`> 1990`, `< 1010`) is unchanged. Full deflection lands at
 asserts — ELRS endpoints occasionally land short and that silently breaks
 arming.
 
+### CH11 hard ESTOP
+
+A single-motion panic input, which this stack did not previously have. CH10 low
+starts `DISARMING` — a controlled ramp-down, not a stop — and the rescue combo
+is armed only in STANDBY/ESTOP, so while the robot was actually running there
+was nothing that said "stop now".
+
+CH11 is **level-triggered**, not edge-triggered, and that has two wanted
+consequences. While the switch is held the fault cannot be cleared: a
+soft-clear (`FAULT_HUMAN_ESTOP` is SOFT severity, so raising CH10 from ESTOP
+clears it) would otherwise hand control back with the panic switch still down.
+And recovery is explicit — release the switch, then toggle CH10.
+
+It is guarded by `alive()` like every other radio input, so a dead link cannot
+assert it. That is deliberate: link loss already has its own path through
+DISARMING, and a dropout should not latch a fault that needs manual recovery.
+
+CH12 is sent by the radio but **ignored** by firmware. It was earmarked for
+`roll_ctrl_en`, but that parameter is persistent — driving it from a switch
+would rewrite the stored value, including at boot from whatever position the
+switch happens to be in. It needs a non-persistent runtime gate first.
+
 ### What goes back to the radio
 
 About 350 bytes/s, scheduled in `teensy/src/CrsfTelem.h`. Deliberately not a

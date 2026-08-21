@@ -52,8 +52,8 @@ panels; the case opens with four hex screws. ~20 minutes.
       **throttle warning** must fire.
 - [ ] Flick SF → hear "armed"; flick back → "disarmed". These run off logical
       switches on CH10 and need no telemetry.
-- [ ] Flick SC → siren + haptic. (CH11 is inert on the robot side; this is
-      only checking the annunciation path.)
+- [ ] Flick SC → siren + haptic on the radio. CH11 is now live in firmware
+      too, so once bound this really does stop the robot.
 - [ ] Flick SB down → hear "logging", and confirm a file appears in `/LOGS`.
 - [ ] Walk both stick combos and confirm they reach real endpoints:
       **rescue** = CH3+CH2 full up, CH1+CH4 full down; **calibration** = the
@@ -192,10 +192,13 @@ Small, but be explicit (plan §6):
 - [ ] CRSF driver replacing `IBus`, with `alive()`/`channel()` failsafe parity.
 - [ ] CRSF command tunnel → existing `on_command()`.
 - [ ] CRSF telemetry emitter — four standard frames + one custom.
-- [ ] **CH11 hard ESTOP** — level-triggered, raising `FAULT_HUMAN_ESTOP` from
-      any energetic state, independent of CH10's disarm path. Today there is
-      no single-motion panic input while running; the rescue combo is armed
-      only in STANDBY/ESTOP.
+- [x] **CH11 hard ESTOP** — level-triggered, raises `FAULT_HUMAN_ESTOP` from
+      any non-ESTOP state and blocks arming while held. Guarded by `alive()`
+      so a dead link cannot assert it. Bench-verify it once bound.
+- [ ] CH12 is still unassigned. `roll_ctrl_en` is persistent, so wiring a
+      switch to it would rewrite the stored value at boot from whatever
+      position the switch is in. Give it a non-persistent runtime gate first
+      if you want the switch.
 - [ ] Lua emitter in `generate_protocol.py`.
 - [ ] Update `radio_channels.md` and `firmware/robot_teensy/README.md` in the
       same change, per the repo's own AI-maintenance note. Worth fixing the

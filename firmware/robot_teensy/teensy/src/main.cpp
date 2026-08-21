@@ -1172,6 +1172,15 @@ float live_tune_value(uint16_t persist_param_id) {
 // Calibration stick combo (CH1/CH4 full up, CH2/CH3 full down): trigger
 //               CALIBRATION from STANDBY; re-enter it to cancel.
 // CH5  > 1990: start SD logging (SIMPLE mode); drop stops it.
+// CH11 > 1990: hard ESTOP, level-triggered. Raises FAULT_HUMAN_ESTOP from
+//               any non-ESTOP state and blocks arming while held. The one
+//               single-motion panic input; the rescue combo is armed only
+//               in STANDBY/ESTOP and CH10 low only starts DISARMING.
+// CH12: unassigned. Earmarked for roll_ctrl_en, but that param is
+//               persistent -- driving it from a switch would rewrite the
+//               stored value, including at boot from whatever position the
+//               switch happens to be in. Wire it to a non-persistent gate
+//               first if you want it.
 // CH6  > 1990: trigger a JUMP from RUNNING (SIMPLE mode), one per rising edge.
 // CH5/CH6 (while RUNNING, LEGACY mode only): debounced switch combination
 //               selects which live-tune gain group CH7/CH8 drive -- see
@@ -1309,6 +1318,57 @@ static void radio_update() {
         SCB_AIRCR = 0x05FA0004;  // Cortex-M7 system reset request
     }
 
+    // ── CH11 hard ESTOP ──────────────────────────────────────────────────────
+    // A single-motion panic input, which this stack did not previously have.
+    // The rescue combo is armed only in STANDBY/ESTOP, and CH10 low goes
+    // through DISARMING — a controlled ramp-down, not a stop. So while the
+    // robot is actually running there was nothing that says "stop now".
+    //
+    // LEVEL-triggered, deliberately, not edge-triggered. Two consequences that
+    // are both wanted:
+    //   * While the switch is held, the fault cannot be cleared. A soft-clear
+    //     (FAULT_HUMAN_ESTOP is SOFT severity, so raising CH10 from ESTOP
+    //     clears it) would otherwise let the robot re-arm with the panic
+    //     switch still down. Here it re-ESTOPs on the very next tick.
+    //   * Recovery is explicit: release the switch, then toggle CH10 to
+    //     soft-clear back to STANDBY.
+    //
+    // Guarded by `alive` like every other radio input: channel() returns 0 on
+    // a dead link, so a lost radio cannot assert this. That is correct — link
+    // loss already has its own path (DISARMING via radio_lost above), and a
+    // dropout should not slam the robot into a latched fault.
+    static constexpr uint8_t ESTOP_DEBOUNCE_TICKS = 3;   // ~6 ms @ 500 Hz
+    static uint8_t s_estop_ticks    = 0;
+    static bool    s_estop_asserted = false;
+
+    const bool estop_raw = alive && (g_rc.channel(11) > 1990);
+    if (estop_raw) {
+        if (s_estop_ticks < ESTOP_DEBOUNCE_TICKS) s_estop_ticks++;
+    } else {
+        s_estop_ticks = 0;
+    }
+    const bool estop_now = (s_estop_ticks >= ESTOP_DEBOUNCE_TICKS);
+
+    if (estop_now != s_estop_asserted) {
+        s_estop_asserted = estop_now;
+        if (estop_now) {
+            comm_log(LOG_LEVEL_ERROR,
+                     "ESTOP reason=RADIO_CH11: hard stop asserted (state=%d)",
+                     (int)g_state.state);
+            g_buzzer.play(RESCUE_CLEAR_MELODY,
+                          sizeof(RESCUE_CLEAR_MELODY) / sizeof(RESCUE_CLEAR_MELODY[0]));
+        } else {
+            comm_log(LOG_LEVEL_WARN,
+                     "Radio: CH11 hard stop released; toggle CH10 to soft-clear");
+        }
+    }
+    // Re-request every tick while asserted. request_estop() is a no-op once we
+    // are already in ESTOP, and this is what makes the switch impossible to
+    // clear past.
+    if (estop_now && g_state.state != STATE_ESTOP) {
+        stateMachine_request_estop();
+    }
+
     // Debounce CH10: the raw armed level must hold for ARM_DEBOUNCE_TICKS
     // consecutive ticks before an arm is requested. Filters a single bad
     // tick of ch10/alive right at the RUNNING-entry race (radio_update()
@@ -1320,7 +1380,9 @@ static void radio_update() {
     static constexpr uint8_t DISARM_DEBOUNCE_TICKS = 2;  // ~4 ms @ 500 Hz
     static uint8_t s_armed_ticks   = 0;
     static uint8_t s_unarmed_ticks = 0;
-    bool armed_raw = alive && (ch10 > 1990);
+    // A held CH11 also blocks arming outright, so the soft-clear path cannot
+    // hand control back while the panic switch is still down.
+    bool armed_raw = alive && (ch10 > 1990) && !s_estop_asserted;
     bool disarmed_raw = alive && (ch10 <= 1990);
     if (armed_raw) {
         if (s_armed_ticks < ARM_DEBOUNCE_TICKS) s_armed_ticks++;

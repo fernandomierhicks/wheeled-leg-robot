@@ -36,8 +36,8 @@ configuration** — which is what the model's power-on switch warning enforces.
 | 8 | **S2** pot | Live tune B | |
 | 9 | **SA** 3-pos | Speed profile | Up = 1 (slowest), mid = 2, down = 3. |
 | 10 | **SF** 2-pos latching | ARM | Down = armed. Needs > 1990 µs — verify real endpoints. |
-| 11 | **SC** 3-pos | Hard ESTOP | *Staged, inert until firmware reads it.* Plan §6 item 4. |
-| 12 | **SD** 3-pos | Spare / roll-ctrl enable | *Staged, inert.* |
+| 11 | **SC** 3-pos | Hard ESTOP | **Live.** Level-triggered: down = ESTOP from any state, and blocks arming while held. Release, then toggle SF to soft-clear. |
+| 12 | **SD** 3-pos | Spare | Sent, but firmware ignores it. `roll_ctrl_en` is persistent, so a switch would rewrite the stored value at boot. |
 
 Inputs are declared in the radio's native RETA order (I0=Rud, I1=Ele, I2=Thr,
 I3=Ail) so the Inputs screen looks like every other model on this transmitter.
@@ -56,6 +56,20 @@ After swapping, set each switch's type in **Radio settings → Hardware**, then
 re-check the model's switch warning. If your physical shoulder switches turn
 out to be different letters than SE/SF, change the two `srcRaw` values in the
 model — nothing else moves.
+
+## The panic switch
+
+**SC down = stop, from any state.** That is the one thing on this transmitter
+that acts immediately rather than politely: SF low starts DISARMING, which is a
+controlled ramp-down, and the rescue combo only works from STANDBY or ESTOP.
+
+It is level-triggered on purpose. While SC is held the fault cannot be cleared
+and the robot cannot arm — a soft-clear would otherwise hand control back with
+the panic switch still down. To recover: put SC up, then toggle SF.
+
+A dead radio cannot assert it. `channel()` returns 0 on a lost link, so the
+`> 1990` test fails; link loss has its own DISARMING path and should not latch
+a fault that needs manual recovery.
 
 ## What the radio does *not* control
 

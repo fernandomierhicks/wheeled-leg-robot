@@ -36,6 +36,8 @@ boot. Set the receiver's own failsafe to **no pulses**, never "hold".
 | C8  | Second knob        | Live tune, slot 1 of active group | 1000–2000 → active group's slot-1 range → its mapped param. See "Live parameter tuning" below. |
 | C9  | 3-pos switch       | Speed profile        | < 1333 = profile 1, 1333–1667 = profile 2, > 1667 = profile 3. Selects the active `vel_max`, `yaw_max`, `torque_lim`, and `roll_max`. |
 | C10 | Right switch (ARM) | Arm / disarm         | > 1990 → RUNNING (requires calibration); drop → STANDBY    |
+| C11 | SWC                | **Hard ESTOP**       | **Level-triggered.** > 1990 raises `FAULT_HUMAN_ESTOP` from any non-ESTOP state, and blocks arming while held. The only single-motion panic input: the rescue combo is armed solely in STANDBY/ESTOP, and C10 low merely starts DISARMING (a controlled ramp-down, not a stop). Debounced 3 ticks. Guarded by `alive()`, so a dead link cannot assert it — link loss has its own DISARMING path and should not latch a fault. Recovery: release C11, then toggle C10 to soft-clear (HUMAN_ESTOP is SOFT severity) back to STANDBY. |
+| C12 | SWD                | *unassigned*         | Earmarked for `roll_ctrl_en`, but that param is **persistent** — driving it from a switch would rewrite the stored value, including at boot from whatever position the switch is in. Needs a non-persistent runtime gate first. |
 
 ## Calibration combo — STANDBY → CALIBRATION
 
