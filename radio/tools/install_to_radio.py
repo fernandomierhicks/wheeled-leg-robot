@@ -67,7 +67,8 @@ def radio_info(root):
     # Scan the whole file: the stick calibration block sits near the top and
     # pushes stickMode well past any small line budget.
     for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-        m = re.match(r"\s*(board|semver|stickMode|internalModule|selectedTheme)"
+        m = re.match(r"\s*(board|semver|stickMode|internalModule|selectedTheme"
+                     r"|currModelFilename)"
                      r"\s*:\s*(\S.*?)\s*$", line)
         if m and m.group(1) not in info:
             info[m.group(1)] = m.group(2).strip('"')
@@ -221,6 +222,20 @@ def main():
     elif model_rename != "model%d.yml" % args.model_number:
         print("\nmodel%d.yml is taken by another model; using %s instead."
               % (args.model_number, model_rename))
+
+    # The radio keeps the selected model in RAM and writes it back out on
+    # change or power-off. Overwriting the file underneath it means the radio
+    # silently clobbers whatever we just installed -- which looks exactly like
+    # the install having failed, and costs an hour to work out.
+    current = info.get("currModelFilename", "")
+    if current == model_rename and "MODELS" in trees:
+        print("\nThe radio currently has %s (%r) loaded, and will write its"
+              % (model_rename, our_name))
+        print("in-RAM copy back over anything installed now.")
+        print("\nOn the radio: select a different model first (Model select ->")
+        print("any other model), then re-run this. Or install everything else")
+        print("with:  --only THEMES WIDGETS SOUNDS IMAGES")
+        return 1
 
     actions = plan_copy(root, trees, model_rename)
     new = [a for a in actions if a[2] == "new"]

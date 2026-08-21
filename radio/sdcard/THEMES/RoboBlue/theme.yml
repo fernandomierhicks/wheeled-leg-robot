@@ -1,25 +1,19 @@
 ---
 summary:
-  name: "RoboBlue"
-  author: "Fernando"
-  info: "Dark instrument theme for the wheeled-leg robot"
-  description: "Near-black slate with a cyan-blue accent, tuned for reading robot state in daylight. Companion to the WLRHUD widget."
+   name: "RoboBlue"
+   author: "Fernando"
+   info: "Dark instrument theme for the wheeled-leg robot"
 colors:
-  # Role names and their use follow EdgeTX's own Dark_Theme. PRIMARY1 is a mid
-  # tone used for borders and dividers -- NOT a background; SECONDARY3 is the
-  # page background and SECONDARY1 the header/panel fill.
-  PRIMARY1:   0x39434F   # slate -- borders, dividers, inactive chrome
-  PRIMARY2:   0xE2ECF7   # near-white -- primary text on dark
-  PRIMARY3:   0x8FA3B8   # dim slate -- secondary text, units, labels
-  SECONDARY1: 0x121821   # panel / header fill
-  SECONDARY2: 0x00A8FF   # blue accent -- gauges, bars, selection fill
-  SECONDARY3: 0x070A0F   # page background, the darkest surface
-  FOCUS:      0x0078D7   # focus ring / selected row background
-  EDIT:       0x1B2735   # edit-mode field background
-  ACTIVE:     0x00E5FF   # cyan -- "this is live" state
-  WARNING:    0xFF3B30   # fault red
-  DISABLED:   0x4A5A6B   # greyed-out controls
-  # QM_BG / QM_FG are the quick-menu colours, added in EdgeTX 2.12.
-  # Earlier firmware ignores unknown keys, so leaving them in is harmless.
-  QM_BG:      0x0E141C
-  QM_FG:      0xE2ECF7
+   PRIMARY1: 0x39434F
+   PRIMARY2: 0xE2ECF7
+   PRIMARY3: 0x8FA3B8
+   SECONDARY1: 0x121821
+   SECONDARY2: 0x00A8FF
+   SECONDARY3: 0x070A0F
+   FOCUS: 0x0078D7
+   EDIT: 0x1B2735
+   ACTIVE: 0x00E5FF
+   WARNING: 0xFF3B30
+   DISABLED: 0x4A5A6B
+   QM_BG: 0x0E141C
+   QM_FG: 0xE2ECF7

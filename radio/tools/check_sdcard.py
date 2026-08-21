@@ -67,6 +67,33 @@ def note(fmt, *a):
     notes.append(fmt % a if a else fmt)
 
 
+def check_no_comments(path, what):
+    """EdgeTX's YAML parser has no comment support -- for ANY file it reads.
+
+    radio/src/storage/yaml/yaml_parser.cpp treats a '#' line as an attribute
+    name, find_node() fails, and at top level the parser returns DONE_PARSING:
+    it stops and keeps only what came before. The file is then rewritten from
+    whatever defaults it managed to load. Nothing warns you.
+
+    This bit the model first (a 17 KB commented file was cut to a 4 KB default,
+    and the only symptom was a stock-looking main screen). Themes go through
+    the same parser, so the rule is enforced on both.
+    """
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    for i, line in enumerate(raw.splitlines(), 1):
+        stripped = line.lstrip()
+        if stripped.startswith("#") and not stripped.startswith("#!"):
+            bad("%s line %d: EdgeTX's YAML parser has no comment support; "
+                "everything after this line is silently discarded. Put the "
+                "explanation in %s instead.", path.name, i, what)
+            return False
+        if "#" in line and ":" in line and not stripped.startswith("#"):
+            bad("%s line %d: trailing '#' comment. EdgeTX reads to end of line, "
+                "so the value would include the comment text.", path.name, i)
+            return False
+    return True
+
+
 def check_model():
     models = sorted((SD / "MODELS").glob("*.yml"))
     if not models:
@@ -77,6 +104,9 @@ def check_model():
         # prefix "model" followed by digits and ".yml". Anything else in
         # /MODELS/ is skipped without a word -- the model simply never appears
         # in the model list, and nothing tells you why.
+        if not check_no_comments(path, "tools/build_model.py"):
+            continue
+
         if not re.fullmatch(r"model\d+\.yml", path.name, re.IGNORECASE):
             bad("%s: EdgeTX only reads model<digits>.yml from /MODELS/; this "
                 "file would be ignored silently", path.name)
@@ -243,12 +273,23 @@ def check_theme():
         if not yml.exists():
             bad("%s: theme.yml missing", t.name)
             continue
+        if not check_no_comments(yml, "the theme's readme.txt"):
+            continue
         data = yaml.safe_load(yml.read_text(encoding="utf-8"))
         colors = data.get("colors", {}) or {}
         for key in THEME_COLORS:
             if key not in colors:
                 bad("%s: theme.yml is missing colour %s", t.name, key)
         for key, val in colors.items():
+            # EdgeTX accepts 0x and 0X (its own stock themes use uppercase);
+            # pyyaml only coerces lowercase, so parse the string ourselves
+            # rather than reporting a difference the radio does not care about.
+            if isinstance(val, str):
+                try:
+                    val = int(val, 16)
+                except ValueError:
+                    bad("%s: colour %s is %r, expected 0xRRGGBB", t.name, key, val)
+                    continue
             if not isinstance(val, int):
                 bad("%s: colour %s is %r, expected 0xRRGGBB", t.name, key, val)
             elif not 0 <= val <= 0xFFFFFF:
