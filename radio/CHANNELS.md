@@ -31,31 +31,36 @@ configuration** — which is what the model's power-on switch warning enforces.
 | 3 | **Left stick V** (Thr → I2) | Hip height | **Must** be the non-centring stick — leg height is a held pose. 30% expo. |
 | 4 | Left stick H (Rud → I0) | Yaw rate | Self-centring. |
 | 5 | **SB** 3-pos | SD log | Down = start recording. Also starts the radio's own `/LOGS` capture. |
-| 6 | **SE** momentary | Jump trigger | Rising edge. One jump per press. Inert unless `jump_enable=1`. |
+| 6 | **SF** shoulder (momentary) | Jump trigger | Rising edge. One jump per press. Inert unless `jump_enable=1`. |
 | 7 | **S1** pot | Live tune A | Centre detent = repeatable midpoint during a pickup sweep. |
 | 8 | **S2** pot | Live tune B | |
 | 9 | **SA** 3-pos | Speed profile | Up = 1 (slowest), mid = 2, down = 3. |
-| 10 | **SF** 2-pos latching | ARM | Down = armed. Needs > 1990 µs — verify real endpoints. |
+| 10 | **SE** shoulder (latching) | ARM | Down = armed. Needs > 1990 µs — verify real endpoints. |
 | 11 | **SC** 3-pos | Hard ESTOP | **Live.** Level-triggered: down = ESTOP from any state, and blocks arming while held. Release, then toggle SF to soft-clear. |
 | 12 | **SD** 3-pos | Spare | Sent, but firmware ignores it. `roll_ctrl_en` is persistent, so a switch would rewrite the stored value at boot. |
 
 Inputs are declared in the radio's native RETA order (I0=Rud, I1=Ele, I2=Thr,
 I3=Ail) so the Inputs screen looks like every other model on this transmitter.
 
-## Hardware you still have to do
+## Shoulder switches — no hardware work needed
 
-The TX15 ships with alternative momentary and 2-position shoulder switches plus
-matching panels, and the case opens with four hex screws.
+The TX15 ships with **SF as the momentary button** and **SE as the latching
+button** (RadioMaster's own manual, back view). That is exactly the pairing
+this model wants, so nothing has to be opened or swapped:
 
-- **SE → momentary.** Jump is edge-triggered. A latching switch here can sit
-  latched where you cannot see it.
-- **SF → 2-position latching.** ARM must hold while you drive, and be
-  index-finger reachable for an instant kill.
+- **SF (momentary) → CH6 jump.** Jump triggers on a rising edge, and a
+  latching control here could sit latched where you cannot see it.
+- **SE (latching) → CH10 ARM.** The firmware arm test is level-based
+  (`armed = alive && ch10 > 1990`), so a momentary button would disarm the
+  instant you let go.
 
-After swapping, set each switch's type in **Radio settings → Hardware**, then
-re-check the model's switch warning. If your physical shoulder switches turn
-out to be different letters than SE/SF, change the two `srcRaw` values in the
-model — nothing else moves.
+The integration plan proposed the opposite lettering. That was arbitrary — what
+matters is momentary-on-jump and latching-on-ARM, and following the factory fit
+gets there with no disassembly and no chance of fitting the wrong one.
+
+Alternative switch panels are in the box if you ever want toggles instead of
+buttons; the case opens with four hex screws. If you do swap them, re-check the
+model's switch warning afterwards.
 
 ## Trims do nothing, deliberately
 

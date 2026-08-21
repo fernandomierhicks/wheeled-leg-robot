@@ -94,7 +94,7 @@ mixData:
    name: "Log"
  -
    destCh: 5
-   srcRaw: "SE"
+   srcRaw: "SF"
    carryTrim: 1
    mixWarn: 0
    mltpx: ADD
@@ -162,7 +162,7 @@ mixData:
    name: "Prof"
  -
    destCh: 9
-   srcRaw: "SF"
+   srcRaw: "SE"
    carryTrim: 1
    mixWarn: 0
    mltpx: ADD

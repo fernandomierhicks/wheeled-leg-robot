@@ -72,17 +72,30 @@ INPUTS = [
 
 # (destCh, srcRaw, mix name, channel name)
 # destCh is 0-based; CH1 is destCh 0.
+#
+# SHOULDER SWITCHES: the TX15 ships with SF as the momentary button and SE as
+# the latching one (RadioMaster's own manual diagram, back view). The
+# integration plan proposed the opposite lettering, which was arbitrary -- what
+# actually matters is that JUMP gets a momentary control and ARM gets a
+# latching one. Following the factory fit instead means no hardware swap at
+# all, and removes a whole class of "did I fit the right switch" error.
+#
+#   jump (CH6)  needs momentary -> SF: rising-edge trigger, and a latching
+#               switch here could sit latched where you cannot see it
+#   ARM  (CH10) needs latching  -> SE: the firmware arm test is level-based
+#               (armed = alive && ch10 > 1990), so a momentary button would
+#               disarm the instant you let go
 MIXES = [
     (0,  "I3", "Roll",  "ROLL"),   # right stick H -- self-centring: release levels
     (1,  "I1", "Vel",   "VEL"),    # right stick V -- release means stop
     (2,  "I2", "Hip",   "HIP"),    # left stick V, the throttle stick
     (3,  "I0", "Yaw",   "YAW"),    # left stick H
     (4,  "SB", "Log",   "LOG"),    # down = channel high = start recording
-    (5,  "SE", "Jump",  "JUMP"),   # SE MUST be momentary: rising-edge trigger
+    (5,  "SF", "Jump",  "JUMP"),   # SF is the factory MOMENTARY button
     (6,  "S1", "TuneA", "TUNEA"),  # centre-detent pot, live tune slot 0
     (7,  "S2", "TuneB", "TUNEB"),
     (8,  "SA", "Prof",  "PROF"),   # up = profile 1 (slowest), down = 3
-    (9,  "SF", "Arm",   "ARM"),    # SF MUST be 2-position latching
+    (9,  "SE", "Arm",   "ARM"),    # SE is the factory LATCHING button
     (10, "SC", "Estop", "ESTOP"),  # live: level-triggered hard ESTOP
     (11, "SD", "Spare", "SPARE"),  # sent but unassigned in firmware
 ]

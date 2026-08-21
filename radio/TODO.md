@@ -29,17 +29,13 @@ overwrites. See [INSTALL.md](INSTALL.md) for the copy procedure and
 - [ ] Add the HUD to a screen if it isn't already on screen 1, and confirm it
       renders (it will say **NO ROBOT TELEMETRY** — that's correct).
 
-### Shoulder switches — the highest-value hardware change on the radio
-The TX15 ships with alternative momentary and 2-position switches plus matching
-panels; the case opens with four hex screws. ~20 minutes.
-
-- [ ] Install **momentary at SE** (jump). Jump is edge-triggered; a latching
-      switch here can sit latched where you cannot see it.
-- [ ] Install **2-position latching at SF** (ARM). Must hold while you drive
-      and be index-finger reachable for an instant kill.
-- [ ] **Radio settings → Hardware**: set each switch's type to match.
-- [ ] If your physical shoulder switches turn out to be different letters,
-      change the two `srcRaw` values in the model — nothing else moves.
+### Shoulder switches — nothing to do
+- [x] The factory fit is **SF momentary, SE latching**, which is exactly the
+      pairing this model wants: jump on SF (rising edge), ARM on SE (level).
+      The model follows the hardware rather than asking you to change it, so
+      no disassembly and no chance of fitting the wrong switch.
+- [ ] Only if you swap the included alternative panels: re-check the model's
+      switch warning afterwards.
 
 ### Validate the channel map with nothing powered
 - [ ] **Screen 2 (Outputs).** Move every stick, switch and pot. Confirm each
