@@ -62,11 +62,17 @@ VERBATIM = ["topbarData", "topbarWidgetWidth", "customSwitches", "cfsGroupOn"]
 # Inputs, in the radio's native RETA order so the Inputs screen looks like
 # every other model on this transmitter. Mode 2 throughout: hip height MUST
 # sit on the non-centring throttle stick, because leg height is a held pose.
+#
+# All linear. Hip height carried 30% expo briefly; removed on request. Stick
+# position now maps straight to leg height, which also means what you see on
+# the Outputs screen is what the firmware receives -- worth keeping in mind if
+# you ever add a curve back, since hip_cmd_rate_lim already shapes the command
+# on the robot side and two shaping stages compound.
 #   (chn, srcRaw, name, expo)
 INPUTS = [
     (0, "Rud", "Yaw",  0),
     (1, "Ele", "Vel",  0),
-    (2, "Thr", "Hip", 30),   # expo: the useful resolution is mid-travel
+    (2, "Thr", "Hip",  0),   # linear: no expo
     (3, "Ail", "Roll", 0),
 ]
 

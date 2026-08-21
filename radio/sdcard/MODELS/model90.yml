@@ -359,7 +359,7 @@ expoData:
    swtch: "NONE"
    curve: 
       type: 1
-      value: 30
+      value: 0
    chn: 2
    flightModes: 000000000
    name: "Hip"

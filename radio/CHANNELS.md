@@ -28,7 +28,7 @@ configuration** — which is what the model's power-on switch warning enforces.
 |---|---|---|---|
 | 1 | Right stick ↔ | gimbal | Roll / lean setpoint |
 | 2 | Right stick ↕ | gimbal | Forward velocity |
-| 3 | Left stick ↕ | gimbal | Hip height (30% expo) |
+| 3 | Left stick ↕ | gimbal | Hip height (linear) |
 | 4 | Left stick ↔ | gimbal | Yaw rate |
 | 5 | **SB** | top row, 2nd from left | SD logging (robot + radio) |
 | 6 | **SF** | momentary shoulder | Jump (rising edge) |
