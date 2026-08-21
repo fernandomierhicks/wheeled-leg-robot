@@ -2494,6 +2494,86 @@
         "persistent"
       ],
       "description": "Speed profile 3 (fast/aggressive) max roll setpoint [rad] (~10°)."
+    },
+    {
+      "symbol": "PARAM_LEAN_TURN_EN",
+      "id": 1358,
+      "group": "GROUP_CONTROL",
+      "name": "lean_turn_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "1 = master enable for coordinated-turn lean. Requires roll_ctrl_en=1 (the lean is delivered by the roll controller's differential hip offset) and lean_gain>0. The radio's lean button gates it too, so the feature needs both a persistent opt-in and a physical press."
+    },
+    {
+      "symbol": "PARAM_LEAN_GAIN",
+      "id": 1359,
+      "group": "GROUP_CONTROL",
+      "name": "lean_gain",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 2.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Scale on the coordinated-turn lean, roll_cmd = -lean_gain*atan(v*omega/g). NOT 1.0 physically: the track is fixed, so differential hip extension shifts the CoM rather than rotating the vehicle about its contact line, and the shift per radian of body tilt depends on CoM height above the hip pivot. Default 0 (inert); walk it up a ladder like jump_effort after the suspended sign check."
+    },
+    {
+      "symbol": "PARAM_LEAN_MAX_RAD",
+      "id": 1360,
+      "group": "GROUP_CONTROL",
+      "name": "lean_max_rad",
+      "default": 0.15,
+      "min": 0.0,
+      "max": 0.5,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Hard clamp on the coordinated-turn lean [rad]. Must stay well inside roll_watchdog_limit (0.35 default) or the feature trips the very watchdog it exists to keep you away from. 0.15 rad = 8.6 deg."
+    },
+    {
+      "symbol": "PARAM_LEAN_MIN_MS",
+      "id": 1361,
+      "group": "GROUP_CONTROL",
+      "name": "lean_min_ms",
+      "default": 0.15,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Forward-speed deadband [m/s] below which no lean is commanded. Spinning in place has no centripetal term to cancel, and an explicit floor stops standstill jitter from dithering the roll setpoint."
+    },
+    {
+      "symbol": "PARAM_LEAN_CMD_RAD",
+      "id": 1362,
+      "group": "GROUP_CONTROL",
+      "name": "lean_cmd_rad",
+      "default": 0.0,
+      "min": -1.0,
+      "max": 1.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Read-only mirror of the lean component currently being added to roll_cmd_rad [rad]. Lets the GUI and the radio HUD show what the turn compensation is actually asking for, separately from the stick."
+    },
+    {
+      "symbol": "PARAM_LEAN_AUTHORITY",
+      "id": 1363,
+      "group": "GROUP_CONTROL",
+      "name": "lean_authority",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Read-only fraction of the requested lean the leg geometry can deliver at the current ride height, min(t,1-t)*2. Zero at full crouch and full extension, where the roll controller's headroom clamp silently removes all differential travel. Exists so the operator can be told why the robot is not leaning."
     }
   ]
 }

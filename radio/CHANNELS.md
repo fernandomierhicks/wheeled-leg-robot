@@ -26,7 +26,7 @@ configuration** — which is what the model's power-on switch warning enforces.
 
 | CH | Control | Position | Function |
 |---|---|---|---|
-| 1 | Right stick ↔ | gimbal | Roll / lean setpoint |
+| 1 | Right stick ↔ | gimbal | Roll / lean setpoint (adds to auto-lean) |
 | 2 | Right stick ↕ | gimbal | Forward velocity |
 | 3 | Left stick ↕ | gimbal | Hip height (linear) |
 | 4 | Left stick ↔ | gimbal | Yaw rate |
@@ -38,13 +38,16 @@ configuration** — which is what the model's power-on switch warning enforces.
 | 10 | **SD** | top row, rightmost | ARM |
 | 11 | **SA** | top row, leftmost | Calibration request |
 | 12 | **SE** | latching shoulder | Reset fault / clear ESTOP |
-| 13 | **SG** | RGB button 1 | Live tune group 0 |
-| 14 | **SH** | RGB button 2 | Live tune group 1 |
-| 15 | **SI** | RGB button 3 | Live tune group 2 |
-| 16 | **SJ** | RGB button 4 | Commit tuned gains |
+| 13 | **SG/SH/SI** | RGB buttons 1–3 | Live tune group — *encoded levels* |
+| 14 | **SJ** | RGB button 4 | Commit tuned gains |
+| 15 | **SK** | RGB button 5 | Coordinated-turn lean |
+| 16 | — | — | *spare* |
 
-All 16 channels are now in use. Buttons 5 and 6 (SK/SL) are free but have no
-channel left — they'd need a channel freed or the command tunnel.
+CH13 carries all three group buttons as distinct levels — 1500 µs none,
+1660 / 1830 / 2000 µs for groups 0/1/2. They're mutually exclusive already, so
+three channels would have been three ways to say one thing. `check_sdcard.py`
+cross-checks those levels against the firmware's band thresholds, because the
+two halves live in different languages and only arithmetic keeps them agreeing.
 
 Inputs are declared in the radio's native RETA order (I0=Rud, I1=Ele, I2=Thr,
 I3=Ail) so the Inputs screen looks like every other model on this transmitter.
@@ -134,6 +137,50 @@ The HUD is the instrument for all of this: it reads telemetry and can show the
 active group, both knob positions, and whether each slot has picked up. That
 last one is invisible today, which the plan calls the mechanism's biggest
 weakness.
+
+## Coordinated-turn lean (button 5)
+
+Turning at speed throws the mass sideways. Leaning into the turn puts the
+resultant of gravity and centripetal acceleration back along the robot's own
+vertical, so the hips carry compression instead of a side load:
+
+```
+roll_cmd = −lean_gain · atan(v · ω / g)
+```
+
+It is a **setpoint generator, not a controller** — everything that makes it
+safe already exists in the roll controller: the setpoint slew limit, the PID
+with anti-windup, and the travel-headroom clamp at `min(t, 1−t) × span`. It
+also inherits that controller's exclusion during jump launch and flight.
+
+Measured velocity, **commanded** yaw rate: forward speed is well tracked so the
+measurement is accurate, while yaw rate is the fast term and using the command
+means the robot leans *as* the turn is asked for, not after the disturbance
+shows up in roll error.
+
+**Three gates, all required**: `lean_turn_en` (persistent), `lean_gain > 0`,
+and the button. A feature that can put the robot on its side does not get to
+switch itself on. `lean_gain` defaults to 0.
+
+`lean_gain` is **not 1.0**. The track is fixed, so differential hip extension
+shifts the CoM rather than rotating the vehicle about its contact line, and the
+shift per radian of body tilt depends on CoM height above the hip pivot. Find
+it empirically on a ladder, the way `jump_effort` is walked up.
+
+The stick still adds on top, so manual counter-lean stays available.
+
+### Before you trust it
+
+**Verify the sign suspended.** Command a slow left turn and confirm the body
+leans left. Lean the wrong way and the robot falls harder and faster than with
+no feature at all, and it only shows up at the moment you can least afford it.
+
+### Lean authority collapses at the stroke ends
+
+`min(t, 1−t)` goes to zero at full crouch and full extension, so there is no
+differential travel left and the robot simply will not lean, however hard it is
+asked. The clamp keeps that *safe* but it is *silent* — `lean_authority` is
+published read-only so the HUD can say so out loud.
 
 ## What the radio does *not* control
 

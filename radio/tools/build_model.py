@@ -118,16 +118,20 @@ MIXES = [
     # SD logging and the jump trigger -- and a tuning session is exactly the
     # one you most want a log of.
     #
-    # One channel per group, not two encoded bits: SG/SH/SI sit in a mutually
-    # exclusive switch group, so pressing one releases the others and the LIT
-    # BUTTON IS THE GROUP INDICATOR. Live-tune state being invisible is what
-    # the plan calls the mechanism's biggest weakness; this puts it on the
-    # front of the transmitter. None lit = tuning inactive.
-    (12, "SG", "TuneG0", "TUNEG0"),  # RGB button 1: gain group 0
-    (13, "SH", "TuneG1", "TUNEG1"),  # RGB button 2: gain group 1
-    (14, "SI", "TuneG2", "TUNEG2"),  # RGB button 3: gain group 2
-    (15, "SJ", "Latch",  "LATCH"),   # RGB button 4: commit tuned gains
+    # All three group buttons share ONE channel. They are already mutually
+    # exclusive (switch group 1), so three channels would be three ways to say
+    # one thing, and every channel is spoken for. Each mixes in with weight w
+    # and offset w so OFF contributes 0 and ON contributes 2w -- see
+    # ENCODED_TUNE_GROUP below and the band decode in main.cpp.
+    (13, "SJ", "Latch", "LATCH"),   # RGB button 4: commit tuned gains -> CH14
+    (14, "SK", "Lean",  "LEAN"),    # RGB button 5: coordinated-turn lean
 ]
+
+# Three exclusive buttons encoded onto CH13 as distinct levels:
+#   none 0% (1500 us) / SG 32% (1660) / SH 66% (1830) / SI 100% (2000)
+# EdgeTX computes source*weight/100 + offset, and a switch source is -100 when
+# off, so weight == offset puts OFF at exactly 0 and ON at 2*weight.
+ENCODED_TUNE_GROUP = [("SG", 16), ("SH", 33), ("SI", 50)]
 
 # Function-switch configuration, which the radio stores per model.
 #
@@ -147,6 +151,8 @@ FUNCTION_SWITCHES = {
     "SW2": ("TUNE G1", "2POS",   1, (255, 180, 0)),
     "SW3": ("TUNE G2", "2POS",   1, (255, 180, 0)),
     "SW4": ("LATCH",   "TOGGLE", 0, (46, 230, 138)),
+    # Lean: latched, and cyan because that is the HUD's "this is live" colour.
+    "SW5": ("LEAN",    "2POS",   0, (0, 229, 255)),
 }
 
 # Channel travel is left at the full +/-100% default on purpose. The firmware
@@ -203,11 +209,11 @@ SWITCH_WARNING = ["SA", "SB", "SC", "SD", "SE", "SF"]
 TRIM_OFF = 1
 
 
-def mix(dest_ch, src, name):
+def mix(dest_ch, src, name, weight=100, offset=0):
     return {
         "destCh": dest_ch, "srcRaw": q(src), "carryTrim": TRIM_OFF, "mixWarn": 0,
         "mltpx": "ADD", "delayPrec": 0, "speedPrec": 0,
-        "flightModes": Raw("000000000"), "weight": 100, "offset": 0,
+        "flightModes": Raw("000000000"), "weight": weight, "offset": offset,
         "swtch": q("NONE"), "delayUp": 0, "delayDown": 0,
         "speedUp": 0, "speedDown": 0, "name": q(name),
     }
@@ -256,8 +262,14 @@ def build():
         "labels": q("Robot"),
     }
 
-    m["mixData"] = [mix(ch, src, nm) for ch, src, nm, _ in MIXES]
+    mixes = [mix(ch, src, nm) for ch, src, nm, _ in MIXES]
+    # CH13 (destCh 12): the three exclusive group buttons summed.
+    for src, w in ENCODED_TUNE_GROUP:
+        mixes.append(mix(12, src, "G" + src[1], weight=w, offset=w))
+    mixes.sort(key=lambda m: m["destCh"])
+    m["mixData"] = mixes
     m["limitData"] = {ch: limit(cn) for ch, _, _, cn in MIXES}
+    m["limitData"][12] = limit("TUNEG")
     m["expoData"] = [expo(*e) for e in INPUTS]
     m["inputNames"] = {i: {"val": q(n)} for i, (_, _, n, _) in enumerate(INPUTS)}
 

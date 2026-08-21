@@ -187,3 +187,9 @@
 #define PARAM_PROFILE_1_ROLL_MAX                   0x0527
 #define PARAM_PROFILE_2_ROLL_MAX                   0x0528
 #define PARAM_PROFILE_3_ROLL_MAX                   0x0529
+#define PARAM_LEAN_TURN_EN                         0x054E
+#define PARAM_LEAN_GAIN                            0x054F
+#define PARAM_LEAN_MAX_RAD                         0x0550
+#define PARAM_LEAN_MIN_MS                          0x0551
+#define PARAM_LEAN_CMD_RAD                         0x0552
+#define PARAM_LEAN_AUTHORITY                       0x0553

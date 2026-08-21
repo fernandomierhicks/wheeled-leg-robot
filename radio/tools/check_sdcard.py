@@ -26,6 +26,7 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parents[2]
 SD = REPO / "radio" / "sdcard"
+MAIN_CPP = REPO / "firmware" / "robot_teensy" / "teensy" / "src" / "main.cpp"
 
 # TX15 analog and switch inventory, from radio/src/targets/tx15/hal.h:
 # four stick axes, two pots (POT1/POT2 -> S1/S2), six switches SA-SF, and six
@@ -49,10 +50,9 @@ EXPECTED_CHANNELS = {
     9: "ARM",
     10: "calibration request",
     11: "fault reset",
-    12: "live-tune group 0",
-    13: "live-tune group 1",
-    14: "live-tune group 2",
-    15: "live-tune latch",
+    12: "live-tune group select",
+    13: "live-tune latch",
+    14: "coordinated-turn lean",
 }
 
 THEME_COLORS = [
@@ -153,8 +153,10 @@ def check_one_model(path, m):
     for mix in m.get("mixData", []):
         ch, src = mix.get("destCh"), mix.get("srcRaw")
         if ch in seen:
-            note("%s: CH%d has more than one mix (%s, %s) -- intentional?",
-                 path.name, ch + 1, seen[ch], src)
+            # Multiple mixes on one channel is how the exclusive tune-group
+            # buttons are encoded into distinct levels. Flag it, but only once.
+            note("%s: CH%d has more than one mix (%s + %s) -- encoded switch "
+                 "levels, or an accident?", path.name, ch + 1, seen[ch], src)
         seen[ch] = src
         if src is None:
             bad("%s: mix on CH%s has no srcRaw", path.name, ch)
@@ -235,7 +237,76 @@ def check_one_model(path, m):
             note("%s: CRSF module has channelsCount %s; 16 is the usual choice",
                  path.name, md.get("channelsCount"))
 
+    check_encoded_levels(path, m)
     check_screens(path, m)
+
+
+def check_encoded_levels(path, m):
+    """Cross-check the encoded tune-group channel against the firmware's bands.
+
+    The transmitter encodes three mutually exclusive buttons into distinct
+    levels on one channel, and the firmware decodes them with band thresholds.
+    The two halves live in different languages, in different directories, and
+    nothing but arithmetic keeps them in agreement -- so check the arithmetic.
+    A drift here does not fail loudly: it silently selects the wrong gain group,
+    and you tune the wrong parameter while watching the right robot.
+    """
+    if not MAIN_CPP.exists():
+        return
+    src = MAIN_CPP.read_text(encoding="utf-8", errors="replace")
+    bands = {}
+    for name in ("LT_BAND_NONE", "LT_BAND_G0", "LT_BAND_G1"):
+        mm = re.search(r"%s\s*=\s*(\d+)" % name, src)
+        if mm:
+            bands[name] = int(mm.group(1))
+    if len(bands) != 3:
+        note("could not read LT_BAND_* from main.cpp; skipped the encoded-level "
+             "cross-check")
+        return
+
+    # Which channel carries more than one mix? That is the encoded one.
+    by_ch = {}
+    for mix in m.get("mixData", []):
+        by_ch.setdefault(mix.get("destCh"), []).append(mix)
+    encoded = {ch: v for ch, v in by_ch.items() if len(v) > 1}
+    if not encoded:
+        return
+
+    for ch, mixes in sorted(encoded.items()):
+        # EdgeTX: source*weight/100 + offset. A switch source is -100 off.
+        levels = [("none", 0)]
+        for mix in mixes:
+            w, off = mix.get("weight", 100), mix.get("offset", 0)
+            if -w + off != 0:
+                bad("%s: CH%d mix %s contributes %+d%% when OFF; weight must "
+                    "equal offset so an unpressed button adds nothing",
+                    path.name, ch + 1, mix.get("srcRaw"), -w + off)
+            levels.append((mix.get("srcRaw"), w + off))
+
+        us = [(nm, 1500 + v * 5) for nm, v in levels]
+        edges = [bands["LT_BAND_NONE"], bands["LT_BAND_G0"], bands["LT_BAND_G1"]]
+
+        def decode(v):
+            if v < edges[0]:
+                return -1
+            if v < edges[1]:
+                return 0
+            if v < edges[2]:
+                return 1
+            return 2
+
+        for i, (nm, v) in enumerate(us):
+            got = decode(v)
+            want = i - 1                      # none -> -1, then 0, 1, 2
+            if got != want:
+                bad("%s: CH%d level %s = %d us decodes to group %d, expected %d "
+                    "-- transmitter encoding and firmware bands disagree",
+                    path.name, ch + 1, nm, v, got, want)
+            margin = min(abs(v - e) for e in edges)
+            if margin < 60:
+                bad("%s: CH%d level %s = %d us sits only %d us from a band "
+                    "edge; a trim or calibration drift would flip the group",
+                    path.name, ch + 1, nm, v, margin)
 
 
 def widget_names():

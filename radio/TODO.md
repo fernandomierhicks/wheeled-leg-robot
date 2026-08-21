@@ -210,7 +210,12 @@ Small, but be explicit (plan §6):
 - [x] **SJ → commit tuned gains** (CH16), momentary, green.
 - [ ] Confirm on the radio that the exclusive group behaves as expected: press
       one, the others release; press the lit one again, all off.
-- [ ] SK/SL are free but **all 16 channels are used**. They'd need a channel
+- [x] **SK → coordinated-turn lean** (CH15), latched, cyan.
+- [ ] SL is free; CH16 is the one spare channel left.
+- [ ] **Suspended sign check for the lean** before any floor test: command a
+      slow left turn, confirm the body leans LEFT. Then walk `lean_gain` up
+      from 0.3 like the jump ladder.
+- [ ] Old note, still true: They'd need a channel
       freed or the command tunnel. Candidates if one comes free: `jump_enable`
       as a latched magenta "JUMP ARMED" lamp, or `roll_ctrl_en` (needs a
       non-persistent gate first).

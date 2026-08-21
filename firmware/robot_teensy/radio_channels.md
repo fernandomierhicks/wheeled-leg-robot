@@ -38,10 +38,10 @@ boot. Set the receiver's own failsafe to **no pulses**, never "hold".
 | C10 | SD (top row, rightmost) | Arm / disarm         | > 1990 → RUNNING (requires calibration); drop → STANDBY    |
 | C11 | SA (top row, leftmost) | **Calibration** | Rising edge requests CALIBRATION from STANDBY; re-trigger during a radio-owned CALIBRATION cancels it through DISARMING (hip gains taper over `calib_rampdown_s`). Edge-triggered off a latching switch, so a debounced *release* is required before another edge counts — powering up with it already down does nothing. 1 s lockout between actions. The calibration stick combo remains as the fallback. |
 | C12 | SE (latching shoulder) | **Reset fault** | Rising edge in ESTOP: full reset to STARTUP, clearing `fault_code` regardless of severity and re-running the startup checks — the same effect as the rescue combo's rising edge. In STANDBY: beep only. Armed solely in STANDBY/ESTOP, never with torque live. No hold-to-reboot: a latching switch left down is not the deliberate gesture that makes the combo's 3 s hold safe. |
-| C13 | SG (RGB button 1) | Live-tune group 0 | One channel per gain group, from a mutually exclusive RGB button group — the lit button is the group indicator. None high = tuning inactive. Still gated by `live_tune_multi_en`, which defaults to 0. |
-| C14 | SH (RGB button 2) | Live-tune group 1 | |
-| C15 | SI (RGB button 3) | Live-tune group 2 | |
-| C16 | SJ (RGB button 4) | **Latch gains** | Rising edge fires the same one-shot as writing `live_tune_latch` from the GUI. Only picked-up slots are committed. |
+| C13 | SG/SH/SI (RGB buttons 1–3) | Live-tune group | All three mutually-exclusive buttons encoded onto one channel as distinct levels: ~1500 µs none, 1660 group 0, 1830 group 1, 2000 group 2. Decoded with ±80 µs bands. Still gated by `live_tune_multi_en`, which defaults to 0. C5/C6 keep SD logging and jump — the old combination borrowed them, so a tuning session could not be logged. |
+| C14 | SJ (RGB button 4) | **Latch gains** | Rising edge fires the same one-shot as writing `live_tune_latch` from the GUI. Only picked-up slots are committed. |
+| C15 | SK (RGB button 5) | **Coordinated-turn lean** | `roll_cmd = −lean_gain·atan(v·ω/g)`, added to the stick roll and clamped to the profile's roll limit. Requires `lean_turn_en=1`, `lean_gain>0` **and** `roll_ctrl_en=1` — the roll controller is what actually delivers the lean, and a warning is logged if it is off. Verify the sign suspended before any floor test. |
+| C16 | — | *spare* | |
 
 ## Calibration combo — STANDBY → CALIBRATION
 

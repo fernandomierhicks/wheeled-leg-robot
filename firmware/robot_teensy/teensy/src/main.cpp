@@ -18,6 +18,7 @@
 #include "sd_logger.h"
 #include "limit_switches.h"
 #include "live_tune.h"
+#include "lean_turn.h"
 
 CommLink g_comm(Serial5, COMM_SRC_TEENSY);     // ESP32 UART bridge
 CommLink g_comm_usb(Serial, COMM_SRC_TEENSY);  // direct PC USB
@@ -1181,10 +1182,14 @@ float live_tune_value(uint16_t persist_param_id) {
 //               effect as the rescue combo's rising edge, minus its
 //               hold-to-reboot -- a latching switch left down is not the
 //               deliberate gesture that makes hold-to-reboot safe.
-// CH13/14/15: live-tune gain group 0/1/2, one channel each, from a mutually
-//               exclusive RGB button group. None high = tuning inactive.
+// CH13: live-tune gain group, encoded as levels from three mutually
+//               exclusive RGB buttons: ~1500 none, 1660 g0, 1830 g1, 2000 g2.
 //               Gated by PARAM_LIVE_TUNE_MULTI_EN.
-// CH16 > 1990: commit the tuned gains (same one-shot as PARAM_LIVE_TUNE_LATCH).
+// CH14 > 1990: commit the tuned gains (same one-shot as PARAM_LIVE_TUNE_LATCH).
+// CH15 > 1990: coordinated-turn lean enable. Also needs PARAM_LEAN_TURN_EN and
+//               a non-zero PARAM_LEAN_GAIN -- three gates, because a feature
+//               that can put the robot on its side should not self-enable.
+// CH16: spare.
 // CH6  > 1990: trigger a JUMP from RUNNING (SIMPLE mode), one per rising edge.
 // CH5/CH6 (while RUNNING, LEGACY mode only): debounced switch combination
 //               selects which live-tune gain group CH7/CH8 drive -- see
@@ -1720,7 +1725,62 @@ static void radio_update() {
         // CH1: roll setpoint for the active-suspension roll controller. Ungated by
         // gui_motion_ctrl (that override only covers v/omega). Sign bench-verified.
         float roll_norm = constrain((g_rc.channel(1) - 1500.0f) / 500.0f, -1.0f, 1.0f);
-        param_force_set(PARAM_ROLL_CMD_RAD, roll_norm * param_get(PARAM_RADIO_ROLL_MAX));
+        const float roll_stick = roll_norm * param_get(PARAM_RADIO_ROLL_MAX);
+
+        // ── Coordinated-turn lean ────────────────────────────────────────────
+        // Turning at speed throws the mass sideways; leaning into the turn puts
+        // the resultant of gravity and centripetal acceleration back along the
+        // robot's own vertical, so the hips carry compression instead of a side
+        // load. See lean_turn.h for the physics and, more importantly, the sign
+        // derivation.
+        //
+        // This is a SETPOINT GENERATOR, not a controller. Everything that makes
+        // it safe already exists downstream in control_loop.cpp: the slew limit
+        // on the setpoint, the PID with anti-windup, and the travel-headroom
+        // clamp at min(t, 1-t)*span. It also inherits, for free, the roll
+        // controller's exclusion during jump launch and flight.
+        //
+        // Measured velocity, COMMANDED yaw rate, deliberately. Forward speed is
+        // well tracked so the measurement is accurate and slow-moving; yaw rate
+        // is the fast term, and using the command means the robot leans AS the
+        // turn is asked for rather than after the disturbance shows up in roll
+        // error. That lead is the whole point of a feedforward.
+        //
+        // Three gates, all required: the persistent lean_turn_en, a non-zero
+        // lean_gain, and the radio's lean button. A feature that can put the
+        // robot on its side should not switch itself on.
+        float lean = 0.0f;
+        const bool lean_switch = (g_rc.channel(15) > 1990);
+        if (lean_switch && param_get(PARAM_LEAN_TURN_EN) >= 0.5f) {
+            lean = lean_turn_setpoint(g_state.wheel_vel_avg_ms,
+                                      param_get(PARAM_OMEGA_CMD_RDS),
+                                      param_get(PARAM_LEAN_GAIN),
+                                      param_get(PARAM_LEAN_MAX_RAD),
+                                      param_get(PARAM_LEAN_MIN_MS));
+            // Asked to lean but the roll controller is off: the setpoint would
+            // be written and silently ignored, which is exactly the kind of
+            // "why is it not doing anything" that costs an evening.
+            static uint32_t s_lean_warn_ms = 0;
+            if (param_get(PARAM_ROLL_CTRL_EN) < 0.5f &&
+                (int32_t)(millis() - s_lean_warn_ms) >= 0) {
+                s_lean_warn_ms = millis() + 5000;
+                comm_log(LOG_LEVEL_WARN,
+                         "Lean-turn requested but roll_ctrl_en=0; the roll "
+                         "controller delivers the lean, so nothing will happen");
+            }
+        }
+        param_force_set(PARAM_LEAN_CMD_RAD, lean);
+        param_force_set(PARAM_LEAN_AUTHORITY,
+                        lean_turn_authority(param_get(PARAM_RADIO_HIP_CMD)));
+
+        // The stick still adds on top, so manual counter-lean stays available
+        // for recovery. Clamped to the profile's roll limit so the automatic
+        // term can never exceed what the operator could have commanded by hand.
+        const float roll_lim = param_get(PARAM_RADIO_ROLL_MAX);
+        float roll_cmd = roll_stick + lean;
+        if (roll_cmd >  roll_lim) roll_cmd =  roll_lim;
+        if (roll_cmd < -roll_lim) roll_cmd = -roll_lim;
+        param_force_set(PARAM_ROLL_CMD_RAD, roll_cmd);
 
         if (!gui_motion_ctrl) {
             float vel_norm = constrain((g_rc.channel(2) - 1500.0f) / 500.0f, -1.0f, 1.0f);
@@ -1786,6 +1846,7 @@ static void radio_update() {
         // Radio link dead: never hold a lean. Roll isn't part of gui_motion_ctrl,
         // so zero it regardless; v/omega only when the GUI isn't driving them.
         param_force_set(PARAM_ROLL_CMD_RAD, 0.0f);
+        param_force_set(PARAM_LEAN_CMD_RAD, 0.0f);
         if (!gui_motion_ctrl) {
             param_force_set(PARAM_V_CMD_MS, 0.0f);
             param_force_set(PARAM_OMEGA_CMD_RDS, 0.0f);
@@ -1796,65 +1857,64 @@ static void radio_update() {
     // See LIVE_TUNE_SLOTS above for the group table and knob-direction
     // convention, and live_tune.h for the safety rationale (pickup, latch).
     //
-    // The group is selected by three dedicated channels, CH13/CH14/CH15, one
-    // per gain group, rather than by the old CH5/CH6 combination. That
-    // combination cost a tuning session both SD logging and the jump trigger,
-    // which made tuning bench-only by construction. On their own channels
-    // nothing is given up, and a tuning session can be logged -- which is
-    // exactly the session you most want a log of.
+    // The group is selected by ONE channel, CH13, carrying all three
+    // mutually-exclusive buttons encoded as distinct levels. That selection
+    // used to live on the CH5/CH6 combination, which cost a tuning session both
+    // SD logging and the jump trigger -- making tuning bench-only by
+    // construction, and the one session you most want a log of the one you
+    // could not log.
     //
-    // One channel per group rather than two encoded bits, because the radio's
-    // RGB function switches support mutually-exclusive groups: press one and
-    // the others release, and the lit button IS the group indicator. The plan
-    // calls the invisibility of live-tune state its biggest weakness, and this
-    // makes it a lamp on the front of the transmitter.
+    // Encoded rather than one channel per group because all 16 channels are
+    // spoken for and the buttons are already mutually exclusive, so three
+    // channels was three ways to say one thing. Each button mixes in with
+    // weight w and offset w, so OFF contributes 0 and ON contributes 2w:
     //
-    //   none high -> tuning inactive (the resting state)
-    //   CH13      -> group 0     CH14 -> group 1     CH15 -> group 2
+    //   none  ->    0%  -> 1500 us
+    //   SG    ->   32%  -> 1660 us    group 0
+    //   SH    ->   66%  -> 1830 us    group 1
+    //   SI    ->  100%  -> 2000 us    group 2
     //
-    // More than one high should be impossible with an exclusive switch group,
-    // but if it happens the lowest wins deterministically rather than the
-    // selection flickering.
+    // ~165 us between levels, decoded with +/-80 us bands. The exclusive switch
+    // group makes any other sum impossible; if one ever appears the band decode
+    // still lands somewhere deterministic rather than oscillating.
     //
-    // PARAM_LIVE_TUNE_MULTI_EN remains the master gate. It defaults to 0, so
-    // the knobs are inert until you deliberately opt in to a tuning session --
-    // a knocked button cannot start moving gains on its own. Two deliberate
-    // acts, one persistent and one physical.
-    static constexpr uint8_t LT_SEL_DEBOUNCE_TICKS = 3;
-    struct LevelDebounce { uint8_t hi; uint8_t lo; bool level; };
-    static LevelDebounce s_lt_sel[3] = {};
+    // "None = 1500 us = inactive" matters as much as the rest: the resting
+    // state of the buttons has to be the state that does nothing.
+    static constexpr uint16_t LT_BAND_NONE = 1580;   // below -> inactive
+    static constexpr uint16_t LT_BAND_G0   = 1745;
+    static constexpr uint16_t LT_BAND_G1   = 1915;
 
-    auto debounce_level = [](LevelDebounce& d, bool raw_hi, bool link_alive) {
-        if (link_alive && raw_hi) {
-            if (d.hi < LT_SEL_DEBOUNCE_TICKS) d.hi++;
-            d.lo = 0;
-        } else if (link_alive) {
-            if (d.lo < LT_SEL_DEBOUNCE_TICKS) d.lo++;
-            d.hi = 0;
-        } else {
-            // Link loss must not read as "group selected". Fall back to
-            // inactive, which drops every slot's pickup on the next pass.
-            d.hi = 0;
-            d.lo = LT_SEL_DEBOUNCE_TICKS;
-        }
-        if (d.hi >= LT_SEL_DEBOUNCE_TICKS) d.level = true;
-        if (d.lo >= LT_SEL_DEBOUNCE_TICKS) d.level = false;
-    };
-    for (uint8_t g = 0; g < 3; g++)
-        debounce_level(s_lt_sel[g], g_rc.channel((uint8_t)(13 + g)) > 1990, alive);
+    static constexpr uint8_t LT_SEL_DEBOUNCE_TICKS = 3;
+    static uint8_t s_lt_stable_ticks = 0;
+    static int8_t  s_lt_group_raw = -1;
+    static int8_t  s_lt_group_deb = -1;
+
+    int8_t group_now = -1;
+    if (alive) {
+        const uint16_t us = g_rc.channel(13);
+        if      (us < LT_BAND_NONE) group_now = -1;
+        else if (us < LT_BAND_G0)   group_now = 0;
+        else if (us < LT_BAND_G1)   group_now = 1;
+        else                        group_now = 2;
+    }
+    // Link loss reads as inactive, which drops every slot's pickup next pass.
+    if (group_now == s_lt_group_raw) {
+        if (s_lt_stable_ticks < LT_SEL_DEBOUNCE_TICKS) s_lt_stable_ticks++;
+    } else {
+        s_lt_group_raw = group_now;
+        s_lt_stable_ticks = 0;
+    }
+    if (s_lt_stable_ticks >= LT_SEL_DEBOUNCE_TICKS) s_lt_group_deb = s_lt_group_raw;
 
     int8_t live_tune_group = -1;
-    if (param_get(PARAM_LIVE_TUNE_MULTI_EN) >= 0.5f) {
-        for (uint8_t g = 0; g < 3; g++) {
-            if (s_lt_sel[g].level) { live_tune_group = (int8_t)g; break; }
-        }
-    }
+    if (param_get(PARAM_LIVE_TUNE_MULTI_EN) >= 0.5f) live_tune_group = s_lt_group_deb;
+
     static int8_t s_lt_group_prev = -1;
     if (live_tune_group != s_lt_group_prev) {
         s_lt_group_prev = live_tune_group;
         if (live_tune_group >= 0)
-            comm_log(LOG_LEVEL_INFO, "Live-tune group %d selected (CH%d)",
-                     (int)live_tune_group, 13 + (int)live_tune_group);
+            comm_log(LOG_LEVEL_INFO, "Live-tune group %d selected (CH13)",
+                     (int)live_tune_group);
         else
             comm_log(LOG_LEVEL_INFO, "Live-tune inactive (no group selected)");
     }
@@ -1881,14 +1941,14 @@ static void radio_update() {
     // real, persistent param. A slot that hasn't picked up yet is skipped, not
     // latched at whatever the knob happens to read. Serviced regardless of
     // live_tune_active so the command flag is always consumed and reset.
-    // CH16 rising edge is a physical "commit these gains", so latching no
+    // CH14 rising edge is a physical "commit these gains", so latching no
     // longer means walking back to the GUI mid-session. Edge-triggered with the
     // same release-and-retry gate as CH11/CH12: the button may rest either way
     // and a reconnect must not look like a fresh press. It simply sets the same
     // one-shot flag the GUI writes, so there is one latch path, not two.
     static RadioEdge s_latch_sw = {};
-    if (edge_update(s_latch_sw, g_rc.channel(16) > 1990, alive)) {
-        comm_log(LOG_LEVEL_INFO, "Radio: CH16 -> live-tune latch requested");
+    if (edge_update(s_latch_sw, g_rc.channel(14) > 1990, alive)) {
+        comm_log(LOG_LEVEL_INFO, "Radio: CH14 -> live-tune latch requested");
         param_force_set(PARAM_LIVE_TUNE_LATCH, 1.0f);
     }
 
@@ -1908,7 +1968,7 @@ static void radio_update() {
         } else {
             comm_log(LOG_LEVEL_WARN,
                      "Live-tune latch ignored: enter live-tune mode first "
-                     "(RUNNING, live_tune_multi_en=1, and a group selected on CH13-CH15)");
+                     "(RUNNING, live_tune_multi_en=1, and a group button lit)");
         }
         param_force_set(PARAM_LIVE_TUNE_LATCH, 0.0f);
     }

@@ -220,16 +220,16 @@ mixData:
    delayPrec: 0
    speedPrec: 0
    flightModes: 000000000
-   weight: 100
-   offset: 0
+   weight: 16
+   offset: 16
    swtch: "NONE"
    delayUp: 0
    delayDown: 0
    speedUp: 0
    speedDown: 0
-   name: "TuneG0"
+   name: "GG"
  -
-   destCh: 13
+   destCh: 12
    srcRaw: "SH"
    carryTrim: 1
    mixWarn: 0
@@ -237,16 +237,16 @@ mixData:
    delayPrec: 0
    speedPrec: 0
    flightModes: 000000000
-   weight: 100
-   offset: 0
+   weight: 33
+   offset: 33
    swtch: "NONE"
    delayUp: 0
    delayDown: 0
    speedUp: 0
    speedDown: 0
-   name: "TuneG1"
+   name: "GH"
  -
-   destCh: 14
+   destCh: 12
    srcRaw: "SI"
    carryTrim: 1
    mixWarn: 0
@@ -254,16 +254,16 @@ mixData:
    delayPrec: 0
    speedPrec: 0
    flightModes: 000000000
-   weight: 100
-   offset: 0
+   weight: 50
+   offset: 50
    swtch: "NONE"
    delayUp: 0
    delayDown: 0
    speedUp: 0
    speedDown: 0
-   name: "TuneG2"
+   name: "GI"
  -
-   destCh: 15
+   destCh: 13
    srcRaw: "SJ"
    carryTrim: 1
    mixWarn: 0
@@ -279,6 +279,23 @@ mixData:
    speedUp: 0
    speedDown: 0
    name: "Latch"
+ -
+   destCh: 14
+   srcRaw: "SK"
+   carryTrim: 1
+   mixWarn: 0
+   mltpx: ADD
+   delayPrec: 0
+   speedPrec: 0
+   flightModes: 000000000
+   weight: 100
+   offset: 0
+   swtch: "NONE"
+   delayUp: 0
+   delayDown: 0
+   speedUp: 0
+   speedDown: 0
+   name: "Lean"
 limitData: 
    0: 
       min: 0
@@ -388,15 +405,6 @@ limitData:
       revert: 0
       curve: 0
       name: "RESET"
-   12: 
-      min: 0
-      max: 0
-      ppmCenter: 0
-      offset: 0
-      symetrical: 0
-      revert: 0
-      curve: 0
-      name: "TUNEG0"
    13: 
       min: 0
       max: 0
@@ -405,7 +413,7 @@ limitData:
       symetrical: 0
       revert: 0
       curve: 0
-      name: "TUNEG1"
+      name: "LATCH"
    14: 
       min: 0
       max: 0
@@ -414,8 +422,8 @@ limitData:
       symetrical: 0
       revert: 0
       curve: 0
-      name: "TUNEG2"
-   15: 
+      name: "LEAN"
+   12: 
       min: 0
       max: 0
       ppmCenter: 0
@@ -423,7 +431,7 @@ limitData:
       symetrical: 0
       revert: 0
       curve: 0
-      name: "LATCH"
+      name: "TUNEG"
 expoData: 
  -
    mode: 3
@@ -725,16 +733,16 @@ customSwitches:
          g: 0
          b: 0
    SW5: 
-      name: ""
-      type: NONE
+      name: "LEAN"
+      type: 2POS
       group: 0
       start: START_OFF
       state: 0
       onColorLuaOverride: OFF
       offColorLuaOverride: OFF
       onColor: 
-         r: 255
-         g: 255
+         r: 0
+         g: 229
          b: 255
       offColor: 
          r: 0

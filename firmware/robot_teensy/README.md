@@ -160,6 +160,41 @@ in `main.cpp` (`> 1990`, `< 1010`) is unchanged. Full deflection lands at
 asserts — ELRS endpoints occasionally land short and that silently breaks
 arming.
 
+### Coordinated-turn lean (CH15)
+
+Turning at speed throws the mass sideways. Leaning into the turn puts the
+resultant of gravity and centripetal acceleration back along the robot's own
+vertical, so the hips carry compression instead of a lateral moment:
+
+```
+roll_cmd = -lean_gain * atan(v * omega / g)
+```
+
+`teensy/src/lean_turn.h` holds the maths, Arduino-free so the **sign** can be
+unit-tested (`pio test -e windows_lean`). That is the one thing here that hurts
+if it is wrong: lean the wrong way and the robot falls harder and faster than
+with no feature at all. Verify it suspended before any floor test.
+
+It is a setpoint generator, not a controller. Everything that makes it safe is
+already in `control_loop.cpp`: the setpoint slew limit, the PID with
+anti-windup, and the travel-headroom clamp at `min(t, 1-t) * span`. It also
+inherits that controller's exclusion during jump launch and flight.
+
+Measured velocity, **commanded** yaw rate. Forward speed is well tracked so the
+measurement is accurate and slow-moving; yaw rate is the fast term, and using
+the command means the robot leans *as* the turn is asked for rather than after
+the disturbance appears in roll error.
+
+Three gates, all required: `lean_turn_en` (persistent), `lean_gain > 0`, and
+CH15. `lean_gain` defaults to 0 and is **not** 1.0 physically — the track is
+fixed, so differential hip extension shifts the CoM rather than rotating the
+vehicle about its contact line, and the shift per radian of tilt depends on CoM
+height above the hip pivot. Walk it up like `jump_effort`.
+
+`lean_authority` is published read-only: `min(t, 1-t)` goes to zero at full
+crouch and full extension, where the headroom clamp silently removes all
+differential travel and the robot will not lean however hard it is asked.
+
 ### CH11 calibration, CH12 fault reset
 
 Switch equivalents of the two stick combos, added because the transmitter now

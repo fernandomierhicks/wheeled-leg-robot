@@ -234,3 +234,9 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0527` | `PARAM_PROFILE_1_ROLL_MAX` | `profile1_roll_max` | 0.05 | 0 … 0.7853982 | persistent |
 | `0x0528` | `PARAM_PROFILE_2_ROLL_MAX` | `profile2_roll_max` | 0.1 | 0 … 0.7853982 | persistent |
 | `0x0529` | `PARAM_PROFILE_3_ROLL_MAX` | `profile3_roll_max` | 0.17 | 0 … 0.7853982 | persistent |
+| `0x054E` | `PARAM_LEAN_TURN_EN` | `lean_turn_en` | 0 | 0 … 1 | persistent |
+| `0x054F` | `PARAM_LEAN_GAIN` | `lean_gain` | 0 | 0 … 2 | persistent |
+| `0x0550` | `PARAM_LEAN_MAX_RAD` | `lean_max_rad` | 0.15 | 0 … 0.5 | persistent |
+| `0x0551` | `PARAM_LEAN_MIN_MS` | `lean_min_ms` | 0.15 | 0 … 1 | persistent |
+| `0x0552` | `PARAM_LEAN_CMD_RAD` | `lean_cmd_rad` | 0 | -1 … 1 | readonly, command |
+| `0x0553` | `PARAM_LEAN_AUTHORITY` | `lean_authority` | 0 | 0 … 1 | readonly, command |
