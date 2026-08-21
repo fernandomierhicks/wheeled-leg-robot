@@ -36,7 +36,7 @@ STUB = Path(__file__).resolve().parent / "edgetx_stub.lua"
 # scale and hide a real bug.
 NATIVE = {
     "Ptch": -0.1064, "Roll": 0.0524, "Yaw": 0.2094,   # -6.1, 3.0, 12.0 degrees
-    "RxBt": 24.1, "Curr": 4.2, "Bat%": 82.0,
+    "RxBt": 24.1, "Bat%": 82.0,   # no Curr: firmware sends CRSF "no data"
     "RQly": 99.0, "1RSS": -71.0, "TPWR": 100.0,
 }
 # The robot-specific numerics no longer arrive as sensors. They ride a private
@@ -73,8 +73,9 @@ def encode_wlr(f):
     d += _be16(f["hip_l"] * 100)
     d += _be16(f["hip_r"] * 100)
     d += _be16(f["wheel"] * 100)
-    d += [int(f["esp32"]) & 0xFF, min(255, int(f["glitch"])) & 0xFF]
-    assert len(d) == 16, len(d)
+    g = min(65535, int(f["glitch"]))
+    d += [int(f["esp32"]) & 0xFF, (g >> 8) & 0xFF, g & 0xFF]
+    assert len(d) == 17, len(d)
     return d
 
 

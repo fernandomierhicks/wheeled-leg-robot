@@ -374,8 +374,10 @@ local function buildRowA(root, L)
            bgColor = C.track, bgOpacity = 0 })
   pc:label({ x = 0, y = gcy - 8, w = cC.w, align = CENTER, font = BOLD,
              text = num("pack_v", "%.1f"), color = valColour("pack_v") })
+  -- Bus current is not instrumented, so the pack panel shows percentage
+  -- instead of a current that would always read zero.
   pc:label({ x = 0, y = gcy + 8, w = cC.w, align = CENTER, font = SMLSIZE,
-             text = num("pack_a", "%.1fA"), color = C.dim })
+             text = num("pack_pct", "%.0f%%"), color = C.dim })
   pc:label({ x = 0, y = A.h - 16, w = cC.w, align = CENTER, font = SMLSIZE,
              text = "PACK", color = C.dim })
 end

@@ -933,17 +933,13 @@ static void send_telemetry(bool prof) {
 // The return half of the link. Gathers the same values fill_telemetry() reads,
 // but only the handful worth a slice of radio bandwidth — see CrsfTelem.h.
 //
-// Two fields are NOT instrumented yet and are sent as zero rather than
-// omitted, because BATTERY_SENSOR and the custom frame each carry their fields
-// together:
-//
-//   * bus current. Nothing on the robot measures it today, so EdgeTX will
-//     create a Curr sensor that reads 0.0 A. Do not trust it, and do not build
-//     a low-current alarm on it, until an actual shunt or an ODrive current
-//     readback feeds this.
-//   * vel_glitch_count. wheel_safety.h filters glitches but never counts them,
-//     so the HUD's GLCH field and its "wheel glitches rising" callout stay at
-//     zero. Wiring a counter through is a small, separate change.
+// Bus current and used capacity are sent as CRSF's all-0xFF "no data" rather
+// than as zero. Nothing on this robot measures either, and EdgeTX skips a
+// field whose bytes are all 0xFF, so no sensor is created at all. A Curr
+// sensor sitting at a confident 0.0 A is exactly what someone would later
+// build a power alarm on. ODrive's Get_Iq (CAN 0x014) would give phase
+// current, which is not bus current, and would add periodic traffic to the
+// control-critical CAN3 bus — so it is a deliberate omission, not an oversight.
 //
 // Pack voltage is real: it is the ODrive bus voltage, which is the pack.
 static void crsf_telemetry_tick() {
@@ -956,8 +952,8 @@ static void crsf_telemetry_tick() {
 
     // Whichever wheel controller is actually reporting; they share the pack.
     float vbus = wm_L.ok ? wm_L.vbus : (wm_R.ok ? wm_R.vbus : 0.0f);
-    s.pack_volts = vbus;
-    s.pack_amps  = 0.0f;                       // not instrumented — see above
+    s.pack_volts = (vbus > 1.0f) ? vbus : CRSF_BATT_NO_DATA;
+    s.pack_amps  = CRSF_BATT_NO_DATA;          // not instrumented — see above
     // 6S: 25.2 V full, 19.8 V empty. V_nom for this robot is the 24.0 V
     // fully-charged working assumption, not the 22.2 V LiPo textbook nominal.
     float pct = (vbus - 19.8f) / (25.2f - 19.8f) * 100.0f;
@@ -976,7 +972,10 @@ static void crsf_telemetry_tick() {
 
     uint32_t esp32_age = millis() - s_last_esp32_status_ms;
     s.esp32_link_ok    = (s_last_esp32_status_ms != 0 && esp32_age < 1000) ? 1 : 0;
-    s.vel_glitch_count = 0;                    // not instrumented — see above
+    // Both axes summed. The bench log that motivated the glitch filter showed
+    // this climbing to 14.6% of samples before a spurious runaway trip, so
+    // hearing it build is the whole point of putting it on the radio.
+    s.vel_glitch_count = wm_L.vel_glitch_count + wm_R.vel_glitch_count;
 
     g_rc_telem.tick(g_rc, millis(), s);
 }

@@ -41,7 +41,9 @@ M.SENSOR = {
   roll     = "Roll",   -- ATTITUDE 0x1E
   yaw      = "Yaw",    -- ATTITUDE 0x1E
   pack_v   = "RxBt",   -- BATTERY_SENSOR 0x08
-  pack_a   = "Curr",   -- BATTERY_SENSOR 0x08  (NOT instrumented yet: reads 0)
+  -- No pack_a: bus current is not instrumented, and the firmware sends CRSF's
+  -- all-0xFF "no data" for it, so EdgeTX never creates a Curr sensor at all.
+  -- Deliberate -- an absent reading is honest, a flat 0.0 A is not.
   pack_pct = "Bat%",   -- BATTERY_SENSOR 0x08
   lq       = "RQly",   -- LINK_STATISTICS 0x14, from the receiver
   rssi     = "1RSS",   -- LINK_STATISTICS 0x14
@@ -59,7 +61,7 @@ local RAD_TO_DEG = 57.29578
 -- Custom frame 0x24, laid out in firmware/robot_teensy/teensy/src/crsf_protocol.h.
 -- Keep the two in step; the byte offsets below are that struct.
 local WLR_FRAME_ID = 0x24
-local WLR_FRAME_LEN = 16
+local WLR_FRAME_LEN = 17
 
 -- Field-id cache. getValue() by numeric id is faster than by name, and this
 -- runs inside a widget that must not starve the Lua VM. Re-probed on a slow
@@ -121,7 +123,7 @@ local function drain(now)
       wlr.hip_r    = be16(data, 11) / 100.0
       wlr.wheel    = be16(data, 13) / 100.0
       wlr.esp32    = data[15]
-      wlr.glitch   = data[16]
+      wlr.glitch   = data[16] * 256 + data[17]
       wlr_ms = now
     end
   end

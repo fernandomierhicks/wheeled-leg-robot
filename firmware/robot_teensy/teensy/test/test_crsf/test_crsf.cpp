@@ -380,7 +380,7 @@ void test_wlr_state_frame(void) {
     s.state = 3; s.fault = 0; s.jump_state = 2; s.standup_state = 1;
     s.alpha = 0.42f; s.profile = 1; s.health_flags = 0x01FF;
     s.hip_l_nm = 2.7f; s.hip_r_nm = -2.9f; s.wheel_ms = 0.55f;
-    s.esp32_ok = 1; s.glitch_count = 900;   // must saturate, not wrap
+    s.esp32_ok = 1; s.glitch_count = 900;
 
     uint8_t f[CRSF_MAX_FRAME];
     uint8_t n = crsf_build_wlr_state(f, s);
@@ -392,8 +392,32 @@ void test_wlr_state_frame(void) {
     TEST_ASSERT_EQUAL_INT16(270,  (int16_t)((f[11] << 8) | f[12]));
     TEST_ASSERT_EQUAL_INT16(-290, (int16_t)((f[13] << 8) | f[14]));
     TEST_ASSERT_EQUAL_INT16(55,   (int16_t)((f[15] << 8) | f[16]));
-    TEST_ASSERT_EQUAL_UINT8(255, f[18]);                      // saturated
+    TEST_ASSERT_EQUAL_UINT16(900, (uint16_t)((f[18] << 8) | f[19]));
     TEST_ASSERT_EQUAL_UINT8(crsf_crc8(f + 2, CRSF_WLR_STATE_LEN + 1), f[n - 1]);
+}
+
+void test_glitch_count_saturates_not_wraps(void) {
+    // A free-running counter that wrapped would read as "stopped climbing",
+    // which is exactly when the annunciator should be warning hardest.
+    CrsfWlrState s = {};
+    s.glitch_count = 70000;
+    uint8_t f[CRSF_MAX_FRAME];
+    crsf_build_wlr_state(f, s);
+    TEST_ASSERT_EQUAL_UINT16(65535, (uint16_t)((f[18] << 8) | f[19]));
+}
+
+void test_battery_no_data_fields(void) {
+    // EdgeTX skips a field whose every byte is 0xFF, so an unmeasured value
+    // produces no sensor at all rather than a confident, wrong zero.
+    uint8_t f[CRSF_MAX_FRAME];
+    crsf_build_battery(f, 24.1f, CRSF_BATT_NO_DATA, -1, 82);
+    TEST_ASSERT_EQUAL_INT16(241, (int16_t)((f[3] << 8) | f[4]));   // volts: real
+    TEST_ASSERT_EQUAL_UINT8(0xFF, f[5]);                            // amps: absent
+    TEST_ASSERT_EQUAL_UINT8(0xFF, f[6]);
+    TEST_ASSERT_EQUAL_UINT8(0xFF, f[7]);                            // mAh: absent
+    TEST_ASSERT_EQUAL_UINT8(0xFF, f[8]);
+    TEST_ASSERT_EQUAL_UINT8(0xFF, f[9]);
+    TEST_ASSERT_EQUAL_UINT8(82, f[10]);                             // percent: real
 }
 
 void test_wlr_state_survives_a_decoder(void) {
@@ -449,6 +473,8 @@ int main(int, char**) {
     RUN_TEST(test_flight_mode_frame);
     RUN_TEST(test_flight_mode_truncates_safely);
     RUN_TEST(test_wlr_state_frame);
+    RUN_TEST(test_glitch_count_saturates_not_wraps);
+    RUN_TEST(test_battery_no_data_fields);
     RUN_TEST(test_wlr_state_survives_a_decoder);
 
     return UNITY_END();

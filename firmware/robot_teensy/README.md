@@ -180,10 +180,17 @@ in `FLIGHT_MODE`. ExpressLRS is known to relay the standard frames; whether it
 relays an arbitrary private type is **not yet verified on hardware**. If it
 does not, the HUD and the spoken fault callouts keep working off the text.
 
-Two fields are **not instrumented** and are sent as zero: bus current (nothing
-measures it, so EdgeTX's `Curr` sensor reads 0.0 A — do not build an alarm on
-it) and `vel_glitch_count` (`wheel_safety.h` filters glitches but never counts
-them).
+Bus current and used capacity are sent as CRSF's all-`0xFF` **"no data"**, not
+as zero. EdgeTX skips a field whose bytes are all `0xFF`, so no `Curr` sensor
+is created at all — an absent reading rather than a confident, wrong 0.0 A that
+someone would later build a power alarm on. ODrive's `Get_Iq` (CAN `0x014`)
+would give phase current, which is not bus current, and would add periodic
+traffic to the control-critical CAN3 bus; that is a deliberate omission.
+
+`vel_glitch_count` is real: `wm_L`/`wm_R.vel_glitch_count` are summed and sent
+as a 16-bit saturating value. It is a free-running total and the annunciator
+warns on it *rising*, so a byte-wide field would have saturated early in a bad
+session and then looked like it had stopped climbing.
 
 Name tables for `FLIGHT_MODE` are generated into `teensy/src/generated_names.h`
 by `protocol/generate_protocol.py`; a new fault fails the generator rather than

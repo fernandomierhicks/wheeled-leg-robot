@@ -200,14 +200,28 @@ inline uint8_t crsf_build_attitude(uint8_t* out, float pitch_rad,
 }
 
 // BATTERY_SENSOR 0x08 — voltage 0.1 V, current 0.1 A, used capacity mAh,
-// remaining percent. 24 V pack; the README's thermal analysis makes bus
-// current worth watching live.
+// remaining percent.
+//
+// Fields the robot does not measure are sent as all-0xFF, which is CRSF's
+// "no data". EdgeTX's getCrossfireTelemetryValue() returns false when every
+// byte of a field is 0xFF and then skips the sensor entirely
+// (crossfire.cpp), so the sensor is never created rather than being created
+// and reading a confident, wrong zero.
+//
+// That distinction matters: nothing on this robot measures bus current, and a
+// Curr sensor sitting at a flat 0.0 A is exactly the kind of reading someone
+// eventually builds an alarm on. Better for it to be visibly absent.
+static constexpr float CRSF_BATT_NO_DATA = -1.0f;   // pass for an unmeasured field
+
 inline uint8_t crsf_build_battery(uint8_t* out, float volts, float amps,
-                                  uint32_t used_mah, uint8_t remaining_pct) {
+                                  int32_t used_mah, uint8_t remaining_pct) {
     uint8_t p[8];
-    crsf_put_be16(p + 0, crsf_round16(volts * 10.0f));
-    crsf_put_be16(p + 2, crsf_round16(amps * 10.0f));
-    crsf_put_be24(p + 4, used_mah & 0xFFFFFFu);
+    if (volts < 0.0f) { p[0] = 0xFF; p[1] = 0xFF; }
+    else              crsf_put_be16(p + 0, crsf_round16(volts * 10.0f));
+    if (amps < 0.0f)  { p[2] = 0xFF; p[3] = 0xFF; }
+    else              crsf_put_be16(p + 2, crsf_round16(amps * 10.0f));
+    if (used_mah < 0) { p[4] = 0xFF; p[5] = 0xFF; p[6] = 0xFF; }
+    else              crsf_put_be24(p + 4, (uint32_t)used_mah & 0xFFFFFFu);
     p[7] = remaining_pct;
     return crsf_build_frame(out, CRSF_ADDR_FLIGHT_CONTROLLER, CRSF_FT_BATTERY, p, 8);
 }
@@ -243,8 +257,13 @@ inline uint8_t crsf_build_flight_mode(uint8_t* out, const char* mode) {
 //  [10..11] hip_r      int16   N.m * 100
 //  [12..13] wheel      int16   m/s * 100
 //  [14]     esp32_ok   uint8
-//  [15]     glitch     uint8   vel_glitch_count, saturating
-static constexpr uint8_t CRSF_WLR_STATE_LEN = 16;
+//  [15..16] glitch     uint16  wm_L + wm_R vel_glitch_count, saturating
+//
+// The glitch count is a free-running total and the annunciator warns on it
+// RISING, so a byte-wide field would saturate early in a bad session and then
+// look like it had stopped climbing -- silencing the warning exactly when it
+// was becoming true. 16 bits costs one byte and removes the problem.
+static constexpr uint8_t CRSF_WLR_STATE_LEN = 17;
 
 struct CrsfWlrState {
     uint8_t  state;
@@ -258,7 +277,7 @@ struct CrsfWlrState {
     float    hip_r_nm;
     float    wheel_ms;
     uint8_t  esp32_ok;
-    uint16_t glitch_count;
+    uint32_t glitch_count;
 };
 
 static inline uint8_t crsf_sat_u8(float v) {
@@ -281,7 +300,9 @@ inline uint8_t crsf_build_wlr_state(uint8_t* out, const CrsfWlrState& s) {
     crsf_put_be16(p + 10, crsf_round16(s.hip_r_nm * 100.0f));
     crsf_put_be16(p + 12, crsf_round16(s.wheel_ms * 100.0f));
     p[14] = s.esp32_ok;
-    p[15] = (uint8_t)(s.glitch_count > 255 ? 255 : s.glitch_count);
+    uint32_t g = (s.glitch_count > 65535u) ? 65535u : s.glitch_count;
+    p[15] = (uint8_t)(g >> 8);
+    p[16] = (uint8_t)(g & 0xFF);
     return crsf_build_frame(out, CRSF_ADDR_FLIGHT_CONTROLLER, CRSF_FT_WLR_STATE,
                             p, CRSF_WLR_STATE_LEN);
 }

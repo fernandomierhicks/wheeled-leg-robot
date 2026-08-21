@@ -12,8 +12,8 @@
 //
 //   ATTITUDE    10 Hz   pitch/roll/yaw -- the state variables that matter
 //   WLR_STATE   10 Hz   the robot-specific numerics, for the Lua HUD
-//   BATTERY      2 Hz   pack volts/amps
-//   FLIGHT_MODE  2 Hz   state name, or !FAULT while in ESTOP
+//   BATTERY      5 Hz   pack volts and percent (current is not measured)
+//   FLIGHT_MODE  5 Hz   state name, or !FAULT while in ESTOP
 //
 // ~350 bytes/s total.
 
@@ -29,8 +29,8 @@ struct CrsfTelemSources {
     float    pitch_rad;
     float    roll_rad;
     float    yaw_rad;
-    float    pack_volts;
-    float    pack_amps;
+    float    pack_volts;    // CRSF_BATT_NO_DATA when unmeasured
+    float    pack_amps;     // CRSF_BATT_NO_DATA when unmeasured
     uint8_t  pack_pct;
     uint8_t  robot_state;
     uint8_t  fault_code;
@@ -43,7 +43,7 @@ struct CrsfTelemSources {
     float    hip_r_torque_nm;
     float    wheel_vel_avg_ms;
     uint8_t  esp32_link_ok;
-    uint16_t vel_glitch_count;
+    uint32_t vel_glitch_count;
 };
 
 class CrsfTelemetry {
@@ -70,7 +70,7 @@ public:
                 n = build_state(f, s);
                 break;
             case 4:
-                n = crsf_build_battery(f, s.pack_volts, s.pack_amps, 0, s.pack_pct);
+                n = crsf_build_battery(f, s.pack_volts, s.pack_amps, -1, s.pack_pct);
                 break;
             case 5:
                 n = crsf_build_attitude(f, s.pitch_rad, s.roll_rad, s.yaw_rad);

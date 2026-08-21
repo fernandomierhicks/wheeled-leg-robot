@@ -114,9 +114,16 @@ failsafe rules. What remains needs hardware.
 - [ ] **Leave the `Ptch`/`Roll`/`Yaw` sensor unit at RAD.** The wire carries
       radians and the HUD converts; switching the sensor to degrees makes
       EdgeTX convert too and the HUD double-counts.
-- [ ] Instrument bus current, so `Curr` stops reading a flat 0.0 A.
-- [ ] Count wheel-velocity glitches in `wheel_safety.h` so `GLCH` and the
-      "wheel glitches rising" callout do something.
+- [x] Wheel-velocity glitch count wired through. It already existed in
+      `lib/WheelMotors` (`wm_L/R.vel_glitch_count`); both axes are summed and
+      sent 16-bit saturating, so `GLCH` and the "glitches rising" callout are
+      live.
+- [x] Bus current: sent as CRSF "no data" rather than a fake zero, so EdgeTX
+      creates no `Curr` sensor at all.
+- [ ] *Optionally* instrument bus current for real. ODrive `Get_Iq` (CAN
+      `0x014`) gives phase current, not bus current, and adds periodic traffic
+      to the control-critical CAN3 bus — a shunt on the pack would be the
+      honest answer. Only worth it if you want live power/thermal numbers.
 - [ ] Inject a deliberate fault and confirm the radio speaks the right one at
       the right tier.
 - [ ] Confirm the HUD stops saying NO ROBOT TELEMETRY and every reading shows

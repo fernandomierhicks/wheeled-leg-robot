@@ -78,18 +78,40 @@ def radio_info(root):
 STICK_MODES = {"0": "Mode 1", "1": "Mode 2", "2": "Mode 3", "3": "Mode 4"}
 
 
-def free_model_number(root, preferred):
+def model_name(path):
+    """The `name:` under `header:` in a model yml, or None."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    m = re.search(r"^header:\s*$(.*?)^\S", text, re.M | re.S)
+    block = m.group(1) if m else text[:400]
+    m = re.search(r'^\s+name:\s*"?([^"\n]+?)"?\s*$', block, re.M)
+    return m.group(1).strip() if m else None
+
+
+def choose_model_slot(root, preferred, our_name):
+    """Pick the model<NN>.yml slot to write.
+
+    Re-installing must UPDATE the model we put there last time, not add a
+    second copy of it. Two models both called WLR ROBOT is the kind of mess
+    that is obvious on a screen and invisible in a script, so match on the
+    model's name first and only fall back to a free slot.
+
+    Returns (filename, replacing_existing).
+    """
     used = set()
-    for p in (root / "MODELS").glob("*.yml"):
+    for p in sorted((root / "MODELS").glob("*.yml")):
         m = re.fullmatch(r"model(\d+)\.yml", p.name, re.IGNORECASE)
-        if m:
-            used.add(int(m.group(1)))
-    if preferred not in used:
-        return preferred
+        if not m:
+            continue
+        used.add(int(m.group(1)))
+        if our_name and model_name(p) == our_name:
+            return p.name, True
     n = preferred
     while n in used:
         n += 1
-    return n
+    return "model%d.yml" % n, False
 
 
 def plan_copy(root, trees, model_rename):
@@ -188,10 +210,16 @@ def main():
               % internal)
 
     trees = args.only or TREES
-    slot = free_model_number(root, args.model_number)
-    model_rename = "model%d.yml" % slot
-    if slot != args.model_number:
-        print("\nmodel%d.yml is taken on this card; using %s instead."
+
+    staged = sorted((SD / "MODELS").glob("model*.yml"))
+    our_name = model_name(staged[0]) if staged else None
+    model_rename, replacing = choose_model_slot(root, args.model_number, our_name)
+    if replacing:
+        print("\nUpdating the existing %r model in %s." % (our_name, model_rename))
+        print("If you edited it on the radio, those edits are about to be")
+        print("overwritten -- a backup is taken first either way.")
+    elif model_rename != "model%d.yml" % args.model_number:
+        print("\nmodel%d.yml is taken by another model; using %s instead."
               % (args.model_number, model_rename))
 
     actions = plan_copy(root, trees, model_rename)
