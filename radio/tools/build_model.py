@@ -83,8 +83,8 @@ MIXES = [
     (7,  "S2", "TuneB", "TUNEB"),
     (8,  "SA", "Prof",  "PROF"),   # up = profile 1 (slowest), down = 3
     (9,  "SF", "Arm",   "ARM"),    # SF MUST be 2-position latching
-    (10, "SC", "Estop", "ESTOP"),  # staged; inert until firmware reads CH11
-    (11, "SD", "Spare", "SPARE"),  # earmarked for roll_ctrl_en
+    (10, "SC", "Estop", "ESTOP"),  # live: level-triggered hard ESTOP
+    (11, "SD", "Spare", "SPARE"),  # sent but unassigned in firmware
 ]
 
 # Channel travel is left at the full +/-100% default on purpose. The firmware
@@ -126,9 +126,23 @@ CUSTOM_FN = [
 SWITCH_WARNING = ["SA", "SB", "SC", "SD", "SE", "SF"]   # all must be up at boot
 
 
+# carryTrim: 0 is TRIM_ON, 1 is TRIM_OFF (myeeprom.h; mixer.cpp applies the
+# trim when carryTrim == 0). Every stick mix here uses TRIM_OFF.
+#
+# Trims are a second authority over the robot's setpoints, and this robot
+# already has its own: pitch_trim_rad, and the whole balance-point story in
+# CLAUDE.md. A bumped trim rocker would put a permanent creep on velocity, a
+# standing lean on roll, a slow turn on yaw, or an offset on leg height -- and
+# because the custom screens turn EdgeTX's trim display off, it would be
+# invisible while doing it. Radios get bumped in bags.
+#
+# Set TRIM_ON deliberately, per channel, if you ever actually want it.
+TRIM_OFF = 1
+
+
 def mix(dest_ch, src, name):
     return {
-        "destCh": dest_ch, "srcRaw": q(src), "carryTrim": 0, "mixWarn": 0,
+        "destCh": dest_ch, "srcRaw": q(src), "carryTrim": TRIM_OFF, "mixWarn": 0,
         "mltpx": "ADD", "delayPrec": 0, "speedPrec": 0,
         "flightModes": Raw("000000000"), "weight": 100, "offset": 0,
         "swtch": q("NONE"), "delayUp": 0, "delayDown": 0,

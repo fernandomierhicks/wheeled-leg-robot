@@ -10,7 +10,7 @@ mixData:
  -
    destCh: 0
    srcRaw: "I3"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -27,7 +27,7 @@ mixData:
  -
    destCh: 1
    srcRaw: "I1"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -44,7 +44,7 @@ mixData:
  -
    destCh: 2
    srcRaw: "I2"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -61,7 +61,7 @@ mixData:
  -
    destCh: 3
    srcRaw: "I0"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -78,7 +78,7 @@ mixData:
  -
    destCh: 4
    srcRaw: "SB"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -95,7 +95,7 @@ mixData:
  -
    destCh: 5
    srcRaw: "SE"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -112,7 +112,7 @@ mixData:
  -
    destCh: 6
    srcRaw: "S1"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -129,7 +129,7 @@ mixData:
  -
    destCh: 7
    srcRaw: "S2"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -146,7 +146,7 @@ mixData:
  -
    destCh: 8
    srcRaw: "SA"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -163,7 +163,7 @@ mixData:
  -
    destCh: 9
    srcRaw: "SF"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -180,7 +180,7 @@ mixData:
  -
    destCh: 10
    srcRaw: "SC"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0
@@ -197,7 +197,7 @@ mixData:
  -
    destCh: 11
    srcRaw: "SD"
-   carryTrim: 0
+   carryTrim: 1
    mixWarn: 0
    mltpx: ADD
    delayPrec: 0

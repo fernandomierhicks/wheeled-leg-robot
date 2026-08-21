@@ -57,6 +57,21 @@ re-check the model's switch warning. If your physical shoulder switches turn
 out to be different letters than SE/SF, change the two `srcRaw` values in the
 model — nothing else moves.
 
+## Trims do nothing, deliberately
+
+All four trim rockers are disabled on this model (`carryTrim: TRIM_OFF` on
+every stick mix). The robot already has its own trim authority —
+`pitch_trim_rad` and the whole balance-point story in `CLAUDE.md` — and a
+second one on the transmitter is the "two sources of truth" problem in
+miniature.
+
+The specific hazard: a bumped trim would put a permanent creep on velocity, a
+standing lean on roll, a slow turn on yaw, or an offset on leg height. And
+because the custom screens turn EdgeTX's trim display off, it would be doing
+that invisibly. Radios get bumped in bags.
+
+Re-enable per channel in `build_model.py` if you ever genuinely want it.
+
 ## The panic switch
 
 **SC down = stop, from any state.** That is the one thing on this transmitter
