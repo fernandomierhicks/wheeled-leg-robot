@@ -54,9 +54,15 @@ Install just part of it with `--only THEMES WIDGETS SOUNDS`.
 2. **Radio settings → Themes → RoboBlue → Set as default.**
    The theme lives in `radio.yml`, which the installer deliberately does not
    write, so this step is yours.
-3. **Model select → WLR ROBOT.** The bring-up checklist should appear. If it
-   doesn't, the `.txt` filename no longer matches the model *name* — EdgeTX
-   builds that path from the name, not the filename.
+3. **Model select → WLR ROBOT.** Boot goes straight to the HUD.
+
+   The bring-up checklist is **not** shown as a boot modal (`displayChecklist:
+   0`). It is still on the card and still reachable on demand from the model
+   menu. It ships under three filenames — `WLR ROBOT.txt`, `WLR_ROBOT.txt` and
+   `model90.txt` — because EdgeTX resolves it from the model name, the model
+   name with underscores, or the model *file* name, and which rule the lookup
+   uses could not be established for 3.0. Set `displayChecklist` back to 1 in
+   `build_model.py` for a bring-up or jump-ladder session.
 4. **Radio settings → Hardware**: set SE to momentary and SF to 2-position,
    after you've physically swapped the shoulder switches. Then power-cycle and
    confirm the switch warning fires when a switch is left down.

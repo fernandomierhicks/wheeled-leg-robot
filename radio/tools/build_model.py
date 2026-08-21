@@ -324,9 +324,6 @@ def build():
                             3: boolean(1), 4: boolean(0)}}},
     }
 
-    # Scalars. displayChecklist shows MODELS/"WLR ROBOT".txt on model select;
-    # disableThrottleWarning 0 keeps the "hip stick must be retracted at boot"
-    # guard live.
     cs = {}
     for i in range(1, 7):
         key = "SW%d" % i
@@ -347,7 +344,20 @@ def build():
     # "always on", so all-off is legal and means tuning is inactive.
     m["cfsGroupOn"] = {1: {"v": 0}, 2: {"v": 0}, 3: {"v": 0}}
 
-    m["displayChecklist"] = 1
+    # Boot goes straight to the HUD.
+    #
+    # 0 stops the checklist being a modal on every power-on and model select.
+    # The file is still shipped and still reachable on demand from the model
+    # menu -- readModelNotes(fromMenu=true) uses the same filename resolution,
+    # which is why the aliases are still worth generating -- so nothing is lost
+    # except the interruption.
+    #
+    # Set it back to 1 for a CRSF bring-up or a jump-ladder session, where
+    # being made to dismiss the ladder deliberately is the entire point.
+    #
+    # disableThrottleWarning stays 0 regardless: "the hip stick must be
+    # retracted at boot" is a different guard and worth keeping.
+    m["displayChecklist"] = 0
     m["checklistInteractive"] = 0
     m["disableThrottleWarning"] = 0
     m["thrTraceSrc"] = Raw("Thr")

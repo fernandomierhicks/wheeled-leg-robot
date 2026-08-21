@@ -771,7 +771,7 @@ cfsGroupOn:
       v: 0
    3: 
       v: 0
-displayChecklist: 1
+displayChecklist: 0
 checklistInteractive: 0
 disableThrottleWarning: 0
 thrTraceSrc: Thr

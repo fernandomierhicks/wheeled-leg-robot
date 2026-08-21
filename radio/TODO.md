@@ -17,9 +17,9 @@ overwrites. See [INSTALL.md](INSTALL.md) for the copy procedure and
 - [ ] **Radio settings → Themes → RoboBlue → Set as default.**
       Theme choice lives in `radio.yml`, which the installer deliberately
       never writes.
-- [ ] **Model select → WLR ROBOT.** Confirm the bring-up checklist appears.
-      If it doesn't, the `.txt` filename no longer matches the model *name* —
-      EdgeTX builds that path from the name, not the filename.
+- [x] **Model select → WLR ROBOT.** Boot goes straight to the HUD; the
+      checklist is on demand from the model menu, and ships under all three
+      filenames EdgeTX might resolve it from.
 - [ ] Confirm the model actually appears at all. EdgeTX auto-discovers
       `model<digits>.yml` files that aren't in `labels.yml`; that logic was
       read from the 2.12 source and 3.0 isn't public, so this is the one
