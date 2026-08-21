@@ -1172,15 +1172,16 @@ float live_tune_value(uint16_t persist_param_id) {
 // Calibration stick combo (CH1/CH4 full up, CH2/CH3 full down): trigger
 //               CALIBRATION from STANDBY; re-enter it to cancel.
 // CH5  > 1990: start SD logging (SIMPLE mode); drop stops it.
-// CH11 > 1990: hard ESTOP, level-triggered. Raises FAULT_HUMAN_ESTOP from
-//               any non-ESTOP state and blocks arming while held. The one
-//               single-motion panic input; the rescue combo is armed only
-//               in STANDBY/ESTOP and CH10 low only starts DISARMING.
-// CH12: unassigned. Earmarked for roll_ctrl_en, but that param is
-//               persistent -- driving it from a switch would rewrite the
-//               stored value, including at boot from whatever position the
-//               switch happens to be in. Wire it to a non-persistent gate
-//               first if you want it.
+// CH11 > 1990: request CALIBRATION from STANDBY; re-trigger during a
+//               radio-owned CALIBRATION cancels it through DISARMING.
+//               Edge-triggered, release-and-retry, 1 s lockout. The
+//               calibration stick combo remains as the fallback.
+// CH12 > 1990: reset a fault / clear an ESTOP -> STARTUP, clearing fault_code
+//               regardless of severity. Armed only in STANDBY/ESTOP. Same
+//               effect as the rescue combo's rising edge, minus its
+//               hold-to-reboot -- a latching switch left down is not the
+//               deliberate gesture that makes hold-to-reboot safe.
+// CH13-CH16: unassigned. Reserved for the six RGB function switches (SG-SL).
 // CH6  > 1990: trigger a JUMP from RUNNING (SIMPLE mode), one per rising edge.
 // CH5/CH6 (while RUNNING, LEGACY mode only): debounced switch combination
 //               selects which live-tune gain group CH7/CH8 drive -- see
@@ -1318,55 +1319,110 @@ static void radio_update() {
         SCB_AIRCR = 0x05FA0004;  // Cortex-M7 system reset request
     }
 
-    // ── CH11 hard ESTOP ──────────────────────────────────────────────────────
-    // A single-motion panic input, which this stack did not previously have.
-    // The rescue combo is armed only in STANDBY/ESTOP, and CH10 low goes
-    // through DISARMING — a controlled ramp-down, not a stop. So while the
-    // robot is actually running there was nothing that says "stop now".
+    // ── CH11 calibration request / CH12 fault reset ──────────────────────────
+    // Both are switch equivalents of the two stick combos, which remain as the
+    // fallback for when the transmitter is not the arming authority.
     //
-    // LEVEL-triggered, deliberately, not edge-triggered. Two consequences that
-    // are both wanted:
-    //   * While the switch is held, the fault cannot be cleared. A soft-clear
-    //     (FAULT_HUMAN_ESTOP is SOFT severity, so raising CH10 from ESTOP
-    //     clears it) would otherwise let the robot re-arm with the panic
-    //     switch still down. Here it re-ESTOPs on the very next tick.
-    //   * Recovery is explicit: release the switch, then toggle CH10 to
-    //     soft-clear back to STANDBY.
+    // Both are EDGE-triggered off a LATCHING control, so each needs the same
+    // release-and-retry gate the combos use: the switch must be seen low again
+    // before another edge counts. Without that, powering up or reconnecting
+    // with the switch already down would fire the action immediately.
     //
-    // Guarded by `alive` like every other radio input: channel() returns 0 on
-    // a dead link, so a lost radio cannot assert this. That is correct — link
-    // loss already has its own path (DISARMING via radio_lost above), and a
-    // dropout should not slam the robot into a latched fault.
-    static constexpr uint8_t ESTOP_DEBOUNCE_TICKS = 3;   // ~6 ms @ 500 Hz
-    static uint8_t s_estop_ticks    = 0;
-    static bool    s_estop_asserted = false;
+    // Neither has a hold-to-reboot: the combos can afford that because holding
+    // two sticks in opposite corners is unmistakably deliberate, whereas a
+    // latching switch left down is the normal resting state of a switch
+    // somebody flicked and forgot.
+    //
+    // Both guarded by `alive`, so a dead link cannot fire either.
+    // Shared by the CH11 switch and the calibration stick combo: either can
+    // start a radio-owned calibration, and either must be able to cancel one.
+    static bool s_radio_calib_owned = false;
+    static bool s_radio_calib_entered = false;
 
-    const bool estop_raw = alive && (g_rc.channel(11) > 1990);
-    if (estop_raw) {
-        if (s_estop_ticks < ESTOP_DEBOUNCE_TICKS) s_estop_ticks++;
-    } else {
-        s_estop_ticks = 0;
-    }
-    const bool estop_now = (s_estop_ticks >= ESTOP_DEBOUNCE_TICKS);
+    struct RadioEdge {
+        uint8_t  hi_ticks;
+        uint8_t  lo_ticks;
+        bool     held;
+        bool     low_seen;
+        uint32_t lockout_until_ms;
+    };
+    static constexpr uint8_t  SWITCH_DEBOUNCE_TICKS = 3;     // ~6 ms @ 500 Hz
+    static constexpr uint32_t SWITCH_LOCKOUT_MS     = 1000;
 
-    if (estop_now != s_estop_asserted) {
-        s_estop_asserted = estop_now;
-        if (estop_now) {
-            comm_log(LOG_LEVEL_ERROR,
-                     "ESTOP reason=RADIO_CH11: hard stop asserted (state=%d)",
-                     (int)g_state.state);
-            g_buzzer.play(RESCUE_CLEAR_MELODY,
-                          sizeof(RESCUE_CLEAR_MELODY) / sizeof(RESCUE_CLEAR_MELODY[0]));
+    auto edge_update = [](RadioEdge& e, bool raw_hi, bool link_alive) -> bool {
+        if (link_alive && raw_hi) {
+            if (e.hi_ticks < SWITCH_DEBOUNCE_TICKS) e.hi_ticks++;
+            e.lo_ticks = 0;
+        } else if (link_alive) {
+            if (e.lo_ticks < SWITCH_DEBOUNCE_TICKS) e.lo_ticks++;
+            e.hi_ticks = 0;
+        } else {
+            // Link loss reads as neither. It must not look like a release,
+            // or a dropout would re-arm the edge for free.
+            e.hi_ticks = 0;
+            e.lo_ticks = 0;
+        }
+        if (e.lo_ticks >= SWITCH_DEBOUNCE_TICKS) {
+            e.low_seen = true;
+            e.held = false;
+        }
+        if (e.hi_ticks >= SWITCH_DEBOUNCE_TICKS && !e.held) {
+            e.held = true;
+            const bool valid = e.low_seen &&
+                               (int32_t)(millis() - e.lockout_until_ms) >= 0;
+            e.low_seen = false;   // consume on every edge, valid or not
+            return valid;
+        }
+        return false;
+    };
+
+    // CH11 — calibration. Same contract as the calibration combo: STANDBY
+    // starts it, re-triggering during a radio-owned CALIBRATION cancels it
+    // through DISARMING so the hip gains taper rather than snapping to zero.
+    static RadioEdge s_calib_sw = {};
+    if (edge_update(s_calib_sw, g_rc.channel(11) > 1990, alive)) {
+        if (g_state.state == STATE_STANDBY) {
+            comm_log(LOG_LEVEL_INFO, "Radio: CH11 -> CALIBRATION");
+            if (stateMachine_request_calibration()) {
+                s_radio_calib_owned = true;
+                s_radio_calib_entered = false;
+                s_calib_sw.lockout_until_ms = millis() + SWITCH_LOCKOUT_MS;
+            }
+        } else if (g_state.state == STATE_CALIBRATION && s_radio_calib_owned) {
+            comm_log(LOG_LEVEL_WARN, "Radio: CH11 re-triggered -> DISARMING");
+            stateMachine_disarm_calibration();
+            s_radio_calib_owned = false;
+            s_radio_calib_entered = false;
+            s_calib_sw.lockout_until_ms = millis() + SWITCH_LOCKOUT_MS;
         } else {
             comm_log(LOG_LEVEL_WARN,
-                     "Radio: CH11 hard stop released; toggle CH10 to soft-clear");
+                     "Radio: CH11 calibration ignored in state %d", (int)g_state.state);
         }
     }
-    // Re-request every tick while asserted. request_estop() is a no-op once we
-    // are already in ESTOP, and this is what makes the switch impossible to
-    // clear past.
-    if (estop_now && g_state.state != STATE_ESTOP) {
-        stateMachine_request_estop();
+
+    // CH12 — reset a fault / clear an ESTOP. Same effect as the rescue combo's
+    // rising edge: a full reset to STARTUP, which clears fault_code regardless
+    // of severity and re-runs the startup checks. A fault that genuinely cannot
+    // be cleared re-faults straight back to ESTOP, which is the honest answer.
+    //
+    // Armed only in STANDBY/ESTOP, never with torque live.
+    static RadioEdge s_reset_sw = {};
+    if (edge_update(s_reset_sw, g_rc.channel(12) > 1990, alive)) {
+        if (g_state.state == STATE_ESTOP) {
+            comm_log(LOG_LEVEL_WARN,
+                     "Radio: CH12 -> reset ESTOP [fault 0x%02X] -> STARTUP",
+                     g_state.fault_code);
+            stateMachine_request_reset();
+            g_buzzer.play(RESCUE_CLEAR_MELODY,
+                          sizeof(RESCUE_CLEAR_MELODY) / sizeof(RESCUE_CLEAR_MELODY[0]));
+            s_reset_sw.lockout_until_ms = millis() + SWITCH_LOCKOUT_MS;
+        } else if (g_state.state == STATE_STANDBY) {
+            comm_log(LOG_LEVEL_INFO, "Radio: CH12 -> nothing to clear (STANDBY)");
+            g_buzzer.play(RADIO_ACQ_MELODY, 1);
+        } else {
+            comm_log(LOG_LEVEL_WARN,
+                     "Radio: CH12 reset ignored in state %d", (int)g_state.state);
+        }
     }
 
     // Debounce CH10: the raw armed level must hold for ARM_DEBOUNCE_TICKS
@@ -1380,9 +1436,7 @@ static void radio_update() {
     static constexpr uint8_t DISARM_DEBOUNCE_TICKS = 2;  // ~4 ms @ 500 Hz
     static uint8_t s_armed_ticks   = 0;
     static uint8_t s_unarmed_ticks = 0;
-    // A held CH11 also blocks arming outright, so the soft-clear path cannot
-    // hand control back while the panic switch is still down.
-    bool armed_raw = alive && (ch10 > 1990) && !s_estop_asserted;
+    bool armed_raw = alive && (ch10 > 1990);
     bool disarmed_raw = alive && (ch10 <= 1990);
     if (armed_raw) {
         if (s_armed_ticks < ARM_DEBOUNCE_TICKS) s_armed_ticks++;
@@ -1482,8 +1536,6 @@ static void radio_update() {
     // cannot start a calibration.
     static bool     s_calib_low_seen = false;
     static uint32_t s_calib_lockout_until_ms = 0;
-    static bool     s_radio_calib_owned = false;
-    static bool     s_radio_calib_entered = false;
 
     const bool calib_raw = alive &&
                            g_rc.channel(1) > 1990 && g_rc.channel(4) > 1990 &&

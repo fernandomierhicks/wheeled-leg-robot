@@ -145,7 +145,7 @@ mixData:
    name: "TuneB"
  -
    destCh: 8
-   srcRaw: "SA"
+   srcRaw: "SC"
    carryTrim: 1
    mixWarn: 0
    mltpx: ADD
@@ -162,7 +162,7 @@ mixData:
    name: "Prof"
  -
    destCh: 9
-   srcRaw: "SE"
+   srcRaw: "SD"
    carryTrim: 1
    mixWarn: 0
    mltpx: ADD
@@ -179,7 +179,7 @@ mixData:
    name: "Arm"
  -
    destCh: 10
-   srcRaw: "SC"
+   srcRaw: "SA"
    carryTrim: 1
    mixWarn: 0
    mltpx: ADD
@@ -193,10 +193,10 @@ mixData:
    delayDown: 0
    speedUp: 0
    speedDown: 0
-   name: "Estop"
+   name: "Calib"
  -
    destCh: 11
-   srcRaw: "SD"
+   srcRaw: "SE"
    carryTrim: 1
    mixWarn: 0
    mltpx: ADD
@@ -210,7 +210,7 @@ mixData:
    delayDown: 0
    speedUp: 0
    speedDown: 0
-   name: "Spare"
+   name: "Reset"
 limitData: 
    0: 
       min: 0
@@ -310,7 +310,7 @@ limitData:
       symetrical: 0
       revert: 0
       curve: 0
-      name: "ESTOP"
+      name: "CALIB"
    11: 
       min: 0
       max: 0
@@ -319,7 +319,7 @@ limitData:
       symetrical: 0
       revert: 0
       curve: 0
-      name: "SPARE"
+      name: "RESET"
 expoData: 
  -
    mode: 3
@@ -417,20 +417,16 @@ customFn:
    2: 
       swtch: "L3"
       func: PLAY_TRACK
-      def: "wlrsir,1,1x"
+      def: "wlrcal,1,1x"
    3: 
-      swtch: "L3"
-      func: HAPTIC
-      def: "3,1"
-   4: 
       swtch: "SBd"
       func: LOGS
       def: "10,1"
-   5: 
+   4: 
       swtch: "SBd"
       func: PLAY_TRACK
       def: "wlrlog,1,1x"
-   6: 
+   5: 
       swtch: "!SBd"
       func: PLAY_TRACK
       def: "wlrlgf,1,1x"

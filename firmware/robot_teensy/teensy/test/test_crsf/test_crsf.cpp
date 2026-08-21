@@ -259,25 +259,27 @@ void test_dead_link_cannot_arm(void) {
         "even without the alive() guard, a dead link must not read as armed");
 }
 
-void test_dead_link_cannot_assert_hard_estop(void) {
-    // CH11 is the level-triggered panic input: radio_update() computes
-    // estop_raw = alive && (channel(11) > 1990). A dead link must not be able
-    // to slam the robot into a latched fault -- link loss already has its own
-    // path through DISARMING, and a dropout that latched ESTOP would turn a
-    // momentary glitch into a manual recovery.
+void test_dead_link_cannot_fire_calib_or_reset(void) {
+    // CH11 requests CALIBRATION and CH12 clears a fault. Both are edge
+    // triggered off a latching switch, and radio_update() gates each on
+    // `alive`. A dropout must not be able to start a calibration or wipe a
+    // fault -- and because both switches can legitimately be resting DOWN
+    // when a link drops, the driver returning 0 is what stops the reconnect
+    // from looking like a fresh rising edge.
     CrsfCore rx; rx.reset();
-    const uint8_t idx[] = {11};
-    const uint16_t us[] = {2000};
+    const uint8_t idx[] = {11, 12};
+    const uint16_t us[] = {2000, 2000};
     uint8_t f[CRSF_MAX_FRAME];
-    uint8_t n = make_rc_frame(f, 1500, idx, us, 1);
+    uint8_t n = make_rc_frame(f, 1500, idx, us, 2);
     for (uint8_t i = 0; i < CRSF_WARMUP_FRAMES; i++) push(rx, f, n, 1000);
-    TEST_ASSERT_TRUE_MESSAGE(rx.alive(1000) && rx.channel_us(11, 1000) > 1990,
-        "a live CH11 held high must assert");
+    TEST_ASSERT_TRUE(rx.channel_us(11, 1000) > 1990);
+    TEST_ASSERT_TRUE(rx.channel_us(12, 1000) > 1990);
 
     const uint32_t dead = 1000 + CRSF_LINK_TIMEOUT_MS;
-    TEST_ASSERT_FALSE(rx.alive(dead) && rx.channel_us(11, dead) > 1990);
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, rx.channel_us(11, dead),
         "a dead link must read CH11 as 0, not as its last high value");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, rx.channel_us(12, dead),
+        "a dead link must read CH12 as 0, not as its last high value");
 }
 
 void test_zero_link_quality_reads_as_dead(void) {
@@ -483,7 +485,7 @@ int main(int, char**) {
     RUN_TEST(test_dead_link_cannot_satisfy_rescue_combo);
     RUN_TEST(test_dead_link_cannot_satisfy_calibration_combo);
     RUN_TEST(test_dead_link_cannot_arm);
-    RUN_TEST(test_dead_link_cannot_assert_hard_estop);
+    RUN_TEST(test_dead_link_cannot_fire_calib_or_reset);
     RUN_TEST(test_zero_link_quality_reads_as_dead);
     RUN_TEST(test_link_quality_recovers);
     RUN_TEST(test_link_stats_absent_does_not_block);

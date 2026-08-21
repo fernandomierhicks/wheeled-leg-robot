@@ -203,13 +203,32 @@ Small, but be explicit (plan §6):
 
 ---
 
-## Loose ends, no rush
+## TODO — the six RGB push buttons (SG–SL)
 
-- [ ] **Six RGB function switches SG–SL** are unassigned. `hal.h` shows the
-      TX15 has them with RGB LEDs (`FUNCTION_SWITCHES_WITH_RGB`); the
-      integration plan predates this and doesn't account for them. Good fit
-      for mirroring robot state in peripheral vision via the `RGB_LED`
-      special function, or as latched bench toggles.
+Six backlit buttons under the gimbals, thumb-reachable without leaving the
+sticks. Completely unassigned; CH13–CH16 are reserved for them. Candidates,
+roughly in order of value:
+
+- [ ] **JUMP ARMED** (`jump_enable`), latched, magenta when armed. It defaults
+      to 0 precisely so jump is inert until deliberately enabled — a lit
+      button makes that state visible instead of buried in the Params tab.
+- [ ] **TUNE ENABLE** (`live_tune_multi_en`), latched, amber. "Am I in tune
+      mode?" is currently invisible, which the plan calls the mechanism's
+      biggest weakness.
+- [ ] **LATCH GAINS** (`live_tune_latch`), momentary, green flash. Committing
+      tuned gains currently means walking to the laptop.
+- [ ] **Gain group select**, two buttons. Would give the full LEGACY tuning
+      workflow on hardware *today*, without waiting for the command tunnel.
+- [ ] **ROLL CTRL** (`roll_ctrl_en`), latched, cyan — needs a non-persistent
+      runtime gate first, since the param is persistent.
+- [ ] **State lamp** — mirror the canonical state colour. NOT VERIFIED that
+      EdgeTX 3.0 can drive an individual function-switch LED from arbitrary
+      conditions; `FUNC_RGB_LED` exists and the hardware has the LEDs, but
+      the binding needs checking on the radio before promising it.
+
+Each needs a channel plus firmware to read it.
+
+## Loose ends, no rush
 - [ ] **Crouch-biased curve on CH3.** There's 30% expo instead. Draw a 5-point
       curve on the touchscreen (Model → Curves) and point the Hip input's
       expo at it — safer than hand-editing the curve point pool in YAML.

@@ -82,7 +82,8 @@
     "wlrest": "st_estop",
     "wlrlog": "o_logon",
     "wlrlgf": "o_logoff",
-    "wlrsir": "t_siren"
+    "wlrsir": "t_siren",
+    "wlrcal": "st_calib"
   },
 
   "tones": {

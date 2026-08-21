@@ -24,20 +24,21 @@ configuration** — which is what the model's power-on switch warning enforces.
 
 ## Channels
 
-| CH | Control | Function | Notes |
+| CH | Control | Position | Function |
 |---|---|---|---|
-| 1 | Right stick H (Ail → I3) | Roll setpoint | Self-centring: release returns to level. Only acts when `roll_ctrl_en=1` in RUNNING. |
-| 2 | Right stick V (Ele → I1) | Forward velocity | Self-centring: release means stop. |
-| 3 | **Left stick V** (Thr → I2) | Hip height | **Must** be the non-centring stick — leg height is a held pose. 30% expo. |
-| 4 | Left stick H (Rud → I0) | Yaw rate | Self-centring. |
-| 5 | **SB** 3-pos | SD log | Down = start recording. Also starts the radio's own `/LOGS` capture. |
-| 6 | **SF** shoulder (momentary) | Jump trigger | Rising edge. One jump per press. Inert unless `jump_enable=1`. |
-| 7 | **S1** pot | Live tune A | Centre detent = repeatable midpoint during a pickup sweep. |
-| 8 | **S2** pot | Live tune B | |
-| 9 | **SA** 3-pos | Speed profile | Up = 1 (slowest), mid = 2, down = 3. |
-| 10 | **SE** shoulder (latching) | ARM | Down = armed. Needs > 1990 µs — verify real endpoints. |
-| 11 | **SC** 3-pos | Hard ESTOP | **Live.** Level-triggered: down = ESTOP from any state, and blocks arming while held. Release, then toggle SF to soft-clear. |
-| 12 | **SD** 3-pos | Spare | Sent, but firmware ignores it. `roll_ctrl_en` is persistent, so a switch would rewrite the stored value at boot. |
+| 1 | Right stick ↔ | gimbal | Roll / lean setpoint |
+| 2 | Right stick ↕ | gimbal | Forward velocity |
+| 3 | Left stick ↕ | gimbal | Hip height (30% expo) |
+| 4 | Left stick ↔ | gimbal | Yaw rate |
+| 5 | **SB** | top row, 2nd from left | SD logging (robot + radio) |
+| 6 | **SF** | momentary shoulder | Jump (rising edge) |
+| 7 | **S1** | left dial | Live tune A |
+| 8 | **S2** | right dial | Live tune B |
+| 9 | **SC** | top row, right of dials | Speed profile 1–3 |
+| 10 | **SD** | top row, rightmost | ARM |
+| 11 | **SA** | top row, leftmost | Calibration request |
+| 12 | **SE** | latching shoulder | Reset fault / clear ESTOP |
+| 13–16 | — | — | *Reserved for the six RGB buttons (SG–SL) — TODO* |
 
 Inputs are declared in the radio's native RETA order (I0=Rud, I1=Ele, I2=Thr,
 I3=Ail) so the Inputs screen looks like every other model on this transmitter.
@@ -77,19 +78,28 @@ that invisibly. Radios get bumped in bags.
 
 Re-enable per channel in `build_model.py` if you ever genuinely want it.
 
-## The panic switch
+## Stopping the robot
 
-**SC down = stop, from any state.** That is the one thing on this transmitter
-that acts immediately rather than politely: SF low starts DISARMING, which is a
-controlled ramp-down, and the rescue combo only works from STANDBY or ESTOP.
+**Drop SD.** There is deliberately no separate hard-ESTOP channel: disarming
+covers it. Be aware of what that means — disarm goes through `DISARMING`, a
+controlled taper of the hip gains, not an immediate torque cut. An immediate
+version was implemented on CH11 and is in git history if the difference ever
+matters to you.
 
-It is level-triggered on purpose. While SC is held the fault cannot be cleared
-and the robot cannot arm — a soft-clear would otherwise hand control back with
-the panic switch still down. To recover: put SC up, then toggle SF.
+## The two edge-triggered switches
 
-A dead radio cannot assert it. `channel()` returns 0 on a lost link, so the
-`> 1990` test fails; link loss has its own DISARMING path and should not latch
-a fault that needs manual recovery.
+CH11 (calibration) and CH12 (reset) are **edge**-triggered off latching
+switches, so both require a debounced *release* before another edge counts.
+That is what stops powering up — or reconnecting — with the switch already
+down from firing the action immediately.
+
+Neither has a hold-to-reboot. The rescue stick combo can afford one because
+holding two sticks in opposite corners is unmistakably deliberate; a latching
+switch left down is just the resting state of a switch somebody flicked and
+forgot.
+
+Both stick combos remain as fallbacks for when the transmitter is not the
+arming authority.
 
 ## What the radio does *not* control
 

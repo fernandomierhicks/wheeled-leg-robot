@@ -160,27 +160,25 @@ in `main.cpp` (`> 1990`, `< 1010`) is unchanged. Full deflection lands at
 asserts — ELRS endpoints occasionally land short and that silently breaks
 arming.
 
-### CH11 hard ESTOP
+### CH11 calibration, CH12 fault reset
 
-A single-motion panic input, which this stack did not previously have. CH10 low
-starts `DISARMING` — a controlled ramp-down, not a stop — and the rescue combo
-is armed only in STANDBY/ESTOP, so while the robot was actually running there
-was nothing that said "stop now".
+Switch equivalents of the two stick combos, added because the transmitter now
+has spare switches and the combos are awkward mid-session. Both combos remain
+as the fallback for when the radio is not the arming authority.
 
-CH11 is **level-triggered**, not edge-triggered, and that has two wanted
-consequences. While the switch is held the fault cannot be cleared: a
-soft-clear (`FAULT_HUMAN_ESTOP` is SOFT severity, so raising CH10 from ESTOP
-clears it) would otherwise hand control back with the panic switch still down.
-And recovery is explicit — release the switch, then toggle CH10.
+Both are **edge**-triggered off latching switches, so both require a debounced
+release before another edge counts — otherwise powering up, or reconnecting,
+with the switch already down would fire the action immediately. Both are
+guarded by `alive()`, so a dropout cannot start a calibration or wipe a fault.
 
-It is guarded by `alive()` like every other radio input, so a dead link cannot
-assert it. That is deliberate: link loss already has its own path through
-DISARMING, and a dropout should not latch a fault that needs manual recovery.
+Neither has a hold-to-reboot. The rescue combo can afford one because holding
+two sticks in opposite corners is unmistakably deliberate; a latching switch
+left down is just the resting state of a switch somebody flicked and forgot.
 
-CH12 is sent by the radio but **ignored** by firmware. It was earmarked for
-`roll_ctrl_en`, but that parameter is persistent — driving it from a switch
-would rewrite the stored value, including at boot from whatever position the
-switch happens to be in. It needs a non-persistent runtime gate first.
+There is **no hard-ESTOP channel**. Dropping ARM disarms, which is considered
+sufficient — note that this goes through `DISARMING`, a controlled taper of the
+hip gains, rather than an immediate torque cut. An immediate version was
+implemented on CH11 and is in git history.
 
 ### What goes back to the radio
 

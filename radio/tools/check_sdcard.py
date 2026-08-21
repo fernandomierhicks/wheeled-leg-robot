@@ -47,6 +47,8 @@ EXPECTED_CHANNELS = {
     7: "live tune B",
     8: "speed profile",
     9: "ARM",
+    10: "calibration request",
+    11: "fault reset",
 }
 
 THEME_COLORS = [

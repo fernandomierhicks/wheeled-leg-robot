@@ -80,24 +80,33 @@ INPUTS = [
 # latching one. Following the factory fit instead means no hardware swap at
 # all, and removes a whole class of "did I fit the right switch" error.
 #
-#   jump (CH6)  needs momentary -> SF: rising-edge trigger, and a latching
-#               switch here could sit latched where you cannot see it
-#   ARM  (CH10) needs latching  -> SE: the firmware arm test is level-based
-#               (armed = alive && ch10 > 1990), so a momentary button would
-#               disarm the instant you let go
+#   jump  (CH6)  needs momentary -> SF: rising-edge trigger, and a latching
+#                switch here could sit latched where you cannot see it
+#   reset (CH12) wants latching  -> SE: an edge-triggered fault clear. The
+#                firmware requires a debounced release before another edge
+#                counts, so the switch resting down is harmless.
+#
+# ARM is on SD, the rightmost top toggle. Configure SD as 2POS in
+# Radio > Hardware: the mix maps a 3-position switch linearly, so the middle
+# position reads as disarmed, but a binary function deserves a binary switch.
+#
+# There is deliberately NO hard-ESTOP channel. Dropping ARM disarms, which
+# goes through DISARMING -- a controlled hip-gain taper rather than an
+# immediate torque cut. If you ever want the immediate version back, it was
+# implemented on CH11 and is in git history.
 MIXES = [
     (0,  "I3", "Roll",  "ROLL"),   # right stick H -- self-centring: release levels
     (1,  "I1", "Vel",   "VEL"),    # right stick V -- release means stop
     (2,  "I2", "Hip",   "HIP"),    # left stick V, the throttle stick
     (3,  "I0", "Yaw",   "YAW"),    # left stick H
-    (4,  "SB", "Log",   "LOG"),    # down = channel high = start recording
-    (5,  "SF", "Jump",  "JUMP"),   # SF is the factory MOMENTARY button
-    (6,  "S1", "TuneA", "TUNEA"),  # centre-detent pot, live tune slot 0
-    (7,  "S2", "TuneB", "TUNEB"),
-    (8,  "SA", "Prof",  "PROF"),   # up = profile 1 (slowest), down = 3
-    (9,  "SE", "Arm",   "ARM"),    # SE is the factory LATCHING button
-    (10, "SC", "Estop", "ESTOP"),  # live: level-triggered hard ESTOP
-    (11, "SD", "Spare", "SPARE"),  # sent but unassigned in firmware
+    (4,  "SB", "Log",   "LOG"),    # top row, 2nd from left
+    (5,  "SF", "Jump",  "JUMP"),   # momentary shoulder -- rising edge
+    (6,  "S1", "TuneA", "TUNEA"),  # left dial, live tune slot 0
+    (7,  "S2", "TuneB", "TUNEB"),  # right dial, live tune slot 1
+    (8,  "SC", "Prof",  "PROF"),   # top row, right of the dials
+    (9,  "SD", "Arm",   "ARM"),    # top row, rightmost
+    (10, "SA", "Calib", "CALIB"),  # top row, leftmost
+    (11, "SE", "Reset", "RESET"),  # latching shoulder -- clear fault / ESTOP
 ]
 
 # Channel travel is left at the full +/-100% default on purpose. The firmware
@@ -108,7 +117,7 @@ MIXES = [
 # Logical switches. Channel-based only: telemetry sensors do not exist until
 # the robot is bound and emitting, and a logical switch pointed at a sensor
 # that was never discovered is one that silently never fires.
-#   L1 armed, L2 jump requested, L3 estop requested
+#   L1 armed, L2 jump requested, L3 calibration requested
 # ch(n) is 0-based (yaml_datastructs_funcs.cpp: n + MIXSRC_FIRST_CH).
 LOGICAL_SW = [
     ("FUNC_VPOS", "ch(9),50"),
@@ -126,8 +135,7 @@ LOGICAL_SW = [
 CUSTOM_FN = [
     ("L1",     "PLAY_TRACK", "wlrarm,1,1x"),
     ("!L1",    "PLAY_TRACK", "wlrdis,1,1x"),
-    ("L3",     "PLAY_TRACK", "wlrsir,1,1x"),
-    ("L3",     "HAPTIC",     "3,1"),
+    ("L3",     "PLAY_TRACK", "wlrcal,1,1x"),
     # Radio-side telemetry log at 1 Hz on the same switch that starts the
     # robot's own .wlog. Two records with different clocks catch a whole class
     # of "the log lied" bugs -- but only if they start together.
@@ -136,7 +144,9 @@ CUSTOM_FN = [
     ("!SBd",   "PLAY_TRACK", "wlrlgf,1,1x"),
 ]
 
-SWITCH_WARNING = ["SA", "SB", "SC", "SD", "SE", "SF"]   # all must be up at boot
+# All six up at boot. That is inert for every one of them: no calibration
+# request, no logging, profile 1 (slowest), disarmed, no reset edge, no jump.
+SWITCH_WARNING = ["SA", "SB", "SC", "SD", "SE", "SF"]
 
 
 # carryTrim: 0 is TRIM_ON, 1 is TRIM_OFF (myeeprom.h; mixer.cpp applies the
