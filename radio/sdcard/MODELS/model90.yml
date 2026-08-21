@@ -645,7 +645,7 @@ screenData:
                      4: 
                         type: Color
                         value: 
-                           color: COLIDX1
+                           color: COLIDX4
          options: 
             0: 
                type: Bool

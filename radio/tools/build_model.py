@@ -335,12 +335,17 @@ def build():
         # background. Unreadable, and the screen it ruins is the one used for
         # the CRSF bring-up gate.
         #
-        # Text and bars both use PRIMARY2 (near-white), the same colour the HUD
-        # uses for primary text, on SECONDARY3 (the darkest surface).
+        # Text is PRIMARY2 (near-white) on SECONDARY3 (the darkest surface).
+        #
+        # The BAR is SECONDARY2 (accent blue) and must NOT match the text.
+        # outputs.cpp creates the bar object first and both labels after it, so
+        # LVGL draws the channel name and the value ON TOP of the bar -- and the
+        # bar grows outward from centre, under both of them. Making bar and text
+        # the same near-white hid every name behind its own bar.
         1: {"LayoutId": q("Layout1x1"),
             "layoutData": {
                 "zones": {0: widget("Outputs", [signed(1), boolean(0),
-                                                colour(5), colour(1), colour(1)])},
+                                                colour(5), colour(1), colour(4)])},
                 "options": {0: boolean(1), 1: boolean(0), 2: boolean(0),
                             3: boolean(1), 4: boolean(0)}}},
     }

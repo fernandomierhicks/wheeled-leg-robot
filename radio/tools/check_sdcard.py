@@ -319,18 +319,33 @@ def check_widget_contrast(path, m):
                     resolved[role] = val
 
             bg = resolved.get("background")
-            if bg is None:
-                continue
-            for role in ("text", "bar"):
-                fg = resolved.get(role)
-                if fg is None:
-                    continue
-                delta = abs(_luminance(fg) - _luminance(bg))
-                if delta < 0.30:
-                    bad("%s: screen %s %s widget -- %s #%06X on background "
-                        "#%06X has almost no contrast (luminance delta %.2f); "
-                        "it will be unreadable on the radio",
-                        path.name, sidx, zone.get("widgetName"), role, fg, bg,
+            if bg is not None:
+                for role in ("text", "bar"):
+                    fg = resolved.get(role)
+                    if fg is None:
+                        continue
+                    delta = abs(_luminance(fg) - _luminance(bg))
+                    if delta < 0.30:
+                        bad("%s: screen %s %s widget -- %s #%06X on background "
+                            "#%06X has almost no contrast (luminance delta "
+                            "%.2f); it will be unreadable on the radio",
+                            path.name, sidx, zone.get("widgetName"), role, fg,
+                            bg, delta)
+
+            # Text vs BAR matters too, and is easy to miss. outputs.cpp creates
+            # the bar first and the labels after, so LVGL draws the channel name
+            # and value on top of the bar -- and the bar grows outward from
+            # centre, underneath both. Matching colours hides every label behind
+            # its own bar, which looks like the bars "covering" the names.
+            text, bar = resolved.get("text"), resolved.get("bar")
+            if text is not None and bar is not None:
+                delta = abs(_luminance(text) - _luminance(bar))
+                if delta < 0.25:
+                    bad("%s: screen %s %s widget -- text #%06X on bar #%06X "
+                        "has almost no contrast (luminance delta %.2f). The "
+                        "labels are drawn over the bar, so the channel names "
+                        "would disappear wherever the bar reaches them.",
+                        path.name, sidx, zone.get("widgetName"), text, bar,
                         delta)
 
 
