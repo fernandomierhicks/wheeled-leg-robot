@@ -242,6 +242,15 @@ def widget(name, options):
     return w
 
 
+# Theme palette indices, in the order EdgeTX defines them. Named because
+# COLIDX3 tells you nothing about whether it is legible on COLIDX5.
+COLIDX = {
+    "PRIMARY1": 0, "PRIMARY2": 1, "PRIMARY3": 2,
+    "SECONDARY1": 3, "SECONDARY2": 4, "SECONDARY3": 5,
+    "FOCUS": 6, "EDIT": 7, "ACTIVE": 8, "WARNING": 9, "DISABLED": 10,
+}
+
+
 def colour(idx):
     return {"type": "Color", "value": {"color": Raw("COLIDX%d" % idx)}}
 
@@ -316,10 +325,22 @@ def build():
             "layoutData": {
                 "zones": {0: widget("WLR HUD", [boolean(1), colour(4)])},
                 "options": {i: boolean(0) for i in range(5)}}},
+        # Outputs widget options, from widgets/outputs.cpp:
+        #   0 first channel, 1 fill background, 2 BG colour,
+        #   3 TEXT colour, 4 BAR colour
+        #
+        # Its defaults are PRIMARY1 for text and SECONDARY1 for the bars,
+        # which assume a LIGHT theme: under RoboBlue those are 0x39434F and
+        # 0x121821, i.e. dark slate text and near-black bars on a near-black
+        # background. Unreadable, and the screen it ruins is the one used for
+        # the CRSF bring-up gate.
+        #
+        # Text and bars both use PRIMARY2 (near-white), the same colour the HUD
+        # uses for primary text, on SECONDARY3 (the darkest surface).
         1: {"LayoutId": q("Layout1x1"),
             "layoutData": {
                 "zones": {0: widget("Outputs", [signed(1), boolean(0),
-                                                colour(5), colour(0), colour(3)])},
+                                                colour(5), colour(1), colour(1)])},
                 "options": {0: boolean(1), 1: boolean(0), 2: boolean(0),
                             3: boolean(1), 4: boolean(0)}}},
     }

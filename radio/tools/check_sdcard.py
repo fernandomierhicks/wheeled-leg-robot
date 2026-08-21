@@ -238,7 +238,100 @@ def check_one_model(path, m):
                  path.name, md.get("channelsCount"))
 
     check_encoded_levels(path, m)
+    check_widget_contrast(path, m)
     check_screens(path, m)
+
+
+# Theme palette order, as EdgeTX defines it. COLIDX<n> in a model refers to
+# these by position.
+PALETTE_ORDER = [
+    "PRIMARY1", "PRIMARY2", "PRIMARY3", "SECONDARY1", "SECONDARY2",
+    "SECONDARY3", "FOCUS", "EDIT", "ACTIVE", "WARNING", "DISABLED",
+]
+
+# Widgets whose colour options we know the meaning of, as (option index, role).
+# From radio/src/gui/colorlcd/widgets/outputs.cpp.
+WIDGET_COLOUR_ROLES = {
+    "Outputs": {2: "background", 3: "text", 4: "bar"},
+}
+
+
+def _luminance(rgb):
+    """Rough relative luminance, good enough to catch dark-on-dark."""
+    r, g, b = (rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
+
+
+def theme_palette():
+    """Resolve the staged theme's colours by palette index."""
+    themes = [p for p in (SD / "THEMES").iterdir() if p.is_dir()]         if (SD / "THEMES").exists() else []
+    for t in themes:
+        yml = t / "theme.yml"
+        if not yml.exists():
+            continue
+        try:
+            data = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            continue
+        colors = data.get("colors", {}) or {}
+        out = {}
+        for i, name in enumerate(PALETTE_ORDER):
+            v = colors.get(name)
+            if isinstance(v, str):
+                try:
+                    v = int(v, 16)
+                except ValueError:
+                    continue
+            if isinstance(v, int):
+                out[i] = v
+        return out
+    return {}
+
+
+def check_widget_contrast(path, m):
+    """Catch dark-text-on-dark-background before the bench does.
+
+    The Outputs widget defaults to PRIMARY1 for text and SECONDARY1 for its
+    bars, which are sensible on a LIGHT theme and unreadable on a dark one --
+    under RoboBlue they are 0x39434F and 0x121821 on a 0x070A0F background.
+    That went out to the radio once. The screen it ruins is the Outputs
+    monitor, which is the one the CRSF bring-up gate depends on.
+    """
+    palette = theme_palette()
+    if not palette:
+        return
+
+    for sidx, screen in (m.get("screenData") or {}).items():
+        zones = screen.get("layoutData", {}).get("zones", {}) or {}
+        for zidx, zone in zones.items():
+            roles = WIDGET_COLOUR_ROLES.get(zone.get("widgetName"))
+            if not roles:
+                continue
+            opts = (zone.get("widgetData") or {}).get("options") or {}
+            resolved = {}
+            for oidx, role in roles.items():
+                val = (opts.get(oidx) or {}).get("value", {}).get("color")
+                if isinstance(val, str) and val.startswith("COLIDX"):
+                    idx = int(val[len("COLIDX"):])
+                    if idx in palette:
+                        resolved[role] = palette[idx]
+                elif isinstance(val, int):
+                    resolved[role] = val
+
+            bg = resolved.get("background")
+            if bg is None:
+                continue
+            for role in ("text", "bar"):
+                fg = resolved.get(role)
+                if fg is None:
+                    continue
+                delta = abs(_luminance(fg) - _luminance(bg))
+                if delta < 0.30:
+                    bad("%s: screen %s %s widget -- %s #%06X on background "
+                        "#%06X has almost no contrast (luminance delta %.2f); "
+                        "it will be unreadable on the radio",
+                        path.name, sidx, zone.get("widgetName"), role, fg, bg,
+                        delta)
 
 
 def check_encoded_levels(path, m):
