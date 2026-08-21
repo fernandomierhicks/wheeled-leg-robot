@@ -38,7 +38,10 @@ boot. Set the receiver's own failsafe to **no pulses**, never "hold".
 | C10 | SD (top row, rightmost) | Arm / disarm         | > 1990 → RUNNING (requires calibration); drop → STANDBY    |
 | C11 | SA (top row, leftmost) | **Calibration** | Rising edge requests CALIBRATION from STANDBY; re-trigger during a radio-owned CALIBRATION cancels it through DISARMING (hip gains taper over `calib_rampdown_s`). Edge-triggered off a latching switch, so a debounced *release* is required before another edge counts — powering up with it already down does nothing. 1 s lockout between actions. The calibration stick combo remains as the fallback. |
 | C12 | SE (latching shoulder) | **Reset fault** | Rising edge in ESTOP: full reset to STARTUP, clearing `fault_code` regardless of severity and re-running the startup checks — the same effect as the rescue combo's rising edge. In STANDBY: beep only. Armed solely in STANDBY/ESTOP, never with torque live. No hold-to-reboot: a latching switch left down is not the deliberate gesture that makes the combo's 3 s hold safe. |
-| C13–C16 | — | *unassigned* | Reserved for the six RGB function switches (SG–SL). |
+| C13 | SG (RGB button 1) | Live-tune group 0 | One channel per gain group, from a mutually exclusive RGB button group — the lit button is the group indicator. None high = tuning inactive. Still gated by `live_tune_multi_en`, which defaults to 0. |
+| C14 | SH (RGB button 2) | Live-tune group 1 | |
+| C15 | SI (RGB button 3) | Live-tune group 2 | |
+| C16 | SJ (RGB button 4) | **Latch gains** | Rising edge fires the same one-shot as writing `live_tune_latch` from the GUI. Only picked-up slots are committed. |
 
 ## Calibration combo — STANDBY → CALIBRATION
 
@@ -111,24 +114,26 @@ slot of the active *gain group*, RUNNING only.
 
 **Whether live tuning is available at all is set by `live_tune_multi_en`.**
 
-### `live_tune_multi_en = 0` — SIMPLE (default)
+### `live_tune_multi_en = 0` (default)
 
-**Live tuning is off.** C5 is the SD-log switch and C6 is the jump trigger, so
-there is no switch left to select a group with and the C7/C8 knobs are inert.
-The groups are not deleted, just unreachable — set `live_tune_multi_en = 1`.
+**Live tuning is off.** The C7/C8 knobs are inert and the group-select buttons
+do nothing. The groups are not deleted, just unreachable — set
+`live_tune_multi_en = 1`. It stays a deliberate, persistent opt-in so a knocked
+button cannot start moving gains on its own.
 
-### `live_tune_multi_en = 1` — LEGACY (three groups)
+### `live_tune_multi_en = 1`
 
-The original combination scheme, and the only mode in which C5/C6 mean *gain
-group*. In this mode C5 does **not** drive SD logging and C6 does **not** jump —
-a tuning session trades both away for the knobs, so it is bench-only by nature.
+Group select is on C13/C14/C15, one channel per group, driven by three
+mutually-exclusive RGB buttons. **C5 keeps SD logging and C6 keeps jump** — the
+old scheme borrowed them, which meant a tuning session gave up both, and a
+tuning session is exactly the one you most want a log of.
 
-| C5 | C6 | Group | Slot 0 (C7) | Slot 1 (C8) |
-|---|---|---|---|---|
-| up | up | *(none — tuning inactive)* | — | — |
-| down | up | 0 | `lqr_k_pitch_ret`, -0.1 … -2.0 | `lqr_k_rate_ret`, -0.01 … -1.0 |
-| up | down | 1 | `vel_pi_kp`, 0.05 … 1.0 | `vel_pi_ki`, 0.02 … 0.5 |
-| down | down | 2 | `roll_kp`, 0.3 … 4.0 | `roll_kd`, 0.02 … 0.5 |
+| Group | Selected by | Slot 0 (C7) | Slot 1 (C8) |
+|---|---|---|---|
+| *(none lit)* | — | *tuning inactive* | — |
+| 0 | C13 / button 1 | `lqr_k_pitch_ret`, -0.1 … -2.0 | `lqr_k_rate_ret`, -0.01 … -1.0 |
+| 1 | C14 / button 2 | `vel_pi_kp`, 0.05 … 1.0 | `vel_pi_ki`, 0.02 … 0.5 |
+| 2 | C15 / button 3 | `roll_kp`, 0.3 … 4.0 | `roll_kd`, 0.02 … 0.5 |
 
 Ranges are `(value at knob-zero, value at knob-max)`. Both slots are mirrored
 live to telemetry regardless of group: `live_tune_ch7_val` / `live_tune_ch8_val`.
@@ -167,8 +172,9 @@ without latching leaves it exactly as it was.
    `live_tune_ch7_val`/`live_tune_ch8_val` in telemetry — they update
    immediately; the *effect* on balance only kicks in once picked up,
    independently per slot).
-3. Write `live_tune_latch` = 1 (Params tab) to persist every currently
-   picked-up slot's shadow value into its real param. One-shot: firmware
+3. Press **button 4 (C16)** to persist every currently picked-up slot's shadow
+   value into its real param — or write `live_tune_latch` = 1 from the Params
+   tab, which is the same one-shot. One-shot: firmware
    latches and resets the flag. A slot that never picked up this session is
    skipped, not latched at a stale/arbitrary value.
 4. To leave live-tune mode: return both C5 and C6 to **up**, or move to another

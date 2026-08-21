@@ -43,7 +43,7 @@ MODEL_NAME = "WLR ROBOT"
 # Blocks we let the radio own. Copied verbatim from its own output: they
 # describe hardware config (the six RGB function switches) and the top bar,
 # neither of which this package has an opinion about yet.
-VERBATIM = ["topbarData", "topbarWidgetWidth", "customSwitches", "cfsGroupOn"]
+VERBATIM = ["topbarData", "topbarWidgetWidth"]
 
 
 # --------------------------------------------------------------------------
@@ -113,7 +113,41 @@ MIXES = [
     (9,  "SD", "Arm",   "ARM"),    # top row, rightmost
     (10, "SA", "Calib", "CALIB"),  # top row, leftmost
     (11, "SE", "Reset", "RESET"),  # latching shoulder -- clear fault / ESTOP
+    # Live tuning, on the RGB push buttons under the gimbals. Group select
+    # lives here rather than on CH5/CH6 so a tuning session no longer gives up
+    # SD logging and the jump trigger -- and a tuning session is exactly the
+    # one you most want a log of.
+    #
+    # One channel per group, not two encoded bits: SG/SH/SI sit in a mutually
+    # exclusive switch group, so pressing one releases the others and the LIT
+    # BUTTON IS THE GROUP INDICATOR. Live-tune state being invisible is what
+    # the plan calls the mechanism's biggest weakness; this puts it on the
+    # front of the transmitter. None lit = tuning inactive.
+    (12, "SG", "TuneG0", "TUNEG0"),  # RGB button 1: gain group 0
+    (13, "SH", "TuneG1", "TUNEG1"),  # RGB button 2: gain group 1
+    (14, "SI", "TuneG2", "TUNEG2"),  # RGB button 3: gain group 2
+    (15, "SJ", "Latch",  "LATCH"),   # RGB button 4: commit tuned gains
 ]
+
+# Function-switch configuration, which the radio stores per model.
+#
+#   2POS   = latching, push-on/push-off  (switches.cpp toggles the logical
+#            state only on press: `SWITCH_2POS && physicalState`)
+#   TOGGLE = momentary, on while held    (toggles on every physical change,
+#            and is forced to start OFF)
+#
+# SG/SH/SI share group 1, which makes them mutually exclusive. cfsGroupOn for
+# that group stays 0 ("not always on"), so all-off is a legal state and is
+# what "tuning inactive" looks like. SJ is a momentary commit in no group.
+#
+# Colours: amber for a selected gain group (matching the HUD's tune accent),
+# green for the commit press.
+FUNCTION_SWITCHES = {
+    "SW1": ("TUNE G0", "2POS",   1, (255, 180, 0)),
+    "SW2": ("TUNE G1", "2POS",   1, (255, 180, 0)),
+    "SW3": ("TUNE G2", "2POS",   1, (255, 180, 0)),
+    "SW4": ("LATCH",   "TOGGLE", 0, (46, 230, 138)),
+}
 
 # Channel travel is left at the full +/-100% default on purpose. The firmware
 # thresholds are absolute microseconds (>1990, <1010) and both stick combos
@@ -279,6 +313,26 @@ def build():
     # Scalars. displayChecklist shows MODELS/"WLR ROBOT".txt on model select;
     # disableThrottleWarning 0 keeps the "hip stick must be retracted at boot"
     # guard live.
+    cs = {}
+    for i in range(1, 7):
+        key = "SW%d" % i
+        name, typ, grp, on = FUNCTION_SWITCHES.get(key, ("", "NONE", 0, (255, 255, 255)))
+        cs[key] = {
+            "name": q(name),
+            "type": Raw(typ),
+            "group": grp,
+            "start": Raw("START_OFF"),
+            "state": 0,
+            "onColorLuaOverride": Raw("OFF"),
+            "offColorLuaOverride": Raw("OFF"),
+            "onColor": {"r": on[0], "g": on[1], "b": on[2]},
+            "offColor": {"r": 0, "g": 0, "b": 0},
+        }
+    m["customSwitches"] = cs
+    # Group 1 holds the mutually exclusive gain-group buttons. 0 = not
+    # "always on", so all-off is legal and means tuning is inactive.
+    m["cfsGroupOn"] = {1: {"v": 0}, 2: {"v": 0}, 3: {"v": 0}}
+
     m["displayChecklist"] = 1
     m["checklistInteractive"] = 0
     m["disableThrottleWarning"] = 0

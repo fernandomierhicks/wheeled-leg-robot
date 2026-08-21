@@ -211,6 +211,74 @@ mixData:
    speedUp: 0
    speedDown: 0
    name: "Reset"
+ -
+   destCh: 12
+   srcRaw: "SG"
+   carryTrim: 1
+   mixWarn: 0
+   mltpx: ADD
+   delayPrec: 0
+   speedPrec: 0
+   flightModes: 000000000
+   weight: 100
+   offset: 0
+   swtch: "NONE"
+   delayUp: 0
+   delayDown: 0
+   speedUp: 0
+   speedDown: 0
+   name: "TuneG0"
+ -
+   destCh: 13
+   srcRaw: "SH"
+   carryTrim: 1
+   mixWarn: 0
+   mltpx: ADD
+   delayPrec: 0
+   speedPrec: 0
+   flightModes: 000000000
+   weight: 100
+   offset: 0
+   swtch: "NONE"
+   delayUp: 0
+   delayDown: 0
+   speedUp: 0
+   speedDown: 0
+   name: "TuneG1"
+ -
+   destCh: 14
+   srcRaw: "SI"
+   carryTrim: 1
+   mixWarn: 0
+   mltpx: ADD
+   delayPrec: 0
+   speedPrec: 0
+   flightModes: 000000000
+   weight: 100
+   offset: 0
+   swtch: "NONE"
+   delayUp: 0
+   delayDown: 0
+   speedUp: 0
+   speedDown: 0
+   name: "TuneG2"
+ -
+   destCh: 15
+   srcRaw: "SJ"
+   carryTrim: 1
+   mixWarn: 0
+   mltpx: ADD
+   delayPrec: 0
+   speedPrec: 0
+   flightModes: 000000000
+   weight: 100
+   offset: 0
+   swtch: "NONE"
+   delayUp: 0
+   delayDown: 0
+   speedUp: 0
+   speedDown: 0
+   name: "Latch"
 limitData: 
    0: 
       min: 0
@@ -320,6 +388,42 @@ limitData:
       revert: 0
       curve: 0
       name: "RESET"
+   12: 
+      min: 0
+      max: 0
+      ppmCenter: 0
+      offset: 0
+      symetrical: 0
+      revert: 0
+      curve: 0
+      name: "TUNEG0"
+   13: 
+      min: 0
+      max: 0
+      ppmCenter: 0
+      offset: 0
+      symetrical: 0
+      revert: 0
+      curve: 0
+      name: "TUNEG1"
+   14: 
+      min: 0
+      max: 0
+      ppmCenter: 0
+      offset: 0
+      symetrical: 0
+      revert: 0
+      curve: 0
+      name: "TUNEG2"
+   15: 
+      min: 0
+      max: 0
+      ppmCenter: 0
+      offset: 0
+      symetrical: 0
+      revert: 0
+      curve: 0
+      name: "LATCH"
 expoData: 
  -
    mode: 3
@@ -555,6 +659,110 @@ screenData:
                type: Bool
                value: 
                   boolValue: 0
+customSwitches: 
+   SW1: 
+      name: "TUNE G0"
+      type: 2POS
+      group: 1
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 180
+         b: 0
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW2: 
+      name: "TUNE G1"
+      type: 2POS
+      group: 1
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 180
+         b: 0
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW3: 
+      name: "TUNE G2"
+      type: 2POS
+      group: 1
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 180
+         b: 0
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW4: 
+      name: "LATCH"
+      type: TOGGLE
+      group: 0
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 46
+         g: 230
+         b: 138
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW5: 
+      name: ""
+      type: NONE
+      group: 0
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 255
+         b: 255
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW6: 
+      name: ""
+      type: NONE
+      group: 0
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 255
+         b: 255
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+cfsGroupOn: 
+   1: 
+      v: 0
+   2: 
+      v: 0
+   3: 
+      v: 0
 displayChecklist: 1
 checklistInteractive: 0
 disableThrottleWarning: 0
@@ -599,107 +807,3 @@ topbarWidgetWidth:
       val: 1
    5:
       val: 1
-customSwitches: 
-   SW1:
-      name: ""
-      type: GLOBAL
-      group: 0
-      start: START_PREVIOUS
-      state: 1
-      onColorLuaOverride: OFF
-      offColorLuaOverride: OFF
-      onColor: 
-         r: 255
-         g: 255
-         b: 255
-      offColor: 
-         r: 0
-         g: 0
-         b: 0
-   SW2:
-      name: ""
-      type: GLOBAL
-      group: 0
-      start: START_PREVIOUS
-      state: 1
-      onColorLuaOverride: OFF
-      offColorLuaOverride: OFF
-      onColor: 
-         r: 255
-         g: 255
-         b: 255
-      offColor: 
-         r: 0
-         g: 0
-         b: 0
-   SW3:
-      name: ""
-      type: GLOBAL
-      group: 0
-      start: START_PREVIOUS
-      state: 1
-      onColorLuaOverride: OFF
-      offColorLuaOverride: OFF
-      onColor: 
-         r: 255
-         g: 255
-         b: 255
-      offColor: 
-         r: 0
-         g: 0
-         b: 0
-   SW4:
-      name: ""
-      type: GLOBAL
-      group: 0
-      start: START_PREVIOUS
-      state: 1
-      onColorLuaOverride: OFF
-      offColorLuaOverride: OFF
-      onColor: 
-         r: 255
-         g: 255
-         b: 255
-      offColor: 
-         r: 0
-         g: 0
-         b: 0
-   SW5:
-      name: ""
-      type: GLOBAL
-      group: 0
-      start: START_PREVIOUS
-      state: 1
-      onColorLuaOverride: OFF
-      offColorLuaOverride: OFF
-      onColor: 
-         r: 255
-         g: 255
-         b: 255
-      offColor: 
-         r: 0
-         g: 0
-         b: 0
-   SW6:
-      name: ""
-      type: GLOBAL
-      group: 0
-      start: START_PREVIOUS
-      state: 1
-      onColorLuaOverride: OFF
-      offColorLuaOverride: OFF
-      onColor: 
-         r: 255
-         g: 255
-         b: 255
-      offColor: 
-         r: 0
-         g: 0
-         b: 0
-cfsGroupOn: 
-   1:
-      v: 0
-   2:
-      v: 0
-   3:
-      v: 0

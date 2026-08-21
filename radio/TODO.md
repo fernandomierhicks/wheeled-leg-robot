@@ -203,30 +203,20 @@ Small, but be explicit (plan §6):
 
 ---
 
-## TODO — the six RGB push buttons (SG–SL)
+## RGB push buttons
 
-Six backlit buttons under the gimbals, thumb-reachable without leaving the
-sticks. Completely unassigned; CH13–CH16 are reserved for them. Candidates,
-roughly in order of value:
-
-- [ ] **JUMP ARMED** (`jump_enable`), latched, magenta when armed. It defaults
-      to 0 precisely so jump is inert until deliberately enabled — a lit
-      button makes that state visible instead of buried in the Params tab.
-- [ ] **TUNE ENABLE** (`live_tune_multi_en`), latched, amber. "Am I in tune
-      mode?" is currently invisible, which the plan calls the mechanism's
-      biggest weakness.
-- [ ] **LATCH GAINS** (`live_tune_latch`), momentary, green flash. Committing
-      tuned gains currently means walking to the laptop.
-- [ ] **Gain group select**, two buttons. Would give the full LEGACY tuning
-      workflow on hardware *today*, without waiting for the command tunnel.
-- [ ] **ROLL CTRL** (`roll_ctrl_en`), latched, cyan — needs a non-persistent
-      runtime gate first, since the param is persistent.
-- [ ] **State lamp** — mirror the canonical state colour. NOT VERIFIED that
-      EdgeTX 3.0 can drive an individual function-switch LED from arbitrary
-      conditions; `FUNC_RGB_LED` exists and the hardware has the LEDs, but
-      the binding needs checking on the radio before promising it.
-
-Each needs a channel plus firmware to read it.
+- [x] **SG/SH/SI → live-tune group 0/1/2** (CH13–15), mutually exclusive
+      switch group, amber when lit. The lit button is the group indicator.
+- [x] **SJ → commit tuned gains** (CH16), momentary, green.
+- [ ] Confirm on the radio that the exclusive group behaves as expected: press
+      one, the others release; press the lit one again, all off.
+- [ ] SK/SL are free but **all 16 channels are used**. They'd need a channel
+      freed or the command tunnel. Candidates if one comes free: `jump_enable`
+      as a latched magenta "JUMP ARMED" lamp, or `roll_ctrl_en` (needs a
+      non-persistent gate first).
+- [ ] Mirroring robot *state* on the LEDs is still unproven — `FUNC_RGB_LED`
+      exists and `onColorLuaOverride` in `customSwitches` hints Lua can drive
+      them, but the binding has not been checked on the radio.
 
 ## Loose ends, no rush
 - [ ] **Crouch-biased curve on CH3.** There's 30% expo instead. Draw a 5-point

@@ -1106,7 +1106,7 @@ static constexpr uint32_t RESCUE_REBOOT_CHIME_MS = 500;  // blocking pump so the
 
 // ── Live parameter tuning (live_tune.h) ────────────────────────────────────────
 // CH7/CH8 knob -> param mapping, grouped in threes by the CH5/CH6 switch
-// combination. Reachable only with PARAM_LIVE_TUNE_MULTI_EN = 1 (LEGACY); in
+// select bits. Reachable only with PARAM_LIVE_TUNE_MULTI_EN = 1; in
 // the default SIMPLE mode CH5/CH6 are the SD-log and jump switches and live
 // tuning is inactive. See "gain-group select" in radio_update().
 //   group 0: CH5 down, CH6 up   -> LQR pitch/rate (retracted)
@@ -1181,7 +1181,10 @@ float live_tune_value(uint16_t persist_param_id) {
 //               effect as the rescue combo's rising edge, minus its
 //               hold-to-reboot -- a latching switch left down is not the
 //               deliberate gesture that makes hold-to-reboot safe.
-// CH13-CH16: unassigned. Reserved for the six RGB function switches (SG-SL).
+// CH13/14/15: live-tune gain group 0/1/2, one channel each, from a mutually
+//               exclusive RGB button group. None high = tuning inactive.
+//               Gated by PARAM_LIVE_TUNE_MULTI_EN.
+// CH16 > 1990: commit the tuned gains (same one-shot as PARAM_LIVE_TUNE_LATCH).
 // CH6  > 1990: trigger a JUMP from RUNNING (SIMPLE mode), one per rising edge.
 // CH5/CH6 (while RUNNING, LEGACY mode only): debounced switch combination
 //               selects which live-tune gain group CH7/CH8 drive -- see
@@ -1589,9 +1592,8 @@ static void radio_update() {
         }
     }
 
-    // CH5: debounced level. What it *drives* depends on PARAM_LIVE_TUNE_MULTI_EN:
-    //   0 (SIMPLE, default) -> CH5 is the SD-log switch, handled just below.
-    //   1 (LEGACY)          -> CH5 only combines with CH6 for gain-group select.
+    // CH5: debounced level. Always the SD-log switch -- gain-group select moved
+    // to CH13/CH14, so CH5 no longer changes meaning with the tuning mode.
     static constexpr uint8_t CH5_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
     static uint8_t s_ch5_hi_ticks = 0;
     static uint8_t s_ch5_lo_ticks = 0;
@@ -1611,10 +1613,7 @@ static void radio_update() {
     if (s_ch5_hi_ticks >= CH5_DEBOUNCE_TICKS) s_ch5_switch_high = true;
     if (s_ch5_lo_ticks >= CH5_DEBOUNCE_TICKS) s_ch5_switch_high = false;
 
-    // CH6: debounced level, symmetric with CH5's pattern above. What it
-    // *drives* depends on PARAM_LIVE_TUNE_MULTI_EN:
-    //   0 (SIMPLE, default) -> CH6 is the jump trigger, handled just below.
-    //   1 (LEGACY)          -> CH6 only combines with CH5 for gain-group select.
+    // CH6: debounced level. Always the jump trigger, for the same reason.
     static constexpr uint8_t CH6_DEBOUNCE_TICKS = 3;  // ~6 ms @ 500 Hz
     static uint8_t s_ch6_hi_ticks = 0;
     static uint8_t s_ch6_lo_ticks = 0;
@@ -1645,32 +1644,30 @@ static void radio_update() {
     // do with torque live. Once opened, the logger deliberately remains active
     // through RUNNING/JUMPING/STANDING_UP; only final close is deferred until
     // the robot returns to a non-energetic state.
-    if (param_get(PARAM_LIVE_TUNE_MULTI_EN) < 0.5f) {
-        static int8_t s_ch5_log_prev = -1;              // -1 unknown, 0 low, 1 high
-        const int8_t ch5_now = s_ch5_switch_high ? 1 : 0;
-        if (s_ch5_log_prev < 0) {
-            s_ch5_log_prev = ch5_now;                   // seed, never act on it
-        } else if (ch5_now != s_ch5_log_prev) {
-            s_ch5_log_prev = ch5_now;
-            if (ch5_now == 1) {
-                if (g_state.state == STATE_STANDBY || g_state.state == STATE_ESTOP) {
-                    const bool started = sd_logger_start(0);   // 0 = until stopped
-                    forgive_sd_blocking_stall();
-                    if (started) {
-                        g_buzzer.play(LOG_START_CHIRP, 1);
-                        comm_log(LOG_LEVEL_INFO, "Radio: CH5 up -> SD logging STARTED");
-                    } else {
-                        comm_log(LOG_LEVEL_WARN, "Radio: CH5 up -> SD log start FAILED");
-                    }
-                } else {
-                    comm_log(LOG_LEVEL_WARN,
-                             "Radio: CH5 up ignored -- start the log before arming");
-                }
-            } else if (sd_logger_is_active()) {
-                sd_logger_stop();
+    static int8_t s_ch5_log_prev = -1;              // -1 unknown, 0 low, 1 high
+    const int8_t ch5_now = s_ch5_switch_high ? 1 : 0;
+    if (s_ch5_log_prev < 0) {
+        s_ch5_log_prev = ch5_now;                   // seed, never act on it
+    } else if (ch5_now != s_ch5_log_prev) {
+        s_ch5_log_prev = ch5_now;
+        if (ch5_now == 1) {
+            if (g_state.state == STATE_STANDBY || g_state.state == STATE_ESTOP) {
+                const bool started = sd_logger_start(0);   // 0 = until stopped
                 forgive_sd_blocking_stall();
-                comm_log(LOG_LEVEL_INFO, "Radio: CH5 down -> SD logging STOPPED");
+                if (started) {
+                    g_buzzer.play(LOG_START_CHIRP, 1);
+                    comm_log(LOG_LEVEL_INFO, "Radio: CH5 up -> SD logging STARTED");
+                } else {
+                    comm_log(LOG_LEVEL_WARN, "Radio: CH5 up -> SD log start FAILED");
+                }
+            } else {
+                comm_log(LOG_LEVEL_WARN,
+                         "Radio: CH5 up ignored -- start the log before arming");
             }
+        } else if (sd_logger_is_active()) {
+            sd_logger_stop();
+            forgive_sd_blocking_stall();
+            comm_log(LOG_LEVEL_INFO, "Radio: CH5 down -> SD logging STOPPED");
         }
     }
 
@@ -1683,20 +1680,18 @@ static void radio_update() {
     //
     // s_ch6_jump_prev seeds UNKNOWN for the same reason the log switch does:
     // the `true` init above would otherwise read as an edge at boot.
-    if (param_get(PARAM_LIVE_TUNE_MULTI_EN) < 0.5f) {
-        static int8_t s_ch6_jump_prev = -1;             // -1 unknown, 0 low, 1 high
-        const int8_t ch6_now = s_ch6_switch_high ? 1 : 0;
-        if (s_ch6_jump_prev < 0) {
-            s_ch6_jump_prev = ch6_now;                  // seed, never act on it
-        } else if (ch6_now != s_ch6_jump_prev) {
-            s_ch6_jump_prev = ch6_now;
-            if (ch6_now == 1) {
-                if (stateMachine_request_jump()) {
-                    comm_log(LOG_LEVEL_INFO, "Radio: CH6 up -> JUMP");
-                } else {
-                    comm_log(LOG_LEVEL_WARN,
-                             "Radio: CH6 up -> jump refused (state=%d)", (int)g_state.state);
-                }
+    static int8_t s_ch6_jump_prev = -1;             // -1 unknown, 0 low, 1 high
+    const int8_t ch6_now = s_ch6_switch_high ? 1 : 0;
+    if (s_ch6_jump_prev < 0) {
+        s_ch6_jump_prev = ch6_now;                  // seed, never act on it
+    } else if (ch6_now != s_ch6_jump_prev) {
+        s_ch6_jump_prev = ch6_now;
+        if (ch6_now == 1) {
+            if (stateMachine_request_jump()) {
+                comm_log(LOG_LEVEL_INFO, "Radio: CH6 up -> JUMP");
+            } else {
+                comm_log(LOG_LEVEL_WARN,
+                         "Radio: CH6 up -> jump refused (state=%d)", (int)g_state.state);
             }
         }
     }
@@ -1798,23 +1793,70 @@ static void radio_update() {
     }
 
     // ── Live parameter tuning (CH7/CH8 knobs) ──────────────────────────────────
-    // Which switch scheme is in force is PARAM_LIVE_TUNE_MULTI_EN's whole job;
-    // see LIVE_TUNE_SLOTS above for the group table and knob-direction
+    // See LIVE_TUNE_SLOTS above for the group table and knob-direction
     // convention, and live_tune.h for the safety rationale (pickup, latch).
     //
-    // SIMPLE (default): live tuning is OFF. CH5 is spent on SD logging and CH6
-    // on the jump trigger, so there is no switch left to select a group with and
-    // the CH7/CH8 knobs are inert. The groups are not deleted, just unreachable;
-    // flip the param to get them back.
+    // The group is selected by three dedicated channels, CH13/CH14/CH15, one
+    // per gain group, rather than by the old CH5/CH6 combination. That
+    // combination cost a tuning session both SD logging and the jump trigger,
+    // which made tuning bench-only by construction. On their own channels
+    // nothing is given up, and a tuning session can be logged -- which is
+    // exactly the session you most want a log of.
     //
-    // LEGACY: the original three-group combination scheme, and the only mode in
-    // which CH5/CH6 mean gain group rather than log/jump. Bench-only by nature —
-    // a tuning session gives up radio logging and jumping to get the knobs.
+    // One channel per group rather than two encoded bits, because the radio's
+    // RGB function switches support mutually-exclusive groups: press one and
+    // the others release, and the lit button IS the group indicator. The plan
+    // calls the invisibility of live-tune state its biggest weakness, and this
+    // makes it a lamp on the front of the transmitter.
+    //
+    //   none high -> tuning inactive (the resting state)
+    //   CH13      -> group 0     CH14 -> group 1     CH15 -> group 2
+    //
+    // More than one high should be impossible with an exclusive switch group,
+    // but if it happens the lowest wins deterministically rather than the
+    // selection flickering.
+    //
+    // PARAM_LIVE_TUNE_MULTI_EN remains the master gate. It defaults to 0, so
+    // the knobs are inert until you deliberately opt in to a tuning session --
+    // a knocked button cannot start moving gains on its own. Two deliberate
+    // acts, one persistent and one physical.
+    static constexpr uint8_t LT_SEL_DEBOUNCE_TICKS = 3;
+    struct LevelDebounce { uint8_t hi; uint8_t lo; bool level; };
+    static LevelDebounce s_lt_sel[3] = {};
+
+    auto debounce_level = [](LevelDebounce& d, bool raw_hi, bool link_alive) {
+        if (link_alive && raw_hi) {
+            if (d.hi < LT_SEL_DEBOUNCE_TICKS) d.hi++;
+            d.lo = 0;
+        } else if (link_alive) {
+            if (d.lo < LT_SEL_DEBOUNCE_TICKS) d.lo++;
+            d.hi = 0;
+        } else {
+            // Link loss must not read as "group selected". Fall back to
+            // inactive, which drops every slot's pickup on the next pass.
+            d.hi = 0;
+            d.lo = LT_SEL_DEBOUNCE_TICKS;
+        }
+        if (d.hi >= LT_SEL_DEBOUNCE_TICKS) d.level = true;
+        if (d.lo >= LT_SEL_DEBOUNCE_TICKS) d.level = false;
+    };
+    for (uint8_t g = 0; g < 3; g++)
+        debounce_level(s_lt_sel[g], g_rc.channel((uint8_t)(13 + g)) > 1990, alive);
+
     int8_t live_tune_group = -1;
     if (param_get(PARAM_LIVE_TUNE_MULTI_EN) >= 0.5f) {
-        if (!s_ch5_switch_high && s_ch6_switch_high)       live_tune_group = 0;
-        else if (s_ch5_switch_high && !s_ch6_switch_high)  live_tune_group = 1;
-        else if (!s_ch5_switch_high && !s_ch6_switch_high) live_tune_group = 2;
+        for (uint8_t g = 0; g < 3; g++) {
+            if (s_lt_sel[g].level) { live_tune_group = (int8_t)g; break; }
+        }
+    }
+    static int8_t s_lt_group_prev = -1;
+    if (live_tune_group != s_lt_group_prev) {
+        s_lt_group_prev = live_tune_group;
+        if (live_tune_group >= 0)
+            comm_log(LOG_LEVEL_INFO, "Live-tune group %d selected (CH%d)",
+                     (int)live_tune_group, 13 + (int)live_tune_group);
+        else
+            comm_log(LOG_LEVEL_INFO, "Live-tune inactive (no group selected)");
     }
     bool live_tune_active = (g_state.state == STATE_RUNNING) && (live_tune_group >= 0);
     static constexpr float LIVE_TUNE_PICKUP_EPS = 0.01f;
@@ -1839,6 +1881,17 @@ static void radio_update() {
     // real, persistent param. A slot that hasn't picked up yet is skipped, not
     // latched at whatever the knob happens to read. Serviced regardless of
     // live_tune_active so the command flag is always consumed and reset.
+    // CH16 rising edge is a physical "commit these gains", so latching no
+    // longer means walking back to the GUI mid-session. Edge-triggered with the
+    // same release-and-retry gate as CH11/CH12: the button may rest either way
+    // and a reconnect must not look like a fresh press. It simply sets the same
+    // one-shot flag the GUI writes, so there is one latch path, not two.
+    static RadioEdge s_latch_sw = {};
+    if (edge_update(s_latch_sw, g_rc.channel(16) > 1990, alive)) {
+        comm_log(LOG_LEVEL_INFO, "Radio: CH16 -> live-tune latch requested");
+        param_force_set(PARAM_LIVE_TUNE_LATCH, 1.0f);
+    }
+
     if (param_get(PARAM_LIVE_TUNE_LATCH) >= 0.5f) {
         if (live_tune_active) {
             bool any = false;
@@ -1854,7 +1907,8 @@ static void radio_update() {
             if (!any) comm_log(LOG_LEVEL_WARN, "Live-tune latch ignored: no slot has picked up yet");
         } else {
             comm_log(LOG_LEVEL_WARN,
-                     "Live-tune latch ignored: enter live-tune mode first (RUNNING + calib switch up)");
+                     "Live-tune latch ignored: enter live-tune mode first "
+                     "(RUNNING, live_tune_multi_en=1, and a group selected on CH13-CH15)");
         }
         param_force_set(PARAM_LIVE_TUNE_LATCH, 0.0f);
     }

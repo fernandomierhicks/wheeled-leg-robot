@@ -32,13 +32,19 @@ configuration** — which is what the model's power-on switch warning enforces.
 | 4 | Left stick ↔ | gimbal | Yaw rate |
 | 5 | **SB** | top row, 2nd from left | SD logging (robot + radio) |
 | 6 | **SF** | momentary shoulder | Jump (rising edge) |
-| 7 | **S1** | left dial | Live tune A |
-| 8 | **S2** | right dial | Live tune B |
+| 7 | **S1** | left dial | Live tune knob A |
+| 8 | **S2** | right dial | Live tune knob B |
 | 9 | **SC** | top row, right of dials | Speed profile 1–3 |
 | 10 | **SD** | top row, rightmost | ARM |
 | 11 | **SA** | top row, leftmost | Calibration request |
 | 12 | **SE** | latching shoulder | Reset fault / clear ESTOP |
-| 13–16 | — | — | *Reserved for the six RGB buttons (SG–SL) — TODO* |
+| 13 | **SG** | RGB button 1 | Live tune group 0 |
+| 14 | **SH** | RGB button 2 | Live tune group 1 |
+| 15 | **SI** | RGB button 3 | Live tune group 2 |
+| 16 | **SJ** | RGB button 4 | Commit tuned gains |
+
+All 16 channels are now in use. Buttons 5 and 6 (SK/SL) are free but have no
+channel left — they'd need a channel freed or the command tunnel.
 
 Inputs are declared in the radio's native RETA order (I0=Rud, I1=Ele, I2=Thr,
 I3=Ail) so the Inputs screen looks like every other model on this transmitter.
@@ -100,6 +106,34 @@ forgot.
 
 Both stick combos remain as fallbacks for when the transmitter is not the
 arming authority.
+
+## Live tuning
+
+Knobs S1/S2 drive two slots of whichever gain group is selected. Group select
+is on the three RGB buttons, in a **mutually exclusive** switch group: press
+one and the others release, so **the lit button is the group indicator**. None
+lit = tuning inactive.
+
+That placement matters. Group select used to live on CH5/CH6, which meant a
+tuning session gave up SD logging *and* the jump trigger — a tuning session is
+exactly the one you most want a log of. On their own channels nothing is
+traded away.
+
+`live_tune_multi_en` is still the master gate and still defaults to 0, so the
+knobs are inert until you deliberately opt into a tuning session. A knocked
+button cannot start moving gains on its own: two deliberate acts, one
+persistent and one physical.
+
+**Button 4 commits.** It fires the same one-shot as writing
+`live_tune_latch` from the GUI, so latching tuned gains no longer means walking
+back to the laptop. Only slots that have *picked up* are latched — a knob that
+was never swept through the current value is skipped, not written at whatever
+it happened to be reading.
+
+The HUD is the instrument for all of this: it reads telemetry and can show the
+active group, both knob positions, and whether each slot has picked up. That
+last one is invisible today, which the plan calls the mechanism's biggest
+weakness.
 
 ## What the radio does *not* control
 

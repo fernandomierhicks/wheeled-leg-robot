@@ -49,6 +49,10 @@ EXPECTED_CHANNELS = {
     9: "ARM",
     10: "calibration request",
     11: "fault reset",
+    12: "live-tune group 0",
+    13: "live-tune group 1",
+    14: "live-tune group 2",
+    15: "live-tune latch",
 }
 
 THEME_COLORS = [
@@ -160,8 +164,14 @@ def check_one_model(path, m):
                 bad("%s: CH%d uses input %s but no expoData defines chn %d",
                     path.name, ch + 1, src, idx)
         elif src in FUNCTION_SWITCHES:
-            note("%s: CH%d uses function switch %s -- confirm it is assigned "
-                 "in Radio > Hardware", path.name, ch + 1, src)
+            # Function switches need a per-model type; NONE means the button
+            # exists but drives nothing, so the channel would sit dead.
+            cfg = (m.get("customSwitches") or {}).get(
+                "SW%d" % (sorted(FUNCTION_SWITCHES).index(src) + 1), {})
+            if cfg.get("type", "NONE") in ("NONE", "GLOBAL"):
+                bad("%s: CH%d reads function switch %s, but its customSwitches "
+                    "type is %r -- the button would drive nothing",
+                    path.name, ch + 1, src, cfg.get("type", "NONE"))
         elif src not in SWITCHES | POTS | STICKS:
             bad("%s: CH%d source %r is not on a TX15", path.name, ch + 1, src)
 
