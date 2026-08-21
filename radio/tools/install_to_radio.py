@@ -224,20 +224,27 @@ def main():
               % (args.model_number, model_rename))
 
     # The radio keeps the selected model in RAM and writes it back out on
-    # change or power-off. Overwriting the file underneath it means the radio
-    # silently clobbers whatever we just installed -- which looks exactly like
-    # the install having failed, and costs an hour to work out.
+    # change or power-off, so overwriting THAT FILE underneath it means the
+    # radio silently clobbers what was just installed -- indistinguishable
+    # from the install having failed.
+    #
+    # Only the model .yml is affected. Everything else in MODELS/ (the
+    # checklist .txt files) is read on demand and is safe to replace, so skip
+    # just the one file rather than refusing the whole run.
     current = info.get("currModelFilename", "")
-    if current == model_rename and "MODELS" in trees:
-        print("\nThe radio currently has %s (%r) loaded, and will write its"
+    skip_model = (current == model_rename and "MODELS" in trees)
+    if skip_model:
+        print("\nNote: the radio has %s (%r) loaded, so it would write its"
               % (model_rename, our_name))
-        print("in-RAM copy back over anything installed now.")
-        print("\nOn the radio: select a different model first (Model select ->")
-        print("any other model), then re-run this. Or install everything else")
-        print("with:  --only THEMES WIDGETS SOUNDS IMAGES")
-        return 1
+        print("in-RAM copy back over a new one. Skipping just that file;")
+        print("everything else installs normally.")
+        print("To update the model too: select a different model on the radio,")
+        print("then re-run.")
 
     actions = plan_copy(root, trees, model_rename)
+    if skip_model:
+        actions = [a for a in actions
+                   if a[1].name.lower() != model_rename.lower()]
     new = [a for a in actions if a[2] == "new"]
     over = [a for a in actions if a[2] == "overwrite"]
     same = [a for a in actions if a[2] == "same"]

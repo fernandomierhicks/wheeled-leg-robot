@@ -37,6 +37,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 BASE = Path(__file__).resolve().parent / "model_base.yml"
 OUT = REPO / "radio" / "sdcard" / "MODELS" / "model90.yml"
+MODELS_DIR = OUT.parent
+CHECKLIST_SRC = MODELS_DIR / "WLR ROBOT.txt"
 
 MODEL_NAME = "WLR ROBOT"
 
@@ -442,6 +444,48 @@ def render():
     return text
 
 
+def checklist_aliases():
+    """Every filename EdgeTX might look for the checklist under.
+
+    view_text.cpp's getModelNotesFile() tries, in order: the model name, the
+    model name with spaces replaced by underscores, the model FILE name with
+    .yml swapped for .txt, and that with underscores. Which of those the
+    boot-time gate actually uses is not something I could establish for
+    EdgeTX 3.0 -- the gate calls modelHasNotes(), whose definition is not in
+    the 2.12 tree I can read.
+
+    So rather than guess, ship all of them. They are 3.5 kB each and copied
+    from one source at build time, so they cannot drift apart.
+    """
+    stem = OUT.stem                     # "model90"
+    names = [MODEL_NAME + ".txt",
+             MODEL_NAME.replace(" ", "_") + ".txt",
+             stem + ".txt"]
+    # Preserve order, drop duplicates.
+    seen, out = set(), []
+    for n in names:
+        if n not in seen:
+            seen.add(n)
+            out.append(MODELS_DIR / n)
+    return out
+
+
+def sync_checklist(check_only=False):
+    if not CHECKLIST_SRC.exists():
+        sys.exit("checklist source %s is missing" % CHECKLIST_SRC)
+    body = CHECKLIST_SRC.read_text(encoding="utf-8")
+    stale = []
+    for path in checklist_aliases():
+        if path == CHECKLIST_SRC:
+            continue
+        if check_only:
+            if not path.exists() or path.read_text(encoding="utf-8") != body:
+                stale.append(path.name)
+        else:
+            path.write_text(body, encoding="utf-8", newline="\n")
+    return stale
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
@@ -449,16 +493,25 @@ def main():
 
     text = render()
     if args.check:
+        stale = sync_checklist(check_only=True)
         if not OUT.exists() or OUT.read_text(encoding="utf-8") != text:
             print("%s is stale -- rerun build_model.py" % OUT, file=sys.stderr)
+            return 1
+        if stale:
+            print("checklist copies stale: %s -- rerun build_model.py"
+                  % ", ".join(stale), file=sys.stderr)
             return 1
         print("%s up to date" % OUT.name)
         return 0
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(text, encoding="utf-8", newline="\n")
+    sync_checklist()
     print("wrote %s (%d bytes, %d mixes, %d special functions)"
           % (OUT.relative_to(REPO), len(text), len(MIXES), len(CUSTOM_FN)))
+    print("checklist under %d names: %s"
+          % (len(checklist_aliases()),
+             ", ".join(p.name for p in checklist_aliases())))
     return 0
 
 
