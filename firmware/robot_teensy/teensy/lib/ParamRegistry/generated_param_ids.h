@@ -193,3 +193,8 @@
 #define PARAM_LEAN_MIN_MS                          0x0551
 #define PARAM_LEAN_CMD_RAD                         0x0552
 #define PARAM_LEAN_AUTHORITY                       0x0553
+#define PARAM_CRSF_TX_FRAMES                       0x0554
+#define PARAM_CRSF_TX_DROPS                        0x0555
+#define PARAM_CRSF_UP_LQ                           0x0556
+#define PARAM_CRSF_UP_RSSI_DBM                     0x0557
+#define PARAM_CRSF_CRC_ERRORS                      0x0558

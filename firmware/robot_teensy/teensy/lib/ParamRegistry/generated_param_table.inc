@@ -183,3 +183,8 @@
 {.id = PARAM_LEAN_MIN_MS, .group_id = GROUP_CONTROL, .name = "lean_min_ms", .value = 0.15f, .min_val = 0.0f, .max_val = 1.0f, .flags = PARAM_FLAG_PERSISTENT, .on_change = nullptr},
 {.id = PARAM_LEAN_CMD_RAD, .group_id = GROUP_CONTROL, .name = "lean_cmd_rad", .value = 0.0f, .min_val = -1.0f, .max_val = 1.0f, .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
 {.id = PARAM_LEAN_AUTHORITY, .group_id = GROUP_CONTROL, .name = "lean_authority", .value = 0.0f, .min_val = 0.0f, .max_val = 1.0f, .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+{.id = PARAM_CRSF_TX_FRAMES, .group_id = GROUP_COMMAND, .name = "crsf_tx_frames", .value = 0.0f, .min_val = 0.0f, .max_val = 1e+09f, .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+{.id = PARAM_CRSF_TX_DROPS, .group_id = GROUP_COMMAND, .name = "crsf_tx_drops", .value = 0.0f, .min_val = 0.0f, .max_val = 1e+09f, .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+{.id = PARAM_CRSF_UP_LQ, .group_id = GROUP_COMMAND, .name = "crsf_up_lq", .value = 0.0f, .min_val = 0.0f, .max_val = 100.0f, .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+{.id = PARAM_CRSF_UP_RSSI_DBM, .group_id = GROUP_COMMAND, .name = "crsf_up_rssi_dbm", .value = 0.0f, .min_val = -130.0f, .max_val = 0.0f, .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},
+{.id = PARAM_CRSF_CRC_ERRORS, .group_id = GROUP_COMMAND, .name = "crsf_crc_errors", .value = 0.0f, .min_val = 0.0f, .max_val = 1e+09f, .flags = PARAM_FLAG_READONLY|PARAM_FLAG_COMMAND, .on_change = nullptr},

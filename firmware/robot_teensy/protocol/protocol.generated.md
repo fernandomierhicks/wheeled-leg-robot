@@ -240,3 +240,8 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0551` | `PARAM_LEAN_MIN_MS` | `lean_min_ms` | 0.15 | 0 … 1 | persistent |
 | `0x0552` | `PARAM_LEAN_CMD_RAD` | `lean_cmd_rad` | 0 | -1 … 1 | readonly, command |
 | `0x0553` | `PARAM_LEAN_AUTHORITY` | `lean_authority` | 0 | 0 … 1 | readonly, command |
+| `0x0554` | `PARAM_CRSF_TX_FRAMES` | `crsf_tx_frames` | 0 | 0 … 1e+09 | readonly, command |
+| `0x0555` | `PARAM_CRSF_TX_DROPS` | `crsf_tx_drops` | 0 | 0 … 1e+09 | readonly, command |
+| `0x0556` | `PARAM_CRSF_UP_LQ` | `crsf_up_lq` | 0 | 0 … 100 | readonly, command |
+| `0x0557` | `PARAM_CRSF_UP_RSSI_DBM` | `crsf_up_rssi_dbm` | 0 | -130 … 0 | readonly, command |
+| `0x0558` | `PARAM_CRSF_CRC_ERRORS` | `crsf_crc_errors` | 0 | 0 … 1e+09 | readonly, command |

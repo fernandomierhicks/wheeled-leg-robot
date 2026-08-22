@@ -979,6 +979,44 @@ static void crsf_telemetry_tick() {
     s.vel_glitch_count = wm_L.vel_glitch_count + wm_R.vel_glitch_count;
 
     g_rc_telem.tick(g_rc, millis(), s);
+
+    // ── Link diagnostics ─────────────────────────────────────────────────────
+    // The emitter above is fire-and-forget: it writes into a UART FIFO and has
+    // no way of knowing whether a receiver is on the other end. Without these
+    // mirrors "the radio shows no telemetry" is indistinguishable between a
+    // firmware that never emitted, a TX wire that goes nowhere, and a radio
+    // that simply has not discovered its sensors — three problems with three
+    // unrelated fixes. Read-only params rather than a periodic log so they cost
+    // nothing when nobody is looking.
+    //
+    // 10 Hz, not every tick: these are for a human reading the Params tab, and
+    // five registry writes at 500 Hz would be 2500 writes/s of pure diagnostics.
+    static uint32_t s_crsf_diag_ms = 0;
+    if (millis() - s_crsf_diag_ms >= 100) {
+        s_crsf_diag_ms = millis();
+        param_force_set(PARAM_CRSF_TX_FRAMES,  (float)g_rc.tx_frames());
+        param_force_set(PARAM_CRSF_TX_DROPS,   (float)g_rc.tx_drops());
+        param_force_set(PARAM_CRSF_CRC_ERRORS, (float)g_rc.crc_errors());
+        // Zero until a LINK_STATISTICS frame has actually been parsed, rather
+        // than a confident-looking 0 % / 0 dBm from an uninitialised struct.
+        if (g_rc.have_link_stats()) {
+            param_force_set(PARAM_CRSF_UP_LQ, (float)g_rc.link().up_lq);
+            // The wire carries RSSI as a positive magnitude; dBm is negative.
+            param_force_set(PARAM_CRSF_UP_RSSI_DBM, -(float)g_rc.link().up_rssi_1);
+        }
+    }
+
+    // One-shot, and the single most diagnostic line in the whole link: if it
+    // never appears the scheduler is not running, and if it does the Teensy is
+    // definitively putting bytes on pin 17 — which moves the search downstream.
+    static bool s_crsf_tx_logged = false;
+    if (!s_crsf_tx_logged && g_rc.tx_frames() > 0) {
+        s_crsf_tx_logged = true;
+        comm_log(LOG_LEVEL_INFO,
+                 "CRSF telem: first frame sent (Serial4 TX pin 17). "
+                 "If the radio still shows no sensors, the break is downstream "
+                 "of the Teensy — wire, receiver telemetry ratio, or sensor discovery.");
+    }
 }
 
 // ── LED ───────────────────────────────────────────────────────────────────────

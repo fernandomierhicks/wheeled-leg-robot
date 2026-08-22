@@ -2574,6 +2574,76 @@
         "command"
       ],
       "description": "Read-only fraction of the requested lean the leg geometry can deliver at the current ride height, min(t,1-t)*2. Zero at full crouch and full extension, where the roll controller's headroom clamp silently removes all differential travel. Exists so the operator can be told why the robot is not leaning."
+    },
+    {
+      "symbol": "PARAM_CRSF_TX_FRAMES",
+      "id": 1364,
+      "group": "GROUP_COMMAND",
+      "name": "crsf_tx_frames",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1000000000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Read-only count of CRSF telemetry frames the Teensy has handed to the Serial4 TX FIFO since boot. Increments ~40/s whenever the scheduler runs (CrsfTelem.h, one frame per 25 ms slot) and is independent of whether anything downstream receives them: it proves the firmware is writing bytes to pin 17, nothing more. Stuck at 0 means the emitter is not running; climbing while the radio shows no sensors means the break is in the wire, the receiver, or the radio's telemetry setup."
+    },
+    {
+      "symbol": "PARAM_CRSF_TX_DROPS",
+      "id": 1365,
+      "group": "GROUP_COMMAND",
+      "name": "crsf_tx_drops",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1000000000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Read-only count of CRSF telemetry frames dropped because Serial4's TX FIFO could not take the whole frame. Crsf::send() drops rather than partially writing, because a half-frame desyncs the receiver's parser while dropping telemetry costs nothing. Should stay at 0: the largest frame is 21 bytes against a FIFO drained at 420000 baud every 25 ms. A rising count means the UART is not draining -- TX pin misconfigured, or a receiver holding the line."
+    },
+    {
+      "symbol": "PARAM_CRSF_UP_LQ",
+      "id": 1366,
+      "group": "GROUP_COMMAND",
+      "name": "crsf_up_lq",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 100.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Read-only uplink link quality in percent, from the receiver's LINK_STATISTICS (0x14) frame. This is the receiver telling the robot how well it is hearing the transmitter, so a non-zero value proves the RX->Teensy direction is alive and the receiver is a real CRSF talker. Also feeds the liveness rule: alive() goes false when this reads 0 while frames still arrive (transmitter gone, receiver still chattering). Reads 0 when no LINK_STATISTICS frame has ever been parsed."
+    },
+    {
+      "symbol": "PARAM_CRSF_UP_RSSI_DBM",
+      "id": 1367,
+      "group": "GROUP_COMMAND",
+      "name": "crsf_up_rssi_dbm",
+      "default": 0.0,
+      "min": -130.0,
+      "max": 0.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Read-only uplink RSSI in dBm (negative; antenna 1) from the receiver's LINK_STATISTICS (0x14) frame. The wire carries it as a positive magnitude and the firmware negates it. Diagnostic only -- nothing in the control path reads it. Reads 0 when no LINK_STATISTICS frame has ever been parsed, which is indistinguishable from a genuine 0 dBm and is not a case that occurs in practice."
+    },
+    {
+      "symbol": "PARAM_CRSF_CRC_ERRORS",
+      "id": 1368,
+      "group": "GROUP_COMMAND",
+      "name": "crsf_crc_errors",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1000000000.0,
+      "flags": [
+        "readonly",
+        "command"
+      ],
+      "description": "Read-only count of received CRSF frames that failed the CRC-8 (poly 0xD5) check since boot. Bytes are arriving but arriving corrupt: a steady climb points at a baud mismatch, a marginal or unshielded TX/RX wire, or a ground problem, none of which the alive()/channel() failsafe can distinguish from a healthy link on its own. Should stay at 0 on a good link."
     }
   ]
 }
