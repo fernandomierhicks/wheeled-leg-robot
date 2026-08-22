@@ -776,6 +776,25 @@ checklistInteractive: 0
 disableThrottleWarning: 0
 thrTraceSrc: Thr
 view: 0
+radioThemesDisabled: GLOBAL
+radioGFDisabled: GLOBAL
+radioTrainerDisabled: GLOBAL
+modelHeliDisabled: GLOBAL
+modelFMDisabled: GLOBAL
+modelCurvesDisabled: GLOBAL
+modelGVDisabled: GLOBAL
+modelLSDisabled: GLOBAL
+modelSFDisabled: GLOBAL
+modelCustomScriptsDisabled: GLOBAL
+modelTelemetryDisabled: GLOBAL
+telemetryProtocol: 0
+ignoreSensorIds: 0
+showInstanceIds: 0
+disableTelemetryWarning: 0
+rssiSource: none
+rfAlarms: 
+   warning: 45
+   critical: 42
 topbarData: 
    zones: 
       4:

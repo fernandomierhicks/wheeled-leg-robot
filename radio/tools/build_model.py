@@ -389,6 +389,39 @@ def build():
     m["thrTraceSrc"] = Raw("Thr")
     m["view"] = 0
 
+    # Per-model menu visibility. GLOBAL means "follow the radio-wide setting",
+    # which is what a radio-created model contains for every one of these.
+    #
+    # These are emitted explicitly because omitting them is NOT neutral. This
+    # file previously ended at topbarWidgetWidth and declared none of them; the
+    # radio loaded it, and when EdgeTX next saved the model it wrote back
+    # modelTelemetryDisabled: ON while every other flag came out GLOBAL. That
+    # hid the model's entire Telemetry menu -- so the sensor list could not be
+    # reached, "Discover new sensors" did not exist, no sensors were ever
+    # created, and the HUD sat on "NO ROBOT TELEMETRY" with a perfectly healthy
+    # link. The Teensy was emitting 39 frames/s the whole time.
+    #
+    # The lesson generalises past this one field: a key we do not write is not
+    # a key set to zero, it is a key set to whatever that build of EdgeTX
+    # happened to leave in the struct. Anything whose wrong value silently
+    # removes functionality gets written explicitly, not left to chance.
+    for _flag in ("radioThemesDisabled", "radioGFDisabled", "radioTrainerDisabled",
+                  "modelHeliDisabled", "modelFMDisabled", "modelCurvesDisabled",
+                  "modelGVDisabled", "modelLSDisabled", "modelSFDisabled",
+                  "modelCustomScriptsDisabled", "modelTelemetryDisabled"):
+        m[_flag] = Raw("GLOBAL")
+
+    # Telemetry basics, same reasoning. rssiSource/rfAlarms are the RSSI-alarm
+    # thresholds a radio-created model ships with; telemetryProtocol 0 is the
+    # default for a CRSF module, and ignoreSensorIds 0 lets discovery add every
+    # sensor the robot emits rather than filtering by instance.
+    m["telemetryProtocol"] = 0
+    m["ignoreSensorIds"] = 0
+    m["showInstanceIds"] = 0
+    m["disableTelemetryWarning"] = 0
+    m["rssiSource"] = Raw("none")
+    m["rfAlarms"] = {"warning": 45, "critical": 42}
+
     return m
 
 
