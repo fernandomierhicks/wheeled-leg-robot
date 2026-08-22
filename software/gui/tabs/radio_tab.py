@@ -9,6 +9,11 @@ from PyQt6.QtWidgets import (
 from .telemetry_bus import TelemetryBus
 from .theme import BG, BORDER, DIM, GREEN, RED, SURFACE, TEXT
 
+# Firmware mirrors CH1–CH14 only: TelemetryPayload.ibus_ch[] is sized by the
+# payload, not by CRSF's 16 (main.cpp, RC_MIRROR_CH). CH15 (coordinated-turn
+# lean) and CH16 are live in firmware but never reach the GUI — watch those on
+# the transmitter's own Outputs screen, which shows all 16. See
+# firmware/robot_teensy/radio_channels.md → "Where to watch these channels".
 NUM_CH = 14
 CH_MIN = 1000
 CH_MAX = 2000
@@ -22,12 +27,28 @@ _COLORS = [
     "#ffd43b", "#63e6be",
 ]
 
-_CH_NAMES = [
-    "CH1  Ail", "CH2  Ele", "CH3  Thr", "CH4  Rud",
-    "CH5  SwA", "CH6  SwB", "CH7  SwC", "CH8  SwD",
-    "CH9",      "CH10",     "CH11",     "CH12",
-    "CH13",     "CH14",
+# (channel, TX15 control, short function, tooltip) — the control column is the
+# name the *radio* uses on its Inputs/Outputs screens, so a reading here can be
+# cross-checked against the transmitter without a translation step. Keep in
+# sync with radio_channels.md and radio/CHANNELS.md.
+_CH_INFO = [
+    ("CH1",  "Ail",  "Roll",        "Right stick ↔ — roll / lean setpoint, × the profile's roll_max. Only acts when roll_ctrl_en=1 in RUNNING."),
+    ("CH2",  "Ele",  "Velocity",    "Right stick ↕ — forward velocity command, × the profile's vel_max."),
+    ("CH3",  "Thr",  "Hip height",  "Left stick ↕ — hip height as t ∈ [0,1], slewed by hip_cmd_rate_lim. The non-centring stick: leg height is a held pose."),
+    ("CH4",  "Rud",  "Yaw rate",    "Left stick ↔ — yaw rate command, × the profile's yaw_max. Inverted in firmware so stick-left yaws left."),
+    ("CH5",  "SB",   "SD log",      "Top row, 2nd from left. Edge-triggered: high starts recording, low stops. A start is refused outside STANDBY/ESTOP, but recording continues through RUNNING."),
+    ("CH6",  "SF",   "Jump",        "Momentary shoulder. Rising edge > 1990 µs requests STATE_JUMPING — one jump per edge. Needs RUNNING and jump_enable=1 (default 0)."),
+    ("CH7",  "S1",   "Tune A",      "Left dial — live-tune slot 0 of the active gain group. Inert unless live_tune_multi_en=1 and a group button is lit."),
+    ("CH8",  "S2",   "Tune B",      "Right dial — live-tune slot 1 of the active gain group. Inert unless live_tune_multi_en=1 and a group button is lit."),
+    ("CH9",  "SC",   "Profile",     "Top row, right of the dials. < 1333 = profile 1, 1333–1667 = profile 2, > 1667 = profile 3. Selects vel_max, yaw_max, torque_lim and roll_max."),
+    ("CH10", "SD",   "ARM",         "Top row, rightmost. Level-based: > 1990 µs arms into RUNNING (requires calibration); drop disarms to STANDBY. Reads 0 on link loss, so a dead radio can never look armed."),
+    ("CH11", "SA",   "Calibrate",   "Top row, leftmost. Rising edge requests CALIBRATION from STANDBY; re-trigger cancels a radio-owned calibration through DISARMING. 1 s lockout, release required between edges."),
+    ("CH12", "SE",   "Reset fault", "Latching shoulder. Rising edge in ESTOP: full reset to STARTUP, clearing fault_code and re-running the startup checks. In STANDBY: beep only. Never armed with torque live."),
+    ("CH13", "SGHI", "Tune group",  "RGB buttons 1–3, mutually exclusive, encoded as levels on one channel: ~1500 µs none, 1660 group 0, 1830 group 1, 2000 group 2. The lit button is the group indicator."),
+    ("CH14", "SJ",   "Latch gains", "RGB button 4. Rising edge fires the same one-shot as writing live_tune_latch from the Params tab. Only picked-up slots are committed."),
 ]
+
+_CH_NAMES = [f"{ch:<5}{sw:<5}{fn}" for ch, sw, fn, _ in _CH_INFO]
 
 
 class RadioTab(QWidget):
@@ -61,7 +82,7 @@ class RadioTab(QWidget):
             curve = self._plot.plot(
                 list(self._bufs[i]),
                 pen=pg.mkPen(_COLORS[i], width=1.2),
-                name=f"CH{i + 1}",
+                name=f"{_CH_INFO[i][0]} {_CH_INFO[i][2]}",
             )
             self._curves.append(curve)
 
@@ -97,8 +118,9 @@ class RadioTab(QWidget):
             name_lbl.setStyleSheet(
                 f"color: {_COLORS[i]}; font-size: 10px; font-family: Consolas;"
             )
-            name_lbl.setFixedWidth(80)
-            name_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            name_lbl.setFixedWidth(148)
+            name_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            name_lbl.setToolTip(_CH_INFO[i][3])
 
             bar = QProgressBar()
             bar.setRange(CH_MIN, CH_MAX)
@@ -126,13 +148,28 @@ class RadioTab(QWidget):
             self._bars.append(bar)
             self._val_lbls.append(val_lbl)
 
+        # CH15/CH16 exist in firmware but not in the telemetry mirror. Say so
+        # here rather than leaving the list looking complete at 14.
+        note_lbl = QLabel(
+            "CH15 SK   Turn lean\nCH16 —    spare\nnot mirrored — read them on the radio's Outputs screen"
+        )
+        note_lbl.setStyleSheet(f"color: {DIM}; font-size: 9px; font-family: Consolas;")
+        note_lbl.setToolTip(
+            "TelemetryPayload.ibus_ch[] carries CH1–CH14 only (main.cpp, RC_MIRROR_CH).\n"
+            "CH15 drives the coordinated-turn lean; CH16 is spare. The transmitter's\n"
+            "own Outputs screen shows all 16 channels live, so it is the instrument\n"
+            "for verifying these two."
+        )
+        bars_layout.addSpacing(8)
+        bars_layout.addWidget(note_lbl)
+
         bars_layout.addStretch()
 
         # ── Outer splitter ─────────────────────────────────────────────────────
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._plot)
         splitter.addWidget(bars_widget)
-        splitter.setSizes([900, 280])
+        splitter.setSizes([820, 360])
         splitter.setHandleWidth(5)
         splitter.setStyleSheet(f"QSplitter::handle {{ background: {BORDER}; }}")
 

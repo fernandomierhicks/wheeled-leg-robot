@@ -30,8 +30,8 @@ boot. Set the receiver's own failsafe to **no pulses**, never "hold".
 | C2  | Pitch stick        | Forward velocity     | 1000–2000 → −1…+1 × `RADIO_VEL_MAX` → `PARAM_V_CMD_MS`   |
 | C3  | Throttle stick     | Hip height / angle   | 1000–2000 → 0…1 → `PARAM_RADIO_HIP_CMD`                   |
 | C4  | Rudder stick       | Yaw rate             | 1000–2000 → −1…+1 × `RADIO_YAW_MAX` → `PARAM_OMEGA_CMD_RDS` |
-| C5  | SB (top row, 2nd from left) | **SD logging** | **Up = start recording, down = stop.** Edge-triggered. A start is refused outside STANDBY/ESTOP (`"CH5 up ignored -- start the log before arming"`) because opening a log preallocates and blocks ~96 ms — but once started, **recording continues through RUNNING**, which is the whole point. Confirmed by a single G5 chirp, so check `buzzer_volume` — there is no LED cue. C5's level no longer gates arming. *(LEGACY mode: gain-group select with C6, and no SD-log function.)* |
-| C6  | SF (momentary shoulder) | **Jump** | Rising edge > 1990 requests `STATE_JUMPING`. **One jump per edge** — drop C6 and raise it again for another; holding it up does not hop repeatedly. Refused unless the robot is in RUNNING *and* `jump_enable = 1` (default **0**, so this is inert until you deliberately enable it). *(LEGACY mode: gain-group select with C5, and no jump function.)* |
+| C5  | SB (top row, 2nd from left) | **SD logging** | **Up = start recording, down = stop.** Edge-triggered. A start is refused outside STANDBY/ESTOP (`"CH5 up ignored -- start the log before arming"`) because opening a log preallocates and blocks ~96 ms — but once started, **recording continues through RUNNING**, which is the whole point. Confirmed by a single G5 chirp, so check `buzzer_volume` — there is no LED cue. C5's level no longer gates arming. |
+| C6  | SF (momentary shoulder) | **Jump** | Rising edge > 1990 requests `STATE_JUMPING`. **One jump per edge** — drop C6 and raise it again for another; holding it up does not hop repeatedly. Refused unless the robot is in RUNNING *and* `jump_enable = 1` (default **0**, so this is inert until you deliberately enable it). |
 | C7  | S1 dial            | Live tune, slot 0 of active group | 1000–2000 → active group's slot-0 range → its mapped param. See "Live parameter tuning" below. |
 | C8  | S2 dial            | Live tune, slot 1 of active group | 1000–2000 → active group's slot-1 range → its mapped param. See "Live parameter tuning" below. |
 | C9  | SC (top row, right of dials) | Speed profile        | < 1333 = profile 1, 1333–1667 = profile 2, > 1667 = profile 3. Selects the active `vel_max`, `yaw_max`, `torque_lim`, and `roll_max`. |
@@ -42,6 +42,28 @@ boot. Set the receiver's own failsafe to **no pulses**, never "hold".
 | C14 | SJ (RGB button 4) | **Latch gains** | Rising edge fires the same one-shot as writing `live_tune_latch` from the GUI. Only picked-up slots are committed. |
 | C15 | SK (RGB button 5) | **Coordinated-turn lean** | `roll_cmd = −lean_gain·atan(v·ω/g)`, added to the stick roll and clamped to the profile's roll limit. Requires `lean_turn_en=1`, `lean_gain>0` **and** `roll_ctrl_en=1` — the roll controller is what actually delivers the lean, and a warning is logged if it is off. Verify the sign suspended before any floor test. |
 | C16 | — | *spare* | |
+
+There is **no "LEGACY mode"**. C5 is always the SD-log switch, C6 is always the
+jump trigger, and gain-group select is always C13. An earlier scheme borrowed
+C5/C6 for group select and is gone; if you find a comment describing it, the
+comment is stale, not the code.
+
+### Where to watch these channels
+
+`TelemetryPayload.ibus_ch[]` mirrors **C1–C14 only** — the array predates CRSF
+and is sized by the payload, not by CRSF's 16 (`main.cpp`, `RC_MIRROR_CH`). So
+the GUI's Radio tab stops at C14 and **cannot see C15 or C16**.
+
+That is deliberate rather than a gap to close. The link is bidirectional now
+and the transmitter has its own **Outputs** screen showing all 16 channels in
+real time, which makes the radio the better instrument for walking the channel
+map — widening the telemetry struct would only duplicate it, at the cost of a
+`TELEM_VERSION` bump, an ESP32 reflash and every existing `.wlog` ceasing to
+decode. Verify C15/C16 on the radio; use the GUI mirror for C1–C14.
+
+`lean_cmd_rad` is read-only telemetry, but it is `−lean_gain·atan(v·ω/g)` and
+therefore **zero at standstill**, so it confirms the lean is *working*, never
+that the C15 button is *wired*.
 
 ## Calibration combo — STANDBY → CALIBRATION
 
@@ -123,17 +145,24 @@ button cannot start moving gains on its own.
 
 ### `live_tune_multi_en = 1`
 
-Group select is on C13/C14/C15, one channel per group, driven by three
-mutually-exclusive RGB buttons. **C5 keeps SD logging and C6 keeps jump** — the
-old scheme borrowed them, which meant a tuning session gave up both, and a
-tuning session is exactly the one you most want a log of.
+Group select is **all on C13**: buttons 1–3 (SG/SH/SI) form a mutually-exclusive
+switch group whose three positions are encoded as distinct levels on that one
+channel. They are already mutually exclusive, so three channels would have been
+three ways to say one thing. **C5 keeps SD logging and C6 keeps jump** — the old
+scheme borrowed them, which meant a tuning session gave up both, and a tuning
+session is exactly the one you most want a log of.
 
-| Group | Selected by | Slot 0 (C7) | Slot 1 (C8) |
-|---|---|---|---|
-| *(none lit)* | — | *tuning inactive* | — |
-| 0 | C13 / button 1 | `lqr_k_pitch_ret`, -0.1 … -2.0 | `lqr_k_rate_ret`, -0.01 … -1.0 |
-| 1 | C14 / button 2 | `vel_pi_kp`, 0.05 … 1.0 | `vel_pi_ki`, 0.02 … 0.5 |
-| 2 | C15 / button 3 | `roll_kp`, 0.3 … 4.0 | `roll_kd`, 0.02 … 0.5 |
+| Group | Button | C13 level | Decode band | Slot 0 (C7) | Slot 1 (C8) |
+|---|---|---|---|---|---|
+| *(none lit)* | — | ~1500 µs | < 1580 | *tuning inactive* | — |
+| 0 | button 1 / SG | ~1660 µs | 1580–1745 | `lqr_k_pitch_ret`, -0.1 … -2.0 | `lqr_k_rate_ret`, -0.01 … -1.0 |
+| 1 | button 2 / SH | ~1830 µs | 1745–1915 | `vel_pi_kp`, 0.05 … 1.0 | `vel_pi_ki`, 0.02 … 0.5 |
+| 2 | button 3 / SI | ~2000 µs | > 1915 | `roll_kp`, 0.3 … 4.0 | `roll_kd`, 0.02 … 0.5 |
+
+Bands are the midpoints between levels (`LT_BAND_*` in `main.cpp`), debounced 3
+ticks. **"None = ~1500 µs = inactive" matters as much as the rest**: the resting
+state of the buttons has to be the state that does nothing. Link loss also reads
+as "none", which drops every slot's pickup on the next pass.
 
 Ranges are `(value at knob-zero, value at knob-max)`. Both slots are mirrored
 live to telemetry regardless of group: `live_tune_ch7_val` / `live_tune_ch8_val`.
@@ -155,8 +184,8 @@ long as the target's read site in `control_loop.cpp` goes through
 param's *current* value; only then does it "pick up" and start tracking 1:1.
 This avoids the gain jumping instantly to wherever the knob happened to be
 sitting when the group was selected. Pickup resets every time you leave
-live-tune mode or change groups (any C5/C6 change, or leaving RUNNING) —
-re-entering always requires re-sweeping.
+live-tune mode or change groups (any C13 group change, including link loss, or
+leaving RUNNING) — re-entering always requires re-sweeping.
 
 **Nothing is written to the real, persistent param until you say so.** While a
 slot is picked up, its live shadow value is what the control loop actually
@@ -167,16 +196,17 @@ without latching leaves it exactly as it was.
 *(All of the below requires `live_tune_multi_en = 1`.)*
 
 1. Arm normally (raise C10) → RUNNING.
-2. Select the group with the C5/C6 combination (see table above). Sweep C7/C8
-   through the group's current values to pick each slot up (watch
-   `live_tune_ch7_val`/`live_tune_ch8_val` in telemetry — they update
-   immediately; the *effect* on balance only kicks in once picked up,
+2. Press the group's RGB button — 1, 2 or 3 (C13). The lit button *is* the
+   group indicator. Sweep C7/C8 through the group's current values to pick each
+   slot up (watch `live_tune_ch7_val`/`live_tune_ch8_val` in telemetry — they
+   update immediately; the *effect* on balance only kicks in once picked up,
    independently per slot).
-3. Press **button 4 (C16)** to persist every currently picked-up slot's shadow
+3. Press **button 4 (C14)** to persist every currently picked-up slot's shadow
    value into its real param — or write `live_tune_latch` = 1 from the Params
    tab, which is the same one-shot. One-shot: firmware
    latches and resets the flag. A slot that never picked up this session is
    skipped, not latched at a stale/arbitrary value.
-4. To leave live-tune mode: return both C5 and C6 to **up**, or move to another
-   group and repeat steps 2-3. Either way the latched (or, if you didn't latch,
-   unchanged) persistent values take over.
+4. To leave live-tune mode: press the lit group button again so **none** are lit
+   (C13 back to ~1500 µs), or move to another group and repeat steps 2-3. Either
+   way the latched (or, if you didn't latch, unchanged) persistent values take
+   over.
