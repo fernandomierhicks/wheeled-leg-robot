@@ -5,8 +5,8 @@ summary:
    info: "Dark instrument theme for the wheeled-leg robot"
 colors:
    PRIMARY1: 0x39434F
-   PRIMARY2: 0xE2ECF7
-   PRIMARY3: 0x8FA3B8
+   PRIMARY2: 0xFFFFFF
+   PRIMARY3: 0xE2ECF7
    SECONDARY1: 0x121821
    SECONDARY2: 0x00A8FF
    SECONDARY3: 0x070A0F
@@ -14,6 +14,6 @@ colors:
    EDIT: 0x1B2735
    ACTIVE: 0x00E5FF
    WARNING: 0xFF3B30
-   DISABLED: 0x4A5A6B
+   DISABLED: 0x8FA3B8
    QM_BG: 0x0E141C
-   QM_FG: 0xE2ECF7
+   QM_FG: 0xFFFFFF

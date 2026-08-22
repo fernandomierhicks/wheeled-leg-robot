@@ -454,6 +454,52 @@ def check_screens(path, m):
                     path.name, idx, zidx, wn)
 
 
+# Background/foreground pairings EdgeTX actually draws, from
+# gui/colorlcd/libui/etx_lv_theme.cpp -- etx_std_ctrl_colors() and friends.
+# These are the reason a theme colour cannot be chosen by how it looks on its
+# own: PRIMARY1 has to stay DARK because it is the text of a CHECKED control,
+# whose background is the cyan ACTIVE colour.
+#
+#   (background role, text role, what it is)
+THEME_PAIRS = [
+    ("PRIMARY2",   "SECONDARY1", "standard control, normal"),
+    ("ACTIVE",     "PRIMARY1",   "standard control, checked"),
+    ("EDIT",       "PRIMARY2",   "standard control, being edited"),
+    ("SECONDARY3", "PRIMARY2",   "page background, primary text"),
+    ("SECONDARY3", "PRIMARY3",   "page background, secondary text"),
+    ("SECONDARY1", "PRIMARY2",   "panel fill, primary text"),
+    ("QM_BG",      "QM_FG",      "quick menu"),
+]
+
+
+def check_theme_contrast(name, colors):
+    """Every pairing EdgeTX actually draws must be legible.
+
+    Choosing theme colours by how they look in isolation is how PRIMARY1 ends
+    up white and every selected control becomes invisible. These pairs come
+    from the theme source, not from taste.
+    """
+    def val(role):
+        v = colors.get(role)
+        if isinstance(v, str):
+            try:
+                return int(v, 16)
+            except ValueError:
+                return None
+        return v if isinstance(v, int) else None
+
+    for bg_role, fg_role, what in THEME_PAIRS:
+        bg, fg = val(bg_role), val(fg_role)
+        if bg is None or fg is None:
+            continue
+        delta = abs(_luminance(fg) - _luminance(bg))
+        if delta < 0.30:
+            bad("%s: %s -- %s #%06X on %s #%06X has luminance delta %.2f. "
+                "EdgeTX draws this pairing (etx_lv_theme.cpp), so it would be "
+                "unreadable on the radio.",
+                name, what, fg_role, fg, bg_role, bg, delta)
+
+
 def check_theme():
     themes = [p for p in (SD / "THEMES").iterdir() if p.is_dir()] \
         if (SD / "THEMES").exists() else []
@@ -485,6 +531,7 @@ def check_theme():
                 bad("%s: colour %s is %r, expected 0xRRGGBB", t.name, key, val)
             elif not 0 <= val <= 0xFFFFFF:
                 bad("%s: colour %s = %#x is out of range", t.name, key, val)
+        check_theme_contrast(t.name, colors)
         for key in ("QM_BG", "QM_FG"):
             if key not in colors:
                 note("%s: no %s (EdgeTX 2.12 quick menu); harmless on 2.11",
