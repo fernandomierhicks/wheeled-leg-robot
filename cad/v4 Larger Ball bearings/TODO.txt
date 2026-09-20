@@ -1,0 +1,6 @@
+Bring body over to new version and properly done
+
+Zip tie holes on other side of cable hole
+
+
+Odrive USB hole on body

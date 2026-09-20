@@ -1,0 +1,138 @@
+[
+  {
+    "name": "GLACIER",
+    "accent_pct": 5.63,
+    "white_cm3": 84.55,
+    "graphite_cm3": 45.8,
+    "accent_cm3": 7.78,
+    "palette": "arctic_lt"
+  },
+  {
+    "name": "NIGHTRUN",
+    "accent_pct": 5.78,
+    "white_cm3": 83.42,
+    "graphite_cm3": 46.72,
+    "accent_cm3": 7.99,
+    "palette": "stealth"
+  },
+  {
+    "name": "FOUNDRY",
+    "accent_pct": 5.86,
+    "white_cm3": 97.08,
+    "graphite_cm3": 46.18,
+    "accent_cm3": 8.92,
+    "palette": "industrial"
+  },
+  {
+    "name": "APEX",
+    "accent_pct": 6.57,
+    "white_cm3": 85.24,
+    "graphite_cm3": 43.78,
+    "accent_cm3": 9.07,
+    "palette": "precision"
+  },
+  {
+    "name": "ABYSS",
+    "accent_pct": 7.7,
+    "white_cm3": 62.25,
+    "graphite_cm3": 41.61,
+    "accent_cm3": 8.66,
+    "palette": "ocean"
+  },
+  {
+    "name": "RECON",
+    "accent_pct": 4.86,
+    "white_cm3": 87.37,
+    "graphite_cm3": 44.04,
+    "accent_cm3": 6.72,
+    "palette": "forest"
+  },
+  {
+    "name": "PULSAR",
+    "accent_pct": 7.83,
+    "white_cm3": 83.72,
+    "graphite_cm3": 43.39,
+    "accent_cm3": 10.81,
+    "palette": "nebula"
+  },
+  {
+    "name": "BULLION",
+    "accent_pct": 11.39,
+    "white_cm3": 81.96,
+    "graphite_cm3": 40.29,
+    "accent_cm3": 15.71,
+    "palette": "titanium"
+  },
+  {
+    "name": "DUNE",
+    "accent_pct": 6.4,
+    "white_cm3": 91.08,
+    "graphite_cm3": 46.74,
+    "accent_cm3": 9.42,
+    "palette": "desert"
+  },
+  {
+    "name": "VICE",
+    "accent_pct": 5.78,
+    "white_cm3": 83.67,
+    "graphite_cm3": 46.48,
+    "accent_cm3": 7.98,
+    "palette": "cyber"
+  },
+  {
+    "name": "SIGNAL",
+    "accent_pct": 7.59,
+    "white_cm3": 85.5,
+    "graphite_cm3": 42.15,
+    "accent_cm3": 10.48,
+    "palette": "amber"
+  },
+  {
+    "name": "GHOST",
+    "accent_pct": 6.7,
+    "white_cm3": 72.86,
+    "graphite_cm3": 55.75,
+    "accent_cm3": 9.23,
+    "palette": "mono"
+  },
+  {
+    "name": "OVERDRIVE",
+    "accent_pct": 10.07,
+    "white_cm3": 60.55,
+    "graphite_cm3": 37.4,
+    "accent_cm3": 10.96,
+    "palette": "cyber"
+  },
+  {
+    "name": "CIRCUITRY",
+    "accent_pct": 5.61,
+    "white_cm3": 83.4,
+    "graphite_cm3": 46.99,
+    "accent_cm3": 7.74,
+    "palette": "concept"
+  },
+  {
+    "name": "MONOLITH",
+    "accent_pct": 13.7,
+    "white_cm3": 69.27,
+    "graphite_cm3": 39.64,
+    "accent_cm3": 17.28,
+    "palette": "titanium"
+  },
+  {
+    "name": "HAZARD",
+    "accent_pct": 6.11,
+    "white_cm3": 100.61,
+    "graphite_cm3": 46.74,
+    "accent_cm3": 9.59,
+    "palette": "industrial"
+  },
+  {
+    "name": "SCALPEL",
+    "accent_pct": 6.6,
+    "white_cm3": 76.26,
+    "graphite_cm3": 45.68,
+    "accent_cm3": 8.62,
+    "palette": "precision"
+  }
+]
