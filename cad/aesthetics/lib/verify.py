@@ -13,6 +13,7 @@ import paths
 from build123d import import_step
 from keepout import openings
 import manifold
+import thinwall
 from shputil import prism
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.GeomAbs import GeomAbs_Cylinder
@@ -132,7 +133,31 @@ def verify(part="Tibia", tag="arctic"):
             ok &= manifold.gate_report(import_step(f).wrapped, f"{part} {nm}",
                                        one_solid=False)
     print(f"\ntopology gate: {'PASS' if ok else 'FAIL'}")
-    return bad, worst, ok
+
+    # CONSTRAINT 5 -- no very thin walls, min_wall 3.0 mm.  The FUSED part only:
+    # decision 29 deliberately leaves the filament bodies unchecked, because the
+    # colour split shaves sub-millimetre skins off a solid that is itself thick
+    # and gating on that would force a redesign of the locked GLACIER accent.
+    #
+    # Measured against the SOURCE, not in absolute terms, for the same reason
+    # collide.py measures every pair twice: all three source links are thin
+    # somewhere by this measure, and on the Femur every one of those places is
+    # the wall of the hip boss seen through its own bore -- a designed bearing
+    # seat that the ground rules forbid touching.  An absolute gate would fail a
+    # perfect rebuild.  Only material the STYLING made thin can be its fault.
+    #
+    # `min_wall` comes from the spec so a part can be built to a different floor
+    # without editing this file.
+    print()
+    mw = thinwall.MIN_WALL
+    sf = os.path.join(paths.SPECS, f"{part.lower()}.json")
+    if os.path.exists(sf):
+        import json
+        mw = float(json.load(open(sf)).get("min_wall", mw))
+    wall_ok, _ = thinwall.compare_report(sty, paths.part_step(part),
+                                         f"{part} fused", mw)
+    print(f"\nthin-wall gate: {'PASS' if wall_ok else 'FAIL'}")
+    return bad, worst, (ok and wall_ok)
 
 
 if __name__ == "__main__":

@@ -68,12 +68,12 @@ He listed these as the definition of done. None is satisfied today.
 | 2 | collision free through the ENTIRE stroke | `python lib/collide.py --sweep 21` | **gate built**, parts not yet rebuilt |
 | 3 | no floating pieces | `python lib/verify.py <Part>` → topology gate | **gate built**, fails today: Coupler 4 chunks, Femur 1 |
 | 4 | no sharp edges | same gate: non-manifold + free edges + needle solids | **gate built**, fails today |
-| 5 | no very thin walls | `min_wall = 3.0` mm | **NO CHECK EXISTS — still to build** |
+| 5 | no very thin walls | `python lib/thinwall.py <Part> --vs-source` | **gate built**, fails today: 4928 mm² introduced on the Femur |
 | 6 | whole surface carries the aesthetic | the back must be designed, not left over | fails today: bare grey squares |
 
-**Constraints 2, 3 and 4 now have working gates. 5 does not.** A minimum-wall
-measurement on a finished solid is the one piece of the brief with no check
-behind it; until it exists, "no very thin walls" is an assertion.
+**All six constraints now have a gate that runs.** Constraint 5 was the last
+one and is `lib/thinwall.py`; see "The minimum-wall check" below for what it
+measures, how it was calibrated, and the one thing about it that surprised.
 
 `lib/collide.py --sweep N` places every instance at N hip angles across the whole
 85 deg travel using `tools/kinematics.py`, and **refuses to run if the kinematic
@@ -110,6 +110,75 @@ the Phase 1 shattering rather than a styling failure. **Look at the backs again
 in a trustworthy export before treating it as an aesthetic problem.** The
 `*_colour.step` files are welded and correct now; the per-filament print STEPs
 are not.
+
+---
+
+## The minimum-wall check — `lib/thinwall.py`
+
+Constraint 5 was the last one with nothing behind it. It measures the way
+SolidWorks' **Evaluate → Thickness Analysis** does: from every point on the
+surface, cast a ray along the INWARD normal and take the distance to the first
+surface it meets. That choice is deliberate — it is a measure **he can check
+himself** in the kernel that actually consumes the files, and Phase 1 settled
+that only a Parasolid consumer is an independent witness.
+
+**The obvious alternative is wrong here.** The inscribed-sphere / distance
+transform measure ("local thickness") is the textbook one, and its value goes to
+**zero at every convex edge**, because no ball that fits inside the material can
+contain a corner point. A greebled part is mostly edges, so it would flag several
+cm³ of sound metal. The ray measure errs the other way — on a wedge it reads
+1/cos(angle) too LARGE — so it stays quiet rather than crying wolf.
+
+**Calibrated before it was believed.** `--selftest` runs seven solids whose
+answer is known by construction and checks each to 0.05 mm:
+
+```
+3 mm plate 3.000 | 10 mm plate 10.000 | 2 mm rib 2.000 | 1 mm pocket floor 1.000
+0.5 mm fin 0.500 | 3 mm chamfer -> NO thin area | 0.5 mm ledge -> NO thin area
+```
+
+The last two are the point: a chamfered edge and a shallow ledge are exactly what
+a naive thickness measure gets wrong, and both come back clean.
+
+### The surprise: THE SOURCE PARTS FAIL AN ABSOLUTE 3 mm GATE
+
+```
+Femur    source  844.7 mm2 thin (3.5%), 17 patches, biggest   63.5
+Tibia    source  719.9       (1.5%),     7 patches, biggest  142.0
+Coupler  source 1602.1       (6.6%),    17 patches, biggest 1042.3
+```
+
+The picture says what the numbers cannot: on the Femur **every one of those
+patches is the wall of the hip boss**, seen through its own bore. That is a
+designed bearing seat, every hole is untouchable by the ground rules, and no
+restyle may thicken it. An absolute gate would therefore fail a PERFECT rebuild,
+and a gate that can never pass is a gate nobody reads.
+
+So the gate measures **twice and reports the increase** — the same shape as
+`lib/collide.py`, for the same reason. `verify.py` calls `compare_report()`;
+`gate_report()` is still there for the absolute question. On the pre-Phase-3
+Femur:
+
+```
+under 3 mm: 5825.7 mm2 total = 897.7 inherited + 4928.1 INTRODUCED by the styling
+```
+
+**4928 mm² in 26 patches over 10 mm² is the number the rebuild must drive to
+zero.** The biggest are 1006 and 966 mm² at the two ends, and there is a hard
+mode at exactly **0.50 mm** — a genuine half-millimetre fin in a 10 mm-tall band
+along the ±Y perimeter, which the map places on the **flange**. `grow_depth_frac`
+0.34 × 39 mm puts the flange prism at Z −5..+8.3, exactly where the thin material
+sits.
+
+The source measurement is cached under `out/cache/thinwall/`, keyed on the STEP's
+mtime and size, because the Tibia's source alone is 32 s and `verify.py` runs
+every build.
+
+**Scope is the FUSED part only** (decision 29). The filament bodies are far
+thinner — Femur graphite reads 0.13 mm over a quarter of its surface — because
+the colour split shaves skins off a solid that is itself thick. Gating on that
+would force a redesign of the locked GLACIER accent, so it is an accepted,
+named gap rather than an oversight.
 
 ---
 
@@ -259,8 +328,10 @@ Before anything is shown:
 
 ```
 python lib/verify.py <Part>        "0 changed, worst deviation 0.000 mm3"
-                                   AND "topology gate: PASS"   (exits non-zero on fail)
+                                   AND "topology gate: PASS"
+                                   AND "thin-wall gate: PASS"  (exits non-zero on fail)
 python lib/collide.py --sweep 21   "no new collisions in any of the 21 configurations"
+python lib/thinwall.py <Part>      the PICTURE -- out/renders/thinwall_<Part>_<tag>.png
 ```
 
 **`verify.py` passing used to be insufficient, three times over**, because it
@@ -438,8 +509,14 @@ lib/collide.py      interference.  --sweep N places every instance at N hip
                     angles across the WHOLE travel via tools/kinematics.py, and
                     refuses to run on a kinematic model that does not reconstruct
                     the exported poses.  Without --sweep it does the old 3 poses.
+lib/thinwall.py     CONSTRAINT 5.  Wall thickness by casting a ray along the
+                    inward normal from every point on the surface -- the same
+                    measure as SolidWorks' Thickness Analysis, so he can check
+                    it himself.  --selftest calibrates it on 7 known solids.
+                    --vs-source reports only what the STYLING made thin.
 lib/verify.py       holes survived + material removed + THE TOPOLOGY GATE
-                    (non-manifold, free edges, one solid, one shell, needles).
+                    (non-manifold, free edges, one solid, one shell, needles)
+                    + THE THIN-WALL GATE, source-relative.
                     Exits non-zero on failure so it can gate a script.
 lib/stepcolor.py    the coloured STEP: welds, one root, honest tolerance
 lib/export3mf.py    Bambu/Orca project 3MF, one filament per body
@@ -562,9 +639,6 @@ the Phase 1 bug**. None was caught by the check nominally responsible for it.
 - **The 20 mm free-space window is binding.** p90 and max sit at 18.4/20.0 on
   all three links, so the real reach is larger and unmeasured. Re-run
   `tools/freemap.py --grow 30` if the rebuild wants more than 20 mm anywhere.
-- **No minimum-wall check exists.** Constraint 5 (`min_wall = 3.0` mm) is the
-  one part of his brief with nothing behind it. Everything else in the brief now
-  has a gate that runs.
 - **Contested space is not allocated.** `freemap` measures each link against
   SOURCE neighbours, so two links can both be told the same gap is free. Growing
   all three to the limit could have them meet in the middle; the sweep will
