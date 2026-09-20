@@ -60,8 +60,14 @@ local RAD_TO_DEG = 57.29578
 
 -- Custom frame 0x24, laid out in firmware/robot_teensy/teensy/src/crsf_protocol.h.
 -- Keep the two in step; the byte offsets below are that struct.
+-- Trimmed from 17 bytes to 3 when the link budget was measured: the emitter
+-- was oversubscribing an ExpressLRS 1:128 downlink by more than an order of
+-- magnitude. Only state, fault and profile are sent now. Every other key stays
+-- declared in WLR_KEYS below so it reports MISSING and renders as a grey dash
+-- rather than silently reading zero -- the readouts are still on screen, there
+-- is simply no data behind them. See CrsfTelem.h.
 local WLR_FRAME_ID = 0x24
-local WLR_FRAME_LEN = 17
+local WLR_FRAME_LEN = 3
 
 -- Field-id cache. getValue() by numeric id is faster than by name, and this
 -- runs inside a widget that must not starve the Lua VM. Re-probed on a slow
@@ -97,6 +103,9 @@ local function linkUp()
   return r ~= nil and r > 0
 end
 
+-- Unused while the 0x24 frame carries only single-byte fields. Kept because
+-- restoring any of the trimmed 16-bit readings (hip torques, wheel speed,
+-- glitch count) needs it back exactly as it was.
 local function be16(d, i)
   local v = d[i] * 256 + d[i + 1]
   if v >= 32768 then v = v - 65536 end
@@ -112,18 +121,9 @@ local function drain(now)
     local cmd, data = crossfireTelemetryPop()
     if cmd == nil then return end
     if cmd == WLR_FRAME_ID and data ~= nil and #data >= WLR_FRAME_LEN then
-      wlr.state    = data[1]
-      wlr.fault    = data[2]
-      wlr.jump     = data[3]
-      wlr.standup  = data[4]
-      wlr.alpha    = data[5] / 200.0
-      wlr.profile  = data[6]
-      wlr.health   = data[7] * 256 + data[8]
-      wlr.hip_l    = be16(data, 9) / 100.0
-      wlr.hip_r    = be16(data, 11) / 100.0
-      wlr.wheel    = be16(data, 13) / 100.0
-      wlr.esp32    = data[15]
-      wlr.glitch   = data[16] * 256 + data[17]
+      wlr.state   = data[1]
+      wlr.fault   = data[2]
+      wlr.profile = data[3]
       wlr_ms = now
     end
   end
@@ -137,6 +137,11 @@ function M.tick(now)
   M.link = linkUp()
   M.now = now
   drain(now)
+  -- Latch the first time the robot is actually heard. Checked after drain()
+  -- so a frame arriving this very tick counts immediately.
+  if not M.ever_seen and M.link and M.robotTelemetry() then
+    M.ever_seen = true
+  end
 end
 
 -- Fall back to the FLIGHT_MODE text when the custom frame is absent. The
@@ -220,6 +225,20 @@ end
 -- FLIGHT_MODE text alone is enough to say the robot is talking to us.
 function M.robotTelemetry()
   return wlr_ms ~= nil or modeText() ~= nil
+end
+
+-- Has the robot EVER been heard from this session?
+--
+-- "Never connected" and "was connected, now quiet" are different situations
+-- and must not look or sound the same. Before the first frame we do not know
+-- what the robot is doing -- we do not even know that it is powered -- so the
+-- HUD greys out and the annunciator stays completely silent. Announcing
+-- anything here would be asserting a robot state we have never observed.
+--
+-- Latching, deliberately: once the robot has been heard, a later dropout is a
+-- real event worth showing and saying, not a return to the cold-start state.
+function M.everSeenRobot()
+  return M.ever_seen == true
 end
 
 function M.haveCustomFrame()

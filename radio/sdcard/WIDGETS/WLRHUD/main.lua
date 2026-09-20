@@ -495,16 +495,35 @@ local function buildWaiting(root, L)
                        visible = noRobot })
   p:rectangle({ x = 0, y = 0, w = w, h = h, rounded = 6, filled = true,
                 color = C.panel })
+  -- "Never connected" and "was connected, now quiet" are different situations
+  -- and must not look the same. Until the robot has actually been heard from
+  -- we know nothing about it -- not even that it is powered -- so this reads
+  -- CONNECTING in grey rather than raising an amber alarm about an absence
+  -- that is simply the normal state of a robot that is not switched on yet.
+  -- The annunciator stays silent over the same condition.
   p:label({ x = 0, y = math.floor(h / 2) - 26, w = w, align = CENTER,
-            font = BOLD, text = "NO ROBOT TELEMETRY", color = C.amber })
+            font = BOLD,
+            text = function()
+              return telem.everSeenRobot() and "NO ROBOT TELEMETRY" or "CONNECTING"
+            end,
+            color = function()
+              return telem.everSeenRobot() and C.amber or C.off
+            end })
   p:label({ x = 0, y = math.floor(h / 2) - 2, w = w, align = CENTER,
             font = SMLSIZE, color = C.dim,
-            text = "waiting for the CRSF telemetry frames" })
+            text = function()
+              if not telem.everSeenRobot() then return "waiting for the robot" end
+              return "waiting for the CRSF telemetry frames"
+            end })
   p:label({ x = 0, y = math.floor(h / 2) + 16, w = w, align = CENTER,
             font = SMLSIZE, color = C.off,
             text = function()
+              if not telem.everSeenRobot() then
+                return telem.link and "link up, robot not heard yet"
+                                   or "waiting for link"
+              end
               return telem.link and "link up, robot fields absent"
-                                 or "no link"
+                                 or "link lost"
             end })
 end
 
@@ -567,8 +586,13 @@ local function buildCompact(root, L)
                color = C.warn, visible = inFault,
                text = faultLabel })
   root:label({ x = 4, y = L.h - 16, w = L.w - 8, font = SMLSIZE,
-               color = C.amber, visible = noRobot,
-               text = "no robot telemetry" })
+               visible = noRobot,
+               color = function()
+                 return telem.everSeenRobot() and C.amber or C.off
+               end,
+               text = function()
+                 return telem.everSeenRobot() and "no robot telemetry" or "connecting"
+               end })
 end
 
 -- Smallest zone: just the state, in the state's own colour.

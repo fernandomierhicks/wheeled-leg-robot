@@ -249,16 +249,26 @@ FLIGHT = [
     ("arm and run",       {"state": 3}, {}, ["st_run"], False),
     ("jump",              {"state": 7, "jump": 1}, {}, ["st_jump"], False),
     ("back to running",   {"state": 3, "jump": 0}, {}, ["st_run"], False),
-    # Pitch watchdog: REPOSITION tier, so two-tone plus the spoken fault.
-    ("pitch watchdog",    {"state": 4, "fault": 8}, {}, ["t_repos", "f_pitchw"], False),
+    # Faults are still SPOKEN, but their tier tones are not: annunc.lua's
+    # ALARMS switch is off, so t_repos/t_siren/haptics are suppressed while
+    # speech is untouched. Assert the speech and the absence of the tone --
+    # the tone reappearing here would mean ALARMS got flipped back on by
+    # accident, which is exactly the regression worth catching.
+    ("pitch watchdog",    {"state": 4, "fault": 8}, {}, ["f_pitchw"], False),
     ("rescue to standby", {"state": 2, "fault": 0}, {}, ["st_stby"], False),
-    # Hardware dropout: REBOOT tier, siren.
-    ("hip feedback lost", {"state": 4, "fault": 3}, {}, ["t_siren", "f_hipfb"], False),
-    # esp32_link_ok rides only the private frame -- there is nowhere to put it
-    # in FLIGHT_MODE -- so this callout is expected to be silent without it.
-    ("esp32 drops",       {"state": 4, "esp32": 0}, {}, ["w_esp"], True),
-    ("battery critical",  {}, {"RxBt": 19.1}, ["w_batcrt"], False),
+    ("hip feedback lost", {"state": 4, "fault": 3}, {}, ["f_hipfb"], False),
+    # esp32_link_ok and pack voltage were both trimmed out of the telemetry
+    # budget, so neither callout can fire at all now: esp32_ok is no longer in
+    # the 0x24 payload, and battWarn sits behind the ALARMS gate. Silence here
+    # is the correct, asserted behaviour rather than an untested gap.
+    ("esp32 drops",       {"state": 4, "esp32": 0}, {}, [], True),
+    ("battery critical",  {}, {"RxBt": 19.1}, [], False),
 ]
+
+# Sounds that must NOT be heard anywhere in the flight while ALARMS is false.
+# Listed positively so flipping the switch back on fails loudly here instead of
+# surprising someone on the bench.
+FORBIDDEN_WHILE_ALARMS_OFF = ["t_soft", "t_repos", "t_siren", "t_stale", "t_ok"]
 
 
 def run_flight(lua, S, with_frame=True):
@@ -309,6 +319,13 @@ def run_flight(lua, S, with_frame=True):
                 problems.append(
                     "transition %r: expected to hear %s, heard %s"
                     % (label, want, sorted(heard) or "nothing"))
+        for banned in FORBIDDEN_WHILE_ALARMS_OFF:
+            if banned in heard:
+                problems.append(
+                    "transition %r: heard alarm tone %s, but annunc.lua's "
+                    "ALARMS switch is off -- either it got flipped back on, or "
+                    "a new call site bypassed alarm()/haptic()"
+                    % (label, banned))
 
     for i in range(1, len(S.errors) + 1):
         problems.append("transitions: %s" % S.errors[i])

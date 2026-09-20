@@ -418,9 +418,44 @@ def build():
     m["telemetryProtocol"] = 0
     m["ignoreSensorIds"] = 0
     m["showInstanceIds"] = 0
-    m["disableTelemetryWarning"] = 0
     m["rssiSource"] = Raw("none")
     m["rfAlarms"] = {"warning": 45, "critical": 42}
+
+    # EdgeTX's own "telemetry lost" callout, off for now alongside the HUD's
+    # alarm tones. It fires every time the robot is powered down, which on a
+    # bench is most of the time, and it says nothing the HUD does not already
+    # show. Set back to 0 to get it -- worth doing before any floor testing,
+    # where losing telemetry is genuinely something you want shouted at you.
+    m["disableTelemetryWarning"] = 1
+
+    # The remaining model scalars, all at EdgeTX's own defaults. Values read
+    # back out of a model90.yml that EdgeTX itself wrote, not invented here.
+    #
+    # Declared for the same reason as the menu flags above: leaving a key out
+    # does not mean "default", it means "whatever this build left in the
+    # struct" -- which is how modelTelemetryDisabled silently came out ON.
+    # Most of these are harmless if they land wrong. throttleReversed and
+    # extendedLimits are not: one inverts the hip-height stick and the other
+    # changes how far every channel can travel, and both would present as a
+    # baffling control problem rather than as a model-file problem.
+    m["thrTrim"] = 0
+    m["thrTrimSw"] = 0
+    m["throttleReversed"] = 0
+    m["enableCustomThrottleWarning"] = 0
+    m["customThrottleWarningPosition"] = 0
+    m["extendedLimits"] = 0
+    m["extendedTrims"] = 0
+    m["trimInc"] = 0
+    m["displayTrims"] = 0
+    m["beepANACenter"] = 0
+    m["noGlobalFunctions"] = 0
+    m["potsWarnEnabled"] = 0
+    m["potsWarnMode"] = Raw("WARN_OFF")
+    m["jitterFilter"] = Raw("GLOBAL")
+    m["modelRegistrationID"] = q("")
+    m["usbJoystickExtMode"] = 0
+    m["usbJoystickIfMode"] = Raw("JOYSTICK")
+    m["usbJoystickCircularCut"] = 0
 
     return m
 

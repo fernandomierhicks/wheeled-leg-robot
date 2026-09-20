@@ -241,43 +241,37 @@ inline uint8_t crsf_build_flight_mode(uint8_t* out, const char* mode) {
 }
 
 // ── WLR_STATE 0x24 — the robot-specific numerics ─────────────────────────────
-// 16-byte payload, big-endian throughout to match every other CRSF frame.
-// Kept small deliberately: CRSF telemetry is a thin slice of the link, and the
-// .wlog on the robot remains the authoritative record. Do not grow this into a
-// mirror of the 247-byte TelemetryPayload.
+// 3-byte payload, big-endian throughout to match every other CRSF frame.
 //
-//  [0]  state          uint8   RobotStateEnum
-//  [1]  fault          uint8   FAULT_*
-//  [2]  jump_state     uint8   0..4
-//  [3]  standup_state  uint8   0..3
-//  [4]  alpha          uint8   gain_sched_alpha * 200 (0..200)
-//  [5]  profile        uint8   active_profile
-//  [6..7]   health     uint16  health_flags
-//  [8..9]   hip_l      int16   N.m * 100
-//  [10..11] hip_r      int16   N.m * 100
-//  [12..13] wheel      int16   m/s * 100
-//  [14]     esp32_ok   uint8
-//  [15..16] glitch     uint16  wm_L + wm_R vel_glitch_count, saturating
+//  [0]  state    uint8   RobotStateEnum
+//  [1]  fault    uint8   FAULT_*
+//  [2]  profile  uint8   active_profile
 //
-// The glitch count is a free-running total and the annunciator warns on it
-// RISING, so a byte-wide field would saturate early in a bad session and then
-// look like it had stopped climbing -- silencing the warning exactly when it
-// was becoming true. 16 bits costs one byte and removes the problem.
-static constexpr uint8_t CRSF_WLR_STATE_LEN = 17;
+// This carried twelve fields until the link budget was measured. The emitter
+// was pushing ~590 B/s into an ExpressLRS downlink that, at a 1:128 telemetry
+// ratio, carries a couple of packets per second — oversubscribed by well over
+// an order of magnitude, so most frames were discarded and *which* ones
+// survived was arbitrary. Trimmed to the three readings that are actually
+// operationally critical: what state the robot is in, what fault it has, and
+// which speed profile is selected.
+//
+// The removed fields — jump_state, standup_state, alpha, health_flags, hip_l,
+// hip_r, wheel_ms, esp32_ok, glitch_count — are still gathered by the firmware
+// and still logged to the .wlog, which remains the authoritative record. The
+// HUD keeps its readouts for them and renders them MISSING, which is the
+// honest display for "not being sent" and is exactly what telem.lua's
+// WLR_KEYS path exists to do. Restoring any of them means widening this
+// payload, the builder below, and the decoder in telem.lua together.
+//
+// Note profile is deliberately here and NOT in the FLIGHT_MODE text: the text
+// field is capped at 13 characters and "STANDING_UP" already spends 11, so
+// there is no room to append it without truncating state names.
+static constexpr uint8_t CRSF_WLR_STATE_LEN = 3;
 
 struct CrsfWlrState {
     uint8_t  state;
     uint8_t  fault;
-    uint8_t  jump_state;
-    uint8_t  standup_state;
-    float    alpha;
     uint8_t  profile;
-    uint16_t health_flags;
-    float    hip_l_nm;
-    float    hip_r_nm;
-    float    wheel_ms;
-    uint8_t  esp32_ok;
-    uint32_t glitch_count;
 };
 
 static inline uint8_t crsf_sat_u8(float v) {
@@ -290,19 +284,7 @@ inline uint8_t crsf_build_wlr_state(uint8_t* out, const CrsfWlrState& s) {
     uint8_t p[CRSF_WLR_STATE_LEN];
     p[0] = s.state;
     p[1] = s.fault;
-    p[2] = s.jump_state;
-    p[3] = s.standup_state;
-    p[4] = crsf_sat_u8(s.alpha * 200.0f);
-    p[5] = s.profile;
-    p[6] = (uint8_t)(s.health_flags >> 8);
-    p[7] = (uint8_t)(s.health_flags & 0xFF);
-    crsf_put_be16(p + 8,  crsf_round16(s.hip_l_nm * 100.0f));
-    crsf_put_be16(p + 10, crsf_round16(s.hip_r_nm * 100.0f));
-    crsf_put_be16(p + 12, crsf_round16(s.wheel_ms * 100.0f));
-    p[14] = s.esp32_ok;
-    uint32_t g = (s.glitch_count > 65535u) ? 65535u : s.glitch_count;
-    p[15] = (uint8_t)(g >> 8);
-    p[16] = (uint8_t)(g & 0xFF);
+    p[2] = s.profile;
     return crsf_build_frame(out, CRSF_ADDR_FLIGHT_CONTROLLER, CRSF_FT_WLR_STATE,
                             p, CRSF_WLR_STATE_LEN);
 }

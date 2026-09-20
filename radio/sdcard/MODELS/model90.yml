@@ -790,11 +790,29 @@ modelTelemetryDisabled: GLOBAL
 telemetryProtocol: 0
 ignoreSensorIds: 0
 showInstanceIds: 0
-disableTelemetryWarning: 0
 rssiSource: none
 rfAlarms: 
    warning: 45
    critical: 42
+disableTelemetryWarning: 1
+thrTrim: 0
+thrTrimSw: 0
+throttleReversed: 0
+enableCustomThrottleWarning: 0
+customThrottleWarningPosition: 0
+extendedLimits: 0
+extendedTrims: 0
+trimInc: 0
+displayTrims: 0
+beepANACenter: 0
+noGlobalFunctions: 0
+potsWarnEnabled: 0
+potsWarnMode: WARN_OFF
+jitterFilter: GLOBAL
+modelRegistrationID: ""
+usbJoystickExtMode: 0
+usbJoystickIfMode: JOYSTICK
+usbJoystickCircularCut: 0
 topbarData: 
    zones: 
       4:

@@ -1,21 +1,44 @@
 #pragma once
 // CRSF telemetry scheduler — the return half of the link.
 //
-// Budget, deliberately: about 10 fields at 5-10 Hz, never a mirror of the
-// 247-byte TelemetryPayload at 50 Hz. CRSF telemetry is a thin slice of the
-// radio link, and the .wlog on the robot stays the authoritative record. If
-// you find yourself wanting another field here, ask first whether the answer
-// is really "look at the log afterwards".
+// Budget, measured rather than assumed. This file used to claim "~350 bytes/s"
+// while actually emitting ~590, and to describe ATTITUDE/WLR_STATE as 10 Hz
+// when three of eight slots at 40 frames/s is 15 Hz. Both figures were wrong,
+// and the second mistake helped hide the first.
 //
-// One frame per tick, round-robin, so telemetry leaves as a trickle rather
-// than a burst that collides with the receiver's own uplink slot.
+// What matters is the other end. An ExpressLRS downlink at a 1:128 telemetry
+// ratio carries a couple of packets per second — order tens of bytes/s. At
+// ~590 B/s the receiver discarded most of what was sent and *which* frames
+// survived was arbitrary, so FLIGHT_MODE — the one frame carrying state and
+// fault as guaranteed-to-relay text — was among the least likely to arrive.
 //
-//   ATTITUDE    10 Hz   pitch/roll/yaw -- the state variables that matter
-//   WLR_STATE   10 Hz   the robot-specific numerics, for the Lua HUD
-//   BATTERY      5 Hz   pack volts and percent (current is not measured)
-//   FLIGHT_MODE  5 Hz   state name, or !FAULT while in ESTOP
+// So the schedule now sends only what is operationally critical:
 //
-// ~350 bytes/s total.
+//   WLR_STATE       2 Hz   state, fault, profile            7 B/frame
+//   FLIGHT_MODE     2 Hz   state name, or !FAULT text   12-18 B/frame
+//   BATTERY_SENSOR  1 Hz   pack volts and percent          12 B/frame
+//
+// ~52 B/s total, a ~11x cut. Pack voltage sits at 1 Hz because it moves on a
+// timescale of minutes; there is nothing to be gained from sampling a slowly
+// draining battery twice a second, and it is the one reading where a stale
+// value is still a useful value.
+//
+// ATTITUDE (0x1E) is no longer emitted at all. Its builder remains in
+// crsf_protocol.h and stays unit-tested, so restoring it is a one-line
+// addition to the switch below: this is a scheduling decision, not a loss of
+// capability. Note the HUD never read `yaw` anyway.
+//
+// The HUD keeps every readout it had. The ones with no data behind them render
+// MISSING, which is the honest display for "not being sent" and is exactly
+// what telem.lua's status handling exists to do. The .wlog on the robot
+// remains the authoritative record for everything trimmed here.
+//
+// State and fault deliberately go out TWICE — as numbers in WLR_STATE and as
+// text in FLIGHT_MODE. FLIGHT_MODE is a standard frame ExpressLRS is known to
+// relay; the private 0x24 type is not confirmed to relay at all. Sending both
+// costs 7 B/frame and means the two critical readings survive either way. It
+// also turns the HUD's profile readout into a live test of whether 0x24
+// relays: a number means it does, MISSING means it does not.
 
 #include <Arduino.h>
 #include "crsf_protocol.h"
@@ -26,24 +49,12 @@
 // keeps this file free of any dependency on robot_state.h or the param
 // registry, so it stays easy to reason about and to test.
 struct CrsfTelemSources {
-    float    pitch_rad;
-    float    roll_rad;
-    float    yaw_rad;
-    float    pack_volts;    // CRSF_BATT_NO_DATA when unmeasured
-    float    pack_amps;     // CRSF_BATT_NO_DATA when unmeasured
-    uint8_t  pack_pct;
-    uint8_t  robot_state;
-    uint8_t  fault_code;
-    uint8_t  jump_state;
-    uint8_t  standup_state;
-    float    gain_sched_alpha;
-    uint8_t  active_profile;
-    uint16_t health_flags;
-    float    hip_l_torque_nm;
-    float    hip_r_torque_nm;
-    float    wheel_vel_avg_ms;
-    uint8_t  esp32_link_ok;
-    uint32_t vel_glitch_count;
+    uint8_t robot_state;
+    uint8_t fault_code;
+    uint8_t active_profile;
+    float   pack_volts;     // CRSF_BATT_NO_DATA when unmeasured
+    float   pack_amps;      // CRSF_BATT_NO_DATA when unmeasured
+    uint8_t pack_pct;
 };
 
 class CrsfTelemetry {
@@ -58,28 +69,15 @@ public:
 
         switch (_slot) {
             case 0:
-                n = crsf_build_attitude(f, s.pitch_rad, s.roll_rad, s.yaw_rad);
+            case 2:
+                n = build_state(f, s);
                 break;
             case 1:
-                n = build_state(f, s);
-                break;
-            case 2:
-                n = crsf_build_attitude(f, s.pitch_rad, s.roll_rad, s.yaw_rad);
-                break;
             case 3:
-                n = build_state(f, s);
+                n = crsf_build_flight_mode(f, mode_text(s));
                 break;
             case 4:
                 n = crsf_build_battery(f, s.pack_volts, s.pack_amps, -1, s.pack_pct);
-                break;
-            case 5:
-                n = crsf_build_attitude(f, s.pitch_rad, s.roll_rad, s.yaw_rad);
-                break;
-            case 6:
-                n = build_state(f, s);
-                break;
-            case 7:
-                n = crsf_build_flight_mode(f, mode_text(s));
                 break;
             default:
                 break;
@@ -108,25 +106,17 @@ public:
 private:
     static uint8_t build_state(uint8_t* f, const CrsfTelemSources& s) {
         CrsfWlrState w;
-        w.state         = s.robot_state;
-        w.fault         = s.fault_code;
-        w.jump_state    = s.jump_state;
-        w.standup_state = s.standup_state;
-        w.alpha         = s.gain_sched_alpha;
-        w.profile       = s.active_profile;
-        w.health_flags  = s.health_flags;
-        w.hip_l_nm      = s.hip_l_torque_nm;
-        w.hip_r_nm      = s.hip_r_torque_nm;
-        w.wheel_ms      = s.wheel_vel_avg_ms;
-        w.esp32_ok      = s.esp32_link_ok;
-        w.glitch_count  = s.vel_glitch_count;
+        w.state   = s.robot_state;
+        w.fault   = s.fault_code;
+        w.profile = s.active_profile;
         return crsf_build_wlr_state(f, w);
     }
 
-    // 8 slots at 25 ms gives attitude and state 10 Hz each, battery and
-    // flight mode 5 Hz.
-    static constexpr uint32_t SLOT_MS = 25;
-    static constexpr uint8_t  SLOTS   = 8;
+    // 5 slots at 200 ms is a 1 s cycle: state and flight mode twice per cycle
+    // (2 Hz), battery once (1 Hz). State changes are events, so the worst-case
+    // 500 ms of display latency buys an 11x cut in link load.
+    static constexpr uint32_t SLOT_MS = 200;
+    static constexpr uint8_t  SLOTS   = 5;
 
     uint32_t _last_ms = 0;
     uint8_t  _slot    = 0;

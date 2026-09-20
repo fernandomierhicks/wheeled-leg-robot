@@ -16,6 +16,20 @@ local SND = "/SOUNDS/en/WLR/"
 
 local M = {}
 
+-- ALARMS -- master switch for every tone, siren and haptic buzz.
+--
+-- Currently OFF by request: the predictive warnings and fault tones were
+-- noise during bench work. Spoken callouts are NOT affected -- state changes
+-- ("standby", "calibrating", "armed") and spoken fault names still announce,
+-- because those are information rather than alarm.
+--
+-- With this false, the four predictive warnings (pitch, hip thermal, wheel
+-- glitch, battery) are skipped outright rather than merely muted, so they
+-- cost nothing per tick. Most of them are inert anyway right now: pitch, hip
+-- torque, glitch count and pack voltage were trimmed out of the telemetry
+-- budget, so they arrive as nil. Set true to get the whole annunciator back.
+local ALARMS = false
+
 -- Tier -> how loud. Matches fault_severity() in shared/comm_protocol.h,
 -- carried into robotdef.lua by the generator.
 local TIER = {
@@ -29,7 +43,13 @@ local function play(name, volume)
   if name then playFile(SND .. name .. ".wav", volume) end
 end
 
+-- Alarm-class audio: tones and sirens. Gated by ALARMS; speech is not.
+local function alarm(name, volume)
+  if ALARMS then play(name, volume) end
+end
+
 local function haptic(ms)
+  if not ALARMS then return end
   if ms > 0 and playHaptic ~= nil then playHaptic(ms, 0) end
 end
 
@@ -91,7 +111,7 @@ local function hipThermal(a, now, tl, tr)
   a.hipHotSince = a.hipHotSince or now
   if (now - a.hipHotSince) < HIP_HOT_S * 1000 then return end
   if now < a.nextHipHot then return end
-  play("t_repos")
+  alarm("t_repos")
   play("w_hiphot")
   a.nextHipHot = now + 15000
   a.hipHotSince = now       -- restart the dwell, so it repeats every 15 s of hold
@@ -107,7 +127,7 @@ local function glitchWarn(a, now, count)
   a.glitchLast = count
   if delta <= 0 then return end
   if now < a.nextGlitch then return end
-  play("t_stale")
+  alarm("t_stale")
   play("w_glitch")
   a.nextGlitch = now + 8000
 end
@@ -118,10 +138,10 @@ local function battWarn(a, now, volts)
   -- 6S pack. 24.0 V is the fully-charged working assumption for this robot,
   -- not the 22.2 V LiPo textbook nominal, so the thresholds sit accordingly.
   if volts <= 19.8 then
-    play("t_siren"); play("w_batcrt"); haptic(60)
+    alarm("t_siren"); play("w_batcrt"); haptic(60)
     a.nextBatt = now + 20000
   elseif volts <= 21.0 then
-    play("t_repos"); play("w_batlow")
+    alarm("t_repos"); play("w_batlow")
     a.nextBatt = now + 60000
   end
 end
@@ -130,12 +150,18 @@ end
 function M.tick(a, t, now)
   if not a.enabled then return end
 
+  -- Say NOTHING until the robot has actually been heard from. Before the
+  -- first frame we do not know the robot's state -- we do not know that it is
+  -- even powered -- and announcing anything would be asserting a state never
+  -- observed. The HUD shows CONNECTING for the same reason.
+  if not t.everSeenRobot() then return end
+
   local linked = t.link and t.robotTelemetry()
   if a.linked == nil then
     a.linked = linked          -- first pass: adopt, do not announce
   elseif linked ~= a.linked then
     a.linked = linked
-    play(linked and "t_ok" or "t_stale")
+    alarm(linked and "t_ok" or "t_stale")
     play(linked and "o_conn" or "o_lost")
     if not linked then haptic(20) end
   end
@@ -182,7 +208,7 @@ function M.tick(a, t, now)
       if fault ~= 0 then
         local f = a.def.fault(fault)
         local tier = TIER[f.tier] or TIER.REBOOT
-        play(tier.tone)
+        alarm(tier.tone)
         haptic(tier.haptic)
         if tier.speak then play(f.wav, 5) end
       end
@@ -198,10 +224,14 @@ function M.tick(a, t, now)
       a.esp32 = ok
     elseif ok ~= a.esp32 then
       a.esp32 = ok
-      if not ok then play("t_stale"); play("w_esp") end
+      if not ok then alarm("t_stale"); play("w_esp") end
     end
   end
 
+  -- Predictive warnings are alarm-class and skipped entirely when ALARMS
+  -- is false. Most are inert regardless: pitch, hip torque and glitch
+  -- count are no longer in the telemetry budget, so they arrive as nil.
+  if not ALARMS then return end
   pitchWarn(a, now, t.live("pitch", nil))
   hipThermal(a, now, t.live("hip_l", nil), t.live("hip_r", nil))
   glitchWarn(a, now, t.live("glitch", nil))

@@ -946,10 +946,9 @@ static void send_telemetry(bool prof) {
 static void crsf_telemetry_tick() {
     CrsfTelemSources s;
 
-    bool sim_pitch_active = param_get(PARAM_ENABLE_SIM_PITCH_RAD) >= 0.5f;
-    s.pitch_rad = imu_pitch();
-    s.roll_rad  = sim_pitch_active ? 0.0f : imu_roll();
-    s.yaw_rad   = sim_pitch_active ? 0.0f : imu_yaw();
+    s.robot_state    = (uint8_t)g_state.state;
+    s.fault_code     = g_state.fault_code;
+    s.active_profile = (uint8_t)param_get(PARAM_ACTIVE_PROFILE);
 
     // Whichever wheel controller is actually reporting; they share the pack.
     float vbus = wm_L.ok ? wm_L.vbus : (wm_R.ok ? wm_R.vbus : 0.0f);
@@ -959,24 +958,6 @@ static void crsf_telemetry_tick() {
     // fully-charged working assumption, not the 22.2 V LiPo textbook nominal.
     float pct = (vbus - 19.8f) / (25.2f - 19.8f) * 100.0f;
     s.pack_pct = (uint8_t)(vbus < 1.0f ? 0 : (pct < 0 ? 0 : (pct > 100 ? 100 : pct)));
-
-    s.robot_state      = (uint8_t)g_state.state;
-    s.fault_code       = g_state.fault_code;
-    s.jump_state       = g_state.jump_state;
-    s.standup_state    = g_state.standup_state;
-    s.gain_sched_alpha = g_state.gain_sched_alpha;
-    s.active_profile   = (uint8_t)param_get(PARAM_ACTIVE_PROFILE);
-    s.health_flags     = build_health_flags();
-    s.hip_l_torque_nm  = g_state.hip_l_torque_nm;
-    s.hip_r_torque_nm  = g_state.hip_r_torque_nm;
-    s.wheel_vel_avg_ms = g_state.wheel_vel_avg_ms;
-
-    uint32_t esp32_age = millis() - s_last_esp32_status_ms;
-    s.esp32_link_ok    = (s_last_esp32_status_ms != 0 && esp32_age < 1000) ? 1 : 0;
-    // Both axes summed. The bench log that motivated the glitch filter showed
-    // this climbing to 14.6% of samples before a spurious runaway trip, so
-    // hearing it build is the whole point of putting it on the radio.
-    s.vel_glitch_count = wm_L.vel_glitch_count + wm_R.vel_glitch_count;
 
     g_rc_telem.tick(g_rc, millis(), s);
 
