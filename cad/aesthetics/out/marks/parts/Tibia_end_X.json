@@ -1,0 +1,50 @@
+{
+ "W": 695,
+ "H": 688,
+ "px_per_mm": 11.995455374925312,
+ "mm_per_px": 0.08336490518653832,
+ "right": [
+  0.0,
+  1.0,
+  0.0
+ ],
+ "up": [
+  0.0,
+  0.0,
+  1.0
+ ],
+ "fwd": [
+  1.0,
+  0.0,
+  0.0
+ ],
+ "centre_mm": [
+  -2.6339506203836116,
+  0.0
+ ],
+ "note": "world = right*((px-W/2)/s + ctr[0]) + up*((H/2-py)/s + ctr[1]) + fwd*depth[py,px]; fwd points from the object to the camera",
+ "kind": "part",
+ "part": "Tibia",
+ "view": "end_X",
+ "show_face": "+Z",
+ "frame": "part local (the frame the recipe builds in)",
+ "axes": {
+  "across": "+Y",
+  "up": "+Z",
+  "towards_camera": "+X"
+ },
+ "camera_fwd_local": [
+  1,
+  0,
+  0
+ ],
+ "header_px": 124,
+ "ids": {
+  "1": "Tibia"
+ },
+ "legend": {
+  "red": "may be REMOVED",
+  "green": "may be ADDED",
+  "unmarked": "leave alone"
+ }
+}

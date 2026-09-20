@@ -1,0 +1,50 @@
+{
+ "W": 1928,
+ "H": 1005,
+ "px_per_mm": 8.996977860119003,
+ "mm_per_px": 0.11114843401279338,
+ "right": [
+  -1.0,
+  0.0,
+  0.0
+ ],
+ "up": [
+  0.0,
+  1.0,
+  0.0
+ ],
+ "fwd": [
+  0.0,
+  0.0,
+  -1.0
+ ],
+ "centre_mm": [
+  -100.00000000000001,
+  11.261411685390105
+ ],
+ "note": "world = right*((px-W/2)/s + ctr[0]) + up*((H/2-py)/s + ctr[1]) + fwd*depth[py,px]; fwd points from the object to the camera",
+ "kind": "part",
+ "part": "RobotMount",
+ "view": "back",
+ "show_face": "+Z",
+ "frame": "part local (the frame the recipe builds in)",
+ "axes": {
+  "across": "-X",
+  "up": "+Y",
+  "towards_camera": "-Z"
+ },
+ "camera_fwd_local": [
+  0,
+  0,
+  -1.0
+ ],
+ "header_px": 124,
+ "ids": {
+  "1": "RobotMount"
+ },
+ "legend": {
+  "red": "may be REMOVED",
+  "green": "may be ADDED",
+  "unmarked": "leave alone"
+ }
+}

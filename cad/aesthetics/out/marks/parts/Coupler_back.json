@@ -1,0 +1,50 @@
+{
+ "W": 1928,
+ "H": 688,
+ "px_per_mm": 8.632296912780951,
+ "mm_per_px": 0.11584402275591368,
+ "right": [
+  1.0,
+  0.0,
+  0.0
+ ],
+ "up": [
+  0.0,
+  1.0,
+  0.0
+ ],
+ "fwd": [
+  0.0,
+  0.0,
+  1.0
+ ],
+ "centre_mm": [
+  2.535379519677676,
+  2.5011104298755527e-12
+ ],
+ "note": "world = right*((px-W/2)/s + ctr[0]) + up*((H/2-py)/s + ctr[1]) + fwd*depth[py,px]; fwd points from the object to the camera",
+ "kind": "part",
+ "part": "Coupler",
+ "view": "back",
+ "show_face": "-Z",
+ "frame": "part local (the frame the recipe builds in)",
+ "axes": {
+  "across": "+X",
+  "up": "+Y",
+  "towards_camera": "+Z"
+ },
+ "camera_fwd_local": [
+  0,
+  0,
+  1.0
+ ],
+ "header_px": 124,
+ "ids": {
+  "1": "Coupler"
+ },
+ "legend": {
+  "red": "may be REMOVED",
+  "green": "may be ADDED",
+  "unmarked": "leave alone"
+ }
+}

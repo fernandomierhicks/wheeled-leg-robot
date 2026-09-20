@@ -1,0 +1,50 @@
+{
+ "W": 1531,
+ "H": 688,
+ "px_per_mm": 11.999657885733836,
+ "mm_per_px": 0.08333570919458304,
+ "right": [
+  -1.0,
+  0.0,
+  0.0
+ ],
+ "up": [
+  0.0,
+  -0.0,
+  1.0
+ ],
+ "fwd": [
+  0.0,
+  1.0,
+  0.0
+ ],
+ "centre_mm": [
+  8.46,
+  10.25
+ ],
+ "note": "world = right*((px-W/2)/s + ctr[0]) + up*((H/2-py)/s + ctr[1]) + fwd*depth[py,px]; fwd points from the object to the camera",
+ "kind": "part",
+ "part": "Side panel",
+ "view": "end_Y",
+ "show_face": "+Z",
+ "frame": "part local (the frame the recipe builds in)",
+ "axes": {
+  "across": "-X",
+  "up": "+Z",
+  "towards_camera": "+Y"
+ },
+ "camera_fwd_local": [
+  0,
+  1,
+  0
+ ],
+ "header_px": 124,
+ "ids": {
+  "1": "Side panel"
+ },
+ "legend": {
+  "red": "may be REMOVED",
+  "green": "may be ADDED",
+  "unmarked": "leave alone"
+ }
+}

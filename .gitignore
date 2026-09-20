@@ -49,3 +49,9 @@ desktop.ini
 .env
 secrets.*
 wifi_config.h
+
+# Markup-sheet and free-space sidecars.  *.npz is ignored repo-wide above, but a
+# markup sheet PNG is unreadable without its .npz (per-pixel part id + depth):
+# that pair is what turns a mark into a millimetre.  They must travel together.
+!cad/aesthetics/out/marks/**/*.npz
+!cad/aesthetics/input/freespace/*.npz

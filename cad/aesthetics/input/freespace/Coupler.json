@@ -1,0 +1,18 @@
+{
+ "part": "Coupler",
+ "poses": "21 swept angles",
+ "res_mm": 0.8,
+ "zres_mm": 1.0,
+ "clearance_mm": 1.0,
+ "grow_window_mm": 20.0,
+ "origin_mm": [
+  -121.77,
+  -42.0250001,
+  -31.0
+ ],
+ "silhouette_mm2": 8003.8,
+ "free_ring_mm2": 7364.5,
+ "reach_p50_mm": 9.9,
+ "reach_p90_mm": 18.4,
+ "reach_max_mm": 20.0
+}

@@ -1,0 +1,50 @@
+{
+ "W": 688,
+ "H": 688,
+ "px_per_mm": 14.35897435897436,
+ "mm_per_px": 0.06964285714285715,
+ "right": [
+  0.0,
+  1.0,
+  0.0
+ ],
+ "up": [
+  0.0,
+  0.0,
+  1.0
+ ],
+ "fwd": [
+  1.0,
+  0.0,
+  0.0
+ ],
+ "centre_mm": [
+  1.7763568394002505e-15,
+  14.499999999999998
+ ],
+ "note": "world = right*((px-W/2)/s + ctr[0]) + up*((H/2-py)/s + ctr[1]) + fwd*depth[py,px]; fwd points from the object to the camera",
+ "kind": "part",
+ "part": "Femur",
+ "view": "end_X",
+ "show_face": "-Z",
+ "frame": "part local (the frame the recipe builds in)",
+ "axes": {
+  "across": "+Y",
+  "up": "+Z",
+  "towards_camera": "+X"
+ },
+ "camera_fwd_local": [
+  1,
+  0,
+  0
+ ],
+ "header_px": 124,
+ "ids": {
+  "1": "Femur"
+ },
+ "legend": {
+  "red": "may be REMOVED",
+  "green": "may be ADDED",
+  "unmarked": "leave alone"
+ }
+}

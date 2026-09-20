@@ -1,0 +1,18 @@
+{
+ "part": "Tibia",
+ "poses": "21 swept angles",
+ "res_mm": 0.8,
+ "zres_mm": 1.0,
+ "clearance_mm": 1.0,
+ "grow_window_mm": 20.0,
+ "origin_mm": [
+  -40.99999999999997,
+  -46.27999999999999,
+  -14.500000100000003
+ ],
+ "silhouette_mm2": 11356.2,
+ "free_ring_mm2": 12738.6,
+ "reach_p50_mm": 10.88,
+ "reach_p90_mm": 18.4,
+ "reach_max_mm": 20.0
+}

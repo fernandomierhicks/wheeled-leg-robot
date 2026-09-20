@@ -1,0 +1,32 @@
+[
+ {
+  "part": "Femur",
+  "marked_outside_silhouette_mm2": 673.3,
+  "take_mm2": 670.1,
+  "pull_back_mm2": 3.2,
+  "offer_mm2": 10541.4,
+  "take_fraction": 0.995,
+  "reach_under_his_mark_p50_mm": 1.6,
+  "reach_under_his_mark_p90_mm": 2.4
+ },
+ {
+  "part": "Tibia",
+  "marked_outside_silhouette_mm2": 2229.8,
+  "take_mm2": 2070.4,
+  "pull_back_mm2": 159.4,
+  "offer_mm2": 10668.2,
+  "take_fraction": 0.929,
+  "reach_under_his_mark_p50_mm": 3.2,
+  "reach_under_his_mark_p90_mm": 5.6
+ },
+ {
+  "part": "Coupler",
+  "marked_outside_silhouette_mm2": 200.3,
+  "take_mm2": 191.4,
+  "pull_back_mm2": 9.0,
+  "offer_mm2": 7173.1,
+  "take_fraction": 0.955,
+  "reach_under_his_mark_p50_mm": 1.6,
+  "reach_under_his_mark_p90_mm": 2.4
+ }
+]
