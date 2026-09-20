@@ -180,3 +180,104 @@ def report(shape, name=""):
     return dict(name=name, vol=volume(shape),
                 nonmanifold=len(nonmanifold_edges(shape)),
                 free=len(free_edges(shape)))
+
+
+# ---------------------------------------------------------------- the gate
+
+NEEDLE_MM3 = 1.0        # a solid smaller than this is debris, not a feature
+NEEDLE_MIN_MM = 0.5     # ... or thinner than this in its smallest dimension
+
+
+def _solids(shape):
+    out = []
+    ex = TopExp_Explorer(shape, TopAbs_SOLID)
+    while ex.More():
+        out.append(TopoDS.Solid_s(ex.Current())); ex.Next()
+    return out
+
+
+def _shells(shape):
+    out = []
+    ex = TopExp_Explorer(shape, TopAbs_SHELL)
+    while ex.More():
+        out.append(TopoDS.Shell_s(ex.Current())); ex.Next()
+    return out
+
+
+def _bbox(shape):
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+    b = Bnd_Box(); BRepBndLib.Add_s(shape, b)
+    x0, y0, z0, x1, y1, z1 = b.Get()
+    return (x1 - x0, y1 - y0, z1 - z0)
+
+
+def gate(shape, name="", one_solid=True):
+    """The four topology checks `verify.py` never had.  Returns a list of
+    problems; empty means the body is sound.
+
+    Every one of these would have caught a defect ON THE DAY IT WAS INTRODUCED,
+    and each instead reached Fernando or a printer:
+
+      non-manifold edges  the Phase 1 bug -- Parasolid shatters the body into
+                          debris and raises NO ERROR, so it looks like a
+                          modelling mistake rather than an export one
+      free edges          an open shell; not a solid at all
+      one solid per body  his "NO FLOATING BODIES" -- the Coupler fused to FIVE
+                          disconnected solids, four of them ~21x5x7 mm chunks
+                          hanging in space, 1.15 cm3 in total
+      one shell per solid a second shell is a SEALED INTERNAL CAVITY.  The Tibia
+                          had three, 1.41 cm3, two of them 36x7 mm bubbles with
+                          no way out -- unprintable and invisible from outside
+
+    `one_solid=False` for a per-filament body: the accent legitimately comes out
+    as several separate traces.  The FUSED part must always be one solid.
+    """
+    probs = []
+    nm = nonmanifold_edges(shape)
+    if nm:
+        probs.append(f"{len(nm)} non-manifold edge(s) -- Parasolid will split this "
+                     f"body into debris on import, silently")
+    fe = free_edges(shape)
+    if fe:
+        probs.append(f"{len(fe)} free edge(s) -- the shell is open, this is not a solid")
+
+    solids = _solids(shape)
+    if not solids:
+        probs.append("no solids at all")
+        return probs
+
+    vols = sorted(((volume(s), s) for s in solids), key=lambda t: -t[0])
+    if one_solid and len(solids) > 1:
+        extra = vols[1:]
+        detail = ", ".join(f"{v:.1f} mm3 at {tuple(round(d,1) for d in _bbox(s))}"
+                           for v, s in extra[:4])
+        probs.append(f"{len(solids)} disconnected solids -- {len(extra)} FLOATING "
+                     f"PIECE(S) totalling {sum(v for v,_ in extra):.1f} mm3: {detail}"
+                     + (" ..." if len(extra) > 4 else ""))
+
+    needles = [(v, s) for v, s in vols
+               if v < NEEDLE_MM3 or min(_bbox(s)) < NEEDLE_MIN_MM]
+    if needles:
+        probs.append(f"{len(needles)} needle/debris solid(s) (<{NEEDLE_MM3} mm3 or "
+                     f"<{NEEDLE_MIN_MM} mm thick) -- fragile sharp features")
+
+    for i, (v, s) in enumerate(vols):
+        sh = _shells(s)
+        if len(sh) > 1:
+            probs.append(f"solid {i} ({v:.1f} mm3) has {len(sh)} shells -- "
+                         f"{len(sh)-1} SEALED INTERNAL CAVITY/IES, unprintable")
+    return probs
+
+
+def gate_report(shape, name="", one_solid=True, say=print):
+    """Run `gate` and print it.  True if the body is sound."""
+    probs = gate(shape, name, one_solid)
+    if not probs:
+        say(f"  topology {name:<22} OK  "
+            f"({len(_solids(shape))} solid(s), {volume(shape)/1000:.2f} cm3)")
+        return True
+    say(f"  topology {name:<22} {len(probs)} PROBLEM(S)")
+    for p in probs:
+        say(f"      - {p}")
+    return False

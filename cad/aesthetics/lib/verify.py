@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paths
 from build123d import import_step
 from keepout import openings
+import manifold
 from shputil import prism
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.GeomAbs import GeomAbs_Cylinder
@@ -114,7 +115,24 @@ def verify(part="Tibia", tag="arctic"):
     print(f"bores missing from styled : {len(miss)}")
     for d, x, y in miss:
         print(f"    D{d:7.2f} at ({x:8.2f},{y:8.2f})")
-    return bad, worst
+
+    # THE TOPOLOGY GATE.  This file passing has been insufficient THREE times,
+    # because it only ever compared VOLUMES through openings and never once
+    # looked at topology.  A body can match the source hole for hole, to 0.000
+    # mm3, and still be non-manifold (Parasolid shreds it), be five disconnected
+    # solids (his "no floating bodies"), or contain a sealed bubble (unprintable).
+    # All three shipped.  Checked on the FUSED part, which must be one solid, and
+    # on each filament body, which may legitimately be several.
+    print()
+    ok = manifold.gate_report(sty.wrapped, f"{part} fused", one_solid=True)
+    pdir = paths.print_dir(part, tag)
+    for nm in ("white", "graphite", "accent"):
+        f = os.path.join(pdir, f"{part}_{tag}_{nm}.step")
+        if os.path.exists(f):
+            ok &= manifold.gate_report(import_step(f).wrapped, f"{part} {nm}",
+                                       one_solid=False)
+    print(f"\ntopology gate: {'PASS' if ok else 'FAIL'}")
+    return bad, worst, ok
 
 
 if __name__ == "__main__":
@@ -128,4 +146,5 @@ if __name__ == "__main__":
         sf = os.path.join(paths.SPECS, f"{part.lower()}.json")
         tag = (json.load(open(sf)).get("tag", "arctic")
                if os.path.exists(sf) else "arctic")
-    verify(part, tag=tag)
+    bad, worst, ok = verify(part, tag=tag)
+    sys.exit(0 if (ok and bad == 0) else 1)

@@ -26,7 +26,11 @@ def one(name, size=760, views=("iso",)):
     t0 = time.time()
     res = MOD.build(sp, verbose=False)
     MOD.export(res, tag=tag)
-    bad, worst = V.verify(MOD.PART, tag=tag)
+    bad, worst, topo_ok = V.verify(MOD.PART, tag=tag)
+    # a body that fails the topology gate is as dead as one that moved a hole:
+    # non-manifold shatters in SolidWorks, a second solid is a floating piece,
+    # a second shell is a sealed cavity.  Treat it the same way.
+    bad = bad or (0 if topo_ok else 1)
     w, g, a = (res["white"].volume / 1000, res["graphite"].volume / 1000,
                res["accent"].volume / 1000 if res["accent"] else 0.0)
     tot = w + g + a
@@ -37,7 +41,7 @@ def one(name, size=760, views=("iso",)):
         # export() ran before verify(), so the files exist.  Remove them: a
         # failed build must not leave STEPs and a 3MF lying around for a
         # downstream renderer to pick up by filename and present as real.
-        print(f"   !! {name} CHANGED {bad} opening(s) -- dropped, artifacts removed")
+        print(f"   !! {name} FAILED (openings changed or topology gate) -- dropped, artifacts removed")
         for d, pat in ((paths.print_dir(MOD.PART, tag), f"{MOD.PART}_{tag}_"),
                        (paths.styled_dir(MOD.PART, tag), f"{MOD.PART}_{tag}_")):
             for f in os.listdir(d):

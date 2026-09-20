@@ -65,16 +65,45 @@ He listed these as the definition of done. None is satisfied today.
 | # | constraint | the check | status |
 |---|---|---|---|
 | 1 | add / remove only where identified | `input/marks/*.json` ∩ `input/freespace/*.npz`, see `tools/reconcile.py` | inputs ready, unused |
-| 2 | collision free through the ENTIRE stroke | `lib/collide.py` driven by `tools/kinematics.py` over ≥21 angles | **collide.py still only does 3 poses — must be rewired** |
-| 3 | no floating pieces | exactly 1 solid per body | **fails today: Coupler 4 chunks, Femur 1** |
-| 4 | no sharp edges | `lib/manifold.py` non-manifold + free edges empty; no needle solids | welding exists; needles still produced |
-| 5 | no very thin walls | `min_wall = 3.0` mm | never measured on a finished body |
-| 6 | whole surface carries the aesthetic | the back must be designed, not left over | **fails today: bare grey squares** |
+| 2 | collision free through the ENTIRE stroke | `python lib/collide.py --sweep 21` | **gate built**, parts not yet rebuilt |
+| 3 | no floating pieces | `python lib/verify.py <Part>` → topology gate | **gate built**, fails today: Coupler 4 chunks, Femur 1 |
+| 4 | no sharp edges | same gate: non-manifold + free edges + needle solids | **gate built**, fails today |
+| 5 | no very thin walls | `min_wall = 3.0` mm | **NO CHECK EXISTS — still to build** |
+| 6 | whole surface carries the aesthetic | the back must be designed, not left over | fails today: bare grey squares |
 
-**Constraint 2 is the one with real work in it.** `lib/collide.py` reads three
-pose STEPs. `tools/kinematics.py` can now place every instance at any hip angle,
-validated to 0.0000 mm, so the sweep should be driven from it. Until that is
-done, "collision free" means three samples, which is not what he asked for.
+**Constraints 2, 3 and 4 now have working gates. 5 does not.** A minimum-wall
+measurement on a finished solid is the one piece of the brief with no check
+behind it; until it exists, "no very thin walls" is an assertion.
+
+`lib/collide.py --sweep N` places every instance at N hip angles across the whole
+85 deg travel using `tools/kinematics.py`, and **refuses to run if the kinematic
+model does not reconstruct the exported poses** — an unvalidated model claiming
+"no collision" is worse than three honest poses. Without `--sweep` it still does
+the three exported poses, which is NOT what "the entire stroke" means.
+
+**It is slow, and that is expected — do not assume it has hung.** Every pair is
+an OCC boolean at roughly a second and that is the entire runtime. Measured:
+
+```
+3 configurations, 5 parts, before   10m 03s
+3 configurations, 3 parts, after     5m 32s     (identical findings)
+21 configurations, 3 parts          ~30-35 min  (extrapolated)
+```
+
+Three things bought that, all worth keeping: source STEPs are imported ONCE
+(they were being re-read from disk inside the inner pair loop), the styled
+boolean runs first and the source boolean is skipped whenever `v_new <= TOL`
+(since `d = v_new - v_old` and `v_old >= 0`, it cannot be a new collision), and
+`--parts` narrows to the parts actually being rebuilt. Use `--sweep 5` while
+iterating and `--sweep 21` before showing him anything.
+
+`lib/verify.py` now ends with the topology gate and **exits non-zero** if it
+fails, so it can be used as a real gate in a script. It checks the FUSED part
+(must be exactly one solid) and each filament body (may legitimately be several).
+Run against today's parts it reproduces every defect in the table below to the
+number — 1153.4 mm³ of floating Coupler, the Femur's 25.2 mm³ chunk, the Tibia's
+3 sealed cavities, and non-manifold counts of white 1 / graphite 2 / accent 2.
+That agreement is the evidence the gate is correct.
 
 **Constraint 6 has a trap.** Some of the "bare grey on the back" may have been
 the Phase 1 shattering rather than a styling failure. **Look at the backs again
@@ -229,22 +258,27 @@ never checked**. Move the guard to the end of `build()`.
 Before anything is shown:
 
 ```
-python lib/verify.py <Part>     must print "0 changed, worst deviation 0.000 mm3"
-python lib/collide.py           must print "no new collisions"   <- REWIRE TO THE SWEEP
+python lib/verify.py <Part>        "0 changed, worst deviation 0.000 mm3"
+                                   AND "topology gate: PASS"   (exits non-zero on fail)
+python lib/collide.py --sweep 21   "no new collisions in any of the 21 configurations"
 ```
 
-**`verify.py` passing has been insufficient THREE times.** It has never tested
-topology. **Add the manifold gate** — four checks that would have caught the
-Phase 1 bug, the Coupler's floating chunks and the Tibia's sealed voids on the
-day each was introduced:
+**`verify.py` passing used to be insufficient, three times over**, because it
+only ever compared VOLUMES through openings and never looked at topology. A body
+can match the source hole for hole to 0.000 mm³ and still be non-manifold
+(Parasolid shreds it), be five disconnected solids, or contain a sealed bubble.
+All three shipped. `lib/manifold.gate()` now runs four checks:
 
 ```python
-import manifold
-manifold.nonmanifold_edges(body)   # empty -> SolidWorks will not shatter it
-manifold.free_edges(body)          # empty -> closed shell
-# plus: exactly 1 solid per body   -> constraint 3, no floating pieces
-# plus: exactly 1 shell per solid  -> no sealed voids
+nonmanifold_edges(body)   # empty -> Parasolid will not shatter it
+free_edges(body)          # empty -> closed shell
+exactly 1 solid per body  # constraint 3, no floating pieces  (fused part only)
+exactly 1 shell per solid # no sealed internal cavities
 ```
+
+plus a needle/debris report (<1 mm³ or <0.5 mm thick) for constraint 4. The
+fused part must be one solid; a per-filament body may legitimately be several,
+since the accent comes out as separate traces — hence `one_solid=False` there.
 
 ### Guards already in `build()` — every one caught a real defect
 
@@ -394,13 +428,19 @@ out, so holes return exactly where they started).
 ```
 lib/paths.py        where STEPs and outputs live; per-part output folders
 lib/spec.py         axes, languages, 16 palettes
-lib/manifold.py     non-manifold + free-edge detection, pinch welding
+lib/manifold.py     non-manifold + free-edge detection, pinch welding, and
+                    gate()/gate_report() -- the four topology checks
 lib/keepout.py      a part's OWN openings and silhouette
 lib/asmkeepout.py   SUPERSEDED by tools/freemap.py -- collapses depth to one
                     layer, pads by PAD_Z on top of clearance, falls back to a
                     convex hull, and calls buffer(0) twice.  Do not trust it.
-lib/collide.py      interference -- THREE POSES ONLY, rewire to the sweep
-lib/verify.py       holes survived + material removed
+lib/collide.py      interference.  --sweep N places every instance at N hip
+                    angles across the WHOLE travel via tools/kinematics.py, and
+                    refuses to run on a kinematic model that does not reconstruct
+                    the exported poses.  Without --sweep it does the old 3 poses.
+lib/verify.py       holes survived + material removed + THE TOPOLOGY GATE
+                    (non-manifold, free edges, one solid, one shell, needles).
+                    Exits non-zero on failure so it can gate a script.
 lib/stepcolor.py    the coloured STEP: welds, one root, honest tolerance
 lib/export3mf.py    Bambu/Orca project 3MF, one filament per body
 parts/femur.py      THE GENERAL RECIPE — everything else is generated from it
@@ -522,8 +562,9 @@ the Phase 1 bug**. None was caught by the check nominally responsible for it.
 - **The 20 mm free-space window is binding.** p90 and max sit at 18.4/20.0 on
   all three links, so the real reach is larger and unmeasured. Re-run
   `tools/freemap.py --grow 30` if the rebuild wants more than 20 mm anywhere.
-- **`lib/collide.py` is still three poses.** Constraint 2 is not satisfiable
-  until it is driven from `tools/kinematics.py`.
+- **No minimum-wall check exists.** Constraint 5 (`min_wall = 3.0` mm) is the
+  one part of his brief with nothing behind it. Everything else in the brief now
+  has a gate that runs.
 - **Contested space is not allocated.** `freemap` measures each link against
   SOURCE neighbours, so two links can both be told the same gap is free. Growing
   all three to the limit could have them meet in the middle; the sweep will
