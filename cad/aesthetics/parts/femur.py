@@ -40,6 +40,7 @@ A, C = (-93.79, 0.0), (93.79, 0.0)      # derived; see module docstring
 SHOW_FACE = "+Z"                        # set from the spec by _face()
 EPS_Z = 0.05       # mm; keeps layer boundaries from being coincident faces
 SIL_TOL = 1.0      # mm2 of source silhouette `grown` may lose to GEOS noise
+FL_OVER = 2.0      # mm the flange laps OVER real material, so the fuse bites
 _CACHE = {}
 
 
@@ -159,6 +160,34 @@ def marks():
                 rem = _wkt.loads(d["remove_wkt"]).buffer(0)
         _CACHE["marks"] = (add, rem)
     return _CACHE["marks"]
+
+
+CBAND_RAKE = 0.42       # dx per dy on a colour-band end
+
+
+def _cband(x0, x1, z0, z1, Y, rake=CBAND_RAKE, flip=False):
+    """A colour band across the part, with its ends RAKED IN PLAN.
+
+    His note on the Coupler's back: *"the gray it just, you know, straight down
+    ... it seems that a child did it"*.  He is right, and the cause is exact:
+    the bands were trapezoids in the X-Z plane swept through Y.  A trapezoid in
+    X-Z is only trapezoidal seen from the SIDE.  Cut it with either big face of
+    the part -- a plane of constant z -- and its footprint is a RECTANGLE whose
+    ends are lines of constant x.  Dead straight, whatever `skew` was set to.
+    So every colour boundary on the two faces anybody actually looks at was
+    square, while the trapezoid lived on the narrow edge where it barely shows.
+
+    Raking the ends in plan puts the diagonal where it is seen.  `flip` reverses
+    the rake so the white and graphite bands lean opposite ways and interlock
+    rather than running parallel.
+
+    `Y` must clear the part but not by much: the trapezoid narrows by 2*rake*Y
+    end to end, so an over-large Y makes the far end cross itself into a bowtie.
+    Callers pass the part's own half-width plus a margin.
+    """
+    d = rake * Y * (-1.0 if flip else 1.0)
+    return prism(ShPoly([(x0 - d, -Y), (x0 + d, Y),
+                         (x1 - d, Y), (x1 + d, -Y)]), z0, z1)
 
 
 def _back_plane(solid, ZT, ZB, out_area, frac=0.45, n=64):
@@ -576,9 +605,27 @@ def plan(sp):
             # panel's 4.79 cm3, sitting at Y +75..+81 past the plate edge.
             mfp = _band_faces(src["solid"], [(z0f, z1f)])[0]
             if not band.is_empty and mfp is not None:
-                touch = mfp.buffer(0.2, join_style=2)
-                keep = [g for g in geoms(band) if g.intersects(touch)]
+                # A PLAN TOUCH IS NOT A 3D JOIN.  Keeping every piece that
+                # merely grazed the footprint is how the Coupler's flange came
+                # off as THREE FREE SOLIDS totalling 1.30 cm3 -- it lands on the
+                # hidden face there, where the section is smaller than the
+                # deeper band the ring was measured from, so the band sits
+                # outboard of the real wall with a gap behind it.
+                #
+                # Two changes.  A piece must OVERLAP real material by area, not
+                # graze it.  And each kept piece is then grown OVER that
+                # material so the fuse has something to bite: the overlap is a
+                # no-op against the source, because this is a union and not a
+                # cut, and the holes are subtracted again straight after.
+                keep = [g for g in geoms(band)
+                        if g.buffer(FL_OVER, join_style=2)
+                             .intersection(mfp).area > 2.0]
                 band = unary_union(keep) if keep else ShPoly()
+                if not band.is_empty:
+                    band = unary_union(
+                        [band, band.buffer(FL_OVER, join_style=2).intersection(mfp)])
+                    if not kb.is_empty:
+                        band = band.difference(kb)
             elif mfp is None:
                 band = ShPoly()
             print(f"  flange @ z {z0f:+6.1f}..{z1f:+6.1f}: ring {a0:.0f} -> "
@@ -1011,8 +1058,18 @@ def build(sp, verbose=True):
         # rather than tuning it: the cut now always reaches open air, so no skin
         # can survive.  Depth is set on the inside instead, and measured from
         # OUT, which is the one outline that IS the material.
+        # OUTER bound well outside the part -- that is the skin fix, and it is
+        # the half that matters.  DEPTH is measured from `grown`, which includes
+        # the flange, NOT from OUT.
+        #
+        # Measuring depth from OUT looks more principled and severs the part.
+        # The flange lives OUTSIDE OUT, so `OUT.buffer(-side_d)` starts eating
+        # `side_d` past the flange's own root: on the Coupler that cut the
+        # flange's attachment away along the -Y edge and 1.27 cm3 came off as
+        # three free-floating pieces.  `_drop_detached` refused the build, which
+        # is how this was caught rather than shipped.
         shell = (prism(grown.buffer(4.0, join_style=2), ZB - 1, ZTOP + 1)
-                 - prism(P["OUT"].buffer(-sp["side_d"], join_style=2),
+                 - prism(grown.buffer(-sp["side_d"], join_style=2),
                          ZB - 1, ZTOP + 1))
         cs = [side_solid(p, -1) for p in P["lo_pr"]] + [side_solid(p, +1) for p in P["hi_pr"]]
         sc = cs[0]
@@ -1072,14 +1129,17 @@ def build(sp, verbose=True):
         part WITHOUT the back treatment, then apply the back treatment at that
         plane and report what the share actually came out as.
         """
+        # Raked in PLAN, not in X-Z -- see _cband().  `_cy` is the part's own
+        # half-width plus a margin; passing a fixed large number would narrow
+        # the trapezoid past zero and fold it into a bowtie.
+        _gb = P["grown"].bounds
+        _cy = max(abs(_gb[1]), abs(_gb[3])) + 8.0
         wz = slab(SZ, ZTOP + 20)
-        for p in [trap_xz(a_, b_, SZ - 4.5, SZ, skew=6)
-                  for a_, b_ in [(fx(.02), fx(.24)), (fx(.50), fx(.72))]]:
-            wz = union(wz, full_y(p))
+        for a_, b_ in [(fx(.02), fx(.24)), (fx(.50), fx(.72))]:
+            wz = union(wz, _cband(a_, b_, SZ - 4.5, SZ, _cy))
         gz = None
-        for p in [trap_xz(a_, b_, SZ, SZ + 14.5, skew=6, taper_end=False)
-                  for a_, b_ in [(fx(.26), fx(.48)), (fx(.74), fx(.96))]]:
-            t = full_y(p)
+        for a_, b_ in [(fx(.26), fx(.48)), (fx(.74), fx(.96))]:
+            t = _cband(a_, b_, SZ, SZ + 14.5, _cy, flip=True)
             gz = t if gz is None else union(gz, t)
         if gz is not None:
             wz = wz - gz

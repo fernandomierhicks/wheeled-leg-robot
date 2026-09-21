@@ -29,7 +29,7 @@ from shapely.geometry import Polygon as ShPoly, Point as ShPoint, box as shbox, 
 from shapely.ops import unary_union
 from keepout import openings, silhouette
 from shputil import prism, raised, frustum, geoms, union
-from feat import trap_xz, side_solid, wall_shell, trap_plan
+from feat import trap_xz, side_solid, wall_shell, trap_plan, band_along
 import accents as ACC
 import spec as spec_mod
 import asmkeepout
@@ -40,6 +40,7 @@ RAD = {F: 16.0, E: 21.02}   # each datum's own feature radius
 SHOW_FACE = "+Z"                        # set from the spec by _face()
 EPS_Z = 0.05       # mm; keeps layer boundaries from being coincident faces
 SIL_TOL = 1.0      # mm2 of source silhouette `grown` may lose to GEOS noise
+FL_OVER = 2.0      # mm the flange laps OVER real material, so the fuse bites
 _CACHE = {}
 
 
@@ -131,6 +132,128 @@ def source():
         _CACHE.update(solid=s, ZT=bb.max.Z, ZB=bb.min.Z, OUT=out,
                       OPEN=op, KEEP=unary_union(op) if op else ShPoly())
     return _CACHE
+
+
+def marks():
+    """His add / remove regions, as part-local plan polygons.  Empty if absent.
+
+    NO TRANSFORM IS NEEDED even though `source()` mirrors this part.  The marks
+    are written in the part's own local XY by `tools/markplan.py`, and `_flip`
+    reflects about Plane.XY, which negates Z and leaves X and Y untouched.  That
+    is worth stating rather than leaving to be rediscovered: a frame mismatch
+    here would put every pocket on the wrong side of the part and still build,
+    verify and render perfectly.
+
+    `confirmed: false` in the file is his own caveat (decision 26) -- the marks
+    are intent, the geometry is the judge -- so these are used to say WHERE, and
+    the free map and the collision sweep say HOW FAR.
+    """
+    if "marks" not in _CACHE:
+        from shapely import wkt as _wkt
+        f = os.path.join(paths.INPUT, "marks", f"{PART}.json")
+        add = rem = ShPoly()
+        if os.path.exists(f):
+            d = json.load(open(f))
+            if d.get("add_wkt"):
+                add = _wkt.loads(d["add_wkt"]).buffer(0)
+            if d.get("remove_wkt"):
+                rem = _wkt.loads(d["remove_wkt"]).buffer(0)
+        _CACHE["marks"] = (add, rem)
+    return _CACHE["marks"]
+
+
+CBAND_RAKE = 0.42       # dx per dy on a colour-band end
+
+
+def _cband(x0, x1, z0, z1, Y, rake=CBAND_RAKE, flip=False):
+    """A colour band across the part, with its ends RAKED IN PLAN.
+
+    His note on the Coupler's back: *"the gray it just, you know, straight down
+    ... it seems that a child did it"*.  He is right, and the cause is exact:
+    the bands were trapezoids in the X-Z plane swept through Y.  A trapezoid in
+    X-Z is only trapezoidal seen from the SIDE.  Cut it with either big face of
+    the part -- a plane of constant z -- and its footprint is a RECTANGLE whose
+    ends are lines of constant x.  Dead straight, whatever `skew` was set to.
+    So every colour boundary on the two faces anybody actually looks at was
+    square, while the trapezoid lived on the narrow edge where it barely shows.
+
+    Raking the ends in plan puts the diagonal where it is seen.  `flip` reverses
+    the rake so the white and graphite bands lean opposite ways and interlock
+    rather than running parallel.
+
+    `Y` must clear the part but not by much: the trapezoid narrows by 2*rake*Y
+    end to end, so an over-large Y makes the far end cross itself into a bowtie.
+    Callers pass the part's own half-width plus a margin.
+    """
+    d = rake * Y * (-1.0 if flip else 1.0)
+    return prism(ShPoly([(x0 - d, -Y), (x0 + d, Y),
+                         (x1 - d, Y), (x1 + d, -Y)]), z0, z1)
+
+
+def _back_plane(solid, ZT, ZB, out_area, frac=0.45, n=64):
+    """The back face of the PLATE -- which is NOT the bounding-box minimum.
+
+    In the mirrored frame the Femur's bbox runs -34..+5, but twenty-nine of
+    those thirty-nine millimetres are the hip boss TUBE; the plate itself is
+    only -5..+5.  So `ZB` is the far end of a cylinder, not the back of the
+    part, and anything aimed at "the back" using it lands in mid-air.
+
+    Paid for immediately: the first back engraving reported 1623 mm2 cut and
+    moved the part's volume by nothing at all, and the deliberate back colour
+    pattern silently did nothing -- white went 57.97 -> 58.02 cm3 on a slab that
+    should have been worth 11 cm3.  Both booleans "succeeded".
+
+    Scans z bands upward and returns the lowest whose plan footprint is at least
+    `frac` of the silhouette: the height at which the part stops being a boss
+    and starts being a plate.
+    """
+    step = (ZT - ZB) / float(n)
+    bands = [(ZB + i * step, ZB + (i + 1) * step) for i in range(n)]
+    for (z0, _z1), f in zip(bands, _band_faces(solid, bands)):
+        if f is not None and f.area >= frac * out_area:
+            return z0
+    return ZB
+
+
+def _drop_detached(body, say, what="body"):
+    """Constraint 3, "no floating pieces": reduce `body` to ONE connected solid.
+
+    THIS MUST RUN LAST.  It used to sit immediately after the growth fuse, but
+    the raised frame/rail/pads union on afterwards and the flange later still,
+    so anything stranded after that point was never looked at -- which is how
+    the shipped Femur kept a 25.2 mm3 chunk and the Coupler four totalling
+    1.15 cm3, both of them found by the topology gate rather than by the guard
+    whose whole job they were.
+
+    Keeping the LARGEST solid rather than everything that touches the source:
+    once cuts are in, two pieces can both overlap the source and still be
+    disconnected from each other, so "touches the source" does not mean "is one
+    part".  A big drop is a design error, not debris -- a removal severed the
+    part -- so it raises rather than quietly printing half a Femur.
+    """
+    sols = body.solids()
+    if len(sols) < 2:
+        return body
+    sols = sorted(sols, key=lambda s: -s.volume)
+    keep, drop = sols[0], sols[1:]
+    lost = sum(s.volume for s in drop)
+    say(f"  {what}: dropped {len(drop)} detached piece(s), {lost/1000:.3f} cm3")
+    # WHERE it is, not just how much.  A guard that silently eats several cm3
+    # every build is how the earlier defects stayed hidden; the bbox says which
+    # feature is stranding material.
+    for d in drop[:4]:
+        b = d.bounding_box()
+        say(f"      {d.volume/1000:7.3f} cm3 at "
+            f"X {b.min.X:+7.1f}..{b.max.X:+7.1f}  "
+            f"Y {b.min.Y:+7.1f}..{b.max.Y:+7.1f}  "
+            f"Z {b.min.Z:+7.1f}..{b.max.Z:+7.1f}")
+    if lost > max(500.0, 0.01 * body.volume):
+        raise RuntimeError(
+            f"{PART}: {lost/1000:.2f} cm3 came away as {len(drop)} separate "
+            f"solid(s) -- a removal has SEVERED the part, which is a design "
+            f"error rather than debris.  Largest kept piece is "
+            f"{keep.volume/1000:.2f} cm3 of {body.volume/1000:.2f}.")
+    return keep
 
 
 def _band_faces(solid, bands, tol=0.8):
@@ -328,6 +451,36 @@ def plan(sp):
     grown = ShPoly(grown.exterior)
     grown = max(geoms(grown.buffer(-0.12, join_style=2).buffer(0.12, join_style=2)),
                 key=lambda g: g.area)
+
+    # ADDED MATERIAL THINNER THAN min_wall IS NOT MATERIAL, IT IS AN ARTEFACT.
+    #
+    # `simplify(tol)` above moves the design boundary by up to tol -- 0.5 mm in
+    # organic mode -- so everywhere the design outline nearly coincides with the
+    # source outline, `grown - OUT` is a hairline ribbon a few tenths wide.
+    # `build()` extrudes exactly that difference, so the ribbon becomes real
+    # metal: a half-millimetre skirt running most of the way round the part.
+    #
+    # It is the single biggest defect on the part.  Measured on the rebuild:
+    # 2049 mm2 -- THIRTY-SEVEN PER CENT of all the thinness the styling
+    # introduces -- lies outside the source silhouette, at a median thickness of
+    # 0.51 mm.  That is the 0.50 mm mode in the thin-wall map, and it is not a
+    # design feature anybody chose; it is `tol` leaking into the solid.
+    #
+    # Morphological opening is the exact tool: a band keeps a ball of radius w/2,
+    # so opening the annulus by min_wall/2 preserves every band at least
+    # min_wall wide and deletes every one that is not, without touching the
+    # source silhouette.  Grown can only ever gain area over OUT, so the
+    # "grown still contains OUT" guard below stays satisfied by construction.
+    _MW = float(sp.get("min_wall", 3.0))
+    _ann = grown.difference(OUT)
+    if not _ann.is_empty and _MW > 0.1:
+        _keep = _ann.buffer(-_MW / 2, join_style=2).buffer(_MW / 2, join_style=2)
+        _shed = _ann.area - (0.0 if _keep.is_empty else _keep.area)
+        if _shed > 1.0:
+            print(f"  growth: shed {_shed:.0f} mm2 of sub-{_MW:g} mm skirt "
+                  f"({_ann.area:.0f} -> {_ann.area - _shed:.0f} mm2 of real growth)")
+        _u = unary_union([OUT, _keep]).buffer(0)
+        grown = ShPoly(max(geoms(_u), key=lambda g: g.area).exterior)
     # `env` INTERSECTS the solid, so anything missing from `grown` is cut off the
     # part.  That mistake has been expensive here before (traps 2, 3, 9), and it
     # is silent -- verify.py only catches it once a hole is hit.  Check directly.
@@ -452,9 +605,27 @@ def plan(sp):
             # panel's 4.79 cm3, sitting at Y +75..+81 past the plate edge.
             mfp = _band_faces(src["solid"], [(z0f, z1f)])[0]
             if not band.is_empty and mfp is not None:
-                touch = mfp.buffer(0.2, join_style=2)
-                keep = [g for g in geoms(band) if g.intersects(touch)]
+                # A PLAN TOUCH IS NOT A 3D JOIN.  Keeping every piece that
+                # merely grazed the footprint is how the Coupler's flange came
+                # off as THREE FREE SOLIDS totalling 1.30 cm3 -- it lands on the
+                # hidden face there, where the section is smaller than the
+                # deeper band the ring was measured from, so the band sits
+                # outboard of the real wall with a gap behind it.
+                #
+                # Two changes.  A piece must OVERLAP real material by area, not
+                # graze it.  And each kept piece is then grown OVER that
+                # material so the fuse has something to bite: the overlap is a
+                # no-op against the source, because this is a union and not a
+                # cut, and the holes are subtracted again straight after.
+                keep = [g for g in geoms(band)
+                        if g.buffer(FL_OVER, join_style=2)
+                             .intersection(mfp).area > 2.0]
                 band = unary_union(keep) if keep else ShPoly()
+                if not band.is_empty:
+                    band = unary_union(
+                        [band, band.buffer(FL_OVER, join_style=2).intersection(mfp)])
+                    if not kb.is_empty:
+                        band = band.difference(kb)
             elif mfp is None:
                 band = ShPoly()
             print(f"  flange @ z {z0f:+6.1f}..{z1f:+6.1f}: ring {a0:.0f} -> "
@@ -507,6 +678,59 @@ def plan(sp):
     gk = sp.get("gap_k", 1.0)
     fx = lambda t: X0 + t * L
 
+    # WHERE MATERIAL MAY BE REMOVED.  Two conditions, and every deep removal
+    # below is intersected with both.
+    #
+    # (1) min_wall of rim on the REAL edge.  `clip()` measures its margin from
+    #     `grown`, which INCLUDES the flange -- and the flange is a prism over
+    #     part of the depth, so at a z where it does not reach there is no metal
+    #     out there at all.  Measured on the pre-Phase-3 build at x=+60: the
+    #     source is solid from y -17.25 to +18.5, and the styled part had a
+    #     0.5 mm-wide free-standing column at y -17.25 with TWELVE MILLIMETRES
+    #     of air beside it.  `clip(cuts, 4.5)` had faithfully kept 4.5 mm clear
+    #     of `grown` and left half a millimetre of real material.  That single
+    #     razor is the 0.50 mm mode in the thin-wall map.  Measuring the margin
+    #     from OUT instead makes the rim structural rather than incidental.
+    #
+    # (2) inside his RED region.  Constraint 1 is "add and remove only where
+    #     identified", and his red is the CENTRAL WEB -- x -73.8..63.3,
+    #     y -12.7..13.3 on a part spanning y +-19.4.  It stops well short of the
+    #     rim and of both pivots on purpose: thicken the edge, hollow the middle,
+    #     leave the bosses alone.  The old cuts ran to y -17, straight through
+    #     the band he marked GREEN for growth -- the exact inverse of the intent.
+    #
+    # Surface relief is NOT bound by (2).  The accent engraving is 1.2 mm into a
+    # 10 mm plate and the side-wall pockets are shallow: they are finish, not
+    # removal, and confining them to the web would strip the locked GLACIER look
+    # off the whole rim for no structural gain.  They are still bound by the
+    # thin-wall gate, which measures what is actually left.
+    # WHICH removals each condition binds is the part that needed thought.
+    # Depth decides it, because that is what "removing material" means here:
+    #
+    #   cutouts   ZB-10 .. ZTOP+12   FULL DEPTH -- a real hole through the part
+    #   pock      ZT-2.1 ..          2.1 mm into the show face
+    #   wins      ftop-4.075 ..      through the RAISED frame, 0.6 mm into the part
+    #   side      side_d into the side wall
+    #   engraving 1.2 mm
+    #
+    # Only `cutouts` takes material out of the web.  The rest is surface relief
+    # -- it is the GLACIER look, it is what he approved, and confining it to the
+    # web would strip the finish off the whole rim for no structural gain.  A
+    # first pass that bound every removal to his red zone deleted all four
+    # windows outright, which is how that distinction got found.
+    #
+    # So: (1) binds everything, (2) binds the through-cut alone.
+    MW = float(sp.get("min_wall", 3.0))
+    _red = marks()[1]
+    core = OUT.buffer(-MW, join_style=2)           # (1) min_wall of real rim
+    web = core if _red.is_empty else core.intersection(_red)   # (2) his red
+    if web.is_empty:
+        web = core
+    rclip = lambda p: (p.intersection(core).difference(kb)
+                       if not p.is_empty else p)
+    wclip = lambda p: (p.intersection(web).difference(kb)
+                       if not p.is_empty else p)
+
     # The frame sits on the lower part of the plan and the rail on the upper.
     # Those bounds used to be absolute mm (-6.0 and +5.0), tuned on a 38.8 mm
     # tall link -- trap 10 a third time, now in Y: on a 104 mm plate they land
@@ -538,21 +762,37 @@ def plan(sp):
         lo, hi = ys
         if i % 2 == 0: pock.append(trap_plan(a_, b_, lo + 7.0, lo + 7.0 + 4.0 * qs, 6.0, 1.2))
         else:          pock.append(trap_plan(a_, b_, hi - 12.0 - 3.5 * qs, hi - 12.0, 6.0, -0.7))
-    pock = clip(unary_union(pock)) if pock else ShPoly()
+    pock = rclip(clip(unary_union(pock))) if pock else ShPoly()
 
     cuts = []
     for a_, b_ in _slots(fx(.18), fx(.82), sp.get("n_cuts", 0), 11.0):
         ys = _yspan(grown, (a_ + b_) / 2)
         if ys is None: continue
         cuts.append(trap_plan(a_, b_, ys[0] + 4.0, ys[0] + 11.0, 6.0, 1.0))
-    cutouts = clip(unary_union(cuts), 4.5) if cuts else ShPoly()
+    cutouts = wclip(clip(unary_union(cuts), 4.5)) if cuts else ShPoly()
+
+    # THE THROUGH-CUT SIZE RULE (decision 29).  His words were "all the way
+    # through would reduce part strength, so only do that in certain small
+    # areas"; the operational form is a largest-inscribed-circle test.  A piece
+    # that fits inside a 12 mm circle goes through; anything bigger becomes a
+    # pocket that stops min_wall short of the far face, so it still reads as the
+    # same feature from the show side while the back keeps a continuous skin.
+    # Tested by erosion rather than by area: a long thin slot and a fat blob can
+    # have the same area and are not remotely the same thing structurally.
+    THRU_R = 0.5 * float(sp.get("thru_max_d", 12.0))
+    cut_thru, cut_pocket = [], []
+    for _g in geoms(cutouts):
+        (cut_pocket if not _g.buffer(-THRU_R, join_style=2).is_empty
+         else cut_thru).append(_g)
+    cutouts = unary_union(cut_thru) if cut_thru else ShPoly()
+    cut_pockets = unary_union(cut_pocket) if cut_pocket else ShPoly()
 
     wins = []
     for a_, b_ in _slots(fx(.22), fx(.78), sp["n_wins"], 8.0):
         ys = _yspan(grown, (a_ + b_) / 2)
         if ys is None: continue
         wins.append(trap_plan(a_, b_, ys[0] + 3.0, ys[0] + 9.0, 5.0, 1.0))
-    wins = (unary_union(wins).intersection(frame.buffer(-3.4, join_style=2)).difference(kb)
+    wins = (rclip(unary_union(wins).intersection(frame.buffer(-3.4, join_style=2)))
             if wins and not frame.is_empty else ShPoly())
 
     # Side-wall pockets.  Absolute z, like split_z was, and just as untransferable:
@@ -583,6 +823,51 @@ def plan(sp):
         sp, grown=grown, kb=kb, clip=clip, yspan=_yspan, slots=_slots, gk=gk,
         joints=[(p, RAD[p] + 2.5) for p in (F, E)])
 
+    # ---------------------------------------------------- THE BACK, designed
+    # CONSTRAINT 6.  His words: "no silly kind of blocks of colour on the
+    # backside -- the entire surface of the thing has to have this aesthetics."
+    #
+    # WHAT THE SQUARES ACTUALLY ARE.  The colour split is a plane at SZ with
+    # white above it, so the back is graphite -- EXCEPT wherever the part is
+    # locally thinner than the cap is deep, where white reaches straight through
+    # and shows as a patch on the back.  Those patches are the footprints of the
+    # show-face pockets, seen from behind.  Nobody chose them, and they follow
+    # no rule, which is exactly why they read as silly.  The blue that reaches
+    # the back arrives the same accidental way.
+    #
+    # Killing them case by case would be endless.  The cause is that the back
+    # was never given a rule of its own, so it gets one: a guaranteed graphite
+    # skin that nothing can break through (build(), `_colour`), and a DELIBERATE
+    # pattern set into that skin -- decision 30, where he chose a designed back
+    # over a uniform one.
+    #
+    # `back_white`: trapezoid islands on the same fractional grid as every other
+    # band, plus a corridor along the accent spine so the blue reads on the back
+    # the way it reads on the front, as a line on a light ground.
+    ZBACK = _back_plane(src["solid"], ZT, ZB, OUT.area)
+
+    _bw = []
+    for a_, b_ in _slots(fx(.06), fx(.94), int(sp.get("n_back", 4)), 13.0 * gk):
+        ys = _yspan(OUT, (a_ + b_) / 2)
+        if ys is None:
+            continue
+        lo, hi = ys
+        _bw.append(trap_plan(a_, b_, lo + 4.5, hi - 4.5, 9.0, 0.0))
+    back_white = unary_union(_bw) if _bw else ShPoly()
+    if not strip.is_empty:
+        back_white = unary_union([back_white, strip.buffer(3.2, join_style=2)])
+    if not back_white.is_empty:
+        back_white = back_white.intersection(OUT.buffer(-2.0, join_style=2)).difference(kb)
+
+    # `back_eng`: two contour-following grooves echoing the show face's long
+    # bands.  Engraved, never proud -- the back points INBOARD at the side
+    # panel, roughly 4 mm away, so material added here would eat the clearance
+    # and have to survive all 21 poses.  A groove cannot foul anything.
+    back_eng = unary_union([band_along(OUT, 5.0, 8.2, fx(.07), fx(.93)),
+                            band_along(OUT, 13.0, 15.4, fx(.19), fx(.81))])
+    if not back_eng.is_empty:
+        back_eng = back_eng.difference(kb).difference(bosses.buffer(1.0))
+
     ct = sp.get("collar_t", 3.4)
     collars = unary_union([ShPoint(*p).buffer(RAD[p] + 0.5 + ct, 96)
                            .difference(ShPoint(*p).buffer(RAD[p] + 0.5, 96))
@@ -591,8 +876,30 @@ def plan(sp):
         collars = unary_union([collars, channel])
     collars = collars.intersection(grown).difference(kb)
 
+    # min_wall BETWEEN REMOVALS, not just against the silhouette.  Keeping every
+    # cut min_wall clear of the outer edge is necessary and nowhere near
+    # sufficient: the side-wall pockets eat `side_d` inward from +-Y while the
+    # slots eat outward from the middle, and neither knows the other exists.
+    # Measured at x=+40 on the first rebuild: the side pocket floor landed at
+    # y -12.3 and the slot wall at y -11.6, leaving a SEVEN-TENTHS of a
+    # millimetre web between two features that each satisfied their own rule.
+    # That pair is 1540 mm2 of the thin map and the single largest patch on the
+    # part.
+    #
+    # The rim wins the argument.  Two ways to break the sandwich: merge the two
+    # removals into one wider opening, or pull one of them back.  Merging would
+    # delete the rib -- and the rib is inside the band he marked GREEN to
+    # THICKEN, so it is the last thing that should go.  The side pocket is the
+    # one that yields, and only where it actually crowds something.
+    side_guard = (unary_union([g for g in (pock, wins, cutouts, cut_pockets)
+                               if not g.is_empty]).buffer(MW, join_style=2)
+                  if any(not g.is_empty for g in (pock, wins, cutouts, cut_pockets))
+                  else ShPoly())
+
     return dict(spec=sp, grown=grown, layers=layers, flange=flange, OUT=OUT, KEEP=KEEP, kb=kb, knee=bosses, wheel=bosses,
                 frame=frame, rail=rail, pads=pads, pock=pock, wins=wins, cutouts=cutouts,
+                cut_pockets=cut_pockets, side_guard=side_guard,
+                back_white=back_white, back_eng=back_eng, ZBACK=ZBACK,
                 lo_pr=lo_pr, hi_pr=hi_pr, ring=ring, strip=strip, blocks=blocks,
                 collars=collars, ZT=ZT, ZB=ZB,
                 ZTOP=ZT + max(sp["frame_h"], sp["rail_h"], sp["pad_h"]) + 1.0)
@@ -692,32 +999,6 @@ def build(sp, verbose=True):
             raise RuntimeError(
                 f"{PART}: fusing the addition LOST volume "
                 f"({solid.volume:.0f} -> {body.volume:.0f} mm3) -- a term was dropped.")
-    # Layering can STRAND material: a layer adds across its own z band, and
-    # where the source does not reach into that band the addition fuses to
-    # nothing and floats free.  The Coupler had 5.08 cm3 (5%) detached, the
-    # Femur 0.92.  A detached body is unprintable and would have gone into the
-    # 3MF as loose pieces, so keep only what is actually joined to the source.
-    _sols = body.solids()
-    if len(_sols) > 1:
-        _keep, _drop = [], []
-        for _s in _sols:
-            _hit = _s & solid
-            (_keep if _hit is not None and _hit.volume > 1.0 else _drop).append(_s)
-        if _keep and _drop:
-            say(f"  dropped {len(_drop)} detached piece(s), "
-                f"{sum(x.volume for x in _drop)/1000:.3f} cm3 -- layer growth "
-                f"with nothing to fuse to")
-            # WHERE it is, not just how much.  A guard that silently eats
-            # several cm3 every build is how the earlier defects stayed hidden;
-            # the bbox says which feature is stranding material.
-            for _d in sorted(_drop, key=lambda x: -x.volume)[:4]:
-                _b = _d.bounding_box()
-                say(f"      {_d.volume/1000:7.3f} cm3 at "
-                    f"X {_b.min.X:+7.1f}..{_b.max.X:+7.1f}  "
-                    f"Y {_b.min.Y:+7.1f}..{_b.max.Y:+7.1f}  "
-                    f"Z {_b.min.Z:+7.1f}..{_b.max.Z:+7.1f}")
-            body = _keep[0] if len(_keep) == 1 else union(*_keep)
-
     _lost = solid - body
     _lv = 0.0 if _lost is None else _lost.volume
     if _lv > 1.0:
@@ -752,14 +1033,55 @@ def build(sp, verbose=True):
         inset = w if inset is None else union(inset, w)
     if not P["cutouts"].is_empty:
         body = body - prism(P["cutouts"], ZB - 10, ZTOP + 12)
+    # The oversized share of the same feature, stopped min_wall short of the far
+    # face so it reads the same from the show side without holing the part
+    # through.  Decision 29's size rule split them in plan(); see THRU_R there.
+    if not P["cut_pockets"].is_empty:
+        _mw = float(sp.get("min_wall", 3.0))
+        body = body - prism(P["cut_pockets"], ZB + _mw, ZTOP + 12)
+        say(f"  {P['cut_pockets'].area:.0f} mm2 of cutout was too big to go "
+            f"through (> {sp.get('thru_max_d', 12.0):g} mm circle); pocketed to "
+            f"leave a {_mw:g} mm floor")
     if sp["side_d"] > 0.1 and (P["lo_pr"] or P["hi_pr"]):
-        shell = wall_shell(grown, ZB - 1, ZTOP + 1, t=sp["side_d"])
+        # A SIDE CUT MUST BREAK THROUGH, OR STAY min_wall CLEAR.  Never between.
+        #
+        # `wall_shell(grown, t)` bounds the cut by `grown` on the OUTSIDE, and
+        # `grown` is a design outline, not the material boundary: `simplify()`
+        # moves it, the flange moves it again, and the source can locally stick
+        # out past it.  Wherever it sits inside the real wall the cut stops
+        # short and leaves a skin.  Measured at x=+44.59: a 3.4 mm groove into
+        # the +Y wall ending 0.6 mm below the surface, over the full z band of
+        # the pocket.  Trap 11 is the same defect in z -- "a cut that stops
+        # short of the surface leaves a razor" -- and it was only ever fixed
+        # there.
+        #
+        # Taking the outer bound WELL OUTSIDE the part removes the failure mode
+        # rather than tuning it: the cut now always reaches open air, so no skin
+        # can survive.  Depth is set on the inside instead, and measured from
+        # OUT, which is the one outline that IS the material.
+        # OUTER bound well outside the part -- that is the skin fix, and it is
+        # the half that matters.  DEPTH is measured from `grown`, which includes
+        # the flange, NOT from OUT.
+        #
+        # Measuring depth from OUT looks more principled and severs the part.
+        # The flange lives OUTSIDE OUT, so `OUT.buffer(-side_d)` starts eating
+        # `side_d` past the flange's own root: on the Coupler that cut the
+        # flange's attachment away along the -Y edge and 1.27 cm3 came off as
+        # three free-floating pieces.  `_drop_detached` refused the build, which
+        # is how this was caught rather than shipped.
+        shell = (prism(grown.buffer(4.0, join_style=2), ZB - 1, ZTOP + 1)
+                 - prism(grown.buffer(-sp["side_d"], join_style=2),
+                         ZB - 1, ZTOP + 1))
         cs = [side_solid(p, -1) for p in P["lo_pr"]] + [side_solid(p, +1) for p in P["hi_pr"]]
         sc = cs[0]
         for c in cs[1:]: sc = union(sc, c)
         sub = (shell & sc)
         if not P["kb"].is_empty:
             sub = sub - prism(P["kb"], ZB - 20, ZTOP + 20)
+        # Keep the side pockets min_wall clear of every other removal, so the
+        # two cannot sandwich the rim into a razor.  See `side_guard` in plan().
+        if not P["side_guard"].is_empty:
+            sub = sub - prism(P["side_guard"], ZB - 20, ZTOP + 20)
         body = body - sub
     say(f"styled body {body.volume/1000:.2f} cm3, {len(body.faces())} faces")
 
@@ -774,25 +1096,85 @@ def build(sp, verbose=True):
     eng = unary_union([g for g in (P["strip"], P["blocks"]) if not g.is_empty])
     if not eng.is_empty:
         body = body - prism(eng, ZT - 1.2, ZTOP + 10)
+    # Constraint 6, the relief half: contour grooves cut INTO the back.  Shallow
+    # and subtractive by choice (decision 30) -- the back faces the side panel
+    # about 4 mm away, so anything proud would eat that clearance, while a groove
+    # cannot foul anything in any pose.
+    _bed = float(sp.get("back_eng_d", 1.2))
+    if not P["back_eng"].is_empty and _bed > 0.05:
+        _zbk = P["ZBACK"]
+        body = body - prism(P["back_eng"], _zbk - 10, _zbk + _bed)
+        say(f"  back: engraved {P['back_eng'].area:.0f} mm2 of contour groove "
+            f"{_bed:g} mm deep at z {_zbk:+.2f} (plate back; bbox floor is "
+            f"{ZB:+.2f})")
+    # Nothing below this point adds or removes geometry -- the colour split only
+    # partitions what is here -- so this is where constraint 3 can finally be
+    # enforced.  See _drop_detached().
+    body = _drop_detached(body, say)
     groove = prism(acc_poly, ZB - 20, ZTOP + 20) if not acc_poly.is_empty else None
     collars = prism(P["collars"], ZB - 20, ZTOP + 20) if not P["collars"].is_empty else None
     full_y = lambda p: Pos(0, 200, 0) * side_solid(p, -1, reach=400)
 
-    def _colour(SZ):
+    def _colour(SZ, back=True):
         """Split the body at plane SZ.  White is the cap at the show face; the
         trapezoid bands straddle the plane, white pushed 4.5 mm below it and
-        graphite 14.5 mm above."""
+        graphite 14.5 mm above.
+
+        `back=False` omits the constraint-6 back treatment.  THE SOLVER BELOW
+        MUST USE IT.  The back skin takes ~2 mm x the whole plate out of white,
+        and a bisection told to hit 70% will chase that by driving SZ downward
+        -- measured, it ran to z -33.70, which is past the back of the plate
+        entirely and out at the tip of the hip boss.  SZ is not a free
+        parameter: the show-face trapezoid bands straddle it, so moving it there
+        carries the whole locked band design off the plate.  Solve for SZ on the
+        part WITHOUT the back treatment, then apply the back treatment at that
+        plane and report what the share actually came out as.
+        """
+        # Raked in PLAN, not in X-Z -- see _cband().  `_cy` is the part's own
+        # half-width plus a margin; passing a fixed large number would narrow
+        # the trapezoid past zero and fold it into a bowtie.
+        _gb = P["grown"].bounds
+        _cy = max(abs(_gb[1]), abs(_gb[3])) + 8.0
         wz = slab(SZ, ZTOP + 20)
-        for p in [trap_xz(a_, b_, SZ - 4.5, SZ, skew=6)
-                  for a_, b_ in [(fx(.02), fx(.24)), (fx(.50), fx(.72))]]:
-            wz = union(wz, full_y(p))
+        for a_, b_ in [(fx(.02), fx(.24)), (fx(.50), fx(.72))]:
+            wz = union(wz, _cband(a_, b_, SZ - 4.5, SZ, _cy))
         gz = None
-        for p in [trap_xz(a_, b_, SZ, SZ + 14.5, skew=6, taper_end=False)
-                  for a_, b_ in [(fx(.26), fx(.48)), (fx(.74), fx(.96))]]:
-            t = full_y(p)
+        for a_, b_ in [(fx(.26), fx(.48)), (fx(.74), fx(.96))]:
+            t = _cband(a_, b_, SZ, SZ + 14.5, _cy, flip=True)
             gz = t if gz is None else union(gz, t)
         if gz is not None:
             wz = wz - gz
+
+        # CONSTRAINT 6 -- the back stops being a leftover of this split.
+        #
+        # First, a graphite skin the white cap cannot reach through.  The
+        # "silly squares" are white arriving on the back wherever the part is
+        # locally thinner than the cap is deep -- the show-face pockets seen
+        # from behind.  Subtracting a slab at the back face removes that whole
+        # failure mode at once, instead of chasing each patch.
+        #
+        # Then the deliberate pattern set INTO that skin: trapezoid islands on
+        # the same fractional grid as every other band, and a corridor along the
+        # accent spine so the blue reads on the back as a line on a light
+        # ground, the way it does on the front.  `bl = cap & groove` below picks
+        # the blue out of whatever white exists, so giving the spine white to
+        # sit in is what puts a DESIGNED blue on the back rather than an
+        # accidental one.
+        _zbk = P["ZBACK"]
+        _skin = float(sp.get("back_skin", 2.0)) if back else 0.0
+        if _skin > 0.05:
+            # A BOUNDED slab at the plate's back, not everything below it.
+            # `slab(_zbk - 40, ...)` would also swallow the hip boss TUBE, which
+            # lives below the plate in this frame and currently carries a
+            # deliberate white band -- repainting it would be a silent change to
+            # a locked look, for a fix aimed somewhere else entirely.
+            wz = wz - slab(_zbk - 1.0, _zbk + _skin)
+        if back and not P["back_white"].is_empty:
+            _bwp = prism(P["back_white"], _zbk - 2,
+                         _zbk + float(sp.get("back_band_t", 3.2)))
+            if _bwp is not None:
+                wz = union(wz, _bwp)
+
         cap = body & wz
         w = cap
         if groove is not None:  w = w - groove
@@ -822,7 +1204,7 @@ def build(sp, verbose=True):
         best = None
         for _ in range(int(sp.get("share_iters", 7))):
             SZ = (lo + hi) / 2
-            white, blue, graph, tot = _colour(SZ)
+            white, blue, graph, tot = _colour(SZ, back=False)
             got = white.volume / tot if tot else 0.0
             say(f"  split {SZ:+7.2f} -> white {100*got:4.1f}%  (target {100*target:.0f}%)")
             if best is None or abs(got - target) < best[0]:
@@ -834,6 +1216,13 @@ def build(sp, verbose=True):
             else:
                 hi = SZ
         _, white, blue, graph, tot, got, SZ = best
+        # SZ is settled on the bare split; now lay the designed back on top of
+        # it.  The share moves and that is expected -- it is reported, not
+        # solved for, because the alternative is letting the back drag the
+        # show-face bands around.
+        white, blue, graph, tot = _colour(SZ)
+        got = white.volume / tot if tot else 0.0
+        say(f"  back treatment applied at split {SZ:+.2f} -> white {100*got:.1f}%")
         if abs(got - target) > 0.03:
             say(f"  note: {100*target:.0f}% white is not reachable on this part "
                 f"-- best {100*got:.1f}% at split {SZ:+.2f}; the accent, collars "
@@ -859,6 +1248,71 @@ def build(sp, verbose=True):
         body, white, graph, blue = (_flip(body), _flip(white),
                                     _flip(graph), _flip(blue))
         say(f"  mirrored back to source orientation (show face local -Z)")
+
+    # WELD HERE, not in the exporter.  lib/stepcolor.py welds on its way out, so
+    # only the coloured STEP was ever sound; the per-filament print STEPs and
+    # the 3MF still carried the pinch edges and still shattered in SolidWorks.
+    # Welding the bodies themselves makes every downstream artifact clean and
+    # leaves stepcolor's own pass a no-op.  A pinch is also a knife-edge
+    # self-contact carrying no load, which is exactly what constraint 4 rules
+    # out, so this is the mechanical answer as well as the topological one.
+    # It runs AFTER the partition check above, because the 0.06 mm rods add a
+    # few hundredths of a percent and that check is exact.
+    # Wrapping the welded TopoDS shape back up needs the CONCRETE class.
+    # `Shape.cast()` looks like the obvious call and returns None for the
+    # compound the weld produces -- silently, so the failure surfaces three
+    # frames later inside export_step as "'NoneType' has no attribute
+    # 'wrapped'", which names nothing.  Pick the class from the shape type.
+    import manifold as _mf
+    from build123d import Compound as _B3DCompound, Solid as _B3DSolid
+    from OCP.TopAbs import TopAbs_SOLID
+
+    def _wrap(ts):
+        return (_B3DSolid(ts) if ts.ShapeType() == TopAbs_SOLID
+                else _B3DCompound(ts))
+
+    def _debris(b, nm, mm3=1.0):
+        """Drop boolean debris from a filament body.
+
+        CONSTRAINT 4.  This was already being done -- in `lib/stepcolor.py`, on
+        its way out -- so only the COLOUR step was ever clean while the
+        per-filament print STEPs and the 3MF kept the specks.  Exactly the same
+        shape of mistake as the weld: a repair living in one exporter instead of
+        in build(), where every artifact can benefit.
+        Found because the designed back put white islands through the graphite
+        body and its needle count went 3 -> 23 in one build.
+        """
+        if b is None:
+            return b
+        sol = b.solids()
+        if len(sol) < 2:
+            return b
+        keep = [s for s in sol if s.volume >= mm3]
+        gone = [s for s in sol if s.volume < mm3]
+        if not gone or not keep:
+            return b
+        say(f"  {nm}: dropped {len(gone)} debris solid(s) under {mm3:g} mm3 "
+            f"({sum(s.volume for s in gone):.2f} mm3 total)")
+        return keep[0] if len(keep) == 1 else union(*keep)
+
+    white = _debris(white, "white")
+    graph = _debris(graph, "graphite")
+    blue = _debris(blue, "accent")
+
+    _welded = {}
+    for _nm, _b in (("body", body), ("white", white),
+                    ("graphite", graph), ("accent", blue)):
+        if _b is None or _b.volume < 1.0:
+            _welded[_nm] = _b
+            continue
+        _w, _left, _dv = _mf.weld_nonmanifold(_b.wrapped, say=lambda *a: None)
+        if _left:
+            say(f"  {_nm}: {_left} non-manifold edge(s) SURVIVED the weld")
+        if _dv:
+            say(f"  {_nm}: welded pinches, {_dv:+.3f} mm3")
+        _welded[_nm] = _wrap(_w) if _dv or _left else _b
+    body, white, graph, blue = (_welded["body"], _welded["white"],
+                                _welded["graphite"], _welded["accent"])
     return dict(body=body, white=white, graphite=graph, accent=blue, plan=P)
 
 
