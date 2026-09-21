@@ -190,8 +190,8 @@ def _cband(x0, x1, z0, z1, Y, rake=CBAND_RAKE, flip=False):
                          (x1 - d, Y), (x1 + d, -Y)]), z0, z1)
 
 
-def _back_plane(solid, ZT, ZB, out_area, frac=0.45, n=64):
-    """The back face of the PLATE -- which is NOT the bounding-box minimum.
+def _plate_face(solid, ZT, ZB, out_area, frac=0.45, n=64, top=False):
+    """A face of the PLATE -- which is NOT the bounding box, at either end.
 
     In the mirrored frame the Femur's bbox runs -34..+5, but twenty-nine of
     those thirty-nine millimetres are the hip boss TUBE; the plate itself is
@@ -203,16 +203,25 @@ def _back_plane(solid, ZT, ZB, out_area, frac=0.45, n=64):
     pattern silently did nothing -- white went 57.97 -> 58.02 cm3 on a slab that
     should have been worth 11 cm3.  Both booleans "succeeded".
 
-    Scans z bands upward and returns the lowest whose plan footprint is at least
-    `frac` of the silhouette: the height at which the part stops being a boss
-    and starts being a plate.
+    THE SAME MISTAKE EXISTS AT THE TOP, and the Coupler wears it: its plate is
+    z -5..+5.5 but its BEARING TUBE runs to +30, so `ZT` is the top of a
+    cylinder.  A show-face inlay measured from ZT painted the tube end and left
+    the plate plain white -- "only one side is edited, the other looks just
+    plain white to me".  The Femur escaped only because its tube points the
+    other way.
+
+    Scans z bands from one end and returns the first whose plan footprint is at
+    least `frac` of the silhouette: where the part stops being a boss and starts
+    being a plate.  `top=True` scans downward from ZT for the show face.
     """
     step = (ZT - ZB) / float(n)
     bands = [(ZB + i * step, ZB + (i + 1) * step) for i in range(n)]
-    for (z0, _z1), f in zip(bands, _band_faces(solid, bands)):
+    fs = _band_faces(solid, bands)
+    for i in (range(n - 1, -1, -1) if top else range(n)):
+        f = fs[i]
         if f is not None and f.area >= frac * out_area:
-            return z0
-    return ZB
+            return bands[i][1] if top else bands[i][0]
+    return ZT if top else ZB
 
 
 def _drop_detached(body, say, what="body"):
@@ -826,7 +835,8 @@ def plan(sp):
     # The plate's back face, which is NOT the bounding-box floor -- see
     # _back_plane().  Both the back engraving and the back half of the colour
     # inlay are measured from it.
-    ZBACK = _back_plane(src["solid"], ZT, ZB, OUT.area)
+    ZBACK = _plate_face(src["solid"], ZT, ZB, OUT.area)
+    ZSHOW = _plate_face(src["solid"], ZT, ZB, OUT.area, top=True)
 
     # ------------------------------------------------- GRAPHITE, DRAWN
     # Decision 32 B.  Graphite used to be the LEFTOVER of a Z-plane split, which
@@ -842,9 +852,14 @@ def plan(sp):
     # styling boss: `bosses` is RAD + 3.5 + knee_grow, which on the Coupler is a
     # 23 and a 28 mm disc on a 208 mm part and swallowed most of the third run,
     # taking its trace down to 12% of the silhouette against the Femur's 22%.
-    _deep = _band_faces(src["solid"], [(ZB, ZBACK - 3.0)])[0]
+    # ... at BOTH ends.  The 10 mm threshold separates a boss tube, which rises
+    # 24.5 mm above the Coupler's plate, from the raised frame/rail/pads at
+    # ~8 mm, which SHOULD carry the trace.
+    _d0 = _band_faces(src["solid"], [(ZB, ZBACK - 3.0)])[0]
+    _d1 = _band_faces(src["solid"], [(ZSHOW + 10.0, ZT)])[0]
+    _deep = unary_union([g for g in (_d0, _d1) if g is not None])
     grey = ACC.grey_trace(sp, grown=grown, kb=kb, path=ACC.LAST.get("path"),
-                          avoid=(None if _deep is None else _deep.buffer(2.5)))
+                          avoid=(None if _deep.is_empty else _deep.buffer(2.5)))
 
     # `back_eng`: two contour-following grooves echoing the show face's long
     # bands.  Engraved, never proud -- the back points INBOARD at the side
@@ -886,7 +901,7 @@ def plan(sp):
     return dict(spec=sp, grown=grown, layers=layers, flange=flange, OUT=OUT, KEEP=KEEP, kb=kb, knee=bosses, wheel=bosses,
                 frame=frame, rail=rail, pads=pads, pock=pock, wins=wins, cutouts=cutouts,
                 cut_pockets=cut_pockets, side_guard=side_guard,
-                grey=grey, back_eng=back_eng, ZBACK=ZBACK,
+                grey=grey, back_eng=back_eng, ZBACK=ZBACK, ZSHOW=ZSHOW,
                 lo_pr=lo_pr, hi_pr=hi_pr, ring=ring, strip=strip, blocks=blocks,
                 collars=collars, ZT=ZT, ZB=ZB,
                 ZTOP=ZT + max(sp["frame_h"], sp["rail_h"], sp["pad_h"]) + 1.0)
@@ -1142,7 +1157,7 @@ def build(sp, verbose=True):
             """
             if poly is None or poly.is_empty:
                 return None
-            top = prism(poly, ZT - d, ZTOP + 12)
+            top = prism(poly, P["ZSHOW"] - d, ZTOP + 12)
             bot = prism(poly, ZB - 12, zbk + d)
             if top is None:
                 return bot
