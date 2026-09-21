@@ -18,6 +18,86 @@ from shputil import geoms
 from feat import trap_plan, band_along
 
 
+# The last routed circuit path, so a board can draw alternative GREY traces on
+# exactly the line the blue already follows instead of re-deriving the routing
+# and drifting from it.  Diagnostic only -- nothing in the build reads it.
+LAST = {}
+
+
+def _route(xa, xb, lane, n_jog, amp, jw, rng):
+    """A routed polyline: straight runs joined by diagonal doglegs.
+
+    The same vocabulary as the blue -- straight, jog, straight, never a square
+    corner -- but its own span, lane and jog positions.  `rng` is seeded from
+    the spec so a chosen arrangement rebuilds exactly instead of re-rolling.
+    """
+    pts, y = [(xa, lane)], lane
+    for xj in np.linspace(xa + 0.20 * (xb - xa), xb - 0.26 * (xb - xa), n_jog):
+        dy = amp * float(rng.choice([-1.0, 1.0])) * float(rng.uniform(0.55, 1.45))
+        pts.append((xj, y))
+        pts.append((xj + jw, y + dy))
+        y += dy
+    pts.append((xb, y))
+    return pts
+
+
+def _trace(pts, w):
+    """Width `w` along `pts`, flat caps and MITRE joins -- a rounded join reads
+    as a drawn stroke, a mitred one reads as a routed track."""
+    return LineString(pts).buffer(w / 2.0, cap_style=2, join_style=2)
+
+
+def grey_trace(sp, *, grown, kb, path=None, avoid=None):
+    """GRAPHITE AS A DRAWN SHAPE.  Decision 32, variant B.
+
+    Until now graphite was never drawn at all: the colour split was a Z plane,
+    white the cap above it, graphite whatever was left.  So it had no path, no
+    width and no direction, it read as camouflage, and on the back it landed as
+    whatever rectangle the plane sliced.  This draws it instead.
+
+    THREE INDEPENDENT RUNS, each with its own span and lane.  They share the
+    blue's dogleg vocabulary and overlap its territory, but none of them tracks
+    it -- a constant offset was round 1, and his note was that it followed the
+    blue "almost exactly ... it needs to be a little bit more random".  The
+    rhythm being copied is the old feature bands', which start and stop at
+    different places; the relationship to the accent is deliberately loose.
+
+    `path` only supplies the accent's mean lane, so the runs sit in the same
+    region of the part.  Nothing else is taken from it.
+    """
+    seed = int(sp.get("grey_seed", 7))
+    tt = float(sp.get("trace_t", 3.0))
+    gx0, gy0, gx1, gy1 = grown.bounds
+    fx = lambda t: gx0 + t * (gx1 - gx0)
+    lane0 = (float(np.mean([p[1] for p in path])) if path
+             else (gy0 + gy1) / 2.0)
+    amp, jw = float(sp.get("jog_amp", 4.5)), float(sp.get("jog_w", 7.0))
+    r = np.random.default_rng(seed)
+    # Lane offsets are FRACTIONS OF THE PART'S OWN HALF-WIDTH, never millimetres.
+    # Trap 12 in TOURNAMENT.md, already paid for in all three axes: an absolute
+    # millimetre does not transfer between parts.  Written as mm these read -11,
+    # +7.5, -8 on the Femur's 23.4 half-width, and the Coupler is 25.9 -- the
+    # runs sat too far inboard there and the trace came out 13% of the
+    # silhouette against the Femur's 22%.  As fractions they land in the same
+    # place on both.  x spans are already fractions of length.
+    half = max(1e-6, (gy1 - gy0) / 2.0)
+    runs = sp.get("grey_runs") or [[.12, .52, -0.470, 2.8],
+                                   [.38, .86, +0.321, 2.2],
+                                   [.60, .93, -0.342, 3.2]]
+    segs = [_trace(_route(fx(a), fx(b), lane0 + dy * half, 2, amp, jw, r), tt * wf)
+            for a, b, dy, wf in runs]
+    g = unary_union(segs).intersection(grown.buffer(-2.2, join_style=2))
+    if not kb.is_empty:
+        g = g.difference(kb)
+    # Keep the runs off the pivot bosses.  The back half of the inlay runs the
+    # full depth so it always reaches the real back surface, which over a boss
+    # TUBE would mean painting a stripe down 29 mm of cylinder; and the joints
+    # already have their own accent ring, so the trace has no business there.
+    if avoid is not None and not avoid.is_empty:
+        g = g.difference(avoid)
+    return g
+
+
 def accents(sp, *, grown, kb, clip, yspan, slots, joints, gk=1.0):
     """-> (strip, blocks, ring, channel).
 
@@ -224,6 +304,8 @@ def accents(sp, *, grown, kb, clip, yspan, slots, joints, gk=1.0):
                 ce = cy(bx1 - 3.0)
                 if ce is not None:
                     pts.append((bx1 - 3.0, ce + lvl))
+                LAST["path"] = list(pts)
+                LAST["band"] = band
                 if len(pts) > 2:
                     line = LineString(pts)
                     # flat caps + mitre joins: a trace has square ends and sharp

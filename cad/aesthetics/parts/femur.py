@@ -823,41 +823,28 @@ def plan(sp):
         sp, grown=grown, kb=kb, clip=clip, yspan=_yspan, slots=_slots, gk=gk,
         joints=[(A, 19.0), (C, 19.0)])
 
-    # ---------------------------------------------------- THE BACK, designed
-    # CONSTRAINT 6.  His words: "no silly kind of blocks of colour on the
-    # backside -- the entire surface of the thing has to have this aesthetics."
-    #
-    # WHAT THE SQUARES ACTUALLY ARE.  The colour split is a plane at SZ with
-    # white above it, so the back is graphite -- EXCEPT wherever the part is
-    # locally thinner than the cap is deep, where white reaches straight through
-    # and shows as a patch on the back.  Those patches are the footprints of the
-    # show-face pockets, seen from behind.  Nobody chose them, and they follow
-    # no rule, which is exactly why they read as silly.  The blue that reaches
-    # the back arrives the same accidental way.
-    #
-    # Killing them case by case would be endless.  The cause is that the back
-    # was never given a rule of its own, so it gets one: a guaranteed graphite
-    # skin that nothing can break through (build(), `_colour`), and a DELIBERATE
-    # pattern set into that skin -- decision 30, where he chose a designed back
-    # over a uniform one.
-    #
-    # `back_white`: trapezoid islands on the same fractional grid as every other
-    # band, plus a corridor along the accent spine so the blue reads on the back
-    # the way it reads on the front, as a line on a light ground.
+    # The plate's back face, which is NOT the bounding-box floor -- see
+    # _back_plane().  Both the back engraving and the back half of the colour
+    # inlay are measured from it.
     ZBACK = _back_plane(src["solid"], ZT, ZB, OUT.area)
 
-    _bw = []
-    for a_, b_ in _slots(fx(.06), fx(.94), int(sp.get("n_back", 4)), 13.0 * gk):
-        ys = _yspan(OUT, (a_ + b_) / 2)
-        if ys is None:
-            continue
-        lo, hi = ys
-        _bw.append(trap_plan(a_, b_, lo + 4.5, hi - 4.5, 9.0, 0.0))
-    back_white = unary_union(_bw) if _bw else ShPoly()
-    if not strip.is_empty:
-        back_white = unary_union([back_white, strip.buffer(3.2, join_style=2)])
-    if not back_white.is_empty:
-        back_white = back_white.intersection(OUT.buffer(-2.0, join_style=2)).difference(kb)
+    # ------------------------------------------------- GRAPHITE, DRAWN
+    # Decision 32 B.  Graphite used to be the LEFTOVER of a Z-plane split, which
+    # is why it read as camouflage and why the back came out covered in
+    # rectangles -- they were whatever the plane happened to slice.  It is drawn
+    # now, as three independent routed runs, and applied as a surface inlay on
+    # BOTH faces, so the back needs no separate treatment at all: the same shape
+    # lands on both sides.  That retires the graphite skin and trapezoid islands
+    # of decision 30, which were patching a symptom of the plane.
+    # Keep the trace off anything that STICKS OUT of the back, because the back
+    # half of the inlay runs the full depth and would paint a stripe down the
+    # side of it.  That means the actual protrusion -- measured -- not the
+    # styling boss: `bosses` is RAD + 3.5 + knee_grow, which on the Coupler is a
+    # 23 and a 28 mm disc on a 208 mm part and swallowed most of the third run,
+    # taking its trace down to 12% of the silhouette against the Femur's 22%.
+    _deep = _band_faces(src["solid"], [(ZB, ZBACK - 3.0)])[0]
+    grey = ACC.grey_trace(sp, grown=grown, kb=kb, path=ACC.LAST.get("path"),
+                          avoid=(None if _deep is None else _deep.buffer(2.5)))
 
     # `back_eng`: two contour-following grooves echoing the show face's long
     # bands.  Engraved, never proud -- the back points INBOARD at the side
@@ -898,7 +885,7 @@ def plan(sp):
     return dict(spec=sp, grown=grown, layers=layers, flange=flange, OUT=OUT, KEEP=KEEP, kb=kb, knee=bosses, wheel=bosses,
                 frame=frame, rail=rail, pads=pads, pock=pock, wins=wins, cutouts=cutouts,
                 cut_pockets=cut_pockets, side_guard=side_guard,
-                back_white=back_white, back_eng=back_eng, ZBACK=ZBACK,
+                grey=grey, back_eng=back_eng, ZBACK=ZBACK,
                 lo_pr=lo_pr, hi_pr=hi_pr, ring=ring, strip=strip, blocks=blocks,
                 collars=collars, ZT=ZT, ZB=ZB,
                 ZTOP=ZT + max(sp["frame_h"], sp["rail_h"], sp["pad_h"]) + 1.0)
@@ -1114,118 +1101,79 @@ def build(sp, verbose=True):
     collars = prism(P["collars"], ZB - 20, ZTOP + 20) if not P["collars"].is_empty else None
     full_y = lambda p: Pos(0, 200, 0) * side_solid(p, -1, reach=400)
 
-    def _colour(SZ, back=True):
-        """Split the body at plane SZ.  White is the cap at the show face; the
-        trapezoid bands straddle the plane, white pushed 4.5 mm below it and
-        graphite 14.5 mm above.
+    def _colour():
+        """Split the body by DRAWN SHAPES, not by a plane.
 
-        `back=False` omits the constraint-6 back treatment.  THE SOLVER BELOW
-        MUST USE IT.  The back skin takes ~2 mm x the whole plate out of white,
-        and a bisection told to hit 70% will chase that by driving SZ downward
-        -- measured, it ran to z -33.70, which is past the back of the plate
-        entirely and out at the tip of the hip boss.  SZ is not a free
-        parameter: the show-face trapezoid bands straddle it, so moving it there
-        carries the whole locked band design off the plate.  Solve for SZ on the
-        part WITHOUT the back treatment, then apply the back treatment at that
-        plane and report what the share actually came out as.
+        Decision 32.  The old split was a horizontal plane at `SZ`: white above
+        it, graphite everything left over.  Graphite was therefore never a shape
+        -- no path, no width, no direction -- which is what made it read as
+        camouflage, and on the back it landed as whatever rectangle the plane
+        happened to cut.  A whole bisection existed to hunt `SZ` for a 70% white
+        target, and it could drag the show-face bands off the plate doing it.
+
+        Now graphite and accent are each a plan shape laid on the part as a
+        SURFACE INLAY on BOTH faces, and white is what remains.  Two things fall
+        out of that: the share is reported rather than solved for, because there
+        is no plane left to solve; and the back needs no treatment of its own,
+        because the same inlay lands on both sides.
+
+        Nothing here cuts or adds geometry -- it only partitions the finished
+        body -- so topology and thin-wall results must be identical to the build
+        before this change.  If they move, something else broke.
         """
-        # Raked in PLAN, not in X-Z -- see _cband().  `_cy` is the part's own
-        # half-width plus a margin; passing a fixed large number would narrow
-        # the trapezoid past zero and fold it into a bowtie.
-        _gb = P["grown"].bounds
-        _cy = max(abs(_gb[1]), abs(_gb[3])) + 8.0
-        wz = slab(SZ, ZTOP + 20)
-        for a_, b_ in [(fx(.02), fx(.24)), (fx(.50), fx(.72))]:
-            wz = union(wz, _cband(a_, b_, SZ - 4.5, SZ, _cy))
-        gz = None
-        for a_, b_ in [(fx(.26), fx(.48)), (fx(.74), fx(.96))]:
-            t = _cband(a_, b_, SZ, SZ + 14.5, _cy, flip=True)
-            gz = t if gz is None else union(gz, t)
-        if gz is not None:
-            wz = wz - gz
+        gd = float(sp.get("grey_d", 3.5))
+        bd = float(sp.get("accent_d", gd))
+        zbk = P["ZBACK"]
 
-        # CONSTRAINT 6 -- the back stops being a leftover of this split.
-        #
-        # First, a graphite skin the white cap cannot reach through.  The
-        # "silly squares" are white arriving on the back wherever the part is
-        # locally thinner than the cap is deep -- the show-face pockets seen
-        # from behind.  Subtracting a slab at the back face removes that whole
-        # failure mode at once, instead of chasing each patch.
-        #
-        # Then the deliberate pattern set INTO that skin: trapezoid islands on
-        # the same fractional grid as every other band, and a corridor along the
-        # accent spine so the blue reads on the back as a line on a light
-        # ground, the way it does on the front.  `bl = cap & groove` below picks
-        # the blue out of whatever white exists, so giving the spine white to
-        # sit in is what puts a DESIGNED blue on the back rather than an
-        # accidental one.
-        _zbk = P["ZBACK"]
-        _skin = float(sp.get("back_skin", 2.0)) if back else 0.0
-        if _skin > 0.05:
-            # A BOUNDED slab at the plate's back, not everything below it.
-            # `slab(_zbk - 40, ...)` would also swallow the hip boss TUBE, which
-            # lives below the plate in this frame and currently carries a
-            # deliberate white band -- repainting it would be a silent change to
-            # a locked look, for a fix aimed somewhere else entirely.
-            wz = wz - slab(_zbk - 1.0, _zbk + _skin)
-        if back and not P["back_white"].is_empty:
-            _bwp = prism(P["back_white"], _zbk - 2,
-                         _zbk + float(sp.get("back_band_t", 3.2)))
-            if _bwp is not None:
-                wz = union(wz, _bwp)
+        def _inlay(poly, d):
+            """A slab at the show face and one at the back.
 
-        cap = body & wz
-        w = cap
-        if groove is not None:  w = w - groove
-        if inset is not None:   w = w - inset
-        if collars is not None: w = w - collars
-        bl = (cap & groove) if groove is not None else None
-        gr = body - w if bl is None else body - w - bl
-        return w, bl, gr, w.volume + gr.volume + (bl.volume if bl else 0)
+            THE BACK SLAB RUNS ALL THE WAY DOWN, and it has to.  Bounding it at
+            `zbk - 0.5` looks tidier and SEALS A CAVITY: the plate's back sits
+            at zbk, but the flange reaches to z -8.3, so over the flange a slab
+            stopping at -5.86 is buried entirely inside metal with white on
+            every side.  The white body came back with one sealed internal
+            shell for exactly that reason -- unprintable, and caught by the
+            topology gate rather than by looking.  Running the slab past the
+            bottom of the part guarantees the inlay always breaks out to the
+            real surface, whatever the local height is.  The boss tubes are
+            kept clean by excluding them in plan instead (see grey_trace).
+            """
+            if poly is None or poly.is_empty:
+                return None
+            top = prism(poly, ZT - d, ZTOP + 12)
+            bot = prism(poly, ZB - 12, zbk + d)
+            if top is None:
+                return bot
+            if bot is None:
+                return top
+            return union(top, bot)
 
-    target = sp.get("white_share")
-    if target is None:
-        SZ = _split_z(sp, ZT, ZB)
-        white, blue, graph, tot = _colour(SZ)
-    else:
-        # SOLVE for the plane rather than guess it.  Depth does not map to
-        # volume: white_depth 0.72 gave the Coupler 42% white and the Femur 74%,
-        # because the share depends on how the cross-section varies through the
-        # part.  White share falls monotonically as the plane rises, so bisect.
-        # This is the `white_share` dial TOURNAMENT.md deferred until the
-        # geometry settled -- it is what makes one locked look transfer to a
-        # part whose proportions nobody tuned by hand.
-        # Keep the BEST result, not the last.  The trapezoid bands move with the
-        # split plane, so white share is not strictly monotonic in SZ -- the
-        # Side panel went 50.1% then 47.6% as the plane dropped -- and a plain
-        # bisection can walk away from a better answer it already had.
-        lo, hi = ZB, ZT
-        best = None
-        for _ in range(int(sp.get("share_iters", 7))):
-            SZ = (lo + hi) / 2
-            white, blue, graph, tot = _colour(SZ, back=False)
-            got = white.volume / tot if tot else 0.0
-            say(f"  split {SZ:+7.2f} -> white {100*got:4.1f}%  (target {100*target:.0f}%)")
-            if best is None or abs(got - target) < best[0]:
-                best = (abs(got - target), white, blue, graph, tot, got, SZ)
-            if abs(got - target) < 0.015:
-                break
-            if got > target:
-                lo = SZ          # too white: raise the plane
-            else:
-                hi = SZ
-        _, white, blue, graph, tot, got, SZ = best
-        # SZ is settled on the bare split; now lay the designed back on top of
-        # it.  The share moves and that is expected -- it is reported, not
-        # solved for, because the alternative is letting the back drag the
-        # show-face bands around.
-        white, blue, graph, tot = _colour(SZ)
-        got = white.volume / tot if tot else 0.0
-        say(f"  back treatment applied at split {SZ:+.2f} -> white {100*got:.1f}%")
-        if abs(got - target) > 0.03:
-            say(f"  note: {100*target:.0f}% white is not reachable on this part "
-                f"-- best {100*got:.1f}% at split {SZ:+.2f}; the accent, collars "
-                f"and pocket insets claim the remainder")
+        blue_s = _inlay(acc_poly, bd)
+        grey_s = _inlay(P["grey"], gd)
+        bl = (body & blue_s) if blue_s is not None else None
+        gr = (body & grey_s) if grey_s is not None else None
+        if bl is not None and bl.volume < 1.0:
+            bl = None
+        if gr is not None and gr.volume < 1.0:
+            gr = None
+        if gr is not None and bl is not None:
+            gr = gr - bl                    # the accent wins where they cross
+        w = body
+        if gr is not None:
+            w = w - gr
+        if bl is not None:
+            w = w - bl
+        return w, bl, gr, (w.volume + (gr.volume if gr else 0.0)
+                           + (bl.volume if bl else 0.0))
+
+    white, blue, graph, tot = _colour()
+    if sp.get("white_share") is not None:
+        say(f"  note: `white_share` no longer applies -- the split is drawn, not "
+            f"solved for a plane.  The share below is what the geometry gives.")
+    say(f"  grey trace {P['grey'].area:.0f} mm2 in plan "
+        f"({100*P['grey'].area/P['grown'].area:.0f}% of the silhouette), "
+        f"inlaid {sp.get('grey_d', 3.5):g} mm on both faces")
     say(f"white {white.volume/1000:6.2f} ({100*white.volume/tot:.0f}%) | "
         f"accent {(blue.volume/1000 if blue else 0):5.2f} | "
         f"graphite {graph.volume/1000:6.2f} ({100*graph.volume/tot:.0f}%)")
