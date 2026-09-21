@@ -47,6 +47,81 @@ def source():
     return _CACHE
 
 
+def _plate_face(solid, ZT, ZB, out_area, frac=0.45, n=64, top=False):
+    """A face of the PLATE -- which is NOT the bounding box, at either end.
+
+    In the mirrored frame the Femur's bbox runs -34..+5, but twenty-nine of
+    those thirty-nine millimetres are the hip boss TUBE; the plate itself is
+    only -5..+5.  So `ZB` is the far end of a cylinder, not the back of the
+    part, and anything aimed at "the back" using it lands in mid-air.
+
+    Paid for immediately: the first back engraving reported 1623 mm2 cut and
+    moved the part's volume by nothing at all, and the deliberate back colour
+    pattern silently did nothing -- white went 57.97 -> 58.02 cm3 on a slab that
+    should have been worth 11 cm3.  Both booleans "succeeded".
+
+    THE SAME MISTAKE EXISTS AT THE TOP, and the Coupler wears it: its plate is
+    z -5..+5.5 but its BEARING TUBE runs to +30, so `ZT` is the top of a
+    cylinder.  A show-face inlay measured from ZT painted the tube end and left
+    the plate plain white -- "only one side is edited, the other looks just
+    plain white to me".  The Femur escaped only because its tube points the
+    other way.
+
+    Scans z bands from one end and returns the first whose plan footprint is at
+    least `frac` of the silhouette: where the part stops being a boss and starts
+    being a plate.  `top=True` scans downward from ZT for the show face.
+    """
+    step = (ZT - ZB) / float(n)
+    bands = [(ZB + i * step, ZB + (i + 1) * step) for i in range(n)]
+    fs = _band_faces(solid, bands)
+    for i in (range(n - 1, -1, -1) if top else range(n)):
+        f = fs[i]
+        if f is not None and f.area >= frac * out_area:
+            return bands[i][1] if top else bands[i][0]
+    return ZT if top else ZB
+
+
+def _drop_detached(body, say, what="body"):
+    """Constraint 3, "no floating pieces": reduce `body` to ONE connected solid.
+
+    THIS MUST RUN LAST.  It used to sit immediately after the growth fuse, but
+    the raised frame/rail/pads union on afterwards and the flange later still,
+    so anything stranded after that point was never looked at -- which is how
+    the shipped Femur kept a 25.2 mm3 chunk and the Coupler four totalling
+    1.15 cm3, both of them found by the topology gate rather than by the guard
+    whose whole job they were.
+
+    Keeping the LARGEST solid rather than everything that touches the source:
+    once cuts are in, two pieces can both overlap the source and still be
+    disconnected from each other, so "touches the source" does not mean "is one
+    part".  A big drop is a design error, not debris -- a removal severed the
+    part -- so it raises rather than quietly printing half a Femur.
+    """
+    sols = body.solids()
+    if len(sols) < 2:
+        return body
+    sols = sorted(sols, key=lambda s: -s.volume)
+    keep, drop = sols[0], sols[1:]
+    lost = sum(s.volume for s in drop)
+    say(f"  {what}: dropped {len(drop)} detached piece(s), {lost/1000:.3f} cm3")
+    # WHERE it is, not just how much.  A guard that silently eats several cm3
+    # every build is how the earlier defects stayed hidden; the bbox says which
+    # feature is stranding material.
+    for d in drop[:4]:
+        b = d.bounding_box()
+        say(f"      {d.volume/1000:7.3f} cm3 at "
+            f"X {b.min.X:+7.1f}..{b.max.X:+7.1f}  "
+            f"Y {b.min.Y:+7.1f}..{b.max.Y:+7.1f}  "
+            f"Z {b.min.Z:+7.1f}..{b.max.Z:+7.1f}")
+    if lost > max(500.0, 0.01 * body.volume):
+        raise RuntimeError(
+            f"{PART}: {lost/1000:.2f} cm3 came away as {len(drop)} separate "
+            f"solid(s) -- a removal has SEVERED the part, which is a design "
+            f"error rather than debris.  Largest kept piece is "
+            f"{keep.volume/1000:.2f} cm3 of {body.volume/1000:.2f}.")
+    return keep
+
+
 def _band_faces(solid, bands, tol=0.8):
     """Plan footprint of the solid's own material inside each z band.
 
@@ -535,10 +610,31 @@ def plan(sp):
             if wins and not frame.is_empty else ShPoly())
 
     # side-wall trapezoid profiles, in X-Z
-    lo_pr = [trap_xz(a, b, -8.5, 2.5, skew=4.5)
-             for a, b in _slots(-18, 238, sp["n_side_lo"], 14.0)]
-    hi_pr = [trap_xz(a, b, 1.5, 8.5, skew=4.0, taper_end=False)
-             for a, b in _slots(-12, 232, sp["n_side_hi"], 16.0)]
+    # RAKED IN PLAN as well as in X-Z.  His note on this part: the cutouts on
+    # the bearing-cylinder side "are kind of like just straight lines ... can you
+    # make them a little more irregular, more trapezoidal ... not straight lines
+    # from one side to the other".
+    #
+    # Same cause as the colour bands, one feature over.  `trap_xz` is a
+    # trapezoid in the X-Z plane swept through Y, so it is only trapezoidal seen
+    # edge-on; cut it with either big FACE of the part -- a plane of constant z
+    # -- and its opening is a RECTANGLE whose ends are lines of constant x.
+    # Raising `skew` cannot help, because the shape is in the wrong plane.  Each
+    # profile now carries a plan trapezoid too, and build() intersects the two,
+    # so the opening is diagonal where it is actually seen.  Alternate profiles
+    # rake the opposite way so the row does not read as a comb.
+    _RK, _RY = float(sp.get("side_rake", 0.40)), 60.0
+
+    def _rk(a, b, flip):
+        d = _RK * _RY * (-1.0 if flip else 1.0)
+        return ShPoly([(a - d, -_RY), (a + d, _RY), (b - d, _RY), (b + d, -_RY)])
+
+    _lo = list(_slots(-18, 238, sp["n_side_lo"], 14.0))
+    _hi = list(_slots(-12, 232, sp["n_side_hi"], 16.0))
+    lo_pr = [trap_xz(a, b, -8.5, 2.5, skew=4.5) for a, b in _lo]
+    hi_pr = [trap_xz(a, b, 1.5, 8.5, skew=4.0, taper_end=False) for a, b in _hi]
+    lo_rk = [_rk(a, b, i % 2 == 1) for i, (a, b) in enumerate(_lo)]
+    hi_rk = [_rk(a, b, i % 2 == 0) for i, (a, b) in enumerate(_hi)]
 
     # accents
     # accents and collars MUST be clipped to the part -- unclipped they float in
@@ -566,9 +662,26 @@ def plan(sp):
         sp, grown=grown, kb=kb, clip=clip, yspan=_yspan, slots=_slots, gk=gk,
         joints=[(E, 20.4), (C, 20.4), (W, 27.6)])
 
+    # The plate's two faces, which are NOT the bounding box: see _plate_face().
+    ZBACK = _plate_face(src["solid"], ZT, ZB, OUT.area)
+    ZSHOW = _plate_face(src["solid"], ZT, ZB, OUT.area, top=True)
+
+    # THE DRAWN GREY TRACE, for the BACK ONLY (decision 33).  His call: the
+    # Tibia's show face is his favourite of the three and stays untouched, so
+    # this part keeps the plane split on the front and takes the trace only on
+    # the back, where the plane was leaving grey rectangles.  Front and back
+    # therefore use different systems here, deliberately -- the face he likes
+    # does not move.
+    _d0 = _band_faces(src["solid"], [(ZB, ZBACK - 3.0)])[0]
+    _d1 = _band_faces(src["solid"], [(ZSHOW + 10.0, ZT)])[0]
+    _deep = unary_union([g for g in (_d0, _d1) if g is not None])
+    grey = ACC.grey_trace(sp, grown=grown, kb=kb, path=ACC.LAST.get("path"),
+                          avoid=(None if _deep.is_empty else _deep.buffer(2.5)))
+
     return dict(spec=sp, grown=grown, layers=layers, flange=flange, OUT=OUT, KEEP=KEEP, kb=kb, knee=knee, wheel=wheel,
+                grey=grey, ZBACK=ZBACK, ZSHOW=ZSHOW,
                 frame=frame, rail=rail, pads=pads, pock=pock, wins=wins, cutouts=cutouts,
-                lo_pr=lo_pr, hi_pr=hi_pr, ring=ring, strip=strip, blocks=blocks,
+                lo_pr=lo_pr, hi_pr=hi_pr, lo_rk=lo_rk, hi_rk=hi_rk, ring=ring, strip=strip, blocks=blocks,
                 collars=_collars(sp, grown, kb, knee, channel),
                 ZT=ZT, ZB=ZB, ZTOP=ZT + max(sp["frame_h"], sp["rail_h"], sp["pad_h"]) + 1.0)
 
@@ -726,8 +839,26 @@ def build(sp, verbose=True):
     if not P["cutouts"].is_empty:
         body = body - prism(P["cutouts"], ZB - 10, ZTOP + 12)
     if sp["side_d"] > 0.1 and (P["lo_pr"] or P["hi_pr"]):
-        shell = wall_shell(grown, ZB - 1, ZTOP + 1, t=sp["side_d"])
-        cuts = [side_solid(p, -1) for p in P["lo_pr"]] + [side_solid(p, +1) for p in P["hi_pr"]]
+        # A SIDE CUT MUST BREAK THROUGH, OR STAY CLEAR.  Never in between.
+        # `wall_shell` bounds the cut by `grown` on the OUTSIDE, and `grown` is a
+        # design outline, not the material boundary -- simplify() moves it and
+        # the flange moves it again.  Where it sits inside the real wall the cut
+        # ends below the surface, and a side pocket that never reaches air is a
+        # slot buried in metal: THE TIBIA'S THREE SEALED CAVITIES, 1.41 cm3,
+        # two of them 36 x 7 mm bubbles with no way out.  Taking the outer bound
+        # well outside the part removes the failure mode instead of tuning it.
+        shell = (prism(grown.buffer(4.0, join_style=2), ZB - 1, ZTOP + 1)
+                 - prism(grown.buffer(-sp["side_d"], join_style=2),
+                         ZB - 1, ZTOP + 1))
+        # each side cut is its X-Z profile AND its plan trapezoid, so the
+        # opening on the faces is diagonal rather than a constant-x rectangle
+        def _sc(prof, rk, side):
+            sol = side_solid(prof, side)
+            pr = prism(rk, ZB - 20, ZTOP + 20)
+            return sol if pr is None else (sol & pr)
+        cuts = ([_sc(p, r, -1) for p, r in zip(P["lo_pr"], P["lo_rk"])]
+                + [_sc(p, r, +1) for p, r in zip(P["hi_pr"], P["hi_rk"])])
+        cuts = [c for c in cuts if c is not None and c.volume > 1.0]
         sc = cuts[0]
         for c in cuts[1:]: sc = union(sc, c)
         body = body - ((shell & sc) - prism(P["kb"], ZB - 20, ZTOP + 20))
@@ -741,6 +872,9 @@ def build(sp, verbose=True):
     eng = unary_union([g for g in (P["strip"], P["blocks"]) if not g.is_empty])
     if not eng.is_empty:
         body = body - prism(eng, ZT - 1.2, ZTOP + 10)
+    # Nothing below adds or removes geometry -- the colour split only
+    # partitions -- so this is where constraint 3 can be enforced.
+    body = _drop_detached(body, say)
     groove = prism(acc_poly, ZB - 20, ZTOP + 20) if not acc_poly.is_empty else None
     collars = prism(P["collars"], ZB - 20, ZTOP + 20)
     full_y = lambda p: Pos(0, 200, 0) * side_solid(p, -1, reach=400)
@@ -756,6 +890,27 @@ def build(sp, verbose=True):
             gz = t if gz is None else union(gz, t)
         if gz is not None:
             wz = wz - gz
+
+        # THE BACK.  "The tibia from the side that has all the edits looks
+        # fantastic ... we just have to check the backside."  The front above is
+        # untouched.  The back was graphite wherever the plane left it and white
+        # wherever the part happened to be thin enough for the cap to reach
+        # through -- those were the rectangles.  It gets a WHITE GROUND instead,
+        # with the drawn trace cut back out of it, so it reads like the front
+        # rather than like a section through the part.
+        #
+        # The trace slab runs past the bottom of the part on purpose: bounded
+        # just under the plate it would be buried inside metal wherever the part
+        # is deeper than the plate, and that seals a cavity in white.  Paid for
+        # on the Femur.
+        zbk = P["ZBACK"]
+        skin = float(sp.get("back_skin", 3.5))
+        wz = union(wz, slab(zbk - 1.0, zbk + skin))
+        if not P["grey"].is_empty:
+            _gt = prism(P["grey"], ZB - 12, zbk + skin)
+            if _gt is not None:
+                wz = wz - _gt
+
         cap = body & wz
         w = cap
         if groove is not None: w = w - groove
@@ -810,6 +965,69 @@ def build(sp, verbose=True):
             f"{tot/1000:.2f} cm3 of white+graphite+accent against a "
             f"{body.volume/1000:.2f} cm3 body. A colour boolean failed; the 3MF "
             f"would be missing {100*(1-tot/body.volume):.0f}% of the part.")
+    # DEBRIS then WELD, both here rather than in an exporter.  Dropping specks
+    # lived in lib/stepcolor.py and welding pinch edges lived there too, so only
+    # the coloured STEP was ever clean while the per-filament STEPs and the 3MF
+    # kept both faults -- which is why this part still shattered in SolidWorks.
+    # A pinch is also a knife-edge self-contact carrying no load, exactly what
+    # constraint 4 rules out, so welding is the mechanical answer as well.
+    import manifold as _mf
+    from build123d import Compound as _B3DCompound, Solid as _B3DSolid
+    from OCP.TopAbs import TopAbs_SOLID
+
+    def _wrap(ts):
+        return (_B3DSolid(ts) if ts.ShapeType() == TopAbs_SOLID
+                else _B3DCompound(ts))
+
+    def _debris(b, nm, mm3=1.0):
+        if b is None:
+            return b
+        sol = b.solids()
+        if len(sol) < 2:
+            return b
+        # Thickness as well as volume: the gate calls a solid a NEEDLE if it is
+        # under 1 mm3 OR under 0.5 mm thick, and a clipped accent trace can be
+        # well over a cubic millimetre while still being a blade.  Testing only
+        # volume left exactly that behind on the Tibia's accent.
+        def _needle(x):
+            b = x.bounding_box()
+            return (x.volume < mm3
+                    or min(b.size.X, b.size.Y, b.size.Z) < 0.5)
+        keep = [x for x in sol if not _needle(x)]
+        gone = [x for x in sol if _needle(x)]
+        if not gone or not keep:
+            return b
+        say(f"  {nm}: dropped {len(gone)} debris/needle solid(s) "
+            f"({sum(x.volume for x in gone):.2f} mm3 total)")
+        return keep[0] if len(keep) == 1 else union(*keep)
+
+    white = _debris(white, "white")
+    graph = _debris(graph, "graphite")
+    blue = _debris(blue, "accent")
+
+    _w = {}
+    for _nm, _b in (("body", body), ("white", white),
+                    ("graphite", graph), ("accent", blue)):
+        if _b is None or _b.volume < 1.0:
+            _w[_nm] = _b
+            continue
+        _ns, _nfix = _mf.drop_null_shells(_b.wrapped, say=say)
+        _sh, _left, _dv = _mf.weld_nonmanifold(_ns, say=lambda *a: None)
+        if _left:
+            say(f"  {_nm}: {_left} non-manifold edge(s) SURVIVED the weld")
+        if _dv:
+            say(f"  {_nm}: welded pinches, {_dv:+.3f} mm3")
+        _w[_nm] = _wrap(_sh) if (_dv or _left or _nfix) else _b
+    body, white, graph, blue = _w["body"], _w["white"], _w["graphite"], _w["accent"]
+
+    # THE GUARD RUNS LAST, AND "LAST" INCLUDES THE REPAIRS.  Welding and shell
+    # dropping both rebuild geometry, and on the Tibia that left a 0.0 mm3
+    # speck behind -- so a guard placed before them is once again a guard with
+    # work happening after it.  That is the same mistake as the detached-piece
+    # check sitting at :699 ahead of the raised features.  Re-run it here, where
+    # nothing follows.
+    body = _drop_detached(body, say, what="body (post-repair)")
+
     return dict(body=body, white=white, graphite=graph, accent=blue, plan=P)
 
 

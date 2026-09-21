@@ -1253,7 +1253,7 @@ def build(sp, verbose=True):
         gone = [s for s in sol if s.volume < mm3]
         if not gone or not keep:
             return b
-        say(f"  {nm}: dropped {len(gone)} debris solid(s) under {mm3:g} mm3 "
+        say(f"  {nm}: dropped {len(gone)} debris/needle solid(s) "
             f"({sum(s.volume for s in gone):.2f} mm3 total)")
         return keep[0] if len(keep) == 1 else union(*keep)
 
@@ -1267,14 +1267,23 @@ def build(sp, verbose=True):
         if _b is None or _b.volume < 1.0:
             _welded[_nm] = _b
             continue
-        _w, _left, _dv = _mf.weld_nonmanifold(_b.wrapped, say=lambda *a: None)
+        _ns, _nfix = _mf.drop_null_shells(_b.wrapped, say=say)
+        _w, _left, _dv = _mf.weld_nonmanifold(_ns, say=lambda *a: None)
         if _left:
             say(f"  {_nm}: {_left} non-manifold edge(s) SURVIVED the weld")
         if _dv:
             say(f"  {_nm}: welded pinches, {_dv:+.3f} mm3")
-        _welded[_nm] = _wrap(_w) if _dv or _left else _b
+        _welded[_nm] = _wrap(_w) if (_dv or _left or _nfix) else _b
     body, white, graph, blue = (_welded["body"], _welded["white"],
                                 _welded["graphite"], _welded["accent"])
+    # THE GUARD RUNS LAST, AND "LAST" INCLUDES THE REPAIRS.  Welding and shell
+    # dropping both rebuild geometry, and on the Tibia that left a 0.0 mm3
+    # speck behind -- so a guard placed before them is once again a guard with
+    # work happening after it.  That is the same mistake as the detached-piece
+    # check sitting at :699 ahead of the raised features.  Re-run it here, where
+    # nothing follows.
+    body = _drop_detached(body, say, what="body (post-repair)")
+
     return dict(body=body, white=white, graphite=graph, accent=blue, plan=P)
 
 

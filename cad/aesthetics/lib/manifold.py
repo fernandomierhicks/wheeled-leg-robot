@@ -148,13 +148,34 @@ def weld_nonmanifold(shape, r=0.06, say=print):
     from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt
     v0 = volume(shape)
     out = shape
-    welded = 0
+    vprev = v0
+    welded = skipped = 0
     for e in bad:
         c = BRepAdaptor_Curve(e)
         p0, p1 = c.Value(c.FirstParameter()), c.Value(c.LastParameter())
         d = gp_Pnt(p1.X() - p0.X(), p1.Y() - p0.Y(), p1.Z() - p0.Z())
         L = (d.X() ** 2 + d.Y() ** 2 + d.Z() ** 2) ** 0.5
-        if L < 1e-6:
+        if L < 0.05:
+            # A ZERO-LENGTH PINCH IS A POINT, and a rod along a point is
+            # nothing -- these were being skipped outright and left behind.
+            # The Tibia's surviving pair sat at one spot, x 194.3, and one of
+            # them had identical start and end.  A small sphere joins the lobes
+            # where a cylinder cannot.
+            from OCP.BRepPrimAPI import BRepPrimAPI_MakeSphere
+            rod = BRepPrimAPI_MakeSphere(p0, r).Shape()
+            cap = 3.0 * 4.19 * r ** 3 + 1e-3
+            try:
+                f = BRepAlgoAPI_Fuse(out, rod); f.SetFuzzyValue(1e-7); f.Build()
+                if f.IsDone():
+                    cand = f.Shape()
+                    dv = volume(cand) - vprev
+                    if -1e-6 <= dv <= cap:
+                        out, vprev = cand, vprev + dv
+                        welded += 1
+                    else:
+                        skipped += 1
+            except Exception:
+                skipped += 1
             continue
         # over-run both ends so the rod cannot itself end flush with a face and
         # create a fresh tangency where the old pinch was
@@ -162,18 +183,96 @@ def weld_nonmanifold(shape, r=0.06, say=print):
                            p0.Z() - d.Z() / L * r),
                     gp_Dir(d.X() / L, d.Y() / L, d.Z() / L))
         rod = BRepPrimAPI_MakeCylinder(ax, r, L + 2 * r).Shape()
-        try:
-            f = BRepAlgoAPI_Fuse(out, rod); f.SetFuzzyValue(1e-7); f.Build()
-            if f.IsDone():
-                out = f.Shape(); welded += 1
-        except Exception as ex:
-            say(f"      weld failed on one edge ({type(ex).__name__})")
+        # A WELD CAN ONLY EVER ADD A ROD.  `IsDone()` is not evidence of that:
+        # OCC reports a successful fuse and hands back rubbish often enough that
+        # this destroyed a part.  On the Tibia one of these collapsed the body
+        # from 215.58 cm3 to half a cubic centimetre -- `IsDone()` true, no
+        # exception -- and build() carried on and wrote the 3MF and both STEPs.
+        # The whole point of welding is to make a body survive import, so a weld
+        # that eats the body is the worst possible failure and it was silent.
+        # Check the volume and skip the rod if it moved by more than the rod.
+        # RETRY THE RADIUS.  An OCC fuse is radius-sensitive: the same rod that
+        # collapses a body at 0.06 mm can land cleanly at 0.15 or 0.02.  With a
+        # single radius the Tibia's last pinch was simply refused and left in,
+        # which still shatters on import -- the refusal protects the part but
+        # does not repair it.  Try a ladder and keep the first that behaves.
+        done = False
+        for rr in (r, r * 2.5, r * 0.4, r * 6.0):
+            ax_r = gp_Ax2(gp_Pnt(p0.X() - d.X() / L * rr, p0.Y() - d.Y() / L * rr,
+                                 p0.Z() - d.Z() / L * rr),
+                          gp_Dir(d.X() / L, d.Y() / L, d.Z() / L))
+            rod_r = BRepPrimAPI_MakeCylinder(ax_r, rr, L + 2 * rr).Shape()
+            cap = 3.0 * 3.14159 * rr * rr * (L + 2 * rr) + 1e-3
+            try:
+                f = BRepAlgoAPI_Fuse(out, rod_r); f.SetFuzzyValue(1e-7); f.Build()
+                if not f.IsDone():
+                    continue
+                cand = f.Shape()
+                dv = volume(cand) - vprev
+                if -1e-6 <= dv <= cap:
+                    out, vprev = cand, vprev + dv
+                    welded += 1
+                    done = True
+                    break
+            except Exception:
+                continue
+        if not done:
+            skipped += 1
+            say(f"      weld REJECTED on one edge at every radius tried; "
+                f"the body is left unwelded there")
     v1 = volume(out)
+    # Belt and braces: even with the per-rod guard, refuse to hand back a body
+    # whose volume has moved more than the rods could account for.
+    if v1 < v0 - 1e-6 or v1 > v0 + max(1.0, 0.01 * v0):
+        say(f"      weld moved volume {v0:.3f} -> {v1:.3f} mm3; kept the original")
+        return shape, len(bad), 0.0
     left = len(nonmanifold_edges(out))
-    say(f"      welded {welded}/{len(bad)} pinch edge(s) at r={r} mm; "
-        f"{left} non-manifold left; volume {v0:.3f} -> {v1:.3f} mm3 "
-        f"(+{100*(v1-v0)/v0:.4f}%)")
+    say(f"      welded {welded}/{len(bad)} pinch edge(s) at r={r} mm"
+        + (f", {skipped} REJECTED" if skipped else "")
+        + f"; {left} non-manifold left; volume {v0:.3f} -> {v1:.3f} mm3 "
+        f"(+{100*(v1-v0)/max(v0,1e-9):.4f}%)")
     return out, left, v1 - v0
+
+
+def drop_null_shells(shape, min_mm3=0.5, say=print):
+    """Rebuild any solid whose extra shells enclose no volume.
+
+    A second shell inside a solid normally means a SEALED CAVITY, which is
+    unprintable and worth stopping for.  A second shell enclosing ZERO volume is
+    something else entirely: OCC boolean debris, a few tenths of a millimetre
+    across.  The Tibia carried one at x 193, 0.2 x 0.1 x 0.4 mm, and the gate
+    called it an unprintable cavity -- true to the letter, misleading in effect,
+    and it sent the search after a design fault that was not there.
+
+    Only near-zero shells are dropped.  A real cavity still fails the gate.
+    """
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeSolid
+    out, fixed = [], 0
+    for sol in _solids(shape):
+        sh = _shells(sol)
+        if len(sh) < 2:
+            out.append(sol)
+            continue
+        vs = []
+        for x in sh:
+            try:
+                vs.append(abs(volume(BRepBuilderAPI_MakeSolid(x).Solid())))
+            except Exception:
+                vs.append(0.0)
+        keep = max(range(len(sh)), key=lambda i: vs[i])
+        if all(v < min_mm3 for i, v in enumerate(vs) if i != keep):
+            try:
+                mk = BRepBuilderAPI_MakeSolid(sh[keep])
+                fx = ShapeFix_Solid(mk.Solid()); fx.Perform()
+                out.append(fx.Solid()); fixed += 1
+                continue
+            except Exception:
+                pass
+        out.append(sol)
+    if not fixed:
+        return shape, 0
+    say(f"      dropped {fixed} null inner shell(s) (boolean debris, not cavities)")
+    return (out[0] if len(out) == 1 else _compound(out)), fixed
 
 
 def report(shape, name=""):
@@ -262,11 +361,29 @@ def gate(shape, name="", one_solid=True):
         probs.append(f"{len(needles)} needle/debris solid(s) (<{NEEDLE_MM3} mm3 or "
                      f"<{NEEDLE_MIN_MM} mm thick) -- fragile sharp features")
 
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeSolid
     for i, (v, s) in enumerate(vols):
         sh = _shells(s)
         if len(sh) > 1:
-            probs.append(f"solid {i} ({v:.1f} mm3) has {len(sh)} shells -- "
-                         f"{len(sh)-1} SEALED INTERNAL CAVITY/IES, unprintable")
+            iv = []
+            for x in sh:
+                try:
+                    iv.append(abs(volume(BRepBuilderAPI_MakeSolid(x).Solid())))
+                except Exception:
+                    iv.append(0.0)
+            keep = max(range(len(sh)), key=lambda k: iv[k])
+            real = [k for k in range(len(sh)) if k != keep and iv[k] >= 0.5]
+            # a null shell is boolean debris, not a bubble -- calling both
+            # "unprintable cavity" sends the search after a design fault that
+            # is not there
+            if real:
+                probs.append(f"solid {i} ({v:.1f} mm3) has {len(real)} SEALED "
+                             f"INTERNAL CAVITY/IES, unprintable "
+                             f"({', '.join(f'{iv[k]:.1f} mm3' for k in real)})")
+            else:
+                probs.append(f"solid {i} ({v:.1f} mm3) has {len(sh)-1} null inner "
+                             f"shell(s) -- boolean debris, not a cavity; "
+                             f"drop_null_shells() removes them")
     return probs
 
 
