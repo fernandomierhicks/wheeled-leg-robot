@@ -47,9 +47,17 @@ def tess_bodies(res, pal, dev=0.13):
     return out, (np.vstack(allV) if allV else np.zeros((1, 3)))
 
 
-def view(bodies, allV, size, elev, azim, bg=BG):
+def view(bodies, allV, size, elev, azim, bg=BG, light=None):
     """`size` is an int (square) or (W, H).  These parts are ~7:1, so a square
-    frame spends most of its pixels on background -- pass a wide one."""
+    frame spends most of its pixels on background -- pass a wide one.
+
+    `light="camera"` puts the light at the viewer.  The fixed default points
+    roughly +Z, so a face-on view of a -Z face renders every triangle at the
+    0.24 ambient floor: the Femur's SHOW face comes out near-black and its BACK
+    comes out bright, whatever colour either of them actually is.  Judging a
+    colour split from such a view reads it exactly backwards.  The default is
+    unchanged so every existing board reproduces.
+    """
     WD, HT = (size, size) if isinstance(size, (int, float)) else size
     e, a = np.radians(elev), np.radians(azim)
     fwd = np.array([np.cos(e) * np.cos(a), np.cos(e) * np.sin(a), np.sin(e)])
@@ -62,7 +70,12 @@ def view(bodies, allV, size, elev, azim, bg=BG):
     s = min(WD / (ext[0] * 1.06), HT / (ext[1] * 1.10))
     img = np.full((HT, WD, 3), bg, np.uint8)
     zbuf = np.full((HT, WD), -1e18)
-    light = np.array([0.35, 0.55, 0.75]); light /= np.linalg.norm(light)
+    if light == "camera":
+        light = fwd / np.linalg.norm(fwd)
+    elif light is None:
+        light = np.array([0.35, 0.55, 0.75]); light /= np.linalg.norm(light)
+    else:
+        light = np.asarray(light, float); light /= np.linalg.norm(light)
     for V, T, base in bodies:
         P = np.stack([V @ right, V @ up, V @ fwd], 1)
         xy = (P[:, :2] - ctr) * s + np.array([WD / 2, HT / 2])

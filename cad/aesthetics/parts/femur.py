@@ -30,7 +30,7 @@ from shapely.geometry import Polygon as ShPoly, Point as ShPoint, box as shbox, 
 from shapely.ops import unary_union
 from keepout import openings, silhouette
 from shputil import prism, raised, frustum, geoms, union
-from feat import trap_xz, side_solid, wall_shell, trap_plan
+from feat import trap_xz, side_solid, wall_shell, trap_plan, band_along
 import accents as ACC
 import spec as spec_mod
 import asmkeepout
@@ -159,6 +159,31 @@ def marks():
                 rem = _wkt.loads(d["remove_wkt"]).buffer(0)
         _CACHE["marks"] = (add, rem)
     return _CACHE["marks"]
+
+
+def _back_plane(solid, ZT, ZB, out_area, frac=0.45, n=64):
+    """The back face of the PLATE -- which is NOT the bounding-box minimum.
+
+    In the mirrored frame the Femur's bbox runs -34..+5, but twenty-nine of
+    those thirty-nine millimetres are the hip boss TUBE; the plate itself is
+    only -5..+5.  So `ZB` is the far end of a cylinder, not the back of the
+    part, and anything aimed at "the back" using it lands in mid-air.
+
+    Paid for immediately: the first back engraving reported 1623 mm2 cut and
+    moved the part's volume by nothing at all, and the deliberate back colour
+    pattern silently did nothing -- white went 57.97 -> 58.02 cm3 on a slab that
+    should have been worth 11 cm3.  Both booleans "succeeded".
+
+    Scans z bands upward and returns the lowest whose plan footprint is at least
+    `frac` of the silhouette: the height at which the part stops being a boss
+    and starts being a plate.
+    """
+    step = (ZT - ZB) / float(n)
+    bands = [(ZB + i * step, ZB + (i + 1) * step) for i in range(n)]
+    for (z0, _z1), f in zip(bands, _band_faces(solid, bands)):
+        if f is not None and f.area >= frac * out_area:
+            return z0
+    return ZB
 
 
 def _drop_detached(body, say, what="body"):
@@ -751,6 +776,51 @@ def plan(sp):
         sp, grown=grown, kb=kb, clip=clip, yspan=_yspan, slots=_slots, gk=gk,
         joints=[(A, 19.0), (C, 19.0)])
 
+    # ---------------------------------------------------- THE BACK, designed
+    # CONSTRAINT 6.  His words: "no silly kind of blocks of colour on the
+    # backside -- the entire surface of the thing has to have this aesthetics."
+    #
+    # WHAT THE SQUARES ACTUALLY ARE.  The colour split is a plane at SZ with
+    # white above it, so the back is graphite -- EXCEPT wherever the part is
+    # locally thinner than the cap is deep, where white reaches straight through
+    # and shows as a patch on the back.  Those patches are the footprints of the
+    # show-face pockets, seen from behind.  Nobody chose them, and they follow
+    # no rule, which is exactly why they read as silly.  The blue that reaches
+    # the back arrives the same accidental way.
+    #
+    # Killing them case by case would be endless.  The cause is that the back
+    # was never given a rule of its own, so it gets one: a guaranteed graphite
+    # skin that nothing can break through (build(), `_colour`), and a DELIBERATE
+    # pattern set into that skin -- decision 30, where he chose a designed back
+    # over a uniform one.
+    #
+    # `back_white`: trapezoid islands on the same fractional grid as every other
+    # band, plus a corridor along the accent spine so the blue reads on the back
+    # the way it reads on the front, as a line on a light ground.
+    ZBACK = _back_plane(src["solid"], ZT, ZB, OUT.area)
+
+    _bw = []
+    for a_, b_ in _slots(fx(.06), fx(.94), int(sp.get("n_back", 4)), 13.0 * gk):
+        ys = _yspan(OUT, (a_ + b_) / 2)
+        if ys is None:
+            continue
+        lo, hi = ys
+        _bw.append(trap_plan(a_, b_, lo + 4.5, hi - 4.5, 9.0, 0.0))
+    back_white = unary_union(_bw) if _bw else ShPoly()
+    if not strip.is_empty:
+        back_white = unary_union([back_white, strip.buffer(3.2, join_style=2)])
+    if not back_white.is_empty:
+        back_white = back_white.intersection(OUT.buffer(-2.0, join_style=2)).difference(kb)
+
+    # `back_eng`: two contour-following grooves echoing the show face's long
+    # bands.  Engraved, never proud -- the back points INBOARD at the side
+    # panel, roughly 4 mm away, so material added here would eat the clearance
+    # and have to survive all 21 poses.  A groove cannot foul anything.
+    back_eng = unary_union([band_along(OUT, 5.0, 8.2, fx(.07), fx(.93)),
+                            band_along(OUT, 13.0, 15.4, fx(.19), fx(.81))])
+    if not back_eng.is_empty:
+        back_eng = back_eng.difference(kb).difference(bosses.buffer(1.0))
+
     ct = sp.get("collar_t", 3.4)
     collars = unary_union([ShPoint(*p).buffer(17.0 + ct, 96).difference(ShPoint(*p).buffer(17.0, 96))
                            for p in (A, C)])
@@ -781,6 +851,7 @@ def plan(sp):
     return dict(spec=sp, grown=grown, layers=layers, flange=flange, OUT=OUT, KEEP=KEEP, kb=kb, knee=bosses, wheel=bosses,
                 frame=frame, rail=rail, pads=pads, pock=pock, wins=wins, cutouts=cutouts,
                 cut_pockets=cut_pockets, side_guard=side_guard,
+                back_white=back_white, back_eng=back_eng, ZBACK=ZBACK,
                 lo_pr=lo_pr, hi_pr=hi_pr, ring=ring, strip=strip, blocks=blocks,
                 collars=collars, ZT=ZT, ZB=ZB,
                 ZTOP=ZT + max(sp["frame_h"], sp["rail_h"], sp["pad_h"]) + 1.0)
@@ -967,6 +1038,17 @@ def build(sp, verbose=True):
     eng = unary_union([g for g in (P["strip"], P["blocks"]) if not g.is_empty])
     if not eng.is_empty:
         body = body - prism(eng, ZT - 1.2, ZTOP + 10)
+    # Constraint 6, the relief half: contour grooves cut INTO the back.  Shallow
+    # and subtractive by choice (decision 30) -- the back faces the side panel
+    # about 4 mm away, so anything proud would eat that clearance, while a groove
+    # cannot foul anything in any pose.
+    _bed = float(sp.get("back_eng_d", 1.2))
+    if not P["back_eng"].is_empty and _bed > 0.05:
+        _zbk = P["ZBACK"]
+        body = body - prism(P["back_eng"], _zbk - 10, _zbk + _bed)
+        say(f"  back: engraved {P['back_eng'].area:.0f} mm2 of contour groove "
+            f"{_bed:g} mm deep at z {_zbk:+.2f} (plate back; bbox floor is "
+            f"{ZB:+.2f})")
     # Nothing below this point adds or removes geometry -- the colour split only
     # partitions what is here -- so this is where constraint 3 can finally be
     # enforced.  See _drop_detached().
@@ -975,10 +1057,21 @@ def build(sp, verbose=True):
     collars = prism(P["collars"], ZB - 20, ZTOP + 20) if not P["collars"].is_empty else None
     full_y = lambda p: Pos(0, 200, 0) * side_solid(p, -1, reach=400)
 
-    def _colour(SZ):
+    def _colour(SZ, back=True):
         """Split the body at plane SZ.  White is the cap at the show face; the
         trapezoid bands straddle the plane, white pushed 4.5 mm below it and
-        graphite 14.5 mm above."""
+        graphite 14.5 mm above.
+
+        `back=False` omits the constraint-6 back treatment.  THE SOLVER BELOW
+        MUST USE IT.  The back skin takes ~2 mm x the whole plate out of white,
+        and a bisection told to hit 70% will chase that by driving SZ downward
+        -- measured, it ran to z -33.70, which is past the back of the plate
+        entirely and out at the tip of the hip boss.  SZ is not a free
+        parameter: the show-face trapezoid bands straddle it, so moving it there
+        carries the whole locked band design off the plate.  Solve for SZ on the
+        part WITHOUT the back treatment, then apply the back treatment at that
+        plane and report what the share actually came out as.
+        """
         wz = slab(SZ, ZTOP + 20)
         for p in [trap_xz(a_, b_, SZ - 4.5, SZ, skew=6)
                   for a_, b_ in [(fx(.02), fx(.24)), (fx(.50), fx(.72))]]:
@@ -990,6 +1083,37 @@ def build(sp, verbose=True):
             gz = t if gz is None else union(gz, t)
         if gz is not None:
             wz = wz - gz
+
+        # CONSTRAINT 6 -- the back stops being a leftover of this split.
+        #
+        # First, a graphite skin the white cap cannot reach through.  The
+        # "silly squares" are white arriving on the back wherever the part is
+        # locally thinner than the cap is deep -- the show-face pockets seen
+        # from behind.  Subtracting a slab at the back face removes that whole
+        # failure mode at once, instead of chasing each patch.
+        #
+        # Then the deliberate pattern set INTO that skin: trapezoid islands on
+        # the same fractional grid as every other band, and a corridor along the
+        # accent spine so the blue reads on the back as a line on a light
+        # ground, the way it does on the front.  `bl = cap & groove` below picks
+        # the blue out of whatever white exists, so giving the spine white to
+        # sit in is what puts a DESIGNED blue on the back rather than an
+        # accidental one.
+        _zbk = P["ZBACK"]
+        _skin = float(sp.get("back_skin", 2.0)) if back else 0.0
+        if _skin > 0.05:
+            # A BOUNDED slab at the plate's back, not everything below it.
+            # `slab(_zbk - 40, ...)` would also swallow the hip boss TUBE, which
+            # lives below the plate in this frame and currently carries a
+            # deliberate white band -- repainting it would be a silent change to
+            # a locked look, for a fix aimed somewhere else entirely.
+            wz = wz - slab(_zbk - 1.0, _zbk + _skin)
+        if back and not P["back_white"].is_empty:
+            _bwp = prism(P["back_white"], _zbk - 2,
+                         _zbk + float(sp.get("back_band_t", 3.2)))
+            if _bwp is not None:
+                wz = union(wz, _bwp)
+
         cap = body & wz
         w = cap
         if groove is not None:  w = w - groove
@@ -1019,7 +1143,7 @@ def build(sp, verbose=True):
         best = None
         for _ in range(int(sp.get("share_iters", 7))):
             SZ = (lo + hi) / 2
-            white, blue, graph, tot = _colour(SZ)
+            white, blue, graph, tot = _colour(SZ, back=False)
             got = white.volume / tot if tot else 0.0
             say(f"  split {SZ:+7.2f} -> white {100*got:4.1f}%  (target {100*target:.0f}%)")
             if best is None or abs(got - target) < best[0]:
@@ -1031,6 +1155,13 @@ def build(sp, verbose=True):
             else:
                 hi = SZ
         _, white, blue, graph, tot, got, SZ = best
+        # SZ is settled on the bare split; now lay the designed back on top of
+        # it.  The share moves and that is expected -- it is reported, not
+        # solved for, because the alternative is letting the back drag the
+        # show-face bands around.
+        white, blue, graph, tot = _colour(SZ)
+        got = white.volume / tot if tot else 0.0
+        say(f"  back treatment applied at split {SZ:+.2f} -> white {100*got:.1f}%")
         if abs(got - target) > 0.03:
             say(f"  note: {100*target:.0f}% white is not reachable on this part "
                 f"-- best {100*got:.1f}% at split {SZ:+.2f}; the accent, collars "
@@ -1078,6 +1209,34 @@ def build(sp, verbose=True):
     def _wrap(ts):
         return (_B3DSolid(ts) if ts.ShapeType() == TopAbs_SOLID
                 else _B3DCompound(ts))
+
+    def _debris(b, nm, mm3=1.0):
+        """Drop boolean debris from a filament body.
+
+        CONSTRAINT 4.  This was already being done -- in `lib/stepcolor.py`, on
+        its way out -- so only the COLOUR step was ever clean while the
+        per-filament print STEPs and the 3MF kept the specks.  Exactly the same
+        shape of mistake as the weld: a repair living in one exporter instead of
+        in build(), where every artifact can benefit.
+        Found because the designed back put white islands through the graphite
+        body and its needle count went 3 -> 23 in one build.
+        """
+        if b is None:
+            return b
+        sol = b.solids()
+        if len(sol) < 2:
+            return b
+        keep = [s for s in sol if s.volume >= mm3]
+        gone = [s for s in sol if s.volume < mm3]
+        if not gone or not keep:
+            return b
+        say(f"  {nm}: dropped {len(gone)} debris solid(s) under {mm3:g} mm3 "
+            f"({sum(s.volume for s in gone):.2f} mm3 total)")
+        return keep[0] if len(keep) == 1 else union(*keep)
+
+    white = _debris(white, "white")
+    graph = _debris(graph, "graphite")
+    blue = _debris(blue, "accent")
 
     _welded = {}
     for _nm, _b in (("body", body), ("white", white),
