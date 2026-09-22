@@ -7,21 +7,21 @@ bottom.
 
 **Phase 1 — outputs trustworthy in SolidWorks — DONE, 2026-09-20.**
 **Phase 2 — the add/remove map and the free-space measurement — DONE, 2026-09-20.**
-**Phase 3 — THE REBUILD — in progress. Four of six constraints pass.**
+**Phase 3 — THE REBUILD — in progress. FIVE of six constraints pass.**
 
 As of 2026-09-21, on all three links:
 
 | constraint | state |
 |---|---|
 | 1 add/remove where identified | holds — marks drive the regions, freemap the extent |
-| 2 collision free through the stroke | **FAILS, 3 pairs** — the sweep has now actually been run |
+| 2 collision free through the stroke | **passes** — 21 poses, no new collisions |
 | 3 no floating pieces | passes — `_drop_detached`, and it raises rather than shipping |
 | 4 no sharp edges | passes — topology gate, 0 needles on the fused body |
 | 5 no very thin walls | **FAILS on all three** — reports at 3.0, gates at 1.5 |
 | 6 no bare colour blocks on the back | passes — drawn trace, both faces |
 
-Constraints 2 and 5 are the open ones, and **read "The thin-wall residue" below
-before attempting 5** — three plausible fixes were tried and measured on
+Constraint 5 is the only one left, and **read "The thin-wall residue" below
+before attempting it** — three plausible fixes were tried and measured on
 2026-09-21 and all three made it worse or did nothing. Do not re-try them.
 
 ---
@@ -81,7 +81,7 @@ He listed these as the definition of done. Four of the six are satisfied as of
 | # | constraint | the check | status |
 |---|---|---|---|
 | 1 | add / remove only where identified | `input/marks/*.json` ∩ `input/freespace/*.npz`, see `tools/reconcile.py` | inputs ready, unused |
-| 2 | collision free through the ENTIRE stroke | `python lib/collide.py --sweep 21` | **FAILS** — 3 pairs, all flange; see "Constraint 2" below |
+| 2 | collision free through the ENTIRE stroke | `python lib/collide.py --sweep 21` | **PASSES** — 21 poses, no new collisions |
 | 3 | no floating pieces | `python lib/verify.py <Part>` → topology gate | **PASSES** on all three |
 | 4 | no sharp edges | same gate: non-manifold + free edges + needle solids | **PASSES** on all three |
 | 5 | no very thin walls | `python lib/thinwall.py <Part> --vs-source` | **FAILS** — 28 patches over 10 mm² at the 1.5 mm gate |
@@ -204,10 +204,10 @@ Measured 2026-09-21 on the Phase-3 rebuild. Source-relative, i.e. the increase
 the styling is responsible for, in mm² of surface (a wall counts twice):
 
 ```
-part      < 3.0 mm   < 1.5 mm  = THE GATE     patches >= 10 mm2   largest
-Femur        3361        474.6                        11           154.8
-Coupler      1169        204.5                         7            47.7
-Tibia        2912        927.4                        10           375.5
+part      < 3.0 mm   < 1.5 mm  = THE GATE     patches (all)
+Femur        3329        467.5                      52
+Coupler      1167        201.8                      33
+Tibia        2912        927.4                      42
 ```
 
 **Decision 36: report at 3.0, gate at 1.5.** One ray cast, two masks, so the
@@ -272,39 +272,61 @@ part rather than porting on principle.
 
 ---
 
-## Constraint 2 — the sweep has now been RUN, and it fails
+## Constraint 2 — PASSES, and the one line that did it
 
     C:/Users/ferna/cadenv/Scripts/python.exe lib/collide.py --sweep 21 --parts Femur Tibia Coupler
 
-Roughly 12 minutes, not the 30 the old note guessed. The kinematic model
-reconstructs all three exported poses to **0.0000 mm**, so the sweep refuses to
-run on a model it has not validated and this one is validated.
+Roughly 12 minutes. The kinematic model reconstructs all three exported poses
+to **0.0000 mm**, so the sweep refuses to run on a model it has not validated
+and this one is validated.
 
 ```
-23 collision report(s) over 21 configurations, 3 distinct pairs:
-  Femur x AK45-10 Stator: worst +12.4 mm3   at EVERY one of the 21 angles
-  Tibia x Femur:          worst  +2.0 mm3   at q = -123.00 deg only
+no new collisions in any of the 21 configuration(s) checked
 ```
 
-**All three are the FLANGE**, located in each part's own build frame:
+It used to report three pairs — Femur × AK45-10 Stator at +12.4 mm³ at EVERY
+one of the 21 angles, and Tibia × Femur at +2.0 mm³ at one end of travel. All
+three were the same defect, in `_flange_at`:
 
-```
-Femur x Stator   two symmetric lumps, X -77.1..-73.6, Y +/-17.1..19.2, Z 6.0..8.3
-                 A = (-93.79, 0), so these sit at radius ~25.8 from the hip
-                 axis and the stator is a cylinder of r 26.5 -- which is why
-                 the volume is CONSTANT across the sweep: the interference is
-                 annular, and rotating the femur just slides it round.
-Tibia x Femur    one lump, Femur-local X 41.1..42.5, Y 15.7..17.7, Z 7.0..8.3
-                 -- the far tip of the same +Y flange run.
+```python
+band = band.difference(ko_f)      # cut clear of every neighbour ...
+...                               # ... twenty lines later ...
+band = unary_union([band, band.buffer(FL_OVER).intersection(mfp)])   # put back
+if not kb.is_empty:
+    band = band.difference(kb)    # holes re-subtracted -- the assembly NOT
 ```
 
-Do NOT try to fix this by clipping features to the plan keep-out: it covers
-**75 % of the Femur's own silhouette**, because it is the neighbours' whole
-swept envelope projected flat, and clipping to it would delete the styling.
-`grown` restores OUT after the keep-out clip, correctly — the source may not be
-deleted — which is exactly why added material can land there. The fix has to be
-3D: keep the flange out of a disc about the hip axis, or stop it standing proud
-of the source's own surface where a neighbour is close.
+**The lap grows the flange `FL_OVER` back inward over the source, straight
+through the boundary that was just enforced, and nothing downstream looks
+again.** At x=−75 the source's +Y edge is y=+19.4 and the lap reaches y=+17.4;
+the AK45-10's body is a cylinder of r 26.5 about the hip axis and passes
+through exactly there. The flange band is also 3.3 mm deeper than the plate it
+laps onto, so the lap does not lie flat on the metal — it hangs past the
+plate's own face, into the motor. Annular, hence constant across the sweep.
+
+The fix is `band = band.difference(ko_f)` after the lap, and it costs 15 mm² of
+Femur flange (1164 → 1149) and 19 of Coupler. A flange that has to lap into a
+motor to stay attached was never attached.
+
+**Two things tried on the way that are NOT in the tree, both worth knowing:**
+
+* *Clipping the flange to the source's own section in z* — band the source
+  footprint, dilate by the flange's reach, keep only flange within reach of
+  real metal at its own height. Correct in principle and it is what the render
+  caption asks for ("structure, not a fin stuck on the original"), but it
+  removes **62 % of the Femur's flange**: the flange stands 3.3 mm proud along
+  its whole length, and that proud step IS the visible edge rail. Far too blunt
+  for a 12 mm³ problem, and a big change to a locked look. Reverted.
+* *Making the keep-out sweep.* `asmkeepout.compute_all` unions over the THREE
+  exported poses; `collide.py --sweep 21` judges twenty-one. **The design input
+  is sampled more coarsely than the gate that judges it**, which is how
+  Tibia × Femur at q = −123° could exist at all — no exported pose is near that
+  angle. A working `--sweep N` for `asmkeepout` was written (tessellate each
+  neighbour in its OWN frame once, then move vertices per configuration, so
+  sweeping costs what one pose used to) and then reverted, because the lap fix
+  cleared the gate without it and recomputing the keep-out rewrites every
+  part's design input. **This blind spot is still there.** If a future
+  collision appears at an angle between the exported poses, this is why.
 
 ---
 
@@ -569,16 +591,16 @@ needles, every opening untouched. The two plates are still pre-Phase-3 and out
 of scope.
 
 ```
-part         fused      source    grew      flange     openings      thin (introduced)
-Femur        84.43 cm3   86.74    +8.0 Y    1164 mm2   13, 0 changed   3361 mm2
-Coupler      70.99       74.27    +6.2 Y    1057       21, 0 changed   1169
-Tibia       215.12      228.12   +12.6 Y    1297       35, 0 changed   2912
+part         fused      source    grew      flange     openings      thin <3 / <1.5
+Femur        84.40 cm3   86.74    +8.0 Y    1149 mm2   13, 0 changed   3329 / 467
+Coupler      70.95       74.27    +6.2 Y    1038       21, 0 changed   1167 / 202
+Tibia       215.12      228.12   +12.6 Y    1297       35, 0 changed   2912 / 927
 Side panel   89.99       92.01    +7.2 Y     289        0 changed      (out of scope)
 RobotMount  107.07      110.32    +6.0 Y    1023        0 changed      (out of scope)
 ```
 
-Worst opening deviation across all three: **0.000 mm³**. The two gates that
-still fail are thin wall (above) and the collision sweep (below).
+Worst opening deviation across all three: **0.000 mm³**, and the 21-pose
+collision sweep reports **no new collisions**. Thin wall is the only gate left.
 
 Deliverables per part:
 

@@ -500,3 +500,43 @@ Nothing about the look changes while this is done unless a collision fix forces
 it, and if one does, he sees it before it ships.
 
 ---
+
+## 38 · phase 3 - constraint 2 PASSES; the flange lap was re-entering the keep-out
+*2026-09-21*
+
+**Chose:** collisions clear at 21 poses
+
+**Said:** All three reported interferences were one defect in _flange_at.
+
+  band = band.difference(ko_f)     # cut clear of every neighbour ...
+  ...                              # ... twenty lines later ...
+  band = union([band, band.buffer(FL_OVER).intersection(mfp)])   # put back
+  band = band.difference(kb)       # holes re-subtracted; the ASSEMBLY not
+
+The FL_OVER lap exists so the fuse has something to bite.  It grows the flange
+2 mm back inward over the source -- straight through the keep-out boundary that
+had just been enforced -- and nothing downstream looked again.  At x=-75 the
+source's +Y edge is y=+19.4 and the lap reaches y=+17.4; the AK45-10's body is
+a cylinder of r 26.5 about the hip axis and passes through exactly there.  The
+flange band is also 3.3 mm deeper than the plate it laps onto, so the lap does
+not lie flat on metal -- it hangs past the plate's own face, into the motor.
+Annular, hence +12.4 mm3 at every one of the 21 angles rather than at one.
+
+FIX: band = band.difference(ko_f) after the lap.  Femur flange 1164 -> 1149
+mm2, Coupler 1057 -> 1038.  Sweep: no new collisions in any of 21
+configurations.  Topology still PASS on all three, 0 openings changed, 0.000
+mm3.  The look is unchanged -- the render is indistinguishable.
+
+TRIED AND REVERTED, both recorded in HANDOFF.md:
+  * Clipping the flange to the source's own section in z.  Correct in
+    principle, and it is what the render caption asks for, but it removes 62%
+    of the Femur's flange: the flange stands 3.3 mm proud along its whole
+    length and that proud step IS the visible edge rail.  Far too blunt for a
+    12 mm3 problem.
+  * Making asmkeepout sweep.  It unions the THREE exported poses while
+    collide.py judges TWENTY-ONE -- the design input is sampled more coarsely
+    than its own gate, which is how Tibia x Femur at q=-123 deg could exist.  A
+    working --sweep was written and reverted because the lap fix cleared the
+    gate without it.  THE BLIND SPOT IS STILL THERE.
+
+---
