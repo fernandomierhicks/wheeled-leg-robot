@@ -33,6 +33,9 @@ SHOW_FACE = "+Z"   # the Tibia is NOT mirrored: the assembly walk puts its
                    # layer code can ask, without this file growing a mirror.
 EPS_Z = 0.05       # mm; keeps layer boundaries from being coincident faces
 SIL_TOL = 1.0      # mm2 of source silhouette `grown` may lose to GEOS noise
+FL_OVER = 2.0      # mm the flange may reach past real material; see the
+                   # section clip in build().  This part's flange does not
+                   # lap like the Femur's, but the reach is the same number.
 _CACHE = {}
 
 

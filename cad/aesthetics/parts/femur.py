@@ -636,6 +636,30 @@ def plan(sp):
                         [band, band.buffer(FL_OVER, join_style=2).intersection(mfp)])
                     if not kb.is_empty:
                         band = band.difference(kb)
+                    # THE LAP PUTS THE FLANGE BACK INSIDE THE KEEP-OUT.
+                    #
+                    # `band` was cut clear of every neighbour twenty lines up,
+                    # and then this lap grows it FL_OVER back inward, over the
+                    # source -- straight through the boundary that was just
+                    # enforced.  The holes get re-subtracted; the assembly did
+                    # not, and nothing downstream looks again.
+                    #
+                    # That is the whole of constraint 2.  At x=-75 the source's
+                    # +Y edge is y=+19.4, the lap reaches y=+17.4, and the
+                    # AK45-10's body is a cylinder of r 26.5 about the hip axis
+                    # that passes through exactly there.  The flange band is
+                    # also 3.3 mm deeper than the plate it laps onto, so the
+                    # lap does not lie flat on the metal -- it hangs past the
+                    # plate's own face, into the motor.  +12.4 mm3 at EVERY one
+                    # of the 21 hip angles, constant because the interference
+                    # is annular and rotating the femur just slides it round.
+                    #
+                    # The lap exists so the fuse has something to bite, and it
+                    # keeps every millimetre of that except where a neighbour
+                    # is.  A flange that has to lap INTO a motor to stay
+                    # attached was never attached.
+                    if ko_f is not None:
+                        band = band.difference(ko_f)
                 # THE OPENING ABOVE RUNS TOO EARLY TO DO ITS JOB.
                 #
                 # "Added material thinner than min_wall is an artefact" is the

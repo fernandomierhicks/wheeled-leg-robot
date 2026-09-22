@@ -10,6 +10,7 @@ JUMPING
 
 ChatGPT_findings.md in digital twwin simualation
 
+Robot is shake in regular operation, need to do an overhaul of latest changes. changed wheel encoder but that looks fine
 
 
 

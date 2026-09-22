@@ -484,3 +484,19 @@ min_wall: it is not a style choice, it is the line between "thinner than asked"
 and "knife edge", and it is the same for every part.
 
 ---
+
+## 37 · phase 3 - collisions before aesthetics
+*2026-09-21*
+
+**Chose:** fix collisions first
+
+**Said:** His call, unprompted and unambiguous: "collisions are more important than static.  We should probably fix the collision first, and once we have a collision-free environment, then we if decide that we can tweak more the aesthetics."
+
+So constraint 2 is the work: 3 pairs, Femur x AK45-10 Stator +12.4 mm3 at every
+one of the 21 hip angles, and Tibia x Femur +2.0 mm3 at one end of travel.  The
+28 sub-1.5 mm razor patches of constraint 5 WAIT until the leg assembles.
+
+Nothing about the look changes while this is done unless a collision fix forces
+it, and if one does, he sees it before it ships.
+
+---
