@@ -455,3 +455,32 @@ source parts do not meet it either (Coupler source 1729 mm2 under 3 mm). The
 question is whether the styling must hold a standard the source does not.
 
 ---
+
+## 36 · phase 3 - constraint 5 reports at 3.0 mm and gates at 1.5
+*2026-09-21*
+
+**Chose:** keep 3.0, gate on 1.5
+
+**Said:** His call, given the threshold table from decision 35.
+
+min_wall 3.0 stays the number that gets PRINTED -- nothing is hidden, and the
+thin-wall map still colours everything under 3 mm.  GATE_WALL 1.5 is what
+passes or fails.
+
+Why the split, in his own numbers:
+  * two thirds of the Femur's and three quarters of the Coupler's introduced
+    thin surface is between 2 and 3 mm -- thinner than he asked for, but not a
+    razor and not a print risk at ~4 perimeters on the X2D;
+  * his OWN source parts fail an absolute 3.0 (source Coupler 1729 mm2 under
+    3 mm), and on the source Femur every thin patch is the hip bearing seat,
+    which the ground rules forbid thickening.  A gate that a perfect rebuild
+    cannot pass is a gate people learn to ignore -- this repo has shipped three
+    of those.
+
+ONE MEASUREMENT, TWO MASKS.  compare() casts the rays once and applies both
+thresholds to the same thickness array, so the reported number and the gated
+number can never drift apart.  GATE_WALL is NOT read from the spec, unlike
+min_wall: it is not a style choice, it is the line between "thinner than asked"
+and "knife edge", and it is the same for every part.
+
+---

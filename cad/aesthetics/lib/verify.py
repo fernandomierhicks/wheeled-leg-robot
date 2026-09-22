@@ -147,7 +147,9 @@ def verify(part="Tibia", tag="arctic"):
     # perfect rebuild.  Only material the STYLING made thin can be its fault.
     #
     # `min_wall` comes from the spec so a part can be built to a different floor
-    # without editing this file.
+    # without editing this file.  `gate_wall` does NOT: it is 1.5 mm for every
+    # part, because it is not a style choice but the line between "thinner than
+    # he asked for" and "a knife edge" (decision 36).  Both numbers are printed.
     print()
     mw = thinwall.MIN_WALL
     sf = os.path.join(paths.SPECS, f"{part.lower()}.json")
@@ -155,7 +157,8 @@ def verify(part="Tibia", tag="arctic"):
         import json
         mw = float(json.load(open(sf)).get("min_wall", mw))
     wall_ok, _ = thinwall.compare_report(sty, paths.part_step(part),
-                                         f"{part} fused", mw)
+                                         f"{part} fused", mw,
+                                         gate_wall=thinwall.GATE_WALL)
     print(f"\nthin-wall gate: {'PASS' if wall_ok else 'FAIL'}")
     return bad, worst, (ok and wall_ok)
 

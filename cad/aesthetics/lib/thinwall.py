@@ -54,6 +54,17 @@ total.  Zero tolerance was rejected because a knife edge tessellates to
 finite-but-small and would block builds that are genuinely fine.  Everything is
 reported either way.
 
+TWO THRESHOLDS, AND THE REASON (decision 36, his call).  `min_wall` 3.0 is his
+number and it is what gets REPORTED; `GATE_WALL` 1.5 is what PASSES or FAILS.
+They are not a fudge and they are not two measurements -- one ray cast, two
+masks, so the printed number and the gated number cannot disagree.  The reason
+for the split is in the numbers: two thirds of what the styling adds sits in
+the 2-3 mm band, which is thinner than he asked for but is not a razor and is
+not a print risk at four perimeters; and his OWN source parts fail 3.0, so a
+3 mm gate is one that argues with you rather than one you fix.  1.5 mm asks the
+question worth asking -- did the styling leave a KNIFE EDGE -- and it is a line
+these parts can actually be brought to.
+
 MEASURED AGAINST THE SOURCE, NOT IN ABSOLUTE TERMS.  `gate()` answers "is this
 solid thin anywhere", which is the honest question to ask of a finished part.
 `compare()` answers the one the rebuild is actually judged on -- "did the
@@ -87,6 +98,7 @@ from OCP.gp import gp_Pnt, gp_Lin, gp_Dir
 MIN_WALL   = 3.0     # his number, decision 25
 PATCH_MM2  = 10.0    # one connected thin patch this big or bigger fails
 TOTAL_MM2  = 50.0    # ... or this much thin surface in total
+GATE_WALL  = 1.5     # decision 36: REPORT at min_wall, PASS/FAIL here
 TESS_DEV   = 0.20    # tessellation deflection; also the error on curved faces
 SAMPLE_MM2 = 1.5     # target surface area per ray
 EPS        = 0.05    # start the ray this far inside, clear of the start face
@@ -338,7 +350,8 @@ def _cached_thin(path, min_wall, dev, per_mm2):
     return pts
 
 
-def compare(sty, src_pts, min_wall=MIN_WALL, near=1.5, res=None, **kw):
+def compare(sty, src_pts, min_wall=MIN_WALL, near=1.5, res=None,
+            gate_wall=GATE_WALL, **kw):
     """Split the styled part's thin material into INHERITED and INTRODUCED.
 
     `src_pts` is the source's thin sample cloud.  A styled thin sample counts as
@@ -371,15 +384,36 @@ def compare(sty, src_pts, min_wall=MIN_WALL, near=1.5, res=None, **kw):
     res["missed"] = int(miss.sum())
     res["missed_area"] = float(w[miss].sum())
 
+    # REPORT AT min_wall, DECIDE AT gate_wall -- decision 36, his call.
+    #
+    # min_wall 3.0 is his number and it stays the number that gets printed, so
+    # nothing is hidden.  But it is not a number these parts can be held to: his
+    # OWN source parts fail it (source Coupler 1729 mm2 under 3 mm, and every
+    # thin patch on the source Femur is the hip bearing seat, which no restyle
+    # may thicken), and two thirds of what the styling adds sits in the 2-3 mm
+    # band -- thin against the number, but not a razor and not a print risk.
+    # Gating there made the gate a thing to be argued with rather than fixed.
+    #
+    # So the gate is 1.5 mm, about four perimeters on the X2D, and it answers
+    # the question worth answering: did the styling leave a KNIFE EDGE.  Both
+    # thresholds come off the same measurement -- one ray cast, two masks -- so
+    # the reported number and the gated number can never disagree.
+    gw = min(gate_wall, min_wall)
+    gate_thin = np.zeros(len(t), bool)
+    gate_thin[idx[new]] = t[idx[new]] < gw
+    res["gate_wall"] = gw
+    res["gate_area"] = float(w[gate_thin].sum())
+    res["gate_patches"] = patches(P, w, gate_thin)
+
     probs = []
-    big = [p for p in res["patches"] if p["area"] >= PATCH_MM2]
+    big = [p for p in res["gate_patches"] if p["area"] >= PATCH_MM2]
     if big:
         probs.append(f"the styling INTRODUCED {len(big)} thin patch(es) at or "
                      f"over {PATCH_MM2:g} mm2 -- largest {big[0]['area']:.1f} mm2, "
-                     f"thinner than {min_wall:g} mm")
-    elif res["introduced_area"] >= TOTAL_MM2:
-        probs.append(f"the styling INTRODUCED {res['introduced_area']:.1f} mm2 of "
-                     f"surface under {min_wall:g} mm in scattered patches "
+                     f"thinner than {gw:g} mm")
+    elif res["gate_area"] >= TOTAL_MM2:
+        probs.append(f"the styling INTRODUCED {res['gate_area']:.1f} mm2 of "
+                     f"surface under {gw:g} mm in scattered patches "
                      f"(limit {TOTAL_MM2:g} mm2)")
     if res["missed_area"] >= MISS_MM2:
         probs.append(f"{res['missed']} inward ray(s) covering "
@@ -389,18 +423,24 @@ def compare(sty, src_pts, min_wall=MIN_WALL, near=1.5, res=None, **kw):
 
 
 def compare_report(sty, src_step, name="", min_wall=MIN_WALL, say=print,
-                   dev=TESS_DEV, per_mm2=SAMPLE_MM2, **kw):
+                   dev=TESS_DEV, per_mm2=SAMPLE_MM2,
+                   gate_wall=GATE_WALL, **kw):
     """Measure the styled part against its own source and print the increase."""
     src_pts = _cached_thin(src_step, min_wall, dev, per_mm2)
-    probs, res = compare(sty, src_pts, min_wall, dev=dev, per_mm2=per_mm2, **kw)
+    probs, res = compare(sty, src_pts, min_wall, dev=dev, per_mm2=per_mm2,
+                         gate_wall=gate_wall, **kw)
     p = res["pct"]
-    say(f"  thin-wall {name:<20} min_wall {min_wall:g} mm   "
-        f"{len(res['t'])} rays over {res['total_area']:.0f} mm2")
+    say(f"  thin-wall {name:<20} report {min_wall:g} mm / gate "
+        f"{res['gate_wall']:g} mm   {len(res['t'])} rays over "
+        f"{res['total_area']:.0f} mm2")
     say(f"      thickness  p1 {p[0.01]:6.2f}   p5 {p[0.05]:6.2f}   "
         f"p25 {p[0.25]:6.2f}   p50 {p[0.50]:6.2f} mm")
     say(f"      under {min_wall:g} mm: {res['thin_area']:.1f} mm2 total "
         f"= {res['inherited_area']:.1f} inherited from the source "
         f"+ {res['introduced_area']:.1f} INTRODUCED by the styling")
+    say(f"      of which under {res['gate_wall']:g} mm (the GATE): "
+        f"{res['gate_area']:.1f} mm2 introduced, "
+        f"{len(res['gate_patches'])} patch(es)")
     if res["missed"]:
         say(f"      [{res['missed']} ray(s), {res['missed_area']:.2f} mm2, "
             f"hit nothing]")
