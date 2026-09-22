@@ -75,16 +75,17 @@ RULES:
 
 ## The six constraints, and how each one is enforced
 
-He listed these as the definition of done. None is satisfied today.
+He listed these as the definition of done. Four of the six are satisfied as of
+2026-09-21; the status column below is kept current.
 
 | # | constraint | the check | status |
 |---|---|---|---|
 | 1 | add / remove only where identified | `input/marks/*.json` ∩ `input/freespace/*.npz`, see `tools/reconcile.py` | inputs ready, unused |
-| 2 | collision free through the ENTIRE stroke | `python lib/collide.py --sweep 21` | **gate built**, parts not yet rebuilt |
-| 3 | no floating pieces | `python lib/verify.py <Part>` → topology gate | **gate built**, fails today: Coupler 4 chunks, Femur 1 |
-| 4 | no sharp edges | same gate: non-manifold + free edges + needle solids | **gate built**, fails today |
-| 5 | no very thin walls | `python lib/thinwall.py <Part> --vs-source` | **gate built**, fails today: 4928 mm² introduced on the Femur |
-| 6 | whole surface carries the aesthetic | the back must be designed, not left over | fails today: bare grey squares |
+| 2 | collision free through the ENTIRE stroke | `python lib/collide.py --sweep 21` | **FAILS** — 3 pairs, all flange; see "Constraint 2" below |
+| 3 | no floating pieces | `python lib/verify.py <Part>` → topology gate | **PASSES** on all three |
+| 4 | no sharp edges | same gate: non-manifold + free edges + needle solids | **PASSES** on all three |
+| 5 | no very thin walls | `python lib/thinwall.py <Part> --vs-source` | **FAILS** — 28 patches over 10 mm² at the 1.5 mm gate |
+| 6 | whole surface carries the aesthetic | the back must be designed, not left over | **PASSES** — drawn trace, both faces |
 
 **All six constraints now have a gate that runs.** Constraint 5 was the last
 one and is `lib/thinwall.py`; see "The minimum-wall check" below for what it
@@ -102,8 +103,11 @@ an OCC boolean at roughly a second and that is the entire runtime. Measured:
 ```
 3 configurations, 5 parts, before   10m 03s
 3 configurations, 3 parts, after     5m 32s     (identical findings)
-21 configurations, 3 parts          ~30-35 min  (extrapolated)
+21 configurations, 3 parts          ~12 min     (MEASURED, 2026-09-21)
 ```
+
+The 30-35 min that used to sit on that last line was an extrapolation and it
+was wrong by nearly 3x. It is cheap enough to run before every review.
 
 Three things bought that, all worth keeping: source STEPs are imported ONCE
 (they were being re-read from disk inside the inner pair loop), the styled
@@ -120,11 +124,10 @@ number — 1153.4 mm³ of floating Coupler, the Femur's 25.2 mm³ chunk, the Tib
 3 sealed cavities, and non-manifold counts of white 1 / graphite 2 / accent 2.
 That agreement is the evidence the gate is correct.
 
-**Constraint 6 has a trap.** Some of the "bare grey on the back" may have been
-the Phase 1 shattering rather than a styling failure. **Look at the backs again
-in a trustworthy export before treating it as an aesthetic problem.** The
-`*_colour.step` files are welded and correct now; the per-filament print STEPs
-are not.
+**Constraint 6 is done.** Graphite was never a shape — it was the leftover of a
+Z-plane split, which is exactly why the backs read as bare blocks. It is now a
+DRAWN circuit-board trace inlaid on both faces (decision 32 B), so the failure
+mode is gone by construction rather than by tuning.
 
 ---
 
