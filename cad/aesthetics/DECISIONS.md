@@ -371,3 +371,87 @@ rather than relocates, and can only be judged once geometry is settled.
 **Said:** THREE NOTES FROM HIM, all acted on. (1) The Coupler: only one side edited, the other plain white. (2) The Tibia's front is his favourite of all three and only its back needed fixing. (3) The Tibia's side cutouts read as straight lines and should be more irregular, more trapezoidal, not straight from one side to the other. THE COUPLER'S BLANK SIDE was the ZB mistake, unfixed at the other end. _back_plane existed because ZB is the bounding-box floor and 29 of the Femur's 39 mm are its knee boss tube. The TOP has the same problem: the Coupler's plate is z -5..+5.5 while its BEARING TUBE runs to +30, so ZT is the top of a cylinder and the show-face inlay painted the tube end 24 mm above the plate. _plate_face() now finds either face. The Femur's ZSHOW is its ZT, so it is unchanged and reproduces at 2129 mm2 of trace either way -- which is how the new code was checked against the old. THE TIBIA KEEPS ITS FRONT. He was offered the drawn trace on both faces, like the Femur, and chose to keep the show face untouched. So this part alone keeps the plane split on the front and takes the trace only on the back, over a white ground. Front and back use different systems here deliberately. White held at 69-70 percent through every rebuild, which is the evidence the front did not move. THE STRAIGHT CUTOUTS ARE THE COLOUR-BAND BUG ONE FEATURE OVER. Side pockets are trap_xz -- a trapezoid in the X-Z plane swept through Y -- so they are only trapezoidal seen EDGE-ON. Cut one with either big face of the part, a plane of constant z, and its opening is a RECTANGLE with ends at constant x. Raising skew could never have helped, because the shape was in the wrong plane. Each profile now carries a plan trapezoid too and build() intersects the two; alternate profiles rake opposite ways so the row does not read as a comb. AND THE WELD NEARLY SHIPPED A DESTROYED PART. weld_nonmanifold fuses a 0.06 mm rod along each pinch. On the Tibia one of those fuses COLLAPSED THE BODY from 215.58 cm3 to half a cubic centimetre -- IsDone() true, no exception -- and build() carried on and wrote the 3MF and both STEPs. The whole purpose of welding is to make a body survive import, so a weld that eats the body is the worst failure it has, and it was silent. It had no volume guard at all, unlike make_manifold() right above it. FOUR FIXES CAME OUT OF CHASING IT: a per-rod volume guard plus a whole-operation fallback; a RADIUS LADDER, because an OCC fuse is radius-sensitive and the rod that collapses a body at 0.06 mm lands cleanly at 0.15 -- without it the last pinch was merely refused, which protects the part but does not repair it; a SPHERE for zero-length pinches, where a rod along a point is nothing and the edge was skipped outright; and drop_null_shells(), because a second shell enclosing ZERO volume is boolean debris, not a sealed cavity, and calling it an unprintable cavity sent the search after a design fault that was not there. _debris also tests THICKNESS now, not just volume: the gate calls a solid a needle under 1 mm3 OR under 0.5 mm thick, and a clipped accent trace can be well over a cubic millimetre and still be a blade. ONE ORDERING LESSON, REPEATED: the detached-piece guard has to run after the REPAIRS too, not just after the features. Welding and shell-dropping rebuild geometry and left a 0.0 mm3 speck behind, so a guard placed before them is once again a guard with work happening after it -- exactly the line-699 mistake from this morning, in a new place. RESULT: ALL THREE LINKS PASS THE TOPOLOGY GATE for the first time. Tibia sealed cavities 3 to 0, non-manifold 3 to 0. Still open: the thin-wall gate on all three, and the 21-pose collision sweep, which has never been run.
 
 ---
+
+## 34 · phase 3 - the collision sweep runs, and where thin walls actually come from
+*2026-09-21*
+
+**Chose:** no board - findings
+
+**Said:** The 21-pose sweep RAN for the first time (model validated, 0.0000 mm
+reconstruction error on all three exported poses) and found three real
+interferences, all small and all the same feature: Femur x AK45-10 Stator
++12.1 mm3 at EVERY pose (constant, because the interference is annular about
+the hip axis), and Tibia x Femur +2.0 mm3 at one end of travel. Located in
+each part's own frame, all three lumps are the FLANGE.
+
+Thin wall, source-relative: Femur 3808 mm2 introduced, Tibia 2912, Coupler
+1253 -- and 90% of the Tibia's and 62% of the Femur's is on +/-Y faces, i.e.
+plan-space razors, not face skins. Attributed to two mechanisms:
+
+  1. A fixed-depth cut into a finite added band. side_d is 5.33 mm and the
+     flange band is 7.5 mm wide, so the side cut leaves 2.2 mm of fin over
+     75 mm. min_wall was already enforced on the flange IN PLAN -- before the
+     removals that make the slivers.
+  2. The Tibia never got side_guard (959 mm2 over three patches, worst
+     0.33 mm) and its cutouts are clipped to grown.buffer(-4.5), a DESIGN
+     outline, while the flange's real outer edge sits inboard of it wherever
+     the attachment filter trimmed it: a 2 mm lip, 10 mm tall, 40 mm long.
+
+DECIDED: enforce the rule where it can be MEASURED rather than predicted --
+at the end of build(), on the body that exists, using the added material's own
+plan footprint in the flange's z band. Two qualifications, both learned the
+expensive way: open the FREE footprint only (the FL_OVER lap is inside the
+silhouette and makes a 2.2 mm fin read as a 4.2 mm strip), and never delete a
+sliver whose removal splits the plan -- that cost 5.63 cm3 of Tibia keel in
+one piece, refused by _drop_detached. Load-bearing slivers are kept and
+REPORTED instead.
+
+---
+
+## 35 · phase 3 - four thin-wall fixes built and measured; one kept
+*2026-09-21*
+
+**Chose:** no board - measured outcomes
+
+**Said:** Decision 34 proposed the measured end-of-build shed. It was built. It does not
+work, and neither do two other plausible fixes. Recording the outcomes so they
+are not re-tried:
+
+  1. SHED sub-min_wall fins at the end of build(), from the added material's
+     own plan footprint in the flange band. A whole z band projects a drafted
+     face at its widest, so the footprint cannot see thinness that varies with
+     z -- which is where these razors are. Femur shed nothing, Coupler rolled
+     back, Tibia shed 383 mm3 and came out 680 mm2 WORSE: cutting a fin in half
+     leaves two fresh thin faces. REVERTED.
+  2. TAKE THE SIDE CUT THROUGH THE FLANGE. side_d 5.33 vs flange_w 5.5 leaves a
+     nominally 0.17 mm fin, which matches the 0.05-0.07 mm minima on the
+     Femur's three largest patches. Snapping the depth to flange_w + min_wall
+     made every part worse -- Femur 3803 -> 4311, Coupler 1253 -> 1938 --
+     because a deeper pocket thins the web between the two opposing pockets.
+     The forbidden-band reasoning is right; the escape is inward, and inward is
+     a visible change to a locked look. REVERTED.
+  3. PORT side_guard TO THE TIBIA. Measured A/B: worse at every threshold,
+     2912 -> 3296 mm2 under 3 mm, 731 -> 1073 under 1 mm, worst single razor
+     patch 330 -> 807. The guard implements half its own rule: on the Femur the
+     side pockets and through cuts never met, so forcing them apart was free;
+     on the Tibia they MERGE cleanly and the guard inserts a wall exactly where
+     they are nearly tangent. REMOVED, with the numbers written into tibia.py.
+  4. GUARD_MARGIN -- KEPT. Found while chasing 3. A guard buffered by exactly
+     min_wall leaves a rim whose nominal width IS min_wall, and a ray crossing
+     it where it is raked reads a hair under, so the guard manufactures a large
+     area of "2.99 mm" wall. Buffering by min_wall + 0.6 took 442 mm2 off the
+     Femur and 84 off the Coupler for nothing.
+
+WHERE THIS LEAVES CONSTRAINT 5, source-relative, mm2 of surface:
+
+    part      < 3.0 mm   < 2.0 mm   < 1.0 mm
+    Femur        3361       1278        278
+    Coupler      1169        316        159
+    Tibia        2912          -        731
+
+Two thirds of the Femur's and three quarters of the Coupler's failure is
+material between 2 and 3 mm. FOR FERNANDO: min_wall 3.0 is his number and the
+source parts do not meet it either (Coupler source 1729 mm2 under 3 mm). The
+question is whether the styling must hold a standard the source does not.
+
+---

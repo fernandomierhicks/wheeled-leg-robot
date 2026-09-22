@@ -609,6 +609,21 @@ def plan(sp):
     wins = (unary_union(wins).intersection(frame.buffer(-3.4, join_style=2)).difference(kb)
             if wins and not frame.is_empty else ShPoly())
 
+    # `side_guard` -- the Femur's rule, that a side pocket stays min_wall clear
+    # of every other removal -- IS DELIBERATELY ABSENT HERE.  It was ported on
+    # 2026-09-21, built and measured, and it is worse on this part at every
+    # threshold: introduced thin surface 2912 -> 3296 mm2 under 3 mm, 731 ->
+    # 1073 under 1 mm, and the worst single razor patch 330 -> 807 mm2.
+    #
+    # The reason is that the guard only implements half of its own rule.  "A
+    # removal must merge with its neighbour or stay min_wall clear" -- on the
+    # Femur the side pockets and the through cuts never met, so forcing them
+    # apart was free.  Here they MERGE, into one clean opening with no wall
+    # between them at all, and the guard inserts a wall precisely where the two
+    # are nearly tangent, which is the thinnest wall it could possibly make.
+    #
+    # Do not re-port it without teaching it to let a nearly-tangent pair merge.
+
     # side-wall trapezoid profiles, in X-Z
     # RAKED IN PLAN as well as in X-Z.  His note on this part: the cutouts on
     # the bearing-cylinder side "are kind of like just straight lines ... can you
@@ -693,6 +708,7 @@ def build(sp, verbose=True):
     grown, KEEP = P["grown"], P["KEEP"]
     ZT, ZB, ZTOP = P["ZT"], P["ZB"], P["ZTOP"]
     CH = sp["chamfer"]
+    MW = float(sp.get("min_wall", 3.0))
     say = print if verbose else (lambda *a, **k: None)
     slab = lambda z0, z1: Pos(0, 0, (z0 + z1) / 2) * Box(900, 700, z1 - z0)
 

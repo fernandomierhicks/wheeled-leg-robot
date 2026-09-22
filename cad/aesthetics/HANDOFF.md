@@ -7,7 +7,22 @@ bottom.
 
 **Phase 1 — outputs trustworthy in SolidWorks — DONE, 2026-09-20.**
 **Phase 2 — the add/remove map and the free-space measurement — DONE, 2026-09-20.**
-**Phase 3 — THE REBUILD — is the current work and has not been started.**
+**Phase 3 — THE REBUILD — in progress. Four of six constraints pass.**
+
+As of 2026-09-21, on all three links:
+
+| constraint | state |
+|---|---|
+| 1 add/remove where identified | holds — marks drive the regions, freemap the extent |
+| 2 collision free through the stroke | **FAILS, 3 pairs** — the sweep has now actually been run |
+| 3 no floating pieces | passes — `_drop_detached`, and it raises rather than shipping |
+| 4 no sharp edges | passes — topology gate, 0 needles on the fused body |
+| 5 no very thin walls | **FAILS on all three** at min_wall 3.0 |
+| 6 no bare colour blocks on the back | passes — drawn trace, both faces |
+
+Constraints 2 and 5 are the open ones, and **read "The thin-wall residue" below
+before attempting 5** — three plausible fixes were tried and measured on
+2026-09-21 and all three made it worse or did nothing. Do not re-try them.
 
 ---
 
@@ -179,6 +194,106 @@ thinner — Femur graphite reads 0.13 mm over a quarter of its surface — becau
 the colour split shaves skins off a solid that is itself thick. Gating on that
 would force a redesign of the locked GLACIER accent, so it is an accepted,
 named gap rather than an oversight.
+
+### The thin-wall residue, and three fixes that did NOT work
+
+Measured 2026-09-21 on the Phase-3 rebuild. Source-relative, i.e. the increase
+the styling is responsible for, in mm² of surface (a wall counts twice):
+
+```
+part      < 3.0 mm   < 2.0 mm   < 1.0 mm
+Femur        3361       1278        278
+Coupler      1169        316        159
+Tibia        2912          -        731    <- largest sub-1 mm patch 330 mm2
+```
+
+(The 2.0 and 1.0 columns were taken before `GUARD_MARGIN`, which only moves
+material out of the 2.9–3.0 band, so they are unchanged to within noise.)
+
+**Read the shape of that table before touching anything.** Two thirds of the
+Femur's and three quarters of the Coupler's failure is material between 2 and
+3 mm — thin against his number, but not a razor. The Tibia is the different
+case: a quarter of its failure is under 1 mm. Chase the sub-1 mm patches; the
+2–3 mm band is a question for Fernando, not a bug.
+
+Four fixes were tried, each built and measured. **One worked. Do not re-try the
+other three without new evidence.**
+
+1. *Shed sub-min_wall fins at the end of `build()`*, using the added material's
+   own plan footprint in the flange band. Sound in principle — measure rather
+   than predict — but the footprint of a whole z band projects a drafted face
+   at its widest, so it cannot see thinness that varies with z, which is where
+   these razors are. Result: Femur shed nothing, Coupler rolled back, Tibia
+   shed 383 mm³ and got **680 mm² WORSE**, because cutting a fin in half leaves
+   two fresh thin faces. Reverted.
+2. *Take the side cut through the flange.* `side_d` 5.33 against `flange_w` 5.5
+   leaves a nominally 0.17 mm fin, which matches the 0.05–0.07 mm minima on the
+   Femur's three largest patches so well that it looked certain. Snapping the
+   depth out to `flange_w + min_wall` made **every part worse** — Femur 3803 →
+   4311, Coupler 1253 → 1938 — because a deeper pocket thins the web between
+   the two opposing pockets and between a pocket and the through cuts. The
+   forbidden-band reasoning is right; the direction to escape it is inward, not
+   outward, and inward is a visible change to a locked look. Reverted.
+3. *Port `side_guard` to the Tibia.* It is the Femur's rule and the Tibia's hand
+   port never got it. Measured A/B on this part: **worse at every threshold** —
+   2912 → 3296 mm² under 3 mm, 731 → 1073 under 1 mm, and the worst single
+   razor patch 330 → 807. The reason is that the guard implements only half of
+   its own rule. "A removal must merge with its neighbour or stay min_wall
+   clear": on the Femur the side pockets and through cuts never met, so forcing
+   them apart was free; on the Tibia they MERGE into one clean opening with no
+   wall at all, and the guard inserts a wall exactly where the two are nearly
+   tangent — the thinnest wall it could make. Removed again, with the numbers
+   written into `tibia.py` so it does not get re-ported.
+4. **WORKED — `GUARD_MARGIN`.** Chasing (3) turned up that a guard buffered by
+   exactly `min_wall` leaves a rim whose nominal width IS `min_wall`, and a ray
+   crossing it where it is raked or curved reads a hair under, so the guard
+   manufactures a large area of "2.99 mm" wall and the gate counts all of it.
+   Visible on the Femur as 31.8 mm² reading exactly 3.00. Buffering by
+   `min_wall + 0.6` took **442 mm² off the Femur and 84 off the Coupler** and
+   cost nothing. Kept.
+
+The honest summary: every remaining razor is in ADDED material that some
+removal has chewed, and the removals are all sized in absolute millimetres
+against outlines rather than against what is behind them. A real fix is a
+sizing pass that knows the local wall, not another clip — and (3) is the
+warning that a rule which helps one link can hurt the next, so measure per
+part rather than porting on principle.
+
+---
+
+## Constraint 2 — the sweep has now been RUN, and it fails
+
+    C:/Users/ferna/cadenv/Scripts/python.exe lib/collide.py --sweep 21 --parts Femur Tibia Coupler
+
+Roughly 12 minutes, not the 30 the old note guessed. The kinematic model
+reconstructs all three exported poses to **0.0000 mm**, so the sweep refuses to
+run on a model it has not validated and this one is validated.
+
+```
+23 collision report(s) over 21 configurations, 3 distinct pairs:
+  Femur x AK45-10 Stator: worst +12.4 mm3   at EVERY one of the 21 angles
+  Tibia x Femur:          worst  +2.0 mm3   at q = -123.00 deg only
+```
+
+**All three are the FLANGE**, located in each part's own build frame:
+
+```
+Femur x Stator   two symmetric lumps, X -77.1..-73.6, Y +/-17.1..19.2, Z 6.0..8.3
+                 A = (-93.79, 0), so these sit at radius ~25.8 from the hip
+                 axis and the stator is a cylinder of r 26.5 -- which is why
+                 the volume is CONSTANT across the sweep: the interference is
+                 annular, and rotating the femur just slides it round.
+Tibia x Femur    one lump, Femur-local X 41.1..42.5, Y 15.7..17.7, Z 7.0..8.3
+                 -- the far tip of the same +Y flange run.
+```
+
+Do NOT try to fix this by clipping features to the plan keep-out: it covers
+**75 % of the Femur's own silhouette**, because it is the neighbours' whole
+swept envelope projected flat, and clipping to it would delete the styling.
+`grown` restores OUT after the keep-out clip, correctly — the source may not be
+deleted — which is exactly why added material can land there. The fix has to be
+3D: keep the flange out of a disc about the hip axis, or stop it standing proud
+of the source's own surface where a neighbour is close.
 
 ---
 
@@ -437,17 +552,22 @@ Bambu, that is evidence of nothing.
 
 ## Where things stand
 
-Five parts styled and exporting manifold — but these are the **pre-Phase-3**
-versions and carry every defect listed above.
+The three LINKS are rebuilt (2026-09-21) and **all three pass the topology
+gate** — one connected solid, no sealed cavities, no non-manifold edges, no
+needles, every opening untouched. The two plates are still pre-Phase-3 and out
+of scope.
 
 ```
-part         styled     source    grew      flange     openings
-Femur        78.56 cm3   86.74    +8.0 Y     785 mm2   0 changed, 0.000 mm3
-Tibia       211.35      228.12   +12.6 Y    1297       0 changed, 0.000
-Coupler      65.19       74.27    +6.2 Y     718       0 changed, 0.000
-Side panel   89.99       92.01    +7.2 Y     289       0 changed, 0.000   (out of scope)
-RobotMount  107.07      110.32    +6.0 Y    1023       0 changed, 0.000   (out of scope)
+part         fused      source    grew      flange     openings      thin (introduced)
+Femur        84.43 cm3   86.74    +8.0 Y    1164 mm2   13, 0 changed   3361 mm2
+Coupler      70.99       74.27    +6.2 Y    1057       21, 0 changed   1169
+Tibia       215.12      228.12   +12.6 Y    1297       35, 0 changed   2912
+Side panel   89.99       92.01    +7.2 Y     289        0 changed      (out of scope)
+RobotMount  107.07      110.32    +6.0 Y    1023        0 changed      (out of scope)
 ```
+
+Worst opening deviation across all three: **0.000 mm³**. The two gates that
+still fail are thin wall (above) and the collision sweep (below).
 
 Deliverables per part:
 

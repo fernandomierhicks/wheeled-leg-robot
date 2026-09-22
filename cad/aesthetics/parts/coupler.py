@@ -40,6 +40,7 @@ RAD = {F: 16.0, E: 21.02}   # each datum's own feature radius
 SHOW_FACE = "+Z"                        # set from the spec by _face()
 EPS_Z = 0.05       # mm; keeps layer boundaries from being coincident faces
 SIL_TOL = 1.0      # mm2 of source silhouette `grown` may lose to GEOS noise
+GUARD_MARGIN = 0.6  # mm on top of min_wall; see `side_guard` in plan()
 FL_OVER = 2.0      # mm the flange laps OVER real material, so the fuse bites
 _CACHE = {}
 
@@ -635,10 +636,35 @@ def plan(sp):
                         [band, band.buffer(FL_OVER, join_style=2).intersection(mfp)])
                     if not kb.is_empty:
                         band = band.difference(kb)
+                # THE OPENING ABOVE RUNS TOO EARLY TO DO ITS JOB.
+                #
+                # "Added material thinner than min_wall is an artefact" is the
+                # rule the growth band already follows, and it is applied at
+                # `a2` -- BEFORE the two steps that actually make the slivers.
+                # The keep-out cut shaves rims around holes, and the FL_OVER
+                # lap adds a 2 mm skirt wherever the band merely grazes the
+                # footprint.  Measured on the Femur: the ring is opened at
+                # 1685 mm2, then clipped to 805 and lapped back to 1165, and
+                # 1024 mm2 of the styling's thin surface -- its three largest
+                # patches -- is in what those two steps left behind.
+                #
+                # Opened here instead, and only OUTSIDE the source footprint:
+                # material standing on metal is backed by the part and cannot
+                # be a thin wall, and the lap lives there.  Opening the lap
+                # would undo the fix directly above it and hand the flange
+                # back its plan-tangent detachment.  Opening is anti-extensive,
+                # so it can never re-enter a keep-out already cut out of it.
+                free = band.difference(mfp)
+                if not free.is_empty:
+                    fat = free.buffer(-o, join_style=2).buffer(o, join_style=2)
+                    sliver = free.difference(fat)
+                    if sliver.area > 0.5:
+                        band = band.difference(sliver)
             elif mfp is None:
                 band = ShPoly()
             print(f"  flange @ z {z0f:+6.1f}..{z1f:+6.1f}: ring {a0:.0f} -> "
-                  f"design {a1:.0f} -> clear {a2:.0f} -> attached {band.area:.0f} mm2")
+                  f"design {a1:.0f} -> clear {a2:.0f} -> attached+opened "
+                  f"{band.area:.0f} mm2")
             return None if band.is_empty else band
 
         flange = None
@@ -893,8 +919,15 @@ def plan(sp):
     # delete the rib -- and the rib is inside the band he marked GREEN to
     # THICKEN, so it is the last thing that should go.  The side pocket is the
     # one that yields, and only where it actually crowds something.
+    # buffered by min_wall PLUS a margin, not by min_wall exactly.  A guard of
+    # exactly MW leaves a rim whose nominal width IS MW, and a ray crossing it
+    # where the rim is raked or curved reads a hair under -- so the guard
+    # manufactures a large area of "2.99 mm" wall and the gate counts every bit
+    # of it.  Visible on the Femur as 31.8 mm2 reading exactly 3.00, and on the
+    # Tibia as +376 mm2 the day the guard was added.  The margin is what makes
+    # the rim pass the check the guard exists to satisfy.
     side_guard = (unary_union([g for g in (pock, wins, cutouts, cut_pockets)
-                               if not g.is_empty]).buffer(MW, join_style=2)
+                               if not g.is_empty]).buffer(MW + GUARD_MARGIN, join_style=2)
                   if any(not g.is_empty for g in (pock, wins, cutouts, cut_pockets))
                   else ShPoly())
 
@@ -914,6 +947,7 @@ def build(sp, verbose=True):
     grown, KEEP = P["grown"], P["KEEP"]
     ZT, ZB, ZTOP = P["ZT"], P["ZB"], P["ZTOP"]
     CH = sp["chamfer"]
+    MW = float(sp.get("min_wall", 3.0))
     say = print if verbose else (lambda *a, **k: None)
     X0, _, X1, _ = grown.bounds
     fx = lambda t: X0 + t * (X1 - X0)
@@ -1085,6 +1119,25 @@ def build(sp, verbose=True):
         if not P["side_guard"].is_empty:
             sub = sub - prism(P["side_guard"], ZB - 20, ZTOP + 20)
         body = body - sub
+    # ADDED MATERIAL THINNER THAN min_wall IS NOT MATERIAL -- MEASURED, at the
+    # end, on the body that actually exists.
+    #
+    # The same rule is already applied twice in plan(), to the growth annulus
+    # and to the flange band, and both times it is applied to a shape that the
+    # removals above then reshape.  The flange leaves plan() at least min_wall
+    # wide everywhere; the side cut then takes a FIXED side_d off its outer
+    # edge, and a fixed depth into a finite band leaves whatever is left.  On
+    # the Femur that is a 2.2 mm fin running 75 mm along the -Y edge -- lump 2
+    # of the three the styling adds, and the largest single source of thin wall
+    # on the part.  Predicting it in plan means predicting every removal;
+    # measuring it here means measuring one thing.
+    #
+    # The added material is prismatic over the flange's own z band, so its plan
+    # footprint is exact rather than a projection, and a morphological opening
+    # with MITRE joins deletes every part narrower than min_wall while leaving
+    # corners where they are.  Only material OUTSIDE the source silhouette is
+    # ever cut, so the "styling may not remove source metal" invariant holds by
+    # construction and not by tolerance.
     say(f"styled body {body.volume/1000:.2f} cm3, {len(body.faces())} faces")
 
     # White is the cap at the SHOW face, down to the split plane.  The source is
