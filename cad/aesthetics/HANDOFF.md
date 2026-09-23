@@ -7,84 +7,120 @@ bottom.
 
 **Phase 1 — outputs trustworthy in SolidWorks — DONE, 2026-09-20.**
 **Phase 2 — the add/remove map and the free-space measurement — DONE, 2026-09-20.**
-**Phase 3 — THE REBUILD — in progress. FIVE of six constraints pass.**
+**Phase 3 — THE REBUILD — the three links are built; next is a GLOBAL CHECK.**
 
-As of 2026-09-21, on all three links:
+State as of the last commit touching this pipeline (`cc829d3`, 2026-09-21).
+Nothing has been built since, so every number below is what is on disk.
 
-| constraint | state |
-|---|---|
-| 1 add/remove where identified | holds — marks drive the regions, freemap the extent |
-| 2 collision free through the stroke | **passes** — 21 poses, no new collisions |
-| 3 no floating pieces | passes — `_drop_detached`, and it raises rather than shipping |
-| 4 no sharp edges | passes — topology gate, 0 needles on the fused body |
-| 5 no very thin walls | **FAILS on all three** — reports at 3.0, gates at 1.5 |
-| 6 no bare colour blocks on the back | passes — drawn trace, both faces |
+| # | constraint | state on Femur / Coupler / Tibia |
+|---|---|---|
+| 1 | add / remove only where identified | **PARTIAL** — see below; this row used to say "holds" and that was wrong |
+| 2 | collision free through the stroke | **PASSES** — 21 poses, no new collisions (three links only) |
+| 3 | no floating pieces | **PASSES** — one solid each; `_drop_detached` raises rather than ship |
+| 4 | no sharp edges | **PASSES** — topology gate: no non-manifold, no free edges, no needles |
+| 5 | no very thin walls | **FAILS** — gate at 1.5 mm: 467 / 202 / 927 mm² introduced |
+| 6 | no bare colour blocks on the back | **PASSES** — drawn grey trace, both faces |
 
-Constraint 5 is the only one left, and **read "The thin-wall residue" below
-before attempting it** — three plausible fixes were tried and measured on
-2026-09-21 and all three made it worse or did nothing. Do not re-try them.
+Every opening on all three: **0 changed, worst deviation 0.000 mm³.**
+
+**Constraint 1, honestly.** Only ONE of his two inputs is wired, on two of the
+three parts. `femur.py` (and the generated `coupler.py`) read his RED marks and
+use them to confine the full-depth *through-cutouts* to his remove zone. His
+GREEN (may-add) marks are loaded and never used, `tools/freemap.py` and
+`tools/reconcile.py` are read by no part at all, and **`tibia.py` never reads
+`input/marks/Tibia.json`**. Where material is added is decided by the growth
+rules plus `lib/asmkeepout.py`, the assembly keep-out, not by his marks.
+
+### What the global check should cover
+
+The collision sweep, topology gate and thin-wall gate each passed or failed on
+its own terms. Nobody has yet looked at the whole thing together, and there are
+blind spots that no single gate covers:
+
+1. **The left femur.** The assembly holds one leg plus `Femur_inside_InsideBox`,
+   the mirrored left femur this file says "inherits the Femur treatment". It has
+   **no recipe, no styled output, and the sweep checked it as SOURCE.** If it is
+   printed styled, that geometry has never been collision-checked.
+2. **The plates.** The sweep ran with `--parts Femur Tibia Coupler`, so Side
+   panel and RobotMount were checked as source. Their styled exports on disk are
+   pre-Phase-3 and out of scope, but a printed robot would carry them.
+3. **The keep-out samples 3 poses; the gate samples 21.** `asmkeepout` unions
+   the exported poses only. The sweep passes today, but the design input is
+   coarser than its own judge. See "Constraint 2" below.
+4. **Constraint 1 as described above**, especially the Tibia ignoring its marks.
+5. **The pipeline relies on a module this file used to call untrustworthy.**
+   "How it works" said `asmkeepout.py` is superseded by `freemap.py`. Both
+   `femur.py` and `tibia.py` call `asmkeepout.load()`, and nothing calls freemap.
+6. **Warnings that print on every build and are tolerated:** the Tibia's chamfer
+   taper fails on layers 0 and 9 (`Standard_TypeMismatch`, built square-edged),
+   and the Femur drops the same 0.021 cm³ detached piece at X −78.8..−74.9 every
+   time. Both are under the guards' limits. Neither has been explained.
+7. **Printability.** The Tibia is 266.5 mm against the X2D's 256 mm bed and must
+   print flat at ~45°. The graphite and accent bodies are not thin-wall checked
+   (decision 29), and the Femur's graphite reads 0.13 mm over a quarter of its
+   surface.
+8. **Does it look right in SolidWorks?** Every render comes out of the OCC
+   kernel that wrote the files, so none of them can catch an export defect
+   (Phase 1). Fernando opening the three `_colour.step` files is the only
+   independent check.
 
 ---
 
 ## The prompt
 
 ```
-Continue the wheeled-leg-robot aesthetics work.  You are starting PHASE 3: the
-rebuild of the three LINKS.
+Continue the wheeled-leg-robot aesthetics work.  The three LINKS (Femur,
+Coupler, Tibia) have been rebuilt in Phase 3.  This session is a GLOBAL CHECK:
+verify the state on disk against every claim in HANDOFF.md, then report what
+holds and what does not.  Do not start fixing things until he has seen that
+report.
 
 READ FIRST, in this order:
-  1. cad/aesthetics/HANDOFF.md     — this file
-  2. cad/aesthetics/TOURNAMENT.md  — the locked look, and the trap list
-  3. cad/aesthetics/DECISIONS.md   — every decision, newest at the bottom
+  1. cad/aesthetics/HANDOFF.md     -- this file; start at "What the global
+                                      check should cover"
+  2. cad/aesthetics/DECISIONS.md   -- every decision, newest at the bottom
+                                      (34-38 are the latest round)
+  3. cad/aesthetics/TOURNAMENT.md  -- the locked look, and the trap list
 
 THE LOOK IS LOCKED. GLACIER, in specs/*.json. Do not restart the tournament,
 do not offer new palettes or accent styles, do not change the spec unless asked.
 
-SCOPE: Femur, Tibia, Coupler.  NOT Side panel, NOT RobotMount — he took the
-plates out of scope explicitly ("let's not focus on the robot plates, either the
-side mount or the robot plate, let's just focus on the links for now").
-Femur_inside_InsideBox is the MIRRORED LEFT FEMUR and inherits the Femur
-treatment; it is not a separate recipe.
+SCOPE: Femur, Tibia, Coupler.  The plates (Side panel, RobotMount) are out of
+scope by his decision, but the global check should SAY what they would do to a
+printed robot, not ignore them.
 
-REBUILD EACH LINK AGAINST SIX HARD CONSTRAINTS.  These are his words, and every
-one of them has a check that must pass before anything is shown:
-
-  1. ADD AND REMOVE ONLY WHERE IDENTIFIED.  His marks give the INTENT (which
-     edges, which regions); tools/freemap.py gives the EXTENT.  See "The two
-     inputs" below.  His marks are NOT gospel — he said so himself.
-  2. COLLISION FREE THROUGH THE ENTIRE STROKE.  Not three poses.  The whole
-     85 deg of travel, sampled from the validated 4-bar.
-  3. NO FLOATING PIECES.  Exactly one connected solid per body.
-  4. NO SHARP EDGES.  No knife edges, no zero-thickness contacts, no needles.
-  5. NO VERY THIN WALLS.  min_wall = 3.0 mm, his number.
-  6. NO BARE BLOCKS OF COLOUR ON THE BACK.  The ENTIRE surface carries the
-     aesthetic — the back is not a leftover of the colour split.
-
-BUILD THE FEMUR FIRST and show him before touching the other two: every other
-recipe is generated from parts/femur.py, so a mistake there propagates.
+RE-RUN, DON'T TRUST.  Every gate, from clean, on what is on disk:
+  lib/verify.py <Part> glacier          (x3)  openings + topology + thin wall
+  lib/collide.py --sweep 21 --parts Femur Tibia Coupler      (~12 min)
+  lib/thinwall.py --selftest                    the gate's own calibration
+  parts/render_part.py <Part>           (x3)  and LOOK at the images
+Numbers to expect are in "Where things stand".  A mismatch is a finding.
 
 RULES:
   - Interpreter is C:/Users/ferna/cadenv/Scripts/python.exe. Never the repo .venv.
   - Log decisions with lib/logdec.py BEFORE doing anything else.
-  - Builds are ~2-4 min. Run long jobs in the background; ASK before launching.
+  - Builds are ~2-4 min, the sweep ~12. Run long jobs in the background;
+    he has given standing permission for collision sweeps.
   - Every hole is untouchable: diameters, positions, counterbores.
-  - Ask, don't assume. Ask for marks on renders — his highest-bandwidth feedback.
+  - Ask, don't assume.  Ask for marks on renders -- his highest-bandwidth
+    feedback.
+  - SendUserFile does not reach him.  Give file paths.
 ```
 
 ---
 
 ## The six constraints, and how each one is enforced
 
-He listed these as the definition of done. Four of the six are satisfied as of
-2026-09-21; the status column below is kept current.
+He listed these as the definition of done. Status is kept current in the table
+at the top of this file; this section is about HOW each one is checked.
 
 | # | constraint | the check | status |
 |---|---|---|---|
-| 1 | add / remove only where identified | `input/marks/*.json` ∩ `input/freespace/*.npz`, see `tools/reconcile.py` | inputs ready, unused |
+| 1 | add / remove only where identified | red marks bound the through-cuts (`web` in `femur.py`); nothing checks the green marks or freemap | **PARTIAL** — Tibia reads no marks |
 | 2 | collision free through the ENTIRE stroke | `python lib/collide.py --sweep 21` | **PASSES** — 21 poses, no new collisions |
 | 3 | no floating pieces | `python lib/verify.py <Part>` → topology gate | **PASSES** on all three |
 | 4 | no sharp edges | same gate: non-manifold + free edges + needle solids | **PASSES** on all three |
-| 5 | no very thin walls | `python lib/thinwall.py <Part> --vs-source` | **FAILS** — 28 patches over 10 mm² at the 1.5 mm gate |
+| 5 | no very thin walls | `python lib/thinwall.py <Part> --vs-source` | **FAILS** — 467 / 202 / 927 mm² under the 1.5 mm gate |
 | 6 | whole surface carries the aesthetic | the back must be designed, not left over | **PASSES** — drawn trace, both faces |
 
 **All six constraints now have a gate that runs.** Constraint 5 was the last
@@ -408,6 +444,11 @@ where a feature wants more.
 Pictures: `out/marks/read/<Part>_FREE.png` (reach map) and `<Part>_RECONCILE.png`
 (green take, red pull back, pale offer).
 
+**None of this is wired into the build yet.** The table above is the plan; the
+rebuild did not consume it. No part reads `reconcile.json` or the freemap, and
+the "4–6 mm varying around the perimeter" plan was never implemented. Growth is
+a fixed `flange_w` band clipped by `asmkeepout`. See constraint 1 at the top.
+
 ---
 
 ## The kinematic model — `tools/kinematics.py`
@@ -451,22 +492,20 @@ tessellate into a handful of very large triangles.
 
 ---
 
-## Defects the rebuild must fix — all measured, none fixed
+## Defects from the pre-Phase-3 audit — all fixed
 
-| part | defect | detail |
+Kept because every one of them passed some numeric check before it was found.
+
+| part | defect | fixed by |
 |---|---|---|
-| Coupler | **4 floating chunks, 1.15 cm³** | the fused body is 5 disconnected solids; chunks ~21 × 5 × 7 mm |
-| Femur | 1 floating chunk, 0.025 cm³ | |
-| Tibia | **3 sealed internal cavities, 1.41 cm³** | two are 36 × 7 mm bubbles with no way out — unprintable |
-| Tibia | 4 bodies with non-manifold edges | `white_2` (1), `graphite_4` (2), `accent_6` (2); welded at export, cause not fixed |
-| RobotMount | **31 needle solids** | 0.01–0.5 mm wide × 5 mm tall (out of scope now, but the cause is shared) |
-| all | the 2D `buffer(0)` pinch | root cause of the non-manifold edges; welding is a repair, not a fix |
-| all | bare grey on the back | constraint 6 — but re-check in a welded export first |
-
-**The floating-chunk cause is known and has a line number.** The detached-piece
-guard runs at `parts/femur.py:699`, but the raised frame/rail/pads are unioned
-on at `:730` and the flange later still — **anything stranded after line 699 is
-never checked**. Move the guard to the end of `build()`.
+| Coupler | 4 floating chunks, 1.15 cm³ | a plan touch is not a 3D join: flange pieces must OVERLAP metal by area and lap `FL_OVER` onto it (decision 31) |
+| Femur | 1 floating chunk, 0.025 cm³ | `_drop_detached` moved to the END of `build()`, and run again after the weld |
+| Tibia | 3 sealed cavities, 1.41 cm³ | side cuts break through to open air instead of stopping at a design outline (decision 33) |
+| Tibia | non-manifold edges on 3 bodies | weld moved into `build()`, plus four fixes to a weld that could silently eat a part (decision 33) |
+| RobotMount | 31 needle solids | out of scope, not re-checked |
+| all | bare grey on the back | graphite is a DRAWN trace now, not the leftover of a plane (decision 32 B) |
+| Coupler | one face plain white | `_plate_face` finds the real plate, not the bbox end of a boss tube (decision 33) |
+| Femur | +12.4 mm³ into the AK45-10 at every hip angle | the flange lap re-entered the keep-out; subtracted again after it (decision 38) |
 
 ---
 
@@ -607,7 +646,7 @@ Deliverables per part:
 | path | what |
 |---|---|
 | `out/print/<Part>/<Part>_glacier.3mf` | print-ready, three filament bodies |
-| `out/print/<Part>/..._{white,graphite,accent}.step` | per filament — **NOT welded; these still shatter in SolidWorks** |
+| `out/print/<Part>/..._{white,graphite,accent}.step` | per filament. Welded inside `build()` now, and these are the bodies the topology gate reads, so they pass it. Not yet opened in SolidWorks. |
 | `out/styled/<Part>/..._colour.step` | **open this to LOOK at it** — welded, one root, coloured |
 | `out/styled/<Part>/..._styled.step` | fused single body, geometry reference |
 | `out/renders/` | `assembly_glacier.png`, `part_*`, `added_*` |
@@ -655,14 +694,18 @@ lib/spec.py         axes, languages, 16 palettes
 lib/manifold.py     non-manifold + free-edge detection, pinch welding, and
                     gate()/gate_report() -- the four topology checks
 lib/keepout.py      a part's OWN openings and silhouette
-lib/asmkeepout.py   SUPERSEDED by tools/freemap.py -- collapses depth to one
-                    layer, pads by PAD_Z on top of clearance, falls back to a
-                    convex hull, and calls buffer(0) twice.  Do not trust it.
+lib/asmkeepout.py   THE ASSEMBLY KEEP-OUT, AND WHAT plan() ACTUALLY USES.  This
+                    line used to call it "superseded by freemap, do not trust
+                    it" -- but femur.py and tibia.py both call load() and no part
+                    reads freemap.  Its known weaknesses are real: it collapses
+                    depth, pads by PAD_Z, can fall back to a hull, and unions
+                    only the THREE exported poses.  The 21-pose sweep passes.
 lib/collide.py      interference.  --sweep N places every instance at N hip
                     angles across the WHOLE travel via tools/kinematics.py, and
                     refuses to run on a kinematic model that does not reconstruct
                     the exported poses.  Without --sweep it does the old 3 poses.
-lib/thinwall.py     CONSTRAINT 5.  Wall thickness by casting a ray along the
+lib/thinwall.py     CONSTRAINT 5, reported at min_wall 3.0, GATED at 1.5 (dec. 36).
+                    Wall thickness by casting a ray along the
                     inward normal from every point on the surface -- the same
                     measure as SolidWorks' Thickness Analysis, so he can check
                     it himself.  --selftest calibrates it on 7 known solids.
@@ -789,25 +832,37 @@ the Phase 1 bug**. None was caught by the check nominally responsible for it.
 
 ## Open
 
+**Constraint 5, the only failing gate.** Under the 1.5 mm gate the styling adds
+467 / 202 / 927 mm² (Femur / Coupler / Tibia). Read "The thin-wall residue"
+first; three fixes have been measured and rejected. He put this on hold until
+the leg was collision-free (decision 37). It is now, so this is his call next.
+
+**Found in the last round, not yet acted on:**
+
+- **`side_guard` is deliberately absent from the Tibia**, with the A/B numbers in
+  `tibia.py`. It only implements half its rule: it cannot let a nearly-tangent
+  pocket and cut MERGE. Teach it that before porting it anywhere.
+- **The Coupler's grey trace covers 14 % of its silhouette against the Femur's
+  25 %.** Its five spine lightening holes eat the runs. Not raised with him.
+- **The Femur's +Y flange stands 3.3 mm proud of the plate along its whole
+  length.** That is the visible edge rail and it is intended, but it is also why
+  the lap reached the motor. Clipping it flush removes 62 % of the flange.
+
+**Older, still open:**
+
 - **The 20 mm free-space window is binding.** p90 and max sit at 18.4/20.0 on
   all three links, so the real reach is larger and unmeasured. Re-run
   `tools/freemap.py --grow 30` if the rebuild wants more than 20 mm anywhere.
 - **Contested space is not allocated.** `freemap` measures each link against
-  SOURCE neighbours, so two links can both be told the same gap is free. Growing
-  all three to the limit could have them meet in the middle; the sweep will
-  catch it, but an explicit split would be better.
+  SOURCE neighbours, so two links can both be told the same gap is free.
 - **Accent volume.** GLACIER runs 2–6 % blue by volume against the original
   "under 1 %" rule from decision 00. Flagged, never re-decided.
 - **The fourth palette value.** The reference sheet names matte white, matte MID
   grey, matte DARK grey and gloss blue. GLACIER has three; he chose to keep three.
 - **BLACKOUT on the Femur** still fails verification (13 openings changed,
   1167 mm³). Contained, but do not lock that spec without fixing it.
-- **The per-filament print STEPs are still unwelded** and will shatter in
-  SolidWorks. Only the `_colour.step` is fixed. Move the weld into `build()` so
-  every downstream artifact is clean.
-- **The plates** (Side panel, RobotMount) read as plain fields and are now out of
-  scope. Their flanges land inboard, which the free map suggests was never
-  necessary — worth revisiting when they come back into scope.
+- **The plates** (Side panel, RobotMount) are pre-Phase-3, out of scope, and have
+  never been through the new gates.
 - **`A_Z = −23.5 mm`** is inherited from baseline-1 and has never been
   re-measured on the v4 box. If anything comes to depend on body-centre
   coordinates, get it measured first.
