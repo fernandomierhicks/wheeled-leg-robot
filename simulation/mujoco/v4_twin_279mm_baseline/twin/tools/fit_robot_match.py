@@ -20,7 +20,7 @@ from scipy.optimize import least_squares, minimize
 from ...params import MotorParams, RobotGeometry, SimParams, WheelMotorParams
 from ...physics import alpha_to_hip_q, get_equilibrium_pitch
 from ...robot_match import (
-    MATCH_REPORT, REPO_ROOT, control_snapshot_sha256,
+    MATCH_REPORT, REPO_ROOT, control_snapshot_sha256, load_robot_match,
 )
 from ...sim_loop import SimController, build_model_and_data, init_sim
 from .param_snapshot import load_snapshot
@@ -33,6 +33,10 @@ if str(GUI_DIR) not in sys.path:
 from analysis.leg_height_sweep import TRIM_TABLE_PARAMS, band_split, plateau_report  # noqa: E402
 from analysis.param_sidecar import load_matching_sidecar  # noqa: E402
 from analysis.wlog_metrics import DecodedRun, compute_metrics, decode_run  # noqa: E402
+
+
+HIP_LOAD_TAU_NM = 0.02      # |mean tau_sym| for a hip-load anchor [N.m]
+HIP_LOAD_DRIFT_TPS = 0.15   # |mean wheel drift| for a hip-load anchor [turns/s]
 
 
 def _relative(path: Path) -> str:
@@ -105,7 +109,8 @@ def _fit_geometry(control: dict[str, float], plateaus) -> tuple[dict, RobotGeome
     targets_arr = np.asarray(targets, dtype=np.float64)
 
     def candidate_from_vector(vector) -> RobotGeometry:
-        battery_x, battery_z, extra_femur, extra_tibia, extra_coupler = vector
+        (battery_x, battery_z, extra_femur, extra_tibia, extra_coupler,
+         imu_offset) = vector
         return replace(
             robot,
             battery_cg_x=float(battery_x),
@@ -113,12 +118,15 @@ def _fit_geometry(control: dict[str, float], plateaus) -> tuple[dict, RobotGeome
             m_femur=robot.measured_femur_mass + float(extra_femur) / 2.0,
             m_tibia=robot.measured_tibia_mass + float(extra_tibia) / 2.0,
             m_coupler=robot.measured_coupler_mass + float(extra_coupler) / 2.0,
+            imu_pitch_offset_rad=float(imu_offset),
         )
 
     def residual(vector):
         candidate = candidate_from_vector(vector)
+        # Trims and logged balance points are in the IMU frame.
         predicted = np.asarray([
             get_equilibrium_pitch(candidate, alpha_to_hip_q(alpha, candidate))
+            + candidate.imu_pitch_offset_rad
             for alpha in fit_alphas
         ])
         return weights_arr * (predicted - targets_arr)
@@ -132,19 +140,20 @@ def _fit_geometry(control: dict[str, float], plateaus) -> tuple[dict, RobotGeome
     ]
     # Chassis half-size is x=70,z=52 mm; battery half-size is x=60,z=18 mm.
     # "Towards the front" therefore permits x=[0,+10] mm and z=+/-34 mm.
+    # IMU offset bounded to +/-10 deg: a mounting error, not a free fudge.
     bounds = [
         (0.0, 0.010), (-0.034, 0.034),
         (0.0, robot.unassigned_mass), (0.0, robot.unassigned_mass),
-        (0.0, robot.unassigned_mass),
+        (0.0, robot.unassigned_mass), (-0.1745, 0.1745),
     ]
     solution = minimize(
         lambda vector: float(np.mean(np.square(residual(vector)))),
-        x0=np.asarray([0.010, -0.030, *initial_extras]),
+        x0=np.asarray([0.010, -0.030, *initial_extras, 0.0]),
         method="SLSQP",
         bounds=bounds,
         constraints={
             "type": "eq",
-            "fun": lambda vector: float(np.sum(vector[2:]) - robot.unassigned_mass),
+            "fun": lambda vector: float(np.sum(vector[2:5]) - robot.unassigned_mass),
         },
         options={"ftol": 1e-15, "maxiter": 2000},
     )
@@ -157,6 +166,7 @@ def _fit_geometry(control: dict[str, float], plateaus) -> tuple[dict, RobotGeome
         "box_cg_z_m": matched.box_cg_z,
         "battery_cg_x_m": matched.battery_cg_x,
         "battery_cg_z_m": matched.battery_cg_z,
+        "imu_pitch_offset_rad": matched.imu_pitch_offset_rad,
         "effective_link_mass_kg_each": {
             "femur": matched.m_femur,
             "tibia": matched.m_tibia,
@@ -168,9 +178,9 @@ def _fit_geometry(control: dict[str, float], plateaus) -> tuple[dict, RobotGeome
             "coupler_bodies": float(solution.x[4]),
         },
         "fit_method": (
-            "constrained weighted fit of battery position and unweighed mass "
-            "allocation against the exported trim schedule plus stationary "
-            "RUNNING plateaus"),
+            "constrained weighted fit of battery position, unweighed mass "
+            "allocation and IMU pitch offset against the exported trim "
+            "schedule plus stationary RUNNING plateaus"),
         "battery_fit_bounds_m": {"x": [0.0, 0.010], "z": [-0.034, 0.034]},
         "weighted_rms_residual_deg": float(np.sqrt(np.mean(
             np.square(residual(solution.x)))) * 180.0 / math.pi),
@@ -187,10 +197,11 @@ def _fit_geometry(control: dict[str, float], plateaus) -> tuple[dict, RobotGeome
         ],
         "provisional": True,
         "caveat": (
-            "The fit places the battery at its forward/lower packaging limits and "
-            "assigns the unresolved whole-robot mass to the femur bodies as an "
-            "equivalent lump. These placements are identification variables, not "
-            "component measurements; confirm with T0.2/T0.3 CG measurements."),
+            "Battery position, link-mass allocation and IMU offset are "
+            "identification variables, not component measurements. The twin's "
+            "mass model cannot reproduce the measured mid-stroke trim hump "
+            "(about 1 deg residual even with the box CG free); confirm with "
+            "T0.2/T0.3 CG measurements."),
     }
     return geometry, matched
 
@@ -246,13 +257,19 @@ def _fit_hip_drive(control: dict[str, float], plateaus,
     measured linkage load points; that schedule remains provisional until the
     unloaded hip and holding-torque tests separate gearbox loss from geometry.
     """
-    fit_rows = [row for row in plateaus if row.equilibrium]
-    all_rows = [row for row in plateaus if row.equilibrium or row.alpha < 0.1]
+    # Hip holding load is set by body weight through the linkage, so it does
+    # not need the strict balance gate: a few mN.m of wheel torque or a slow
+    # drift barely changes it. LOG0039 has no strict-equilibrium plateau but
+    # five usable hip-load ones across the stroke.
+    fit_rows = [row for row in plateaus
+                if row.equilibrium or (abs(row.mean_tau_nm) < HIP_LOAD_TAU_NM
+                                       and abs(row.drift_turns_s) < HIP_LOAD_DRIFT_TPS)]
+    all_rows = [row for row in plateaus if row in fit_rows or row.alpha < 0.1]
     if len(fit_rows) < 2:
         return {
             "torque_scale_ret": 1.0,
             "torque_scale_ext": 1.0,
-            "fit_method": "not fitted: fewer than two equilibrium hip-load anchors",
+            "fit_method": "not fitted: fewer than two hip-load anchors",
             "anchors": [],
             "provisional": True,
         }
@@ -297,15 +314,19 @@ def _fit_hip_drive(control: dict[str, float], plateaus,
             ))
         return np.asarray(errors, dtype=np.float64)
 
+    # One scale over the whole stroke: a transmission/telemetry factor is a
+    # property of the motor, not of leg height. A ret/ext schedule fitted
+    # here only absorbs load-shape (mass/geometry) error, and on LOG0039 it
+    # ran to an unphysical 0.25 bound.
     solution = least_squares(
-        residual, x0=np.asarray([0.85, 0.65]),
-        bounds=(np.asarray([0.25, 0.25]), np.asarray([1.25, 1.25])),
-        diff_step=1e-3, xtol=1e-6, ftol=1e-6, gtol=1e-6, max_nfev=80,
+        lambda s: residual((s[0], s[0])), x0=np.asarray([0.9]),
+        bounds=(np.asarray([0.5]), np.asarray([1.5])),
+        diff_step=1e-3, xtol=1e-6, ftol=1e-6, gtol=1e-6, max_nfev=40,
     )
     if not solution.success:
         raise RuntimeError(f"hip transmission fit failed: {solution.message}")
 
-    scales = solution.x
+    scales = (float(solution.x[0]), float(solution.x[0]))
     anchors = []
     for row in all_rows:
         predicted = response(scales, row.alpha)
@@ -317,7 +338,7 @@ def _fit_hip_drive(control: dict[str, float], plateaus,
             + predicted["reported_torque_r_nm"])
         anchors.append({
             "gain_sched_alpha": row.alpha,
-            "used_for_fit": bool(row.equilibrium),
+            "used_for_fit": row in fit_rows,
             "measured_sag_l_rad": row.hip_sag_l_rad,
             "measured_sag_r_rad": row.hip_sag_r_rad,
             "measured_mean_sag_rad": measured_sag,
@@ -331,22 +352,24 @@ def _fit_hip_drive(control: dict[str, float], plateaus,
         "torque_scale_ret": float(scales[0]),
         "torque_scale_ext": float(scales[1]),
         "fit_method": (
-            "MuJoCo static-settle least squares against equilibrium hip sag and "
-            "reported load torque; controller kp/kd/tff held fixed"),
-        "fitted_equilibrium_anchor_count": len(fit_rows),
+            "MuJoCo static-settle least squares of one stroke-wide scale "
+            "against hip sag and reported load torque on hip-load plateaus; "
+            "controller kp/kd/tff held fixed"),
+        "fitted_hip_load_anchor_count": len(fit_rows),
         "normalized_rms_residual": float(np.sqrt(np.mean(residual(scales) ** 2))),
         "anchors": anchors,
         "provisional": True,
         "caveat": (
             "This is an effective command-to-joint torque schedule inferred from "
-            "two loaded poses. It may absorb linkage geometry, mass placement, "
+            "the loaded plateaus. It may absorb linkage geometry, mass placement, "
             "gearbox loss, and torque-telemetry scale; T2.3/T2.4 must separate them."),
     }
 
 
 def build_report(wlog_path: Path | None = None) -> dict:
     wlog_path = Path(wlog_path) if wlog_path else _latest_wlog()
-    export_path = REPO_ROOT / "software" / "gui" / "parameter_exports" / "Default gains.json"
+    # The reference export is chosen in robot_match.json; refitting keeps it.
+    export_path = REPO_ROOT / load_robot_match()["control_export"]
     odrive_path = (REPO_ROOT / "components" / "characterization" / "odrive" /
                    "USB GUI" / "savedPresets" / "Both axis working CS 3 and 4 .json")
     control = load_snapshot(export_path)

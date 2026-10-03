@@ -5,7 +5,17 @@ LatencyBuffer(n_steps=0) is a transparent pass-through — no conditional
 branches needed in the sim loop.
 """
 import collections
+import math
 from typing import Any
+
+
+def delay_ticks(delay_s: float, dt_s: float) -> int:
+    """Buffer depth for a delay, rounding half a tick up.
+
+    Python's round() is half-to-even, which made a 1 ms delay at a 2 ms tick
+    silently zero ticks.
+    """
+    return max(0, math.floor(delay_s / dt_s + 0.5))
 
 
 class LatencyBuffer:

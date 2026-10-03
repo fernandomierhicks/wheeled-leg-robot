@@ -12,7 +12,7 @@ import math
 # Allow running from repo root without installing the package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 
-from v4_twin_279mm_baseline.models.latency import LatencyBuffer
+from v4_twin_279mm_baseline.models.latency import LatencyBuffer, delay_ticks
 from v4_twin_279mm_baseline.params import LatencyParams, SimTiming
 
 
@@ -69,32 +69,27 @@ def test_reset_refills_with_new_value():
 # ── Test 3: buffer depth calculation matches LatencyParams / SimTiming ───────
 
 def test_buffer_depth_formula_default():
-    """n_sens and n_act must equal round(delay_s / dt_ctrl)."""
+    """Delay depth rounds half a tick up (round() is half-to-even)."""
     timing = SimTiming()        # 0.5 ms physics, 500 Hz firmware control
     dt_ctrl = timing.sim_timestep * timing.ctrl_steps   # = 0.002 s
     assert math.isclose(dt_ctrl, 0.002, rel_tol=1e-9)
 
-    latency = LatencyParams()   # defaults: 2 ms sensor + 1 ms actuator
-    n_sens_expected = round(latency.sensor_delay_s  / dt_ctrl)
-    n_act_expected  = round(latency.actuator_delay_s / dt_ctrl)
-    assert n_sens_expected == 1
-    assert n_act_expected  == 0  # Python round() ties-to-even at half a tick
+    latency = LatencyParams()   # defaults: 2 ms sensor, no actuator transport
+    assert delay_ticks(latency.sensor_delay_s, dt_ctrl) == 1
+    assert delay_ticks(latency.actuator_delay_s, dt_ctrl) == 0
+    assert delay_ticks(0.001, dt_ctrl) == 1   # was 0 under round()
 
 
 def test_buffer_depth_formula_custom():
     """Formula holds for arbitrary delay values."""
     timing  = SimTiming()
     dt_ctrl = timing.sim_timestep * timing.ctrl_steps
-
-    latency = LatencyParams(sensor_delay_s=0.005, actuator_delay_s=0.002)
-    assert round(latency.sensor_delay_s  / dt_ctrl) == 2
-    assert round(latency.actuator_delay_s / dt_ctrl) == 1
+    assert delay_ticks(0.005, dt_ctrl) == 3
+    assert delay_ticks(0.002, dt_ctrl) == 1
+    assert delay_ticks(0.004, dt_ctrl) == 2
 
 
 def test_zero_delay_gives_zero_depth():
     timing  = SimTiming()
     dt_ctrl = timing.sim_timestep * timing.ctrl_steps
-
-    latency = LatencyParams(sensor_delay_s=0.0, actuator_delay_s=0.0)
-    assert round(latency.sensor_delay_s  / dt_ctrl) == 0
-    assert round(latency.actuator_delay_s / dt_ctrl) == 0
+    assert delay_ticks(0.0, dt_ctrl) == 0

@@ -664,11 +664,14 @@ def build_xml(robot: RobotGeometry = None,
               sandbox_obstacles: list = None,
               prop_bodies: list = None,
               floor_size: tuple = None,
-              weld_body: bool = False) -> str:
+              weld_body: bool = False,
+              wheel_torque_tau_s: float = 0.0) -> str:
     """Generate MJCF XML for the two-leg balance robot.
 
     robot: RobotGeometry (defaults to RobotGeometry()).
     motors: MotorParams for actuator torque limits (defaults to MotorParams()).
+    wheel_torque_tau_s: first-order lag on wheel torque (ODrive current loop);
+        0 applies the command instantly.
     weld_body: if True, body is fixed to world frame (no freejoint) — Phase 0 early verification.
     """
     if robot is None:
@@ -690,7 +693,15 @@ def build_xml(robot: RobotGeometry = None,
     motor_y_L = LEG_Y - 0.0215
     motor_y_R = -(LEG_Y - 0.0215)
 
-    W_Y = 0.036
+    # Physical hip hard stops. The leg can bottom on the retract stop when
+    # parked near alpha=0 (bench, 2026-08-09). Stop stiffness (solreflimit
+    # 5 ms) is a placeholder: printed-part stops, never measured.
+    HIP_STOP_RET_DEG = math.degrees(robot.Q_RET)
+    HIP_STOP_EXT_DEG = math.degrees(robot.Q_EXT)
+
+    # Wheel-centre offset outboard of the leg plane, set so the contact
+    # patches sit at the measured track (leg_y itself is unverified).
+    W_Y = robot.track_m / 2.0 - LEG_Y
 
     maytech = min(robot.wheel_motor_mass, p['m_wheel'])
     tyre = max(0.005, p['m_wheel'] - maytech)
@@ -796,7 +807,8 @@ def build_xml(robot: RobotGeometry = None,
       <body name="femur_{side}" pos="0 {sy:.5f} {A_Z:.5f}">
         <inertial pos="{femur_com_x:.5f} 0 0" mass="{femur_inertial_mass:.4f}" diaginertia="{femur_Ix:.3e} {femur_Iyz:.3e} {femur_Iyz:.3e}"/>
         <joint name="hip_{side}" type="hinge" axis="0 1 0"
-               range="-180 180" armature="0.01" damping="0.05"/>
+               range="{HIP_STOP_EXT_DEG:.3f} {HIP_STOP_RET_DEG:.3f}"
+               solreflimit="0.005 1" armature="0.01" damping="0.05"/>
         <geom name="femur_geom_{side}" type="cylinder" fromto="0 0 0 {-L_f:.5f} 0 0"
               size="0.007" rgba="0.94 0.75 0.25 0.55"
               solref="0.02 1" contype="1" conaffinity="1"/>
@@ -843,6 +855,8 @@ def build_xml(robot: RobotGeometry = None,
 
     hip_torque_lim = motors.hip.torque_limit
     wheel_torque_lim = motors.wheel.torque_limit
+    wheel_dyn = (f'dyntype="filterexact" dynprm="{wheel_torque_tau_s:.6g}" '
+                 if wheel_torque_tau_s > 0.0 else '')
 
     return f"""<mujoco model="lqr_balance">
   <option gravity="0 0 -9.81" timestep="0.0005" solver="Newton"
@@ -936,10 +950,19 @@ def build_xml(robot: RobotGeometry = None,
            ctrllimited="true" ctrlrange="{-hip_torque_lim:.1f} {hip_torque_lim:.1f}"/>
     <motor name="hip_act_R"   joint="hip_R"        gear="1"
            ctrllimited="true" ctrlrange="{-hip_torque_lim:.1f} {hip_torque_lim:.1f}"/>
-    <motor name="wheel_act_L" joint="wheel_spin_L" gear="1"
+    <general name="wheel_act_L" joint="wheel_spin_L" gear="1" {wheel_dyn}
            ctrllimited="true" ctrlrange="{-wheel_torque_lim:.1f} {wheel_torque_lim:.1f}"/>
-    <motor name="wheel_act_R" joint="wheel_spin_R" gear="1"
+    <general name="wheel_act_R" joint="wheel_spin_R" gear="1" {wheel_dyn}
            ctrllimited="true" ctrlrange="{-wheel_torque_lim:.1f} {wheel_torque_lim:.1f}"/>
+    <!-- AK45 MIT impedance, evaluated by MuJoCo every physics step like the
+         motor's own fast inner loop: force = ctrl + b1*q + b2*qdot.
+         SimController.set_hip_mit() writes ctrl/biasprm/forcerange per tick. -->
+    <general name="hip_mit_L" joint="hip_L" gear="1" biastype="affine"
+           biasprm="0 0 0" forcelimited="true"
+           forcerange="{-hip_torque_lim:.1f} {hip_torque_lim:.1f}"/>
+    <general name="hip_mit_R" joint="hip_R" gear="1" biastype="affine"
+           biasprm="0 0 0" forcelimited="true"
+           forcerange="{-hip_torque_lim:.1f} {hip_torque_lim:.1f}"/>
   </actuator>
 
   <sensor>

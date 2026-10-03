@@ -5,3 +5,7 @@
 #define FAULT_PITCH_WATCHDOG 8
 #define FAULT_WHEEL_RUNAWAY 9
 #define FAULT_ROLL_WATCHDOG 14
+
+#include <stdint.h>
+#define LOG_LEVEL_INFO 0x01
+void comm_log(uint8_t level, const char* fmt, ...);

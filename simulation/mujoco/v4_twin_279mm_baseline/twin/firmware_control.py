@@ -25,7 +25,24 @@ L_EFF_RET = 0.098915
 L_EFF_EXT = 0.363396
 M_BODY = 2.5620  # firmware value; 2026-08-09 scale inventory, battery in / wheels out
 WHEEL_R = 0.056
+WHEEL_TRACK = 0.340  # [m] measured contact-patch spacing; used when yaw_rate_src = 1
 MOTOR_TRQ_MAX = 7.0
+
+# 9-point balance-trim table, evenly spaced over alpha [0, 1].
+TRIM_POINT_PARAMS = (
+    "lqr_pitch_trim_ret", "lqr_pitch_trim_12", "lqr_pitch_trim_25",
+    "lqr_pitch_trim_38", "lqr_pitch_trim_50", "lqr_pitch_trim_62",
+    "lqr_pitch_trim_75", "lqr_pitch_trim_88", "lqr_pitch_trim_ext",
+)
+# Trim learner gates (control_loop.cpp TRIM_LEARN_*).
+TRIM_LEARN_SETTLE_S = 2.0
+TRIM_LEARN_WINDOW_S = 6.0
+TRIM_LEARN_TAU_S = 5.0
+TRIM_LEARN_TAU_NM = 0.005
+TRIM_LEARN_DRIFT_MS = 0.05
+TRIM_LEARN_ALPHA_TOL = 0.01
+TRIM_LEARN_V_STILL = 0.02
+TRIM_LEARN_W_STILL = 0.05
 
 GAIN_ALLOWLIST = frozenset({
     "lqr_k_pitch_ret", "lqr_k_pitch_ext", "lqr_k_rate_ret",
@@ -92,6 +109,29 @@ def _schedule(ret: float, ext: float, alpha: float) -> float:
     return ret + alpha * (ext - ret)
 
 
+def pitch_trim_bracket(alpha: float, n: int) -> tuple[int, float]:
+    x = _clamp(alpha, 0.0, 1.0) * (n - 1)
+    i = min(int(x), n - 2)
+    return i, x - i
+
+
+def pitch_trim_table(points: list[float], alpha: float) -> float:
+    i, w = pitch_trim_bracket(alpha, len(points))
+    return points[i] + w * (points[i + 1] - points[i])
+
+
+def pitch_trim_table_nudge(points: list[float], alpha: float, delta: float) -> None:
+    i, w = pitch_trim_bracket(alpha, len(points))
+    norm = (1.0 - w) ** 2 + w * w
+    points[i] += delta * (1.0 - w) / norm
+    points[i + 1] += delta * w / norm
+
+
+def wheel_yaw_rate(vel_l_turns_s: float, vel_r_turns_s: float,
+                   wheel_r_m: float, track_m: float) -> float:
+    return (vel_r_turns_s - vel_l_turns_s) * 2.0 * math.pi * wheel_r_m / track_m
+
+
 def safe_backward_theta_limit(configured_limit: float, watchdog_bwd: float,
                               pitch_trim: float, margin: float) -> float:
     safe_limit = max(0.0, watchdog_bwd + pitch_trim - margin)
@@ -156,6 +196,55 @@ class FirmwareController:
         self.roll_fault_start_s: float | None = None
         self.wheel_fault_start_s: float | None = None
         self.plant_id_start_s: float | None = None
+        self._tl_reset(alpha0=-1.0)  # forces a fresh window on the first tick
+
+    def _tl_reset(self, alpha0: float) -> None:
+        self.tl_still_s = 0.0
+        self.tl_alpha0 = alpha0
+        self.tl_n = 0
+        self.tl_sum_pitch = self.tl_sum_tau = self.tl_sum_vel = 0.0
+        self.tl_learning = False
+
+    def _trim_points(self) -> list[float]:
+        return [self.params[name] for name in TRIM_POINT_PARAMS]
+
+    def _trim_learn_step(self, enabled: bool, alpha: float, pitch: float,
+                         tau_sym: float, vel_avg_ms: float) -> None:
+        """One tick of control_loop.cpp trim_learn_step()."""
+        p = self.params
+        still = (enabled and abs(p["v_cmd_ms"]) < TRIM_LEARN_V_STILL
+                 and abs(p["omega_cmd_rds"]) < TRIM_LEARN_W_STILL
+                 and abs(alpha - self.tl_alpha0) < TRIM_LEARN_ALPHA_TOL)
+        if not still:
+            self._tl_reset(alpha0=alpha)
+            return
+        self.tl_still_s += DT
+        if self.tl_still_s < TRIM_LEARN_SETTLE_S:
+            return
+        self.tl_n += 1
+        self.tl_sum_pitch += pitch
+        self.tl_sum_tau += tau_sym
+        self.tl_sum_vel += vel_avg_ms
+        if self.tl_n * DT < TRIM_LEARN_WINDOW_S:
+            return
+        mean_pitch = self.tl_sum_pitch / self.tl_n
+        if (abs(self.tl_sum_tau / self.tl_n) >= TRIM_LEARN_TAU_NM or
+                abs(self.tl_sum_vel / self.tl_n) >= TRIM_LEARN_DRIFT_MS):
+            return
+        self.tl_learning = True
+
+        points = self._trim_points()
+        before = pitch_trim_table(points, alpha)
+        pitch_trim_table_nudge(points, alpha, (mean_pitch - before) * DT / TRIM_LEARN_TAU_S)
+        lo, _ = pitch_trim_bracket(alpha, len(points))
+        for i in (lo, lo + 1):  # param_set clamps to the schema range
+            definition = PARAMS_BY_NAME[TRIM_POINT_PARAMS[i]]
+            p[TRIM_POINT_PARAMS[i]] = _clamp(points[i], definition.min, definition.max)
+
+        moved = pitch_trim_table(self._trim_points(), alpha) - before
+        self.vel_integral = _clamp(self.vel_integral - moved / p["vel_pi_ki"],
+                                   -p["vel_pi_int_max"], p["vel_pi_int_max"])
+        self.theta_ref_rlt -= moved
 
     def enter_running(self, time_s: float, hip_alpha: float,
                       *, ramp_complete: bool = False) -> None:
@@ -260,7 +349,7 @@ class FirmwareController:
         sched_fwd = _schedule(p["pitch_wd_fwd_ret"], p["pitch_wd_fwd_ext"], alpha)
         sched_bwd = _schedule(p["pitch_wd_bwd_ret"], p["pitch_wd_bwd_ext"], alpha)
         barrier_th = _schedule(p["lqr_barrier_th_ret"], p["lqr_barrier_th_ext"], alpha)
-        pitch_trim = _schedule(p["lqr_pitch_trim_ret"], p["lqr_pitch_trim_ext"], alpha)
+        pitch_trim = pitch_trim_table(self._trim_points(), alpha)
         soft_limit = p["wm_vel_limit"]
         if sample.jump_handoff_active and p["jmp_handoff_vel_lim"] > 0.0:
             soft_limit = p["jmp_handoff_vel_lim"]
@@ -297,7 +386,12 @@ class FirmwareController:
 
         tau_yaw = 0.0
         if p["yaw_pi_en"] >= 0.5:
-            yaw_err = p["omega_cmd_rds"] - sample.yaw_rate_rads
+            # yaw_rate_src: 0 = body gyro, 1 = wheel encoders.
+            omega_measured = (
+                wheel_yaw_rate(sample.wheel_l_turns_s, sample.wheel_r_turns_s,
+                               WHEEL_R, WHEEL_TRACK)
+                if p["yaw_rate_src"] >= 0.5 else sample.yaw_rate_rads)
+            yaw_err = p["omega_cmd_rds"] - omega_measured
             self.yaw_integral = _clamp(
                 self.yaw_integral + yaw_err * DT,
                 -p["yaw_pi_int_max"], p["yaw_pi_int_max"])
@@ -345,6 +439,16 @@ class FirmwareController:
         if sample.jump_handoff_active and p["jmp_handoff_torque"] > 0.0:
             torque_limit = p["jmp_handoff_torque"]
         tau_sym = _clamp(tau_sym, -torque_limit, torque_limit)
+
+        # Trim learner: RUNNING only, needs a real (not pinned) alpha and a
+        # vel-PI integrator to offload into.
+        trim_learn_en = (p["trim_learn_en"] >= 0.5
+                         and sample.state.upper() == "RUNNING"
+                         and p["alpha_force_ret_en"] < 0.5
+                         and self.plant_id_start_s is None
+                         and p["vel_pi_en"] >= 0.5 and p["vel_pi_ki"] > 0.0)
+        self._trim_learn_step(trim_learn_en, alpha, pitch, tau_sym, vel_avg_ms)
+
         l_eff = _schedule(L_EFF_RET, L_EFF_EXT, alpha)
         ff2 = p["ff2_alpha"] * M_BODY * 9.81 * l_eff * math.sin(pitch) if p["ff2_alpha"] > 0.0 else 0.0
         ff1 = (-p["ff1_alpha"] *

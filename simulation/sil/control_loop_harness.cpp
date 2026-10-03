@@ -65,6 +65,11 @@ void param_force_set(uint16_t id, float value) {
     if (value > p->max_val) value = p->max_val;
     p->value = value;
 }
+ParamSetResult param_set(uint16_t id, float value) {
+    param_force_set(id, value);
+    return ParamSetResult::OK;
+}
+void comm_log(uint8_t, const char*, ...) {}
 
 static std::vector<float> parse(const std::string& line) {
     std::vector<float> values;
@@ -74,12 +79,20 @@ static std::vector<float> parse(const std::string& line) {
     return values;
 }
 
-int main() {
+int main(int argc, char** argv) {
     // Watchdog behavior is unit-tested separately; vector equivalence focuses
     // on one-tick balance/drive/yaw/control ordering.
     param_force_set(PARAM_PITCH_WATCHDOG_ENABLE, 0.0f);
     param_force_set(PARAM_ROLL_WATCHDOG_EN, 0.0f);
     param_force_set(PARAM_HIP_RUNNING_RAMP_TIME_S, 0.0f);
+    // Optional overrides, one "<param id>=<value>" per argument.
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        const auto eq = arg.find('=');
+        if (eq == std::string::npos) return 3;
+        param_force_set(static_cast<uint16_t>(std::strtoul(arg.substr(0, eq).c_str(), nullptr, 0)),
+                        std::strtof(arg.substr(eq + 1).c_str(), nullptr));
+    }
     g_state.state = STATE_RUNNING;
     controlLoop_reset();
     controlLoop_reset_hip_ramp();

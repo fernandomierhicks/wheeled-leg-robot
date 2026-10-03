@@ -26,7 +26,7 @@ from v4_twin_279mm_baseline.physics import (build_xml, build_assets, solve_ik,
                                      get_equilibrium_pitch, hip_q_to_alpha)
 from v4_twin_279mm_baseline.models.battery import BatteryModel
 from v4_twin_279mm_baseline.models.motor import motor_taper, motor_currents
-from v4_twin_279mm_baseline.models.latency import LatencyBuffer
+from v4_twin_279mm_baseline.models.latency import LatencyBuffer, delay_ticks
 from v4_twin_279mm_baseline.controllers.lqr import (
     compute_gain_table, lqr_torque, compute_AB_table, interpolate_AB,
     discretize_AB,
@@ -64,6 +64,7 @@ def build_model_and_data(params: SimParams,
         sandbox_obstacles=list(world.sandbox_obstacles) if world.sandbox_obstacles else None,
         prop_bodies=list(world.prop_bodies) if world.prop_bodies else None,
         floor_size=world.floor_size[:2] if world.floor_size else None,
+        wheel_torque_tau_s=params.latency.wheel_torque_time_constant_s,
     )
     assets = build_assets()
     model = mujoco.MjModel.from_xml_string(xml, assets)
@@ -270,6 +271,8 @@ class SimController:
         self.act_hip_R   = _act("hip_act_R")
         self.act_wheel_L = _act("wheel_act_L")
         self.act_wheel_R = _act("wheel_act_R")
+        self.act_mit_L   = _act("hip_mit_L")
+        self.act_mit_R   = _act("hip_mit_R")
 
         self.box_bid     = _bid("box")
         self.wheel_bid_L = _bid("wheel_asm_L")
@@ -306,16 +309,21 @@ class SimController:
         self.prev_theta_ref = 0.0
         self.prev_v_target = 0.0
 
-        n_sens = round(params.latency.sensor_delay_s / self.dt_ctrl) \
-            if params.latency.sensor_delay_s > 0 else 0
-        n_act = round(params.latency.actuator_delay_s / self.dt_ctrl) \
-            if params.latency.actuator_delay_s > 0 else 0
+        n_sens = delay_ticks(params.latency.sensor_delay_s, self.dt_ctrl)
+        n_act = delay_ticks(params.latency.actuator_delay_s, self.dt_ctrl)
         self.n_sens = n_sens
         self.n_act = n_act
         pitch0 = get_equilibrium_pitch(robot, robot.Q_NOM,
                                        m_spring=params.gains.knee_spring.m_spring)
-        self.sens_buf = LatencyBuffer(n_sens, (pitch0, 0.0, 0.0, 9.81))
+        self.sens_buf = LatencyBuffer(
+            n_sens, (pitch0 + robot.imu_pitch_offset_rad, 0.0, 0.0, 9.81))
         self.ctrl_buf = LatencyBuffer(n_act, (0.0, 0.0))
+        # Firmware-path IMU channels (roll, roll rate, gyro yaw rate) share the
+        # pitch channel's sensor delay.
+        self.imu_aux_buf = LatencyBuffer(n_sens, (0.0, 0.0, 0.0))
+        # Wheel speeds the firmware sees: last CAN encoder estimate, held.
+        self.wheel_fb_turns_s: tuple[float, float] | None = None
+        self.wheel_fb_next_t = 0.0
 
         ik0 = solve_ik(robot.Q_NOM, robot.as_dict())
         self._l_eff_nom = abs(ik0['W_z']) if ik0 else 0.2
@@ -351,6 +359,23 @@ class SimController:
         self.v_batt = params.battery.V_nom
 
         # Adaptive suspension scale is now owned by JumpController (via mode_out.susp_scale)
+
+    def set_hip_mit(self, model, data, side: str, q_sp: float, kp: float,
+                    kd: float, tff: float, limit: float, scale: float) -> None:
+        """Command one AK45 MIT impedance, applied every physics step.
+
+        Reported (motor-side) torque is clip(kp*(q_sp-q) - kd*qdot + tff,
+        +/-limit); the joint receives it times the plant-side ``scale``.
+        """
+        act = self.act_mit_L if side == "L" else self.act_mit_R
+        data.ctrl[act] = scale * (kp * q_sp + tff)
+        model.actuator_biasprm[act, :3] = (0.0, -scale * kp, -scale * kd)
+        model.actuator_forcerange[act] = (-scale * limit, scale * limit)
+
+    def clear_hip_mit(self, model, data) -> None:
+        for act in (self.act_mit_L, self.act_mit_R):
+            data.ctrl[act] = 0.0
+            model.actuator_biasprm[act, :3] = 0.0
 
     def reset(self, model, data):
         """Reset all controller state (e.g. after sandbox auto-restart)."""
@@ -427,13 +452,24 @@ class SimController:
         if not use_ff2:
             firmware.params["ff2_alpha"] = 0.0
 
+        roll_d, roll_rate_d, yaw_rate_d = self.imu_aux_buf.push(
+            (roll_true, roll_rate, float(data.qvel[self.d_yaw])))
+        if (self.wheel_fb_turns_s is None
+                or data.time >= self.wheel_fb_next_t - 1e-9):
+            self.wheel_fb_turns_s = (
+                float(data.qvel[self.d_whl_L]) / (2.0 * math.pi),
+                float(data.qvel[self.d_whl_R]) / (2.0 * math.pi))
+            self.wheel_fb_next_t = (float(data.time)
+                                    + params.latency.wheel_feedback_period_s)
+        wheel_l_fb, wheel_r_fb = self.wheel_fb_turns_s
+
         output = firmware.step(FirmwareControlInput(
             time_s=float(data.time), pitch_rad=float(pitch_delayed),
-            pitch_rate_rads=float(pitch_rate_delayed), roll_rad=float(roll_true),
-            roll_rate_rads=float(roll_rate),
-            yaw_rate_rads=float(data.qvel[self.d_yaw]),
-            wheel_l_turns_s=float(data.qvel[self.d_whl_L]) / (2.0 * math.pi),
-            wheel_r_turns_s=float(data.qvel[self.d_whl_R]) / (2.0 * math.pi),
+            pitch_rate_rads=float(pitch_rate_delayed), roll_rad=float(roll_d),
+            roll_rate_rads=float(roll_rate_d),
+            yaw_rate_rads=float(yaw_rate_d),
+            wheel_l_turns_s=wheel_l_fb,
+            wheel_r_turns_s=wheel_r_fb,
             hip_alpha=float(alpha),
             hip_l_torque_nm=self.hip_reported_torque_L,
             hip_r_torque_nm=self.hip_reported_torque_R, state=state,
@@ -466,15 +502,20 @@ class SimController:
                 - output.hip_kd * data.qvel[self.d_hip_R] + output.hip_tff,
                 -params.motors.hip.torque_limit, params.motors.hip.torque_limit))
             hip_torque_scale = params.motors.hip.torque_scale(alpha)
-            data.ctrl[self.act_hip_L] = (
-                self.hip_reported_torque_L * hip_torque_scale)
-            data.ctrl[self.act_hip_R] = (
-                self.hip_reported_torque_R * hip_torque_scale)
+            for side, q_nom in (("L", q_nom_L), ("R", q_nom_R)):
+                self.set_hip_mit(
+                    model, data, side, q_nom, output.hip_kp, output.hip_kd,
+                    output.hip_tff, params.motors.hip.torque_limit,
+                    hip_torque_scale)
+            tau_hip_physical_L = self.hip_reported_torque_L * hip_torque_scale
+            tau_hip_physical_R = self.hip_reported_torque_R * hip_torque_scale
         else:
             self.hip_reported_torque_L = 0.0
             self.hip_reported_torque_R = 0.0
-            data.ctrl[self.act_hip_L] = 0.0
-            data.ctrl[self.act_hip_R] = 0.0
+            self.clear_hip_mit(model, data)
+            tau_hip_physical_L = tau_hip_physical_R = 0.0
+        data.ctrl[self.act_hip_L] = 0.0
+        data.ctrl[self.act_hip_R] = 0.0
         data.qfrc_applied[self.d_hip_L] = 0.0
         data.qfrc_applied[self.d_hip_R] = 0.0
 
@@ -498,8 +539,8 @@ class SimController:
             tau_whl_R=float(data.ctrl[self.act_wheel_R]),
             tau_hip_L=self.hip_reported_torque_L,
             tau_hip_R=self.hip_reported_torque_R,
-            tau_hip_physical_L=float(data.ctrl[self.act_hip_L]),
-            tau_hip_physical_R=float(data.ctrl[self.act_hip_R]),
+            tau_hip_physical_L=tau_hip_physical_L,
+            tau_hip_physical_R=tau_hip_physical_R,
             tau_spring_L=0.0, tau_spring_R=0.0,
             hip_q_L=float(data.qpos[self.s_hip_L]),
             hip_q_R=float(data.qpos[self.s_hip_R]), hip_q_avg=hip_q_avg,
@@ -553,6 +594,7 @@ class SimController:
         params = self.params
         robot  = params.robot
         rng    = self.rng
+        self.clear_hip_mit(model, data)  # the firmware path re-arms it below
 
         if q_hip_target is None:
             q_hip_target = robot.Q_NOM
@@ -562,7 +604,8 @@ class SimController:
         # ── Sensors ──────────────────────────────────────────────────────────
         pitch_true, pitch_rate_true = get_pitch_and_rate(
             data, self.box_bid, self.d_pitch)
-        pitch      = pitch_true      + rng.normal(0, params.noise.pitch_std_rad)
+        pitch      = (pitch_true + robot.imu_pitch_offset_rad
+                      + rng.normal(0, params.noise.pitch_std_rad))
         pitch_rate = pitch_rate_true + rng.normal(0, params.noise.pitch_rate_std_rad_s)
         wheel_vel  = (data.qvel[self.d_whl_L] + data.qvel[self.d_whl_R]) / 2.0
         az_imu     = float(data.cacc[self.box_bid, 5])        + rng.normal(0, params.noise.accel_std)
@@ -610,16 +653,9 @@ class SimController:
         _pitch_rate_delayed = float(_pitch_rate_d)
         _wheel_vel_delayed = float(_wheel_vel_d)
 
-        # ── Matrix predictor — ZOH-discretised 3-state prediction ──────────────
-        # Propagates the delayed state x(t-n) forward n steps using the exact
-        # discrete A_d, B_d and the stored torque history, giving x̂(t).
-        # Replaces the scalar Smith predictor which ignored wheel_vel coupling.
-        if self.n_sens > 0:
-            x_del = np.array([_pitch_d, _pitch_rate_d, _wheel_vel_d])
-            x_pred = self._Ad_n @ x_del
-            for k, tau in enumerate(self._tau_hist):
-                x_pred += self._BdPow[k].ravel() * tau
-            _pitch_d, _pitch_rate_d, _wheel_vel_d = x_pred
+        # No state predictor: the Teensy feeds delayed sensor values straight
+        # into the LQR. The legacy matrix predictor that used to run here
+        # cancelled the modelled sensor delay, so the twin saw none.
 
         # Jump phases wrap the schema-driven firmware balance controller, just
         # as STATE_JUMPING wraps controlLoop_run() on the Teensy.
@@ -667,6 +703,7 @@ class SimController:
                 scale = params.motors.hip.torque_scale(hip_q_to_alpha(hip_q_avg, robot))
                 self.hip_reported_torque_L = reported_l
                 self.hip_reported_torque_R = reported_r
+                self.clear_hip_mit(model, data)
                 data.ctrl[self.act_hip_L] = reported_l * scale
                 data.ctrl[self.act_hip_R] = reported_r * scale
                 tick.update(

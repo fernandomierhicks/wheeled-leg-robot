@@ -185,8 +185,18 @@ class LatencyParams:
     round(delay_s / dt_ctrl) control steps.  Total round-trip delay seen by
     the controller = sensor_delay_s + actuator_delay_s.
     """
-    sensor_delay_s: float = 0.002       # [s] 0 = disabled
-    actuator_delay_s: float = 0.001     # [s] 0 = disabled
+    sensor_delay_s: float = 0.002       # [s] 0 = disabled; IMU, unmeasured (T3.1)
+    # Teensy -> CAN -> ODrive transport is well under one physics step; the
+    # real actuator lag is the current loop, modelled by the filter below.
+    # (The former 0.001 here rounded to zero ticks, so this changes nothing.)
+    actuator_delay_s: float = 0.0       # [s] 0 = disabled
+    # ODrive current_control_bandwidth = 1000 rad/s on both axes (Odrive
+    # export.json, 2026-10-02): first-order torque lag, tau = 1/bandwidth.
+    wheel_torque_time_constant_s: float = 0.001
+    # ODrive encoder estimates arrive over CAN every 10 ms (encoder_rate_ms
+    # default); measured in LOG0039: wm_*_vel_turns_s changes every 10.0 ms.
+    # The firmware holds the last value between messages.
+    wheel_feedback_period_s: float = 0.010
 
 
 @dataclass(frozen=True)
@@ -447,6 +457,9 @@ class RobotGeometry:
 
     wheel_r: float = 0.056          # [m] wheel radius (112 mm OD)
     leg_y: float = 0.1430           # [m] Y-offset of leg plane from body centre
+    # [m] wheel contact-patch spacing, measured on the v4 robot (2026-08-09);
+    # encoder yaw matches the gyro at unity gain with it (LOG0036).
+    track_m: float = 0.340
     motor_mass: float = 0.260       # [kg] BASELINE 0.260 — AK45-10 hip motor
 
     @property
@@ -472,6 +485,9 @@ class RobotGeometry:
     Q_RET: float = field(default_factory=lambda: math.radians(+28.0))
     Q_EXT: float = field(default_factory=lambda: math.radians(-57.0))
     calib_backoff_rad: float = 0.0872665  # [rad] retract-switch backoff
+    # [rad] IMU mounting offset: firmware pitch = true body pitch + this.
+    # Fitted with the CG from parked balance points (robot_match.json).
+    imu_pitch_offset_rad: float = 0.0
 
     @property
     def F_X(self) -> float:

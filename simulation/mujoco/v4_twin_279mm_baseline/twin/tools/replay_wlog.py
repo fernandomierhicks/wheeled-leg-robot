@@ -47,6 +47,7 @@ _STATE_CHANNELS = (
     "pitch_rad", "pitch_rate_rads", "wheel_vel_avg", "yaw_rate_rads",
     "hip_l_pos_rad", "hip_r_pos_rad",
 )
+STATIC_TYRE_DEPTH_M = 0.001
 _CONTROL_CHANNELS = (
     "tau_sym", "tau_yaw", "hip_l_torque_nm", "hip_r_torque_nm",
 )
@@ -185,9 +186,10 @@ def _initialise_window(model, data, params, controller_values,
     root_qpos = model.jnt_qposadr[root_joint]
     root_dof = model.jnt_dofadr[root_joint]
     roll = float(fields["roll_rad"][index])
-    pitch = float(fields["pitch_rad"][index])
+    pitch = float(fields["pitch_rad"][index])  # IMU frame
     yaw = float(fields["yaw_rad"][index])
-    data.qpos[root_qpos + 3:root_qpos + 7] = _quat_from_rpy(roll, pitch, yaw)
+    data.qpos[root_qpos + 3:root_qpos + 7] = _quat_from_rpy(
+        roll, pitch - robot.imu_pitch_offset_rad, yaw)
     speed = float(fields["wheel_vel_avg"][index])
     data.qvel[root_dof + 0] = speed * math.cos(yaw)
     data.qvel[root_dof + 1] = speed * math.sin(yaw)
@@ -208,6 +210,17 @@ def _initialise_window(model, data, params, controller_values,
         data.qvel[model.jnt_dofadr[hip_joint]] = float(hip_vel[index])
     mujoco.mj_forward(model, data)
 
+    # Attitude and leg angles above fix the shape, not the height: without
+    # this the wheels started 7-17 mm inside the floor and every window
+    # opened with a contact transient. Put the lower wheel at the tyre's
+    # static loaded contact depth (~1 mm, from a settled balance run).
+    lowest = min(
+        float(data.geom_xpos[mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_GEOM, f"wheel_tire_geom_{side}")][2])
+        for side in ("L", "R")) - robot.wheel_r
+    data.qpos[root_qpos + 2] -= lowest + STATIC_TYRE_DEPTH_M
+    mujoco.mj_forward(model, data)
+
     controller = SimController(model, data, params, rng_seed=index)
     controller.firmware_ctrl.update_params(controller_values)
     q_cmd_l = firmware_hip_to_sim_q(
@@ -220,10 +233,20 @@ def _initialise_window(model, data, params, controller_values,
         speed / robot.wheel_r, 9.81,
     )
     controller.sens_buf.reset(sensor_seed)
+    controller.imu_aux_buf.reset((
+        roll, float(fields["roll_rate_rads"][index]),
+        float(fields["yaw_rate_rads"][index]),
+    ))
     controller.ctrl_buf.reset((
         float(fields["whl_tau_l"][index]),
         float(fields["whl_tau_r"][index]),
     ))
+    # Wheel torque-lag state: start at the torque already being applied.
+    scale = params.motors.wheel.command_torque_scale
+    for act, name in ((controller.act_wheel_L, "whl_tau_l"),
+                      (controller.act_wheel_R, "whl_tau_r")):
+        if model.actuator_actnum[act]:
+            data.act[model.actuator_actadr[act]] = float(fields[name][index]) * scale
     controller._tau_hist = collections.deque(  # replay state seed
         [float(fields["tau_sym"][index])] * controller.n_sens,
         maxlen=max(controller.n_sens, 1),
@@ -280,8 +303,12 @@ def _open_loop_tick(model, data, controller: SimController,
         - p["hip_running_kd"] * data.qvel[controller.d_hip_R] + tff,
         -params.motors.hip.torque_limit, params.motors.hip.torque_limit))
     hip_scale = params.motors.hip.torque_scale(alpha)
-    data.ctrl[controller.act_hip_L] = reported_l * hip_scale
-    data.ctrl[controller.act_hip_R] = reported_r * hip_scale
+    for side, q_cmd in (("L", q_cmd_l), ("R", q_cmd_r)):
+        controller.set_hip_mit(
+            model, data, side, q_cmd, p["hip_running_kp"], p["hip_running_kd"],
+            tff, params.motors.hip.torque_limit, hip_scale)
+    data.ctrl[controller.act_hip_L] = 0.0
+    data.ctrl[controller.act_hip_R] = 0.0
     pitch, pitch_rate = get_pitch_and_rate(
         data, controller.box_bid, controller.d_pitch)
     _, roll_rate = get_roll_and_rate(data, controller.box_bid, controller.d_roll)
@@ -289,7 +316,8 @@ def _open_loop_tick(model, data, controller: SimController,
     wheel_vel = 0.5 * (
         data.qvel[controller.d_whl_L] + data.qvel[controller.d_whl_R]) * robot.wheel_r
     return {
-        "pitch_rad": float(pitch), "pitch_rate_rads": float(pitch_rate),
+        "pitch_rad": float(pitch) + robot.imu_pitch_offset_rad,  # IMU frame
+        "pitch_rate_rads": float(pitch_rate),
         "wheel_vel_avg": float(wheel_vel),
         "yaw_rate_rads": float(data.qvel[controller.d_yaw]),
         "hip_l_pos_rad": sim_q_to_firmware_hip(
@@ -325,7 +353,7 @@ def _closed_loop_tick(model, data, controller: SimController,
         use_suspension=True, use_ff1=True, use_ff2=True,
     )
     return {
-        "pitch_rad": float(tick["pitch"]),
+        "pitch_rad": float(tick["pitch"]) + robot.imu_pitch_offset_rad,  # IMU frame
         "pitch_rate_rads": float(tick["pitch_rate"]),
         "wheel_vel_avg": float(tick["v_measured"]),
         "yaw_rate_rads": float(tick["yaw_rate"]),

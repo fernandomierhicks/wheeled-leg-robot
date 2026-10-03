@@ -1,44 +1,204 @@
 {
   "schema_version": 2,
-  "generated_utc": "2026-08-12T04:18:10.947083+00:00",
-  "control_export": "software/gui/parameter_exports/Default gains.json",
+  "generated_utc": "2026-10-03T05:10:31.362654+00:00",
+  "control_export": "software/gui/parameter_exports/2026_10_10 Parameters for release 1.0.json",
   "control_snapshot": {
-    "parameter_count": 176,
-    "sha256": "866bffc17936a9ef00ef67ac58be70589fff6af0233c6b22d3affe824f112d4f",
+    "parameter_count": 195,
+    "sha256": "249cd7edcad3bc2764aa0f21a72161a5d852590cefa3e4c98fa1b61e28061faf",
     "fit_policy": "immutable during identification; only plant-side mass, CG, inertia, friction, delay, contact, and actuator conversions may vary"
   },
-  "latest_wlog": "data/logs/runs/20260810T045619_693178Z_SD_LOG0001/LOG0001.WLOG",
+  "latest_wlog": "data/logs/runs/20261002T220429_873924Z_SD_LOG0039/LOG0039.WLOG",
   "odrive_snapshot": "components/characterization/odrive/USB GUI/savedPresets/Both axis working CS 3 and 4 .json",
   "parameter_reconciliation": {
-    "export_parameter_count": 177,
-    "log_sidecar_parameter_count": 138,
-    "common_parameter_count": 136,
+    "export_parameter_count": 195,
+    "log_sidecar_parameter_count": 177,
+    "common_parameter_count": 177,
     "meaningful_initial_differences": [
       {
-        "name": "jump_ext_timeout",
-        "export_value": 0.2,
-        "log_initial_value": 0.15
+        "name": "hip_cmd_rate_lim",
+        "export_value": 2.0,
+        "log_initial_value": 0.5
       },
       {
-        "name": "jump_torque_max",
-        "export_value": 7.0,
+        "name": "hip_roll_kd",
+        "export_value": 1.2,
+        "log_initial_value": 0.8
+      },
+      {
+        "name": "jmp_handoff_kp_mul",
+        "export_value": 1.0,
+        "log_initial_value": 1.5
+      },
+      {
+        "name": "jmp_handoff_kr_mul",
+        "export_value": 1.0,
+        "log_initial_value": 1.5
+      },
+      {
+        "name": "jmp_handoff_kv_mul",
+        "export_value": 0.0,
+        "log_initial_value": 1.0
+      },
+      {
+        "name": "jmp_handoff_torque",
+        "export_value": 0.8,
+        "log_initial_value": 0.6
+      },
+      {
+        "name": "jmp_handoff_vel_lim",
+        "export_value": 14.0,
+        "log_initial_value": 10.0
+      },
+      {
+        "name": "jump_enable",
+        "export_value": 1.0,
         "log_initial_value": 0.0
+      },
+      {
+        "name": "jump_retract_angle",
+        "export_value": 0.9948376736367678,
+        "log_initial_value": -1.0
+      },
+      {
+        "name": "lqr_barrier_th_ext",
+        "export_value": 0.2792526803190927,
+        "log_initial_value": 0.20944
+      },
+      {
+        "name": "lqr_barrier_th_ret",
+        "export_value": 0.2792526803190927,
+        "log_initial_value": 0.20944
+      },
+      {
+        "name": "lqr_pitch_trim_38",
+        "export_value": -0.09075712110370514,
+        "log_initial_value": -0.0803
+      },
+      {
+        "name": "lqr_pitch_trim_ext",
+        "export_value": -0.0471238898038469,
+        "log_initial_value": -0.0304136
+      },
+      {
+        "name": "lqr_pitch_trim_ret",
+        "export_value": -0.019198621771937627,
+        "log_initial_value": -0.0330907
+      },
+      {
+        "name": "pitch_wd_bwd_ext",
+        "export_value": 0.41887902047863906,
+        "log_initial_value": 0.349066
+      },
+      {
+        "name": "pitch_wd_bwd_ret",
+        "export_value": 0.41887902047863906,
+        "log_initial_value": 0.349066
+      },
+      {
+        "name": "profile1_roll_max",
+        "export_value": 0.3490658503988659,
+        "log_initial_value": 0.0872665
+      },
+      {
+        "name": "profile1_torque_lim",
+        "export_value": 0.2,
+        "log_initial_value": 0.3
+      },
+      {
+        "name": "profile1_yaw_max",
+        "export_value": 1.7453292519943295,
+        "log_initial_value": 0.872665
+      },
+      {
+        "name": "profile2_roll_max",
+        "export_value": 0.3490658503988659,
+        "log_initial_value": 0.174533
+      },
+      {
+        "name": "profile2_torque_lim",
+        "export_value": 0.3,
+        "log_initial_value": 0.4
+      },
+      {
+        "name": "profile2_yaw_max",
+        "export_value": 3.490658503988659,
+        "log_initial_value": 2.61799
+      },
+      {
+        "name": "profile3_roll_max",
+        "export_value": 0.6108652381980153,
+        "log_initial_value": 0.349066
+      },
+      {
+        "name": "profile3_torque_lim",
+        "export_value": 0.4,
+        "log_initial_value": 0.6
+      },
+      {
+        "name": "profile3_yaw_max",
+        "export_value": 8.726646259971648,
+        "log_initial_value": 5.23599
+      },
+      {
+        "name": "roll_ctrl_en",
+        "export_value": 1.0,
+        "log_initial_value": 0.0
+      },
+      {
+        "name": "roll_int_max",
+        "export_value": 0.3,
+        "log_initial_value": 0.148036
+      },
+      {
+        "name": "roll_kd",
+        "export_value": 0.03,
+        "log_initial_value": 0.018331
       },
       {
         "name": "roll_ki",
-        "export_value": 0.1,
-        "log_initial_value": 0.0
+        "export_value": 2.5,
+        "log_initial_value": 0.123271
+      },
+      {
+        "name": "roll_kp",
+        "export_value": 0.8,
+        "log_initial_value": 0.726292
       },
       {
         "name": "roll_offset_max",
-        "export_value": 0.3,
-        "log_initial_value": 0.15
+        "export_value": 0.6981317007977318,
+        "log_initial_value": 0.3
+      },
+      {
+        "name": "roll_rate_lim",
+        "export_value": 2.0943951023931953,
+        "log_initial_value": 0.1
+      },
+      {
+        "name": "theta_max_bwd_ext",
+        "export_value": 0.20943951023931953,
+        "log_initial_value": 0.139626
+      },
+      {
+        "name": "theta_max_bwd_ret",
+        "export_value": 0.20943951023931953,
+        "log_initial_value": 0.139626
+      },
+      {
+        "name": "vel_pi_rate_lim",
+        "export_value": 1.0471975511965976,
+        "log_initial_value": 0.523599
+      },
+      {
+        "name": "wm_vel_limit",
+        "export_value": 10.0,
+        "log_initial_value": 6.0
       }
     ],
     "running_active_profiles": [
       2
     ],
-    "running_torque_limit_nm": 0.4,
+    "running_torque_limit_nm": 0.1,
     "note": "Historical replay uses the sidecar values active during the run. Current scenarios use the latest export. Differences are listed explicitly above and are not plant-fit variables."
   },
   "mass_inventory": {
@@ -63,19 +223,20 @@
   "geometry": {
     "box_cg_x_m": 0.0,
     "box_cg_z_m": 0.0,
-    "battery_cg_x_m": 0.01,
-    "battery_cg_z_m": -0.03399999999999982,
+    "battery_cg_x_m": 4.815698002492517e-18,
+    "battery_cg_z_m": -0.02050105061955369,
+    "imu_pitch_offset_rad": 0.02767209911360462,
     "effective_link_mass_kg_each": {
       "femur": 0.3665,
       "tibia": 0.085,
-      "coupler": 0.035000000000000045
+      "coupler": 0.03500000000000002
     },
     "unassigned_mass_allocation_kg_total": {
       "femur_bodies": 0.653,
       "tibia_bodies": 0.0,
-      "coupler_bodies": 8.326672684688674e-17
+      "coupler_bodies": 3.033823201136648e-17
     },
-    "fit_method": "constrained weighted fit of battery position and unweighed mass allocation against the exported trim schedule plus stationary RUNNING plateaus",
+    "fit_method": "constrained weighted fit of battery position, unweighed mass allocation and IMU pitch offset against the exported trim schedule plus stationary RUNNING plateaus",
     "battery_fit_bounds_m": {
       "x": [
         0.0,
@@ -86,34 +247,21 @@
         0.034
       ]
     },
-    "weighted_rms_residual_deg": 1.6134428308091218,
+    "weighted_rms_residual_deg": 1.0682819020975503,
     "unweighted_residual_deg": [
-      2.713518754367447,
-      -0.19666863684359553,
-      -0.2892785681334349,
-      0.7521826835058986,
-      -3.121978156536532,
-      0.44704890053162727,
-      -0.1109230968552222
+      -1.4703224787449714,
+      0.10446267666009865,
+      0.9011800403264726,
+      0.8752874433743015,
+      0.6149693089317343,
+      0.7492905186262316,
+      0.4157529205510489,
+      0.13108101748486148,
+      -2.3217160741336165
     ],
-    "equilibrium_plateaus": [
-      {
-        "gain_sched_alpha": 0.7294730685896215,
-        "duration_s": 29.448,
-        "balance_pitch_deg": -4.394248608685183,
-        "mean_tau_sym_nm": 0.0035974558245084683,
-        "wheel_drift_turns_s": -0.033603327940881576
-      },
-      {
-        "gain_sched_alpha": 0.9204139086561134,
-        "duration_s": 13.312,
-        "balance_pitch_deg": -4.093142779568299,
-        "mean_tau_sym_nm": 0.003955340158103661,
-        "wheel_drift_turns_s": 0.003943037563072141
-      }
-    ],
+    "equilibrium_plateaus": [],
     "provisional": true,
-    "caveat": "The fit places the battery at its forward/lower packaging limits and assigns the unresolved whole-robot mass to the femur bodies as an equivalent lump. These placements are identification variables, not component measurements; confirm with T0.2/T0.3 CG measurements."
+    "caveat": "Battery position, link-mass allocation and IMU offset are identification variables, not component measurements. The twin's mass model cannot reproduce the measured mid-stroke trim hump (about 1 deg residual even with the box CG free); confirm with T0.2/T0.3 CG measurements."
   },
   "wheel_drive": {
     "motor_kv_rpm_per_v": 70.0,
@@ -126,104 +274,133 @@
     "caveat": "Derived from the latest saved ODrive preset, not a live configuration read or blocked-wheel torque measurement. It assumes the installed wheel motor is the documented 70 KV variant."
   },
   "hip_drive": {
-    "torque_scale_ret": 1.2499999999999845,
-    "torque_scale_ext": 0.5927359810981957,
-    "fit_method": "MuJoCo static-settle least squares against equilibrium hip sag and reported load torque; controller kp/kd/tff held fixed",
-    "fitted_equilibrium_anchor_count": 2,
-    "normalized_rms_residual": 0.5062073621951061,
+    "torque_scale_ret": 0.5109985066663575,
+    "torque_scale_ext": 0.5109985066663575,
+    "fit_method": "MuJoCo static-settle least squares of one stroke-wide scale against hip sag and reported load torque on hip-load plateaus; controller kp/kd/tff held fixed",
+    "fitted_hip_load_anchor_count": 5,
+    "normalized_rms_residual": 5.42816258530346,
     "anchors": [
       {
-        "gain_sched_alpha": 0.03486252717406924,
+        "gain_sched_alpha": 2.0214392621300614e-05,
+        "used_for_fit": true,
+        "measured_sag_l_rad": -0.02664823395132138,
+        "measured_sag_r_rad": -0.02757992141863756,
+        "measured_mean_sag_rad": -0.02711407768497947,
+        "simulated_mean_sag_rad": -0.007504402724482139,
+        "sag_residual_rad": 0.01960967496049733,
+        "measured_mean_reported_torque_nm": -1.2584861893182757,
+        "simulated_mean_reported_torque_nm": -0.7252829207608371,
+        "torque_residual_nm": 0.5332032685574386
+      },
+      {
+        "gain_sched_alpha": 0.3331176076620151,
+        "used_for_fit": true,
+        "measured_sag_l_rad": -0.05606761732702096,
+        "measured_sag_r_rad": -0.05291344091960285,
+        "measured_mean_sag_rad": -0.054490529123311905,
+        "simulated_mean_sag_rad": -0.02241883465775579,
+        "sag_residual_rad": 0.03207169446555612,
+        "measured_mean_reported_torque_nm": -2.1321856726176223,
+        "simulated_mean_reported_torque_nm": -1.172603758627949,
+        "torque_residual_nm": 0.9595819139896733
+      },
+      {
+        "gain_sched_alpha": 0.6009225207470057,
+        "used_for_fit": true,
+        "measured_sag_l_rad": -0.056171454776130385,
+        "measured_sag_r_rad": -0.055688559600655246,
+        "measured_mean_sag_rad": -0.05593000718839282,
+        "simulated_mean_sag_rad": -0.06822905483440482,
+        "sag_residual_rad": -0.012299047646012001,
+        "measured_mean_reported_torque_nm": -2.1770224982954893,
+        "simulated_mean_reported_torque_nm": -2.5467993026404856,
+        "torque_residual_nm": -0.36977680434499627
+      },
+      {
+        "gain_sched_alpha": 0.9624106725540934,
+        "used_for_fit": true,
+        "measured_sag_l_rad": -0.05414089529740833,
+        "measured_sag_r_rad": -0.050679879788809314,
+        "measured_mean_sag_rad": -0.052410387543108825,
+        "simulated_mean_sag_rad": -0.07635595354664737,
+        "sag_residual_rad": -0.023945566003538546,
+        "measured_mean_reported_torque_nm": -2.0774805452567398,
+        "simulated_mean_reported_torque_nm": -2.7896259334172484,
+        "torque_residual_nm": -0.7121453881605087
+      },
+      {
+        "gain_sched_alpha": 0.5089878998585722,
+        "used_for_fit": true,
+        "measured_sag_l_rad": -0.05770037585592231,
+        "measured_sag_r_rad": -0.04286443182174091,
+        "measured_mean_sag_rad": -0.05028240383883161,
+        "simulated_mean_sag_rad": -0.03684075352009306,
+        "sag_residual_rad": 0.013441650318738549,
+        "measured_mean_reported_torque_nm": -2.0174028756140885,
+        "simulated_mean_reported_torque_nm": -1.6049483340034725,
+        "torque_residual_nm": 0.412454541610616
+      },
+      {
+        "gain_sched_alpha": 0.06578378596846361,
         "used_for_fit": false,
-        "measured_sag_l_rad": 0.03774778955826872,
-        "measured_sag_r_rad": 0.04146927301566461,
-        "measured_mean_sag_rad": 0.03960853128696666,
-        "simulated_mean_sag_rad": 0.08171272112225994,
-        "sag_residual_rad": 0.04210418983529328,
-        "measured_mean_reported_torque_nm": -1.404539424409839,
-        "simulated_mean_reported_torque_nm": -0.3571550885088732,
-        "torque_residual_nm": 1.0473843359009658
-      },
-      {
-        "gain_sched_alpha": 0.7294730685896215,
-        "used_for_fit": true,
-        "measured_sag_l_rad": 0.011639238561634395,
-        "measured_sag_r_rad": 0.017839755038145087,
-        "measured_mean_sag_rad": 0.01473949679988974,
-        "simulated_mean_sag_rad": 0.01232419043667519,
-        "sag_residual_rad": -0.002415306363214551,
-        "measured_mean_reported_torque_nm": -2.029378979110873,
-        "simulated_mean_reported_torque_nm": -2.0916653510971512,
-        "torque_residual_nm": -0.062286371986278066
-      },
-      {
-        "gain_sched_alpha": 0.9204139086561134,
-        "used_for_fit": true,
-        "measured_sag_l_rad": 0.0027483419443552312,
-        "measured_sag_r_rad": 0.008839822016083278,
-        "measured_mean_sag_rad": 0.005794081980219254,
-        "simulated_mean_sag_rad": 0.007866856713463929,
-        "sag_residual_rad": 0.0020727747332446745,
-        "measured_mean_reported_torque_nm": -2.2506613820934525,
-        "simulated_mean_reported_torque_nm": -2.202513654865439,
-        "torque_residual_nm": 0.048147727228013526
+        "measured_sag_l_rad": -0.03731188155411115,
+        "measured_sag_r_rad": -0.028331132182481827,
+        "measured_mean_sag_rad": -0.03282150686829649,
+        "simulated_mean_sag_rad": -0.011619457463572843,
+        "sag_residual_rad": 0.021202049404723648,
+        "measured_mean_reported_torque_nm": -1.4906833793805991,
+        "simulated_mean_reported_torque_nm": -0.8487406636152326,
+        "torque_residual_nm": 0.6419427157653665
       }
     ],
     "provisional": true,
-    "caveat": "This is an effective command-to-joint torque schedule inferred from two loaded poses. It may absorb linkage geometry, mass placement, gearbox loss, and torque-telemetry scale; T2.3/T2.4 must separate them."
+    "caveat": "One stroke-wide scale fitted to five hip-load plateaus. It is far from a clean fit (normalized residual ~5): the twin's hip load rises much more steeply with extension than the robot's, a mass-distribution/linkage-load error a transmission factor cannot fix. 0.51 gives the best LOG0039 balance replay but under-powers the jump model (1.0 is the physical prior). T2.4/T0.2 must resolve it."
   },
   "log_evidence": {
     "telem_version": 12,
     "sample_rate_hz": 500,
-    "samples": 112451,
-    "duration_s": 224.898782,
+    "samples": 76360,
+    "duration_s": 152.743429,
     "state_durations_s": {
-      "STANDBY": 3.361,
-      "RUNNING": 215.48,
-      "STANDING_UP": 5.058,
+      "STANDBY": 3.604,
+      "RUNNING": 148.14,
       "DISARMING": 1.002
     },
-    "running_samples": 107740,
-    "running_duration_s": 215.477734,
+    "running_samples": 74070,
+    "running_duration_s": 148.137638,
     "running_faults": 0,
-    "running_rms_trim_relative_pitch_error_deg": 2.7774,
-    "running_rms_pitch_rate_deg_s": 12.0379,
-    "running_lqr_band_1p5_to_4_hz_rms_deg": 0.5635787897425396,
-    "running_torque_saturation_fraction": 8.353443475032486e-05,
+    "running_rms_trim_relative_pitch_error_deg": 4.3884,
+    "running_rms_pitch_rate_deg_s": 22.5378,
+    "running_lqr_band_1p5_to_4_hz_rms_deg": 0.5171587930114472,
+    "running_torque_saturation_fraction": 0.024895369245308493,
     "max_wheel_speed_turns_s": {
-      "left": 4.9286,
-      "right": 5.0354
+      "left": 13.2523,
+      "right": 8.3923
     },
     "hip_position_fit": {
       "l": {
-        "intercept_rad": -0.014759899377596739,
-        "span_rad": -1.465369765607157,
-        "rms_residual_rad": 0.002431675161313132
+        "intercept_rad": -0.07306155749995502,
+        "span_rad": -1.4118381455286173,
+        "rms_residual_rad": 0.009369146643560282
       },
       "r": {
-        "intercept_rad": -0.020146263045643497,
-        "span_rad": -1.4667843756470376,
-        "rms_residual_rad": 0.002431287485939226
+        "intercept_rad": -0.07746391906325656,
+        "span_rad": -1.412734117778713,
+        "rms_residual_rad": 0.011386420546039009
       }
     },
     "hip_static_load_anchors": [
       {
-        "gain_sched_alpha": 0.03486252717406924,
-        "mean_hip_torque_nm": -1.404539424409839,
-        "hip_sag_l_rad": 0.03774778955826872,
-        "hip_sag_r_rad": 0.04146927301566461
+        "gain_sched_alpha": 2.0214392621300614e-05,
+        "mean_hip_torque_nm": -1.2584861893182757,
+        "hip_sag_l_rad": -0.02664823395132138,
+        "hip_sag_r_rad": -0.02757992141863756
       },
       {
-        "gain_sched_alpha": 0.7294730685896215,
-        "mean_hip_torque_nm": -2.029378979110873,
-        "hip_sag_l_rad": 0.011639238561634395,
-        "hip_sag_r_rad": 0.017839755038145087
-      },
-      {
-        "gain_sched_alpha": 0.9204139086561134,
-        "mean_hip_torque_nm": -2.2506613820934525,
-        "hip_sag_l_rad": 0.0027483419443552312,
-        "hip_sag_r_rad": 0.008839822016083278
+        "gain_sched_alpha": 0.06578378596846361,
+        "mean_hip_torque_nm": -1.4906833793805991,
+        "hip_sag_l_rad": -0.03731188155411115,
+        "hip_sag_r_rad": -0.028331132182481827
       }
     ],
     "wheel_current_observed": false

@@ -72,6 +72,7 @@ def build_robot_matched_params(base: SimParams | None = None,
         m_femur=float(geometry["effective_link_mass_kg_each"]["femur"]),
         m_tibia=float(geometry["effective_link_mass_kg_each"]["tibia"]),
         m_coupler=float(geometry["effective_link_mass_kg_each"]["coupler"]),
+        imu_pitch_offset_rad=float(geometry.get("imu_pitch_offset_rad", 0.0)),
     )
 
     drive = report["wheel_drive"]

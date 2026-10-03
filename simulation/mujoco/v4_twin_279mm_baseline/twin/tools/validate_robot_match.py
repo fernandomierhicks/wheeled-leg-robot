@@ -50,7 +50,9 @@ def simulate_case(alpha: float, perturb_deg: float, duration_s: float = 10.0,
                 use_suspension=True, use_ff1=True, use_ff2=True,
             )
             trim = float(tick["pitch_trim"])
-            errors.append(tick["pitch"] - tick["theta_ref"] - trim)
+            # Trim-relative error in the firmware's (IMU) pitch frame.
+            errors.append(tick["pitch"] + robot.imu_pitch_offset_rad
+                          - tick["theta_ref"] - trim)
             peak_command = max(peak_command, abs(tick["tau_cmd_L"]),
                                abs(tick["tau_cmd_R"]))
             fault = tick["firmware_fault"]
