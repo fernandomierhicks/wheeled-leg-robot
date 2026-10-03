@@ -10,19 +10,11 @@ JUMPING
 
 ChatGPT_findings.md in digital twwin simualation
 
-Robot is shake in regular operation, need to do an overhaul of latest changes. changed wheel encoder but that looks fine
-
-
-
-
 
 ---------------------------------------------------------SIMULATION
 TYPO on mechanical dimensions. Revisit for highest jump???
-Fix bugs in TODO.md
 
-
-
--REtune robot with AK45 as wheel motor?
+-retune robot with AK45 as wheel motor?
 
 -Flip?
 Want me to build this as a new scenario (S11)? The sequence would be:

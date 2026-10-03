@@ -306,7 +306,8 @@ the existing torque clamps and wheel governors. It auto-clears at the requested
 duration and on every controlled-state exit. These are test hooks, not normal
 driving settings; use them only with the robot restrained and a reviewed test
 procedure. The complete offline/hardware workflow is documented in the twin's
-`README.md` and `HARDWARE_TEST_HANDOFF.md`.
+`README.md` and `HARDWARE_TEST_HANDOFF.md`; the full plan, goals, and bench
+test program (T0–T4) are in the twin's `DigitalTwin.md`.
 
 Persistent Teensy parameters use two generation-numbered, CRC32-protected
 LittleFS slots. A save is verified before it becomes current, the previous
