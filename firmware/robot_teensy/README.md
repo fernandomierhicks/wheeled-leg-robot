@@ -123,11 +123,12 @@ again. To load a specific `.wlog` or host `jsonl` first, use
 
 Select the **Jumping** analyzer view for a phase-aligned launch and recovery
 report. It focuses the plots around every `JUMPING` episode and shows phase and
-touchdown markers alongside the effective forward command/nudge, body attitude,
-all three IMU rates, hip position/speed/torque, and wheel speed/torque authority.
-Current logs use the firmware's live `LANDING` phase. Acceleration plots remain
-for older captures but read zero with the integrated-only production IMU; older
-V12 captures infer touchdown from their historical acceleration/gyro evidence.
+touchdown markers alongside body attitude, all three IMU rates, hip
+position/speed/torque, and wheel speed/torque authority. Logs use the
+firmware's live `LANDING` phase (`jump_state` 3), except captures from the
+2026-10-02 interval when it was reverted, where `jump_state` 3 meant `JP_DONE`
+and there is no live touchdown marker. Acceleration plots read zero with the
+integrated-only production IMU.
 
 ## Radio link (CRSF) and radio telemetry
 
@@ -183,7 +184,9 @@ inherits that controller's exclusion during jump launch and flight.
 Measured velocity, **commanded** yaw rate. Forward speed is well tracked so the
 measurement is accurate and slow-moving; yaw rate is the fast term, and using
 the command means the robot leans *as* the turn is asked for rather than after
-the disturbance appears in roll error.
+the disturbance appears in roll error. That command is already slewed by
+`yaw_accel_max` (see `radio_channels.md`, C1), so the lean builds with the turn
+rather than ahead of it.
 
 Three gates, all required: `lean_turn_en` (persistent), `lean_gain > 0`, and
 CH15. `lean_gain` defaults to 0 and is **not** 1.0 physically — the track is
@@ -399,7 +402,7 @@ the current `Default gains.json` keeps FF2 disabled.
 
 **`WHEEL_R` also scales reported speed.** `wheel_vel_avg_ms` is
 `turns/s × 2π × WHEEL_R`, so the same physical speed now reads 0.747× what it
-did. Everything tuned in m/s — `vel_pi_*`, `v_cmd_ms`, `radio_vel_max`,
+did. Everything tuned in m/s — `vel_pi_*`, `v_cmd_ms`,
 `profileN_vel_max` — is off by that factor until re-checked.
 
 ## Control algorithm (`teensy/src/control_loop.cpp`)
@@ -407,11 +410,31 @@ did. Everything tuned in m/s — `vel_pi_*`, `v_cmd_ms`, `radio_vel_max`,
 LQR on 3-state linearised inverted pendulum: `[pitch−θ_ref−trim, pitch_rate, wheel_vel_avg−v_ref]`.  
 Gains are scheduled with leg height (α ∈ [0,1], retracted→extended).  
 Balance-point trim offsets the pitch target so zero velocity holds at the true
-balance lean when the CG isn't over the axle. Its height schedule is
-`trim(α) = trim_ret + α(trim_ext − trim_ret) + lqr_trim_curve·α(1−α)`;
-the curve coefficient leaves both endpoint trims unchanged, and zero preserves
-the old linear schedule. The GUI groups all three parameters under Hip →
-Pitch Trim vs Leg Height.
+balance lean when the CG isn't over the axle. It is a **9-point table** over α
+(0, 0.125, … 1), linearly interpolated: `lqr_pitch_trim_ret`,
+`lqr_pitch_trim_12` … `_88`, `lqr_pitch_trim_ext`. A table rather than a formula
+because the balance point is not smooth in leg height — LOG0036 (2026-10-02)
+measured −1.4° retracted, −4.9° at α 0.22 and −1.7° extended. The quadratic
+`lqr_trim_curve` it replaced (ID 0x0450) is retired; the param store and the GUI
+importer skip it in old stores and exports. The GUI groups the table under
+Hip → Pitch Trim vs Leg Height, in leg-height order.
+
+**Trim learning (`trim_learn_en`, non-persistent).** At equilibrium — no stick,
+no mean wheel torque, no creep — the pitch the robot holds *is* its balance
+point, so the robot can measure its own trim. With `trim_learn_en = 1`, park at
+a leg height with the sticks centred: after 2 s of settling and 6 s of
+averaging, if mean `tau_sym` < 5 mN·m and mean wheel speed < 0.05 m/s, the table
+at the current α is walked toward the averaged pitch with a 5 s time constant.
+Moving a stick or the leg height restarts the window. A learn at α moves the two
+bracketing points by the minimum needed (`pitch_trim_table_nudge()`); parking on
+a table point moves that point alone. Each learned step is offloaded from the
+vel-PI integrator and the θ_ref rate limiter in the same tick, so θ_ref + trim —
+the actual lean target — never jumps. The GUI log shows `Trim learn: alpha …
+learning` / `… done, trim …`. Learned points are ordinary persistent params:
+they flush to flash after disarm like any GUI edit (export a JSON as the backup).
+Requires valid calibration, α not pinned (`alpha_force_ret_en`), the vel PI on
+with `vel_pi_ki > 0`, and RUNNING (never STANDING_UP/JUMPING). The torque gate
+also rejects slopes: holding position on ~0.3° already needs 5 mN·m per wheel.
 
 **Backward soft-limit barrier** — authority is asymmetric: the leg linkage
 hits the ground on a hard backward lean well before forward pitch runs out of
@@ -427,8 +450,19 @@ direction `k_pitch` already pushes on a backward pitch error). Continuous at
 the boundary and exactly zero inside it, so `lqr_barrier_k=0` (its default)
 leaves today's tuning byte-identical; tune it up on the bench once the
 threshold is confirmed to sit inside `pitch_wd_bwd_ret/ext`.  
-Outer loops: velocity PI (sets θ_ref), yaw PI (differential torque). The
-velocity PI uses directional conditional-integration anti-windup: its integral
+Outer loops: velocity PI (sets θ_ref), yaw PI (differential torque). The yaw
+PI's measured rate comes from the IMU gyro (`yaw_rate_src = 0`, default) or the
+wheel encoders (`yaw_rate_src = 1`, `(v_R − v_L)/WHEEL_TRACK`, track 0.340 m).
+The gyro is on the far side of the legs' 12–17 Hz roll/yaw body mode from the
+wheel motors and ~160° out of phase with the wheels there, so yaw gain on the
+gyro pumps that mode (the "shakes when yaw is aggressive, worst extended"
+symptom); the encoders are collocated with the motors and damp it instead. The
+two agree to 1–2 % below 1 Hz (LOG0036). Encoders cannot see wheel slip.
+The yaw PI's setpoint is acceleration-limited upstream, in `radio_update()`:
+`omega_cmd_rds` slews toward the stick at `yaw_accel_max` (default 8 rad/s²).
+Without it a full-stick step saturated `yaw_pi_torque_max` in one tick, and P3
+(8.73 rad/s) was reached in ~0.1 s. GUI motion-control commands are not ramped.
+The velocity PI uses directional conditional-integration anti-windup: its integral
 freezes when an update would push the requested lean farther past the active
 asymmetric clamp, but remains free to unwind back out of saturation.
 Feedforward: FF1 cancels hip reaction torque; FF2 adds gravity compensation.
@@ -678,21 +712,39 @@ falls to the pitch watchdog alone. It is **persistent**, so a disable survives
 a power cycle; `setup()` logs an unconditional `WARN` on any boot that comes up
 with it cleared, which is what replaces the boot-to-safe guarantee.
 
-**Jump phase machine and overrun fault** — `JUMPING` is
-`CROUCH → EXTEND → RETRACT → LANDING → HANDOFF → RUNNING`. The former flat
-3000 ms state timer and blind `JP_DONE` settle have been removed. CROUCH and
-RETRACT durations follow their live angle/speed settings, EXTEND has its own
-cap, landing must be detected before `jump_land_timeout`, and HANDOFF must
-capture before `jmp_handoff_timeout`. A complete budget derived from those
-settings plus `JUMP_OVERRUN_MARGIN_S` remains as a final scheduling guard.
-Any phase timeout raises `FAULT_JUMP_TIMEOUT`; it never silently hands an
-unfinished jump to RUNNING. With `jump_enable=0` or invalid hip calibration,
-the request remains a no-op rather than a fault.
+**Jump phase machine** — `JUMPING` is
+`CROUCH → EXTEND → RETRACT → LANDING → HANDOFF → RUNNING`
+(`jump_state` 0–4). History, because it explains the current shape:
+
+- 2026-08-11 (`f938d62`) added gyro landing detection, LANDING/HANDOFF, a
+  15 ms RETRACT braking blend, a RETRACT feedback-torque cap and a pre-EXTEND
+  forward nudge.
+- 2026-10-02 morning: all of it was reverted to the plain
+  `CROUCH → EXTEND → RETRACT → JP_DONE` sequence on suspicion it had broken
+  jumps.
+- 2026-10-02 evening: `LOG0042` (4 jumps, 1 success) showed what actually
+  decides a jump — pitch at touchdown against the 0.2–0.4 N·m profile torque
+  clamp, and wheels landing at ~20 turns/s — and that the gyro detector caught
+  all four touchdowns 0–80 ms after contact. So the **detector and
+  LANDING/HANDOFF were restored**; the braking blend, the RETRACT torque cap and
+  the nudge were **not** (no evidence for them in the log). `jump_retract_torque`,
+  `jump_nudge_fwd_vel/dur`, `jump_air_accel_z` and `jump_land_accel_z` remain
+  in `schema.json` for compatibility but nothing in firmware reads them.
+
+There is no overall phase-budget/overrun fault. Every phase has its own bound
+and none of them faults: EXTEND ends at `jump_ext_timeout`, a missed landing
+enters HANDOFF after `jump_land_timeout`, and HANDOFF releases to RUNNING
+after `jmp_handoff_timeout` whether or not it captured. `FAULT_JUMP_TIMEOUT`
+(0x0F) is still defined but nothing sets it. The pitch watchdog and the
+motor/IMU/ESTOP transitions are what can stop a jump in progress. With
+`jump_enable=0` or invalid hip calibration the request retires straight to a
+captured HANDOFF — an unarmed jump is a no-op, not a fault.
 
 `JUMPING` is reached through GUI/API `SET_MODE(JUMPING)` or the CH6 rising edge
-in SIMPLE live-tune mode. Both remain gated by persistent `jump_enable`, whose
-default is 0. The two hardware jumps in `LOG0015.WLOG` are the current reference
-captures.
+in SIMPLE live-tune mode, both gated by persistent `jump_enable` (default 0).
+`stateMachine_request_jump()` also refuses to arm while the robot is already
+moving hard (`jump_arm_motion_ok()`: `jmp_arm_fwd_ms`, `jmp_arm_bwd_ms`,
+`jmp_arm_yaw_rate`, `jmp_arm_roll`) — a one-time gate at request time.
 
 **`jump_effort` is persistent and defaults to 1.0.** EXTEND commands
 `jump_torque_max × jump_effort`. `jump_torque_max` remains the reviewed ceiling;
@@ -726,17 +778,7 @@ different manoeuvres, and none of them were repeatable.
 | `jump_extend_angle` | rad (GUI: deg) | how far EXTEND pushes, stated forwards |
 | `jump_retract_angle` | rad (GUI: deg) | the landing pose; **negative = return to the pre-jump pose** |
 | `jump_retract_speed` | rad/s (GUI: deg/s) | **peak** hip speed of the tuck back |
-| `jump_retract_torque` | N·m | commanded hip-feedback torque ceiling during RETRACT |
 | `jump_torque_rate` | N·m/s | EXTEND torque onset rate |
-| `jump_nudge_fwd_vel` | m/s | forward offset added to the pilot's live velocity command |
-| `jump_nudge_fwd_dur` | s | how long that offset is active immediately before EXTEND |
-
-At EXTEND→RETRACT, firmware carries the measured hip position and velocity into
-a 15 ms smooth braking blend before reversing toward the landing pose. The
-blend shortens automatically near the calibrated extended limit. During all of
-RETRACT, `jump_retract_torque` (default 7 N·m) scales `jump_kp`/`jump_kd`
-together to cap the predicted feedback request; it is not a motor current limit,
-so impact or external back-driving can still report more torque.
 
 Phase durations are now *derived*: `1.875 × travel / peak_speed`, the 1.875
 being the quintic minimum-jerk profile's peak-to-mean rate ratio (asserted in
@@ -752,59 +794,85 @@ softstart *duration* means a harder push ramps in proportionally faster, so the
 most violent jumps got the sharpest torque step. A rate makes onset time scale
 with the torque being commanded.
 
-The forward nudge is active only during the final `jump_nudge_fwd_dur` seconds
-of CROUCH. The effective request is always `stick velocity + jump_nudge_fwd_vel`;
-the nudge never replaces the operator command. A zero velocity or duration
-disables it. Defaults are 0.15 m/s and 0.10 s.
+`jump_extend_angle` is stated forwards while `jump_hs_margin` still measures
+backwards from the calibrated extended limit; the margin is deliberately the
+lower-level guard, so an extend target set too high is still caught by the
+mechanism rather than by the operator.
 
-**Live landing detection is gyro-only.** Starting at RETRACT, it sums changes
-in the full 3-axis gyro vector over a fixed 12 ms window.
-`jump_land_gyro_imp` must be exceeded by at least two fresh IMU reports, so a
-held 400 Hz value spanning multiple 500 Hz control ticks and a lone corrupted
-sample cannot trigger it. The detector is blanked for `jump_land_min_air` after
-RETRACT begins, rejecting the launch impulse. Defaults are a 2.5 rad/s gyro
-threshold, 0.16 s blanking, and 1.0 s timeout. `jump_air_accel_z` and
-`jump_land_accel_z` remain reserved for parameter-file/protocol compatibility
-but have no effect.
-The 0.16 s blanking window leaves about 50 ms before the earliest reference
-touchdown and rejects early-tuck rotation, which can otherwise look like contact
-while both wheels are airborne. The gyro detector
-found both reference contacts 0.560/0.570 s after the jump request and
-0.224/0.210 s after RETRACT began.
+**RETRACT** is a plain minimum-jerk ramp from wherever EXTEND stopped to the
+landing pose (`jump_retract_angle`; negative = the pre-jump pose) at full
+`jump_kp`/`jump_kd`, then holds that pose until landing is detected. On a real
+hop liftoff happens ~25–40 ms into RETRACT (`LOG0042`), so this is the pose the
+robot lands *on*.
 
-The detector consumes only fresh gyro report timestamps. This matters because
-the production BNO086 report arrives at 400 Hz while the control loop runs at
-500 Hz: held values are ignored rather than counted as extra impact evidence.
+**Live landing detection is gyro-only** (`jump_landing.h`). From RETRACT entry
+it sums changes in the 3-axis gyro vector over a 12 ms window; at least two
+fresh IMU reports must push the sum past `jump_land_gyro_imp` (default
+2.5 rad/s), so a lone corrupted sample or a 400 Hz value held across 500 Hz
+ticks cannot trigger it. It is blanked for `jump_land_min_air` (0.16 s) after
+RETRACT starts to reject the launch impulse. Run offline on the four `LOG0042`
+jumps it fired 0–80 ms after first contact every time. If it has not fired by
+`jump_land_timeout` (1.0 s) the sequence enters HANDOFF anyway (logged, not a
+fault) — *uncaptured*, so the handoff wheel-speed limit still applies; going
+straight to RUNNING there would trip the 2× `wm_vel_limit` runaway watchdog,
+which is exactly what ended `LOG0042` jump 4.
 
-**LANDING and HANDOFF use the normal running controller with scoped recovery
-authority.** LANDING is an explicit telemetry phase at contact. HANDOFF keeps
-the same velocity, yaw, roll, hip, scheduled LQR, barrier, feedforward, and
-wheel-governor code as RUNNING, while applying only these temporary overrides:
+**LANDING and HANDOFF run the normal RUNNING controller with scoped
+overrides.** At contact the hip rate limiter is seeded from the measured pose
+and its gain ramp completed, so CH3 slews in with no step; the hips go back to
+`controlLoop_run()`'s normal command, and the roll controller is active as in
+RUNNING. LANDING is a one-tick telemetry marker. HANDOFF applies:
 
-| Parameter | Default | HANDOFF effect |
-|---|---:|---|
-| `jmp_handoff_kp_mul` | 1.5 | multiplies scheduled LQR pitch gain |
-| `jmp_handoff_kr_mul` | 1.5 | multiplies scheduled pitch-rate gain |
-| `jmp_handoff_kv_mul` | 1.0 | multiplies direct wheel-velocity gain |
-| `jmp_handoff_torque` | 0.6 N·m | temporary symmetric/per-wheel torque limit; 0 inherits RUNNING |
-| `jmp_handoff_vel_lim` | 10 turns/s | temporary wheel governor/runaway baseline; 0 inherits RUNNING |
-| `jmp_handoff_pitch` | 0.05 rad | trim-relative pitch-error capture band |
-| `jmp_handoff_rate` | 1.0 rad/s | pitch-rate capture band |
-| `jmp_handoff_hold_s` | 0.15 s | continuous time in the full capture band |
-| `jmp_handoff_timeout` | 1.5 s | recovery deadline before `FAULT_JUMP_TIMEOUT` |
+| Parameter | Default | HANDOFF effect | Recommended from `LOG0042` |
+|---|---:|---|---|
+| `jmp_handoff_kp_mul` | 1.5 | multiplies scheduled LQR pitch gain | **1.0** — torque was saturated, more gain adds nothing |
+| `jmp_handoff_kr_mul` | 1.5 | multiplies scheduled pitch-rate gain | **1.0** |
+| `jmp_handoff_kv_mul` | 1.0 | multiplies direct wheel-velocity gain | 1.0 |
+| `jmp_handoff_torque` | 0.6 N·m | replaces `lqr_torque_limit`; 0 inherits | **≥ 0.6** — 2× the 0.3 N·m profile clamp; holds ~31° of lean |
+| `jmp_handoff_vel_lim` | 10 turns/s | wheel governor / 2× runaway baseline; 0 inherits | **≥ 12** — wheels land at ~20 turns/s, and 10 trips at 20 |
+| `jmp_handoff_pitch` | 0.05 rad | trim-relative pitch-error capture band | |
+| `jmp_handoff_rate` | 1.0 rad/s | pitch-rate capture band | |
+| `jmp_handoff_hold_s` | 0.15 s | continuous time in band (both wheels also within `wm_vel_limit`) | |
+| `jmp_handoff_timeout` | 1.5 s | releases to RUNNING uncaptured — not a fault | |
 
-Both wheels must also return inside the normal `wm_vel_limit` before capture.
-At landing the hip command limiter is seeded from measured pose, so CH3 slews
-back in without a position step. The controller state is intentionally carried
-across HANDOFF→RUNNING; only the temporary authority overrides are removed.
+These are persistent, so changing the compiled default does not change a
+robot's stored value — set them from the GUI. The controller state is carried
+across HANDOFF→RUNNING; only the overrides are removed.
 
-**The ground-tuned wheel loop remains active through CROUCH/EXTEND/RETRACT.**
-Zero wheel torque there is unsafe when a weak attempt never leaves the floor:
-at the crouched effective length the open-loop inverted-pendulum time constant
-is about 0.1 s. The detector now supplies the timing required for a future
-airborne reaction-wheel controller, but the present firmware does not switch to
-one; free-spinning wheel velocity is still interpreted by the ground LQR as
-forward velocity.
+The torque limit is the important one. Holding a lean θ takes
+`τ = M·g·tanθ·r/2` per wheel: 0.22 N·m at 13° (the one `LOG0042` success), 0.37
+at 21°, 0.58 at 31° (the falls), against the 0.3 N·m profile clamp in use.
+
+**Airborne wheel hold and velocity-loop freeze (2026-10-02).** With the ground
+balance loop running in the air, it saturated and spun the unloaded wheels to
+the `jmp_air_vel_lim` ceiling (~20 turns/s, ~7 m/s at the tread), so every jump
+in `LOG0042`/`LOG0043` landed on skidding wheels; and the velocity PI read that
+spin as ground speed and wound `theta_ref` to +20° by the end of HANDOFF,
+driving the post-landing overshoot. Two changes:
+
+- **Liftoff detection + wheel hold.** In RETRACT, liftoff is declared when
+  either wheel departs its RETRACT-entry speed by more than 5 turns/s
+  (`JUMP_LIFTOFF_WHEEL_DELTA`; logged as `JUMP: liftoff detected`). No ground
+  manoeuvre can do that in a few ms — 5 turns/s is ~1.8 m/s — and in `LOG0043`
+  it happened 25–40 ms into RETRACT on all nine jumps. From then until landing
+  is detected, each wheel's torque is `jmp_air_whl_kp × (w_entry − w)` instead
+  of the balance-loop output (still clamped by the torque limit and the soft
+  governor). Measured wheel inertia is ~8.5×10⁻⁵ kg·m² per side, so the default
+  0.03 N·m per turn/s is an ~18 ms time constant against 140–210 ms flights.
+  `jmp_air_whl_kp = 0` disables the hold. A jump that never leaves the floor
+  never trips the detector, which is what answers the old objection to freeing
+  the wheels by phase (crouched, the pendulum time constant is ~0.1 s).
+- **Velocity PI frozen** from RETRACT entry until HANDOFF captures or times
+  out: integral and `theta_ref` are held, then resume. Not a param.
+
+During the hold `tau_sym` telemetry still shows what the LQR asked for;
+`whl_tau_l/r` show what was sent.
+
+**Wheel speed limits are state-scoped.** `controlLoop_wheel_vel_limit()`
+returns `jmp_air_vel_lim` (default 22 turns/s) during CROUCH/EXTEND/RETRACT and
+`jmp_handoff_vel_lim` during LANDING/HANDOFF; the runaway watchdog trips at 2×
+whichever applies. Without the airborne limit a real jump tripped
+`FAULT_WHEEL_RUNAWAY` mid-RETRACT against 2× `wm_vel_limit`.
 
 **Expect a small hop, and don't trust the old numbers.** At 3.518 kg total
 (`params.py`), an average leg Jacobian of `dz/dq ≈ 0.19 m/rad`
@@ -868,12 +936,11 @@ ever fire after that had *also* failed. Mount failure now means "run on
 compiled defaults and say so".
 
 **Roll controller (active suspension)** — off by default (`roll_ctrl_en`). In
-RUNNING and the post-contact jump LANDING/HANDOFF, a PI-D loop on roll
-angle/rate (`roll_kp`, `roll_ki`, `roll_kd`) produces a
+RUNNING and the post-contact jump LANDING/HANDOFF, a PI-D loop on roll angle/rate (`roll_kp`, `roll_ki`, `roll_kd`) produces a
 differential hip position offset (`+offset` one leg, `−offset` the other,
 clamped to `roll_offset_max` and to calibrated hip travel) that levels/leans the
-body about +X. The setpoint comes from radio **CH1**, scaled by the active
-profile's `radio_roll_max` (per-profile `profileN_roll_max`, selected by CH9) and
+body about +X. The setpoint comes from radio **CH4**, scaled by the CH9-selected
+profile's `profileN_roll_max` and
 slew-limited (`roll_rate_lim`) so a snapped stick doesn't step-perturb pitch.
 While active the hips are held with a soft, backdrivable impedance
 (`hip_roll_kp`/`hip_roll_kd` replace `hip_running_kp`/`kd`; `hip_running_tff`
@@ -902,7 +969,9 @@ deliberately small clamp (default 0.1 rad·s) rather than relying on
 `roll_offset_max` alone. It also masks rather than fixes a mechanical
 asymmetry, so it is worth confirming the bias isn't a real CG/leg-length
 problem first. There is no integrator state in telemetry, but the total
-commanded offset is observable as `(hip_l_cmd_pos_rad − hip_r_cmd_pos_rad)/2`.
+commanded offset is observable as `(hip_r_cmd_pos_rad − hip_l_cmd_pos_rad)/2`
+(the code applies `pos_L −= offset`, `pos_R += offset`; exact when both legs
+share the same calibrated span).
 
 **Symmetric travel-headroom clamp.** The effective offset limit each tick is
 `min(roll_offset_max, min(t, 1−t) × span)`, applied *before* the differential
@@ -1044,7 +1113,7 @@ Full FSM diagram: `teensy/state_machine.md`.
 | 4 | `STATE_ESTOP` | Fault latch — see fault table below |
 | 5 | `STATE_MANUAL` | GUI direct control (MIT frames); watchdog 500 ms |
 | 6 | `STATE_CMD_REJECT` | ~1 s transient: buzzer + red blink, auto-returns to prior state |
-| 7 | `STATE_JUMPING` | Launch sequence from RUNNING (~0.9 s at default phase params); auto-returns to RUNNING. Triggered by GUI/API `SET_MODE` or the CH6 rising edge in SIMPLE live-tune mode |
+| 7 | `STATE_JUMPING` | Launch, flight, landing detection and recovery handoff from RUNNING; returns to RUNNING once HANDOFF captures or times out. Triggered by GUI/API `SET_MODE` or the CH6 rising edge in SIMPLE live-tune mode |
 | 8 | `STATE_STANDING_UP` | Arm-time settling window — crouch to a fixed leg height, stiffen the hips, balance with the pitch watchdog masked, then RUNNING |
 | 9 | `STATE_DISARMING` | Normal active-state or radio-calibration exit: wheel IDLE immediately, hip torque ramps safely to zero, then STANDBY |
 
@@ -1092,7 +1161,7 @@ Set in `g_state.fault_code` before entering `STATE_ESTOP`. Non-zero only while i
 | `0x0C` | `FAULT_WHEEL_INIT_TIMEOUT` | No CAN reply from wheel motors within 2 s of boot | REBOOT |
 | `0x0D` | `FAULT_STANDUP_FAILED` | Standup denied (pitch out of recoverable range) or exhausted retries/diverged | REPOSITION |
 | `0x0E` | `FAULT_ROLL_WATCHDOG` | `|roll| > roll_watchdog_limit` for > 200 ms (lateral tip guard) | REPOSITION |
-| `0x0F` | `FAULT_JUMP_TIMEOUT` | Landing/handoff timed out, or JUMPING overran its computed live phase budget | REPOSITION |
+| `0x0F` | `FAULT_JUMP_TIMEOUT` | Reserved — no longer raised; every JUMPING phase timeout now exits without a fault | REPOSITION |
 
 **Severity tiers:** SOFT → ESTOP→STANDBY directly; REPOSITION → reposition robot then reset; GUI_FIX → fix param in GUI then reset; REBOOT → power-cycle required.
 
@@ -1349,7 +1418,7 @@ off during cleanup regardless of pass/fail.
 
 **Out of scope — no software RC channel injection.** Neither tool can
 simulate physical transmitter input. `PARAM_IBUS_CH*` and the radio-derived
-params (`radio_vel_max`, `radio_yaw_max`, `active_profile`, ...) are all
+params (`active_profile`, `roll_cmd_rad`, ...) are all
 `PARAM_FLAG_READONLY` — firmware-written mirrors of the real iBus receiver,
 with no command-side injection point. Profile switching (CH9) in particular
 has no non-radio trigger at all right now. "Radio commands" in these tools

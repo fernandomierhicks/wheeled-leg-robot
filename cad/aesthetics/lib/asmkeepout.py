@@ -235,12 +235,25 @@ def load(part, clearance=1.0, layer=None):
     `layer=None` means the union of every layer -- the old single-envelope
     behaviour, and the conservative one: material blocked at ANY depth blocks a
     full-thickness prism.
+
+    A MISSING CACHE RAISES; an EMPTY one returns None.  Those used to be the
+    same answer, and they mean opposite things: an empty layer is a measurement
+    that says "no neighbour here", a missing file is no measurement at all.
+    Every caller treats None as "nothing to avoid" and grows the part freely,
+    so a cleared cache used to build parts straight into their neighbours
+    without a word -- trap 16 ("a keep-out that silently returns empty does not
+    throw") in a new place.  Decision 40.
     """
+    def _missing(q):
+        raise FileNotFoundError(
+            f"asmkeepout: no keep-out cache for {part} ({q}).  Growth would be "
+            f"UNCONSTRAINED by the assembly.  Rebuild it first:  "
+            f"python lib/asmkeepout.py {part} --layers 3")
     n = n_layers(part)
     if n == 0:
         q = os.path.join(CACHE, part + ".wkt")          # pre-layer cache
         if not os.path.exists(q):
-            return None
+            _missing(q)
         g = shwkt.loads(open(q).read())
         return None if g.is_empty else g.buffer(float(clearance), join_style=2)
     idx = range(n) if layer is None else [layer]
@@ -248,7 +261,7 @@ def load(part, clearance=1.0, layer=None):
     for i in idx:
         q = os.path.join(CACHE, f"{part}.L{i}.wkt")
         if not os.path.exists(q):
-            continue
+            _missing(q)
         g = shwkt.loads(open(q).read())
         if not g.is_empty:
             gs.append(g)

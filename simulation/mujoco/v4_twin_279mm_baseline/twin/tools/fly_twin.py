@@ -40,7 +40,7 @@ from v4_twin_279mm_baseline.twin.tools.tx15_joystick import (  # noqa: E402
 )
 
 CHANNEL_NAMES = {
-    1: "roll", 2: "vel", 3: "hip", 4: "yaw", 5: "log", 6: "jump",
+    1: "yaw", 2: "vel", 3: "hip", 4: "roll", 5: "log", 6: "jump",
     7: "tuneA", 8: "tuneB", 9: "prof", 10: "ARM", 11: "calib",
     12: "reset", 13: "tuneG", 14: "latch", 15: "lean", 16: "spare",
 }
@@ -84,7 +84,8 @@ def monitor(joy: Tx15Joystick, decoder: ChannelDecoder) -> int:
     try:
         while True:
             ch = joy.poll()
-            cmd = decoder.decode(ch)
+            # Wall clock here (no sim running), so w= shows the yaw ramp.
+            cmd = decoder.decode(ch, t=time.monotonic())
             cols = "  ".join(
                 "%s:%4d" % (CHANNEL_NAMES.get(n, str(n)), ch.get(n, 0))
                 for n in sorted(ch))
@@ -115,11 +116,13 @@ def fly(joy: Tx15Joystick, decoder: ChannelDecoder, duration: float) -> int:
     robot = DEFAULT_PARAMS.robot
     state = {"cmd": decoder.decode({})}
 
-    def refresh(_t: float):
+    def refresh(t: float):
         # One poll per tick, shared by all four profile callables: polling
         # separately in each would sample the sticks at four slightly
-        # different instants and shear the command set.
-        state["cmd"] = decoder.decode(joy.poll())
+        # different instants and shear the command set. Sim time drives the
+        # yaw ramp, so it runs at the robot's rate even if the sim does not
+        # run in real time.
+        state["cmd"] = decoder.decode(joy.poll(), t=t)
         return state["cmd"]
 
     last_t = {"v": -1.0}
@@ -179,6 +182,10 @@ def main() -> int:
     ap.add_argument("--index", type=int, default=0, help="HID device index")
     ap.add_argument("--any", action="store_true",
                     help="use --index even if its name does not look like a TX15")
+    ap.add_argument("--profile", type=int, choices=(1, 2, 3), default=2,
+                    help="speed profile whose profileN_vel/yaw/roll_max scale "
+                         "the sticks (default 2). Chosen here because CH9 "
+                         "arrives over HID as a boolean.")
     ap.add_argument("--duration", type=float, default=600.0,
                     help="sim duration [s] (default 600)")
     args = ap.parse_args()
@@ -197,22 +204,25 @@ def main() -> int:
         return 1
 
     # Limits come from the shared schema, so sim and robot cannot drift apart
-    # on what "full stick" means.
+    # on what "full stick" means: full deflection is the selected profile's max,
+    # exactly as radio_update() scales it.
     try:
         from v4_twin_279mm_baseline.twin import params_control
         defaults = params_control.default_values()
+        p = args.profile
         decoder = ChannelDecoder(
-            vel_max=defaults["radio_vel_max"],
-            yaw_max=defaults["radio_yaw_max"],
-            roll_max=defaults["radio_roll_max"],
+            vel_max=defaults[f"profile{p}_vel_max"],
+            yaw_max=defaults[f"profile{p}_yaw_max"],
+            roll_max=defaults[f"profile{p}_roll_max"],
+            yaw_accel_max=defaults["yaw_accel_max"],
         )
     except Exception:
         # Falling back is fine for --monitor, but say so: silently using
         # different limits than the robot is exactly the drift this tool
         # exists to prevent.
-        print("note: could not read radio_*_max from params_control; "
-              "falling back to 0.5 / 1.0 / 0.1")
-        decoder = ChannelDecoder(0.5, 1.0, 0.1)
+        print("note: could not read profileN_*_max / yaw_accel_max from "
+              "params_control; falling back to 0.5 / 1.0 / 0.1, 8 rad/s^2")
+        decoder = ChannelDecoder(0.5, 1.0, 0.1, yaw_accel_max=8.0)
 
     try:
         if args.monitor:

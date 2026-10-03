@@ -76,23 +76,54 @@ def test_sticks_centred_command_nothing():
     assert c.radio_hip_cmd == pytest.approx(0.0)
 
 
-def test_velocity_scales_by_radio_vel_max():
+def test_velocity_scales_by_profile_vel_max():
     assert dec().decode({2: 2000}).v_cmd_ms == pytest.approx(VEL_MAX)
     assert dec().decode({2: 1000}).v_cmd_ms == pytest.approx(-VEL_MAX)
 
 
 def test_yaw_is_inverted_so_stick_left_yaws_left():
-    # main.cpp negates CH4: "inverted: stick left -> robot yaws left". Stick
-    # left is a LOW channel, and yawing left is POSITIVE omega.
-    assert dec().decode({4: 1000}).omega_cmd_rds == pytest.approx(YAW_MAX)
-    assert dec().decode({4: 2000}).omega_cmd_rds == pytest.approx(-YAW_MAX)
+    # main.cpp negates CH1: "inverted: stick left -> robot yaws left". Stick
+    # left is a LOW channel, and yawing left is POSITIVE omega. CH1 since the
+    # C1/C4 swap of 2026-10-02 (it was CH4).
+    assert dec().decode({1: 1000}).omega_cmd_rds == pytest.approx(YAW_MAX)
+    assert dec().decode({1: 2000}).omega_cmd_rds == pytest.approx(-YAW_MAX)
+    assert dec().decode({4: 1000}).omega_cmd_rds == pytest.approx(0.0)
 
 
 def test_roll_is_not_inverted():
     # Stick right is a HIGH channel and positive roll. The asymmetry with yaw
     # is real and in the firmware; this test exists so nobody "fixes" it.
-    assert dec().decode({1: 2000}).roll_cmd_rad == pytest.approx(ROLL_MAX)
-    assert dec().decode({1: 1000}).roll_cmd_rad == pytest.approx(-ROLL_MAX)
+    # CH4 since the C1/C4 swap (it was CH1).
+    assert dec().decode({4: 2000}).roll_cmd_rad == pytest.approx(ROLL_MAX)
+    assert dec().decode({4: 1000}).roll_cmd_rad == pytest.approx(-ROLL_MAX)
+    assert dec().decode({1: 2000}).roll_cmd_rad == pytest.approx(0.0)
+
+
+def test_yaw_ramps_at_yaw_accel_max_on_the_sim_clock():
+    # radio_update() slews omega_cmd_rds toward the stick at yaw_accel_max
+    # instead of stepping to it -- a full-stick step used to saturate the yaw
+    # PI in one tick. Same rate both ways.
+    d = ChannelDecoder(VEL_MAX, 8.0, ROLL_MAX, yaw_accel_max=8.0)
+    assert d.decode({1: 1500}, t=0.0).omega_cmd_rds == pytest.approx(0.0)
+    assert d.decode({1: 1000}, t=0.25).omega_cmd_rds == pytest.approx(2.0)
+    assert d.decode({1: 1000}, t=0.5).omega_cmd_rds == pytest.approx(4.0)
+    assert d.decode({1: 1000}, t=5.0).omega_cmd_rds == pytest.approx(8.0)
+    assert d.decode({1: 1500}, t=5.5).omega_cmd_rds == pytest.approx(4.0)
+
+
+def test_dead_link_ramps_yaw_to_zero_rather_than_snapping():
+    d = ChannelDecoder(VEL_MAX, 8.0, ROLL_MAX, yaw_accel_max=8.0)
+    d.decode({1: 1500}, t=0.0)
+    d.decode({1: 1000}, t=5.0)
+    c = d.decode({}, link_alive=False, t=5.5)
+    assert c.omega_cmd_rds == pytest.approx(4.0)
+    assert c.v_cmd_ms == pytest.approx(0.0)
+
+
+def test_without_a_clock_yaw_steps():
+    # No t (the pure decode tests above) means no dt to slew over.
+    d = ChannelDecoder(VEL_MAX, YAW_MAX, ROLL_MAX, yaw_accel_max=8.0)
+    assert d.decode({1: 1000}).omega_cmd_rds == pytest.approx(YAW_MAX)
 
 
 def test_hip_is_unipolar():
@@ -200,9 +231,10 @@ def test_synthetic_pilot_drives_the_twin():
     from v4_twin_279mm_baseline.twin.tools.tx15_joystick import axis_to_us
 
     limits = params_control.default_values()
-    decoder = ChannelDecoder(limits["radio_vel_max"],
-                             limits["radio_yaw_max"],
-                             limits["radio_roll_max"])
+    decoder = ChannelDecoder(limits["profile2_vel_max"],
+                             limits["profile2_yaw_max"],
+                             limits["profile2_roll_max"],
+                             yaw_accel_max=limits["yaw_accel_max"])
     robot = DEFAULT_PARAMS.robot
 
     def channels(t):
@@ -215,7 +247,7 @@ def test_synthetic_pilot_drives_the_twin():
     def poll(t):
         if t != state["t"]:
             state["t"] = t
-            state["cmd"] = decoder.decode(channels(t))
+            state["cmd"] = decoder.decode(channels(t), t=t)
         return state["cmd"]
 
     scenario = ScenarioConfig(

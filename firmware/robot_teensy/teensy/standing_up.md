@@ -174,7 +174,7 @@ instead of applied globally.
 
 > **Handoff caveat:** pinning means alpha steps `0 → measured` at the RUNNING
 > handoff, which steps the applied pitch trim with it. For measured alpha `h`,
-> the step is `h·(trim_ext − trim_ret) + lqr_trim_curve·h·(1−h)`. If that proves
+> the step is the trim table's value at `h` minus `lqr_pitch_trim_ret`. If that proves
 > to matter on the bench, set `standup_ret_gains = 0` and let standup schedule
 > on measured leg height like RUNNING does.
 

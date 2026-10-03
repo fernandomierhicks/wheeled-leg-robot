@@ -307,6 +307,27 @@ def _band_faces(solid, bands, tol=0.8):
     return out
 
 
+def _flat_z(solid, zguess, win=2.0):
+    """The z of the largest horizontal face within `win` of `zguess`.
+
+    `_plate_face()` scans z BANDS, so what it returns is quantised to a band
+    edge -- -5.36 on the Femur, whose plate back is really -5.00.  Good enough
+    to say which end is the plate, not good enough to cut a 1.2 mm feature
+    from.  This reads the actual face."""
+    from render3d import tessellate
+    V, T, _ = tessellate(solid, 0.3)
+    tri = np.asarray(V, float)[np.asarray(T, int)]
+    n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    A = 0.5 * np.linalg.norm(n, axis=1)
+    nz = np.abs(n[:, 2]) / np.maximum(1e-12, 2 * A)
+    zm = tri[:, :, 2].mean(axis=1)
+    flat = (nz > 0.999) & (np.abs(zm - zguess) < win)
+    if not flat.any():
+        return zguess
+    zs = np.round(zm[flat], 2)
+    return float(max(np.unique(zs), key=lambda z_: A[flat][zs == z_].sum()))
+
+
 def _top_face(solid, ZT, depth=2.0):
     """Plan region where the part's OWN surface reaches the show face.
 
@@ -867,9 +888,20 @@ def plan(sp):
 
     # Raised features may only sit where the part actually reaches the show
     # face; see _top_face().  Anything outside that region would float.
+    # THE SHOW FACE IS THE PLATE, NOT THE BOUNDING BOX.  Every show-face relief
+    # feature -- the raised frame, rail and pads, the pockets, the windows and
+    # the accent engraving -- used to hang off ZT.  On the Femur ZT is the plate
+    # face.  On the Coupler it is the end of the bearing tube, 24.5 mm above the
+    # plate, so every one of them was built in mid-air or clipped to the tube
+    # end and the Coupler's show face came out FLAT: "no relief difference among
+    # colours, like the other parts" (decision 40).  Decision 33 fixed exactly
+    # this for the colour inlay and left the relief behind.  ZS is the plate's
+    # own measured face; on the Femur it equals ZT, so the Femur reproduces.
+    ZSHOW = _plate_face(src["solid"], ZT, ZB, OUT.area, top=True)
+    ZS = _flat_z(src["solid"], ZSHOW)
     _tf = src.get("TOPF")
     if _tf is None:
-        _tf = _top_face(src["solid"], ZT)
+        _tf = _top_face(src["solid"], ZS)
         src["TOPF"] = _tf if _tf is not None else ShPoly()
         _tf = src["TOPF"]
     if not _tf.is_empty:
@@ -886,7 +918,6 @@ def plan(sp):
     # _back_plane().  Both the back engraving and the back half of the colour
     # inlay are measured from it.
     ZBACK = _plate_face(src["solid"], ZT, ZB, OUT.area)
-    ZSHOW = _plate_face(src["solid"], ZT, ZB, OUT.area, top=True)
 
     # ------------------------------------------------- GRAPHITE, DRAWN
     # Decision 32 B.  Graphite used to be the LEFTOVER of a Z-plane split, which
@@ -911,14 +942,90 @@ def plan(sp):
     grey = ACC.grey_trace(sp, grown=grown, kb=kb, path=ACC.LAST.get("path"),
                           avoid=(None if _deep.is_empty else _deep.buffer(2.5)))
 
-    # `back_eng`: two contour-following grooves echoing the show face's long
-    # bands.  Engraved, never proud -- the back points INBOARD at the side
-    # panel, roughly 4 mm away, so material added here would eat the clearance
-    # and have to survive all 21 poses.  A groove cannot foul anything.
-    back_eng = unary_union([band_along(OUT, 5.0, 8.2, fx(.07), fx(.93)),
-                            band_along(OUT, 13.0, 15.4, fx(.19), fx(.81))])
-    if not back_eng.is_empty:
-        back_eng = back_eng.difference(kb).difference(bosses.buffer(1.0))
+    # `back_eng`: the back engraving, drawn as a CIRCUIT BOARD (decision 39) --
+    # 45-degree buses ending in via pads.  It was four contour-following strips,
+    # which read as plain lines.  Engraved, never proud -- the back points
+    # INBOARD at the side panel, roughly 4 mm away, so material added here
+    # would eat the clearance and have to survive all 21 poses.  A groove
+    # cannot foul anything.  It keeps min_wall (+0.6) of land to the part edge
+    # and the holes -- that land IS a wall -- and stays off the bosses and
+    # anything that sticks out of the back.  The blue runs full depth, so it
+    # shows on the back too; a groove beside it is only a colour boundary, not
+    # a wall, so 1.5 mm clears it visually.
+    _acc = unary_union([g for g in (strip, blocks, ring) if not g.is_empty])
+    _allow = OUT.buffer(-(MW + 0.6), join_style=2)
+    if not KEEP.is_empty:
+        _allow = _allow.difference(KEEP.buffer(MW + 0.6))
+    _allow = _allow.difference(bosses.buffer(1.0))
+    if not _deep.is_empty:
+        _allow = _allow.difference(_deep.buffer(2.5))
+    if not _acc.is_empty:
+        _allow = _allow.difference(_acc.buffer(1.5))
+    # ... and min_wall clear of the styling's own THROUGH cuts, which reach the
+    # back: a track tangent to a cutout sliver at x=-30 left a 0.06 mm wall.
+    _thru = [g for g in (cutouts, cut_pockets) if not g.is_empty]
+    if _thru:
+        _allow = _allow.difference(unary_union(_thru).buffer(MW + 0.6, join_style=2))
+    # Side-wall pockets eat `side_d` in from the edge over their own z band.
+    # Where that band comes within min_wall of the groove floor, a groove
+    # alongside leaves a sliver between the two -- measured on the Coupler at
+    # x=-8.5 as a 0.49 mm wall.  Keep clear of the pocket's plan reach there.
+    _sd, _bd = float(sp.get("side_d", 0.0)), float(sp.get("back_eng_d", 1.2))
+    if _sd > 0.1:
+        # the pocket's real plan reach: side_d in from `grown`, minus where the
+        # side guard (below) stops it short of other removals
+        _rm = [g for g in (pock, wins, cutouts, cut_pockets) if not g.is_empty]
+        _gd = (unary_union(_rm).buffer(MW + GUARD_MARGIN, join_style=2)
+               if _rm else ShPoly())
+        _rim = grown.difference(grown.buffer(-_sd, join_style=2)).difference(_gd)
+        for _prs, _sg in ((lo_pr, -1), (hi_pr, +1)):
+            for _p in _prs:
+                _xs, _zs = [q[0] for q in _p], [q[1] for q in _p]
+                if min(_zs) < ZBACK + _bd + MW + 0.6 and max(_zs) > ZBACK - 1.0:
+                    _half = shbox(min(_xs), -500 if _sg < 0 else 0,
+                                  max(_xs), 0 if _sg < 0 else 500)
+                    _f = _rim.intersection(_half)
+                    if not _f.is_empty:
+                        _allow = _allow.difference(
+                            _f.buffer(MW + 0.6, join_style=2))
+    # ENGRAVE ONLY WHERE THE BACK IS THE FLAT PLATE.  ZBACK comes from a band
+    # scan and is quantised (-5.36 on the Femur, whose plate back is really at
+    # -5.00), and the back is not flat everywhere: the Femur's sloped
+    # transition runs across it.  A fixed-depth groove through a slope leaves a
+    # razor -- measured at x=-30 as a 0.06 mm wall.  So find the plate's true
+    # z from its own horizontal faces, cut the groove from THAT, and keep the
+    # grooves min_wall clear of any non-flat surface within the groove's depth
+    # plus min_wall of it.
+    from render3d import tessellate as _tess
+    _V, _T, _ = _tess(src["solid"], 0.3)
+    _V, _T = np.asarray(_V, float), np.asarray(_T, int)
+    _tri = _V[_T]
+    _e1, _e2 = _tri[:, 1] - _tri[:, 0], _tri[:, 2] - _tri[:, 0]
+    _n = np.cross(_e1, _e2)
+    _A = 0.5 * np.linalg.norm(_n, axis=1)
+    _nz = np.abs(_n[:, 2]) / np.maximum(1e-12, 2 * _A)
+    _zm = _tri[:, :, 2].mean(axis=1)
+    _flat = (_nz > 0.999) & (np.abs(_zm - ZBACK) < 2.0)
+    ZGROOVE = ZBACK
+    if _flat.any():
+        _zs = np.round(_zm[_flat], 2)
+        _u = np.unique(_zs)
+        ZGROOVE = float(max(_u, key=lambda z_: _A[_flat][_zs == z_].sum()))
+    _zt = _tri[:, :, 2]
+    _bad = ((_zt.max(axis=1) > ZGROOVE + 0.05)
+            & (_zt.min(axis=1) < ZGROOVE + _bd + MW + 0.6)
+            & (_nz > 0.05) & (_A > 1e-4))
+    if _bad.any():
+        _bp = [ShPoly(t[:, :2]) for t in _tri[_bad]]
+        _bp = [p.buffer(0.01) for p in _bp if p.is_valid and p.area > 1e-4]
+        if _bp:
+            _allow = _allow.difference(
+                unary_union(_bp).buffer(MW + 0.6, join_style=2))
+    _oy0, _oy1 = OUT.bounds[1], OUT.bounds[3]
+    back_eng, _ntr = ACC.circuit_grooves(
+        sp, out=OUT, allowed=_allow, fx=fx,
+        fy=lambda t: (_oy0 + _oy1) / 2 + t * (_oy1 - _oy0) / 2)
+    print(f"  back: circuit engraving, {_ntr} tracks, {back_eng.area:.0f} mm2")
 
     ct = sp.get("collar_t", 3.4)
     collars = unary_union([ShPoint(*p).buffer(17.0 + ct, 96).difference(ShPoint(*p).buffer(17.0, 96))
@@ -957,7 +1064,7 @@ def plan(sp):
     return dict(spec=sp, grown=grown, layers=layers, flange=flange, OUT=OUT, KEEP=KEEP, kb=kb, knee=bosses, wheel=bosses,
                 frame=frame, rail=rail, pads=pads, pock=pock, wins=wins, cutouts=cutouts,
                 cut_pockets=cut_pockets, side_guard=side_guard,
-                grey=grey, back_eng=back_eng, ZBACK=ZBACK, ZSHOW=ZSHOW,
+                grey=grey, back_eng=back_eng, ZBACK=ZBACK, ZSHOW=ZSHOW, ZGROOVE=ZGROOVE, ZS=ZS,
                 lo_pr=lo_pr, hi_pr=hi_pr, ring=ring, strip=strip, blocks=blocks,
                 collars=collars, ZT=ZT, ZB=ZB,
                 ZTOP=ZT + max(sp["frame_h"], sp["rail_h"], sp["pad_h"]) + 1.0)
@@ -969,6 +1076,7 @@ def build(sp, verbose=True):
     src = source(); solid = src["solid"]
     grown, KEEP = P["grown"], P["KEEP"]
     ZT, ZB, ZTOP = P["ZT"], P["ZB"], P["ZTOP"]
+    ZS = P["ZS"]                   # the show PLATE face -- see plan()
     CH = sp["chamfer"]
     MW = float(sp.get("min_wall", 3.0))
     say = print if verbose else (lambda *a, **k: None)
@@ -1072,9 +1180,9 @@ def build(sp, verbose=True):
     # body ships an unprintable part, so fall back rather than trust it.
     _b0 = body
     body = union(body,
-                 raised(P["frame"], ZT - CH - 1.0, sp["frame_h"] + 1.0, draft=12) if sp["frame_h"] > .3 else None,
-                 raised(P["rail"],  ZT - CH - 0.8, sp["rail_h"]  + 0.8, draft=10) if sp["rail_h"]  > .3 else None,
-                 raised(P["pads"],  ZT - CH - 0.8, sp["pad_h"]   + 0.8, draft=16) if sp["pad_h"]   > .3 else None)
+                 raised(P["frame"], ZS - CH - 1.0, sp["frame_h"] + 1.0, draft=12) if sp["frame_h"] > .3 else None,
+                 raised(P["rail"],  ZS - CH - 0.8, sp["rail_h"]  + 0.8, draft=10) if sp["rail_h"]  > .3 else None,
+                 raised(P["pads"],  ZS - CH - 0.8, sp["pad_h"]   + 0.8, draft=16) if sp["pad_h"]   > .3 else None)
     if body is None or body.volume < _b0.volume * 0.98:
         say(f"  raised-feature union collapsed the body "
             f"({_b0.volume/1000:.2f} -> {(body.volume/1000 if body else 0):.2f} cm3); "
@@ -1083,10 +1191,10 @@ def build(sp, verbose=True):
 
     inset = None
     if not P["pock"].is_empty and sp["pocket_d"] > 0.1:
-        body = body - prism(P["pock"], ZT - sp["pocket_d"], ZTOP + 10)
+        body = body - prism(P["pock"], ZS - sp["pocket_d"], ZTOP + 10)
         inset = prism(P["pock"].buffer(0.25), ZB - 20, ZTOP + 20)
     if not P["wins"].is_empty and sp["win_d"] > 0.1:
-        ftop = ZT - CH - 1.0 + sp["frame_h"] + 1.0
+        ftop = ZS - CH - 1.0 + sp["frame_h"] + 1.0
         body = body - prism(P["wins"], ftop - sp["win_d"], ZTOP + 12)
         w = prism(P["wins"].buffer(0.25), ZB - 20, ZTOP + 20)
         inset = w if inset is None else union(inset, w)
@@ -1173,14 +1281,14 @@ def build(sp, verbose=True):
     acc_poly = unary_union([g for g in (P["ring"], P["strip"], P["blocks"]) if not g.is_empty])
     eng = unary_union([g for g in (P["strip"], P["blocks"]) if not g.is_empty])
     if not eng.is_empty:
-        body = body - prism(eng, ZT - 1.2, ZTOP + 10)
+        body = body - prism(eng, ZS - 1.2, ZTOP + 10)
     # Constraint 6, the relief half: contour grooves cut INTO the back.  Shallow
     # and subtractive by choice (decision 30) -- the back faces the side panel
     # about 4 mm away, so anything proud would eat that clearance, while a groove
     # cannot foul anything in any pose.
     _bed = float(sp.get("back_eng_d", 1.2))
     if not P["back_eng"].is_empty and _bed > 0.05:
-        _zbk = P["ZBACK"]
+        _zbk = P["ZGROOVE"]            # the plate's measured face, not the band scan
         body = body - prism(P["back_eng"], _zbk - 10, _zbk + _bed)
         say(f"  back: engraved {P['back_eng'].area:.0f} mm2 of contour groove "
             f"{_bed:g} mm deep at z {_zbk:+.2f} (plate back; bbox floor is "

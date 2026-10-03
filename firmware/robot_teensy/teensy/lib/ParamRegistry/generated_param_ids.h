@@ -62,6 +62,7 @@
 #define PARAM_YAW_PI_TORQUE_MAX                    0x040F
 #define PARAM_YAW_PI_INT_MAX                       0x0410
 #define PARAM_OMEGA_CMD_RDS                        0x0411
+#define PARAM_YAW_ACCEL_MAX                        0x045A
 #define PARAM_FF1_ALPHA                            0x0412
 #define PARAM_FF2_ALPHA                            0x0413
 #define PARAM_FF1_KT_HIP                           0x0414
@@ -103,6 +104,7 @@
 #define PARAM_JUMP_ARM_MAX_YAW_RATE_RADS           0x054A
 #define PARAM_JUMP_ARM_MAX_ROLL_RAD                0x054B
 #define PARAM_JUMP_AIRBORNE_WHEEL_VEL_LIMIT        0x054C
+#define PARAM_JUMP_AIRBORNE_WHEEL_HOLD_KP          0x0559
 #define PARAM_ENABLE_SIM_PITCH_RAD                 0x0420
 #define PARAM_SIM_PITCH_RATE_RAD_S                 0x0421
 #define PARAM_ENABLE_SIM_PITCH_RATE                0x0422
@@ -152,10 +154,16 @@
 #define PARAM_PLANT_ID_F0_HZ                       0x044D
 #define PARAM_PLANT_ID_F1_HZ                       0x044E
 #define PARAM_PLANT_ID_DURATION_S                  0x044F
-#define PARAM_LQR_PITCH_TRIM_CURVE                 0x0450
+#define PARAM_YAW_RATE_SRC                         0x0451
+#define PARAM_TRIM_LEARN_EN                        0x0452
+#define PARAM_LQR_PITCH_TRIM_12                    0x0453
+#define PARAM_LQR_PITCH_TRIM_25                    0x0454
+#define PARAM_LQR_PITCH_TRIM_38                    0x0455
+#define PARAM_LQR_PITCH_TRIM_50                    0x0456
+#define PARAM_LQR_PITCH_TRIM_62                    0x0457
+#define PARAM_LQR_PITCH_TRIM_75                    0x0458
+#define PARAM_LQR_PITCH_TRIM_88                    0x0459
 #define PARAM_RADIO_HIP_CMD                        0x0500
-#define PARAM_RADIO_VEL_MAX                        0x0501
-#define PARAM_RADIO_YAW_MAX                        0x0502
 #define PARAM_LIVE_TUNE_CH7_VAL                    0x0503
 #define PARAM_LIVE_TUNE_CH8_VAL                    0x051B
 #define PARAM_PROFILE_1_VEL_MAX                    0x0510
@@ -183,7 +191,6 @@
 #define PARAM_HIP_ROLL_KP                          0x0523
 #define PARAM_HIP_ROLL_KD                          0x0524
 #define PARAM_ROLL_CMD_RAD                         0x0525
-#define PARAM_RADIO_ROLL_MAX                       0x0526
 #define PARAM_PROFILE_1_ROLL_MAX                   0x0527
 #define PARAM_PROFILE_2_ROLL_MAX                   0x0528
 #define PARAM_PROFILE_3_ROLL_MAX                   0x0529

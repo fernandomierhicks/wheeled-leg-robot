@@ -2,15 +2,45 @@
 
 #include <math.h>
 
-// Quadratic balance-trim schedule with fixed retracted/extended endpoints.
-// A zero curve coefficient is exactly the legacy linear interpolation; at
-// alpha=0.5 the curve contributes one quarter of its configured value.
-inline float scheduled_pitch_trim(float trim_ret, float trim_ext,
-                                  float trim_curve, float alpha) {
+// Balance-trim lookup table: n points evenly spaced over alpha [0,1]
+// (point 0 at alpha=0, point n-1 at alpha=1), linearly interpolated. Finds
+// the bracketing pair (*lo, *lo+1) and the weight of the upper one.
+inline void pitch_trim_bracket(float alpha, int n, int* lo, float* w_hi) {
     if (alpha < 0.0f) alpha = 0.0f;
     if (alpha > 1.0f) alpha = 1.0f;
-    return trim_ret + alpha * (trim_ext - trim_ret)
-         + trim_curve * alpha * (1.0f - alpha);
+    float x = alpha * (float)(n - 1);
+    int i = (int)x;
+    if (i > n - 2) i = n - 2;
+    *lo = i;
+    *w_hi = x - (float)i;
+}
+
+inline float pitch_trim_table(const float* points, int n, float alpha) {
+    int i;
+    float w;
+    pitch_trim_bracket(alpha, n, &i, &w);
+    return points[i] + w * (points[i + 1] - points[i]);
+}
+
+// Move the interpolated trim at alpha by exactly delta, changing the two
+// bracketing points by the smallest amount that does it (each in proportion
+// to its interpolation weight). A point at the current alpha takes all of it;
+// midway between two points both move by delta.
+inline void pitch_trim_table_nudge(float* points, int n, float alpha, float delta) {
+    int i;
+    float w;
+    pitch_trim_bracket(alpha, n, &i, &w);
+    float norm = (1.0f - w) * (1.0f - w) + w * w;  // >= 0.5, never zero
+    points[i]     += delta * (1.0f - w) / norm;
+    points[i + 1] += delta * w / norm;
+}
+
+// Body yaw rate seen by the wheels [rad/s], positive CCW from above (+Z):
+// the right wheel rolling forward faster than the left turns the robot left.
+// Inputs are firmware-frame wheel speeds (positive = forward on both sides).
+inline float wheel_yaw_rate(float vel_l_turns_s, float vel_r_turns_s,
+                            float wheel_r_m, float track_m) {
+    return (vel_r_turns_s - vel_l_turns_s) * 2.0f * (float)M_PI * wheel_r_m / track_m;
 }
 
 // Keep the velocity-loop backward pitch target inside the independently

@@ -5804,3 +5804,158 @@
 2026-08-08 22:58:28 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
 2026-08-08 22:58:32 [INFO] Control: axis1 -> closed loop (mode=3, seeded input_pos=-0.1391 turns)
 2026-08-08 22:58:51 [INFO] Control: axis1 -> idle
+2026-10-02 13:47:47 [WARNING] Killing stale process PID 16100: c:\dropbox\personal projects\robotics\wheeled-leg-robot\.venv\scripts\python.exe odrive_gui.py
+2026-10-02 13:48:25 [WARNING] Killing stale process PID 20432: c:\dropbox\personal projects\robotics\wheeled-leg-robot\.venv\scripts\python.exe c:/dropbox/personal projects/robotics/wheeled-leg-robot/components/characterization/odrive/usb gui/odrive_gui.py
+2026-10-02 13:50:57 [WARNING] Killing stale process PID 4872: c:\dropbox\personal projects\robotics\wheeled-leg-robot\.venv\scripts\python.exe c:/dropbox/personal projects/robotics/wheeled-leg-robot/components/characterization/odrive/usb gui/odrive_gui.py
+2026-10-02 13:53:38 [WARNING] Killing stale process PID 2888: c:\dropbox\personal projects\robotics\wheeled-leg-robot\.venv\scripts\python.exe c:/dropbox/personal projects/robotics/wheeled-leg-robot/components/characterization/odrive/usb gui/odrive_gui.py
+2026-10-02 13:53:47 [WARNING] Killing stale process PID 6756: c:\dropbox\personal projects\robotics\wheeled-leg-robot\.venv\scripts\python.exe c:/dropbox/personal projects/robotics/wheeled-leg-robot/components/characterization/odrive/usb gui/odrive_gui.py
+2026-10-02 13:54:07 [WARNING] Killing stale process PID 10744: c:\dropbox\personal projects\robotics\wheeled-leg-robot\.venv\scripts\python.exe components\characterization\odrive\usb gui\odrive_gui.py
+2026-10-02 13:56:43 [INFO] No stale ODrive processes found.
+2026-10-02 13:56:44 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-10-02 13:56:59 [INFO] No stale ODrive processes found.
+2026-10-02 13:56:59 [INFO] CmdInterface: polling C:\Dropbox\Personal Projects\Robotics\wheeled-leg-robot\components\characterization\odrive\USB GUI\odrive_cmd_inbox.txt every 500 ms
+2026-10-02 13:57:02 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-10-02 13:57:02 [INFO] Setup: axis0 config read OK
+2026-10-02 13:57:02 [INFO] Control: axis0 gains read OK
+2026-10-02 13:57:02 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 13:57:02 [INFO] GUI: connect success
+2026-10-02 13:57:07 [INFO] Control: axis0 -> closed loop (mode=2, seeded input_pos=10.5970 turns)
+2026-10-02 13:57:18 [INFO] Control: safety limits applied (I=10.00A V=20.00t/s)
+2026-10-02 13:57:20 [INFO] Control: axis0 -> idle
+2026-10-02 13:57:22 [INFO] Control: axis0 -> closed loop (mode=2, seeded input_pos=10.5970 turns)
+2026-10-02 13:57:36 [INFO] Control: axis0 -> idle
+2026-10-02 13:57:37 [INFO] Setup: axis1 config read OK
+2026-10-02 13:57:37 [INFO] Control: axis1 gains read OK
+2026-10-02 13:57:37 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 13:57:42 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=10.5760 turns)
+2026-10-02 13:57:56 [INFO] Control: axis1 -> idle
+2026-10-02 13:58:01 [INFO] Setup: axis0 config read OK
+2026-10-02 13:58:01 [INFO] Control: axis0 gains read OK
+2026-10-02 13:58:01 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 13:58:02 [INFO] Disconnected
+2026-10-02 13:58:03 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-10-02 13:58:03 [INFO] Setup: axis0 config read OK
+2026-10-02 13:58:03 [INFO] Control: axis0 gains read OK
+2026-10-02 13:58:03 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 13:58:03 [INFO] GUI: connect success
+2026-10-02 13:58:04 [INFO] Setup: axis0 config read OK
+2026-10-02 13:58:04 [INFO] Control: axis0 gains read OK
+2026-10-02 13:58:04 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 13:58:30 [INFO] Setup: axis0 encoder configured — mode=256 CPR=16384 CS=3  gpio3/4/5=DIGITAL
+2026-10-02 13:58:30 [INFO] Disconnected
+2026-10-02 13:58:34 [INFO] Disconnected
+2026-10-02 13:58:35 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-10-02 13:58:35 [INFO] Setup: reconnected after reboot
+2026-10-02 13:58:41 [INFO] Control: axis0 gains read OK
+2026-10-02 13:58:41 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 13:58:41 [INFO] Setup: axis0 config read OK
+2026-10-02 13:59:06 [ERROR] Setup: read failed: Device 3869324F3135 disconnected
+2026-10-02 13:59:06 [ERROR] Control: read gains error: Device 3869324F3135 disconnected
+2026-10-02 13:59:06 [ERROR] Control: read FF flags error: Device 3869324F3135 disconnected
+2026-10-02 13:59:06 [ERROR] Control: read safety limits error: Device 3869324F3135 disconnected
+2026-10-02 13:59:06 [WARNING] CAN tab read error: Device 3869324F3135 disconnected
+2026-10-02 13:59:07 [ERROR] Setup: read failed: Device 3869324F3135 disconnected
+2026-10-02 13:59:07 [ERROR] Control: read gains error: Device 3869324F3135 disconnected
+2026-10-02 13:59:07 [ERROR] Control: read FF flags error: Device 3869324F3135 disconnected
+2026-10-02 13:59:07 [ERROR] Control: read safety limits error: Device 3869324F3135 disconnected
+2026-10-02 13:59:07 [WARNING] CAN tab read error: Device 3869324F3135 disconnected
+2026-10-02 13:59:14 [ERROR] Setup: read failed: Device 3869324F3135 disconnected
+2026-10-02 13:59:14 [ERROR] Control: read gains error: Device 3869324F3135 disconnected
+2026-10-02 13:59:14 [ERROR] Control: read FF flags error: Device 3869324F3135 disconnected
+2026-10-02 13:59:14 [ERROR] Control: read safety limits error: Device 3869324F3135 disconnected
+2026-10-02 13:59:14 [WARNING] CAN tab read error: Device 3869324F3135 disconnected
+2026-10-02 13:59:15 [ERROR] Setup: read failed: Device 3869324F3135 disconnected
+2026-10-02 13:59:15 [ERROR] Control: read gains error: Device 3869324F3135 disconnected
+2026-10-02 13:59:15 [ERROR] Control: read FF flags error: Device 3869324F3135 disconnected
+2026-10-02 13:59:15 [ERROR] Control: read safety limits error: Device 3869324F3135 disconnected
+2026-10-02 13:59:15 [WARNING] CAN tab read error: Device 3869324F3135 disconnected
+2026-10-02 13:59:16 [INFO] Disconnected
+2026-10-02 13:59:17 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-10-02 13:59:17 [INFO] Setup: axis0 config read OK
+2026-10-02 13:59:17 [INFO] Control: axis0 gains read OK
+2026-10-02 13:59:17 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 13:59:17 [INFO] GUI: connect success
+2026-10-02 13:59:19 [INFO] EXEC clear_errors(() {}) -> None
+2026-10-02 13:59:19 [INFO] Control: errors cleared + watchdog fed
+2026-10-02 13:59:22 [INFO] Setup: error suppressor started for calibration
+2026-10-02 13:59:22 [INFO] Setup: axis0 motor calibration started (split cal phase 1)
+2026-10-02 13:59:27 [INFO] Setup: axis0 motor cal OK — R=0.3358 L=0.000264
+2026-10-02 13:59:27 [INFO] Setup: axis0 encoder offset cal started (split cal phase 2)
+2026-10-02 13:59:36 [INFO] Setup: error suppressor stopped (cleared 3623 times)
+2026-10-02 13:59:36 [INFO] auto_tune: axis0 vel_gain=0.0596 vel_int=0.0298 R=0.3358 kT=0.0400
+2026-10-02 13:59:36 [INFO] Setup: axis0 calibration + auto-tune complete
+2026-10-02 13:59:36 [INFO] Disconnected
+2026-10-02 13:59:40 [INFO] Disconnected
+2026-10-02 13:59:40 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-10-02 13:59:40 [INFO] Setup: reconnected after reboot
+2026-10-02 13:59:40 [INFO] Control: axis0 gains read OK
+2026-10-02 13:59:40 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 13:59:40 [INFO] Setup: axis0 config read OK
+2026-10-02 13:59:46 [INFO] Setup: axis0 encoder configured — mode=257 CPR=16384 CS=3  gpio3/4/5=DIGITAL
+2026-10-02 13:59:46 [INFO] Disconnected
+2026-10-02 13:59:50 [INFO] Disconnected
+2026-10-02 13:59:50 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-10-02 13:59:50 [INFO] Setup: reconnected after reboot
+2026-10-02 13:59:53 [INFO] Control: axis0 gains read OK
+2026-10-02 13:59:53 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 13:59:54 [INFO] Setup: axis0 config read OK
+2026-10-02 14:00:04 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-10-02 14:00:05 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-10-02 14:00:05 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-10-02 14:00:05 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-10-02 14:00:05 [ERROR] Control: clear errors failed: Device 3869324F3135 disconnected
+2026-10-02 14:00:06 [ERROR] Setup: read failed: Device 3869324F3135 disconnected
+2026-10-02 14:00:06 [ERROR] Control: read gains error: Device 3869324F3135 disconnected
+2026-10-02 14:00:06 [ERROR] Control: read FF flags error: Device 3869324F3135 disconnected
+2026-10-02 14:00:06 [ERROR] Control: read safety limits error: Device 3869324F3135 disconnected
+2026-10-02 14:00:06 [WARNING] CAN tab read error: Device 3869324F3135 disconnected
+2026-10-02 14:00:07 [ERROR] Setup: read failed: Device 3869324F3135 disconnected
+2026-10-02 14:00:07 [ERROR] Control: read gains error: Device 3869324F3135 disconnected
+2026-10-02 14:00:07 [ERROR] Control: read FF flags error: Device 3869324F3135 disconnected
+2026-10-02 14:00:07 [ERROR] Control: read safety limits error: Device 3869324F3135 disconnected
+2026-10-02 14:00:07 [WARNING] CAN tab read error: Device 3869324F3135 disconnected
+2026-10-02 14:00:07 [INFO] Disconnected
+2026-10-02 14:00:08 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-10-02 14:00:08 [INFO] Setup: axis0 config read OK
+2026-10-02 14:00:08 [INFO] Control: axis0 gains read OK
+2026-10-02 14:00:08 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 14:00:08 [INFO] GUI: connect success
+2026-10-02 14:00:15 [INFO] Control: axis0 -> closed loop (mode=2, seeded input_pos=-0.0492 turns)
+2026-10-02 14:00:24 [INFO] Control: axis0 -> idle
+2026-10-02 14:00:29 [INFO] Control: axis0 -> closed loop (mode=3, seeded input_pos=0.0247 turns)
+2026-10-02 14:00:43 [INFO] Control: axis0 -> idle
+2026-10-02 14:00:46 [INFO] Control: axis0 -> closed loop (mode=2, seeded input_pos=0.1222 turns)
+2026-10-02 14:01:03 [INFO] Control: axis0 -> idle
+2026-10-02 14:01:11 [INFO] Setup: axis1 config read OK
+2026-10-02 14:01:11 [INFO] Control: axis1 gains read OK
+2026-10-02 14:01:11 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 14:01:14 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=-0.2803 turns)
+2026-10-02 14:01:16 [INFO] Control: axis1 -> idle
+2026-10-02 14:01:43 [ERROR] Setup: read failed: Device 3869324F3135 disconnected
+2026-10-02 14:01:43 [ERROR] Control: read gains error: Device 3869324F3135 disconnected
+2026-10-02 14:01:43 [ERROR] Control: read FF flags error: Device 3869324F3135 disconnected
+2026-10-02 14:01:43 [ERROR] Control: read safety limits error: Device 3869324F3135 disconnected
+2026-10-02 14:01:43 [WARNING] CAN tab read error: Device 3869324F3135 disconnected
+2026-10-02 14:01:45 [ERROR] Control: enable error: Device 3869324F3135 disconnected
+2026-10-02 14:01:47 [INFO] Disconnected
+2026-10-02 14:01:48 [INFO] Connected: serial=0x3869324f3135 fw=0.5.6
+2026-10-02 14:01:48 [INFO] Setup: axis0 config read OK
+2026-10-02 14:01:48 [INFO] Control: axis0 gains read OK
+2026-10-02 14:01:48 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 14:01:48 [INFO] GUI: connect success
+2026-10-02 14:01:50 [INFO] Setup: axis0 config read OK
+2026-10-02 14:01:50 [INFO] Control: axis0 gains read OK
+2026-10-02 14:01:50 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 14:01:51 [INFO] EXEC clear_errors(() {}) -> None
+2026-10-02 14:01:51 [INFO] Control: errors cleared + watchdog fed
+2026-10-02 14:01:53 [INFO] Control: axis0 -> closed loop (mode=2, seeded input_pos=0.0240 turns)
+2026-10-02 14:02:20 [INFO] Control: axis0 -> idle
+2026-10-02 14:02:22 [INFO] Setup: axis1 config read OK
+2026-10-02 14:02:22 [INFO] Control: axis1 gains read OK
+2026-10-02 14:02:22 [INFO] Control: safety limits read (I=10.00A V=20.00t/s)
+2026-10-02 14:02:24 [INFO] Control: axis1 -> closed loop (mode=2, seeded input_pos=-0.2803 turns)
+2026-10-02 14:02:30 [INFO] Control: axis1 -> idle
+2026-10-02 14:02:38 [INFO] INSPECTOR: starting property tree probe
+2026-10-02 14:02:38 [INFO] INSPECTOR: probe complete — 979 properties
+2026-10-02 14:03:20 [INFO] presets: saved config to C:/Dropbox/Desktop/Good settings/Odrive export.json (11 sections)
+2026-10-02 14:03:20 [INFO] Presets: saved 221 params to C:/Dropbox/Desktop/Good settings/Odrive export.json

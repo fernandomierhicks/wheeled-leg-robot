@@ -12,18 +12,25 @@ void controlLoop_reset_hip_ramp();  // called on RUNNING entry, except when retu
 // re-entering the ordinary arm-in gain ramp.
 void controlLoop_complete_hip_ramp();
 
-// Ephemeral jump controls. The velocity offset is added to the pilot's live
-// v_cmd_ms (never replaces or persists it). Jump handoff keeps the ordinary
-// RUNNING stack but enables its scoped LQR-gain/authority overrides. Both are
-// cleared by controlLoop_reset().
-void controlLoop_set_velocity_command_offset(float offset_ms);
+// Jump LANDING/HANDOFF: keeps the ordinary RUNNING stack but enables its scoped
+// LQR-gain/torque/wheel-speed overrides (jmp_handoff_*). Cleared by
+// controlLoop_reset().
 void controlLoop_set_jump_handoff_active(bool active);
 
+// Jump: hold the velocity PI's integral and theta_ref (wheel speed is not ground
+// speed from liftoff through the landing handoff). Cleared by controlLoop_reset().
+void controlLoop_set_velocity_loop_frozen(bool frozen);
+
+// Jump, airborne: replace each wheel's balance torque with
+// jmp_air_whl_kp * (target - measured) [turns/s]. Cleared by controlLoop_reset().
+void controlLoop_set_wheel_hold(bool active, float target_L, float target_R);
+
 // The wheel speed governor's limit currently in force [turns/s]: wm_vel_limit
-// normally, the STANDING_UP-scoped standup_vel_limit, or the active jump
-// handoff's jmp_handoff_vel_lim. Zero overrides inherit the normal value.
-// Shared by the soft governor, runaway watchdog's 2x trip, and telemetry's
-// velocity-limited health bits so all three report the same number.
+// normally, the STANDING_UP-scoped standup_vel_limit, jmp_handoff_vel_lim during
+// jump LANDING/HANDOFF, or jmp_air_vel_lim during CROUCH/EXTEND/RETRACT (wheels
+// are genuinely unloaded and spin fast in the air). Zero overrides inherit
+// wm_vel_limit. Shared by the soft governor, the runaway watchdog's 2x trip, and
+// telemetry's velocity-limited health bits so all three report the same number.
 float controlLoop_wheel_vel_limit();
 
 // Hip height override: while set, controlLoop_run() holds the legs at this

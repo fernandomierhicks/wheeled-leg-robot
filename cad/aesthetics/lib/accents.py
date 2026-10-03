@@ -22,6 +22,7 @@ from feat import trap_plan, band_along
 # exactly the line the blue already follows instead of re-deriving the routing
 # and drifting from it.  Diagnostic only -- nothing in the build reads it.
 LAST = {}
+DEBUG = False
 
 
 def _route(xa, xb, lane, n_jog, amp, jw, rng):
@@ -96,6 +97,195 @@ def grey_trace(sp, *, grown, kb, path=None, avoid=None):
     if avoid is not None and not avoid.is_empty:
         g = g.difference(avoid)
     return g
+
+
+def _via(x, y, s):
+    """A via pad: a square with 45-degree chamfered corners, side `s`."""
+    h, c = s / 2.0, s * 0.29
+    return ShPoly([(x - h + c, y - h), (x + h - c, y - h), (x + h, y - h + c),
+                   (x + h, y + h - c), (x + h - c, y + h), (x - h + c, y + h),
+                   (x - h, y + h - c), (x - h, y - h + c)])
+
+
+def _bus_line(xa, xb, y0, jogs):
+    """Centre line of a bus: horizontal runs joined by TRUE 45-degree jogs.
+
+    `jogs` is [(x, y_new), ...]; each jog climbs |dy| over dx = |dy|, which is
+    what makes it read as a routed PCB track rather than a sketched line."""
+    pts, y = [(xa, y0)], y0
+    for xj, yn in jogs:
+        pts.append((xj, y))
+        pts.append((xj + abs(yn - y), yn))
+        y = yn
+    pts.append((max(xb, pts[-1][0] + 1.0), y))
+    return LineString(pts)
+
+
+def _fit_run(line, ok, step=0.5, min_len=14.0):
+    """The longest stretch of `line` whose every sample satisfies ok(point).
+    Trimming to fit, rather than clipping, is what keeps every pad whole: a
+    clipped via reads as a mistake, a shorter trace does not."""
+    from shapely.ops import substring
+    L = line.length
+    n = max(2, int(L / step) + 1)
+    good = [ok(line.interpolate(i * L / (n - 1))) for i in range(n)]
+    best, cur = (0, -1), None
+    for i, g in enumerate(good + [False]):
+        if g and cur is None:
+            cur = i
+        elif not g and cur is not None:
+            if i - 1 - cur > best[1] - best[0]:
+                best = (cur, i - 1)
+            cur = None
+    s0, s1 = best[0] * L / (n - 1), best[1] * L / (n - 1)
+    if s1 - s0 < min_len:
+        return None
+    return substring(line, s0, s1)
+
+
+def circuit_grooves(sp, *, out, allowed, fx, fy):
+    """THE BACK ENGRAVING, AS A CIRCUIT BOARD.  Decision 39.
+
+    It used to be `band_along()` x4: contour-following strips running 86% of
+    the part -- four plain lines.  His note: "small extruded cuts that are just
+    lines instead of ... a pattern of lines like a circuit board ... trapezoidal
+    or 45 degree corners".  The vocabulary is the one in artistic concepts/:
+    parallel BUSES that turn together at 45 degrees, TAPS that branch off at 45
+    degrees, and every track end finished with a chamfered via pad.
+
+    Every bus is given in FRACTIONS (x of length, y of the part's own
+    half-width about its centre, trap 12):
+      [x0, x1, n_tracks, y0, [[x_jog, y_new], ...], [[x_tap, dy], ...]]
+      ["v", x, y0, y1, kink_mm]      a jumper across the part
+    Tracks are exact parallel offsets of the centre line (mitre joins), so the
+    land between two tracks is constant.  Pitch is sized so even a pad clears
+    its neighbour's track by min_wall + 0.5: pitch = pad/2 + w/2 + min_wall + 0.5.
+    Taps (optional, last field) leave the OUTERMOST track in the direction of
+    their dy and end in a via.
+
+    Nothing is clipped: a track is TRIMMED to the longest stretch that fits
+    `allowed`, then each end is walked back until its via fits and clears
+    every groove already placed.  A clipped via reads as a mistake; a shorter
+    track does not.  Returns (grooves, n_tracks_kept).
+    """
+    from shapely.ops import substring
+    w = float(sp.get("groove_w", 1.4))
+    pad = float(sp.get("groove_pad", 3.8))
+    mw = float(sp.get("min_wall", 3.0))
+    pitch = float(sp.get("groove_pitch", pad / 2 + w / 2 + mw + 0.5))
+    stag = float(sp.get("groove_stagger", 6.0))
+    thr = mw + 0.4                       # land between two grooves
+    buses = sp.get("back_circuit") or [
+        [.12, .60, 3, +.12, [[.23, -.26]]],
+        [.60, .84, 1, -.62, [[.72, -.40]]],
+    ]
+    LAST["allowed"] = allowed
+    inner = allowed.buffer(-(w / 2 + 0.05), join_style=2)
+    ok = lambda p: inner.contains(p)
+    kept = []
+
+    def _clear(g):
+        return all(g.distance(k_) >= thr for k_ in kept)
+
+    def _place(ln, extra=None):
+        """Walk the ends of `ln` back until both vias sit inside `allowed` and
+        clear every groove already placed; append the result.  `extra` is a
+        groove this one is allowed to touch (a tap's parent)."""
+        others = kept if extra is None else [k_ for k_ in kept if k_ is not extra]
+        clr = lambda g: all(g.distance(k_) >= thr for k_ in others)
+        if not clr(_trace(list(ln.coords), w)) and extra is None:
+            return None, None
+        a, b = 0.0, ln.length
+        fixed_a = extra is not None       # a tap's root stays on its parent
+        while b - a >= (6.0 if fixed_a else 8.0):
+            s_ = substring(ln, a, b)
+            p0, p1 = s_.coords[0], s_.coords[-1]
+            v0, v1 = _via(*p0, pad), _via(*p1, pad)
+            t_ = _trace(list(s_.coords), w)
+            g0 = fixed_a or (v0.within(allowed) and clr(v0))
+            g1 = v1.within(allowed) and clr(v1)
+            if g0 and g1 and (extra is None or clr(t_)):
+                return unary_union([t_, v1] + ([] if fixed_a else [v0])), s_
+            if not g0: a += 1.0
+            if not g1: b -= 1.0
+        return None, None
+
+    for bus in buses:
+        if bus[0] == "v":
+            # JUMPER: a short run across the part with one 45-degree kink,
+            # vias at both ends -- for the gaps between a row of holes
+            _, xv, ya, yb = bus[:4]
+            xa_, ya_, yb_ = fx(xv), fy(ya), fy(yb)
+            ym, d_ = (ya_ + yb_) / 2.0, float(bus[4]) if len(bus) > 4 else 2.0
+            sg = 1.0 if yb_ > ya_ else -1.0
+            ln = LineString([(xa_, ya_), (xa_, ym - sg * d_ / 2),
+                             (xa_ + d_, ym + sg * d_ / 2), (xa_ + d_, yb_)])
+            ln = _fit_run(ln, ok, min_len=8.0)
+            g, _ = (None, None) if ln is None else _place(ln)
+            if DEBUG:
+                print(f"    jumper at {xv:.3f}: {'ok' if g is not None else 'no room'}")
+            if g is not None:
+                kept.append(g)
+            continue
+        x0, x1, n, y0, jogs = bus[:5]
+        taps = bus[5] if len(bus) > 5 else []
+        cl = _bus_line(fx(x0), fx(x1), fy(y0), [(fx(a), fy(b)) for a, b in jogs])
+        lines = []
+        for k in range(int(n)):
+            off = (k - (n - 1) / 2.0) * pitch
+            ln = cl if abs(off) < 1e-9 else cl.offset_curve(off, join_style=2,
+                                                          mitre_limit=5.0)
+            if ln.is_empty or ln.geom_type != "LineString":
+                continue
+            a_, b_ = stag * k, stag * (n - 1 - k)     # staggered ends
+            if ln.length - a_ - b_ < 14.0:
+                continue
+            lines.append((off, substring(ln, a_, ln.length - b_)))
+        for off, ln in sorted(lines, key=lambda t: -t[1].length):
+            L0 = ln.length
+            ln = _fit_run(ln, ok)
+            g, ln = (None, None) if ln is None else _place(ln)
+            if DEBUG:
+                print(f"    bus {x0:.2f}-{x1:.2f} off {off:+.1f}: {L0:.0f} mm -> "
+                      f"{0 if g is None else ln.length:.0f} mm")
+            if g is None:
+                continue
+            kept.append(g)
+            parent = g
+            # taps branch off the outermost track on their own side
+            for tp in taps:
+                xt, dy = tp[0], tp[1]
+                side = max(o for o, _ in lines) if dy > 0 else min(o for o, _ in lines)
+                if abs(off - side) > 1e-6:
+                    continue
+                xs = fx(xt)
+                cut = ln.intersection(LineString([(xs, -500), (xs, 500)]))
+                if cut.is_empty or cut.geom_type != "Point":
+                    continue
+                # a tap turns off at 45 degrees and then runs square to the
+                # track -- the 45 carries it into the gap, the square run is
+                # what lets it reach between two holes without touching either
+                d_ = fy(dy) - fy(0)
+                dd = abs(d_) * (tp[2] if len(tp) > 2 else 0.3)
+                sg = 1.0 if d_ > 0 else -1.0
+                tap = LineString([(cut.x, cut.y), (cut.x + dd, cut.y + sg * dd),
+                                  (cut.x + dd, cut.y + d_)])
+                tg, _ = _place(tap, extra=parent)
+                if DEBUG:
+                    print(f"      tap at {xt:.2f}: {'ok' if tg is not None else 'no room'}")
+                if tg is not None:
+                    # TEARDROP.  A tap leaving the track at 45 degrees leaves an
+                    # acute wedge of land between the two that narrows to a knife
+                    # edge -- a PCB "acid trap", and on the Coupler 12.4 mm2 of
+                    # sub-1.5 mm wall at the tap roots.  Filling the wedge up to
+                    # the end of the 45 turns every land corner obtuse.
+                    tear = ShPoly([(cut.x, cut.y), (cut.x + 2 * dd, cut.y),
+                                   (cut.x + dd, cut.y + sg * dd)]
+                                  ).buffer(w / 2.0, join_style=2)
+                    idx = kept.index(parent)
+                    parent = unary_union([parent, tg, tear])
+                    kept[idx] = parent
+    return (unary_union(kept) if kept else ShPoly()), len(kept)
 
 
 def accents(sp, *, grown, kb, clip, yspan, slots, joints, gk=1.0):

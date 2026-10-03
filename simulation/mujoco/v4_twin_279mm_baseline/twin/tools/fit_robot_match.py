@@ -30,7 +30,7 @@ GUI_DIR = REPO_ROOT / "software" / "gui"
 if str(GUI_DIR) not in sys.path:
     sys.path.insert(0, str(GUI_DIR))
 
-from analysis.leg_height_sweep import band_split, plateau_report  # noqa: E402
+from analysis.leg_height_sweep import TRIM_TABLE_PARAMS, band_split, plateau_report  # noqa: E402
 from analysis.param_sidecar import load_matching_sidecar  # noqa: E402
 from analysis.wlog_metrics import DecodedRun, compute_metrics, decode_run  # noqa: E402
 
@@ -80,12 +80,18 @@ def _state_durations(run: DecodedRun) -> dict[str, float]:
 
 def _fit_geometry(control: dict[str, float], plateaus) -> tuple[dict, RobotGeometry]:
     robot = replace(RobotGeometry(), calib_backoff_rad=control["calib_backoff_rad"])
-    alphas = np.linspace(0.0, 1.0, 5)
-    trim_ret = control["lqr_pitch_trim_ret"]
-    trim_ext = control["lqr_pitch_trim_ext"]
-    trim_curve = control["lqr_trim_curve"]
-    targets = list(trim_ret + alphas * (trim_ext - trim_ret)
-                   + trim_curve * alphas * (1.0 - alphas))
+    # Firmware trim is a 9-point table over alpha (2026-10-02). Snapshots that
+    # predate it carry only the ret/ext end points, which every one of them
+    # used linearly (their lqr_trim_curve was 0).
+    table = [control.get(name) for name in TRIM_TABLE_PARAMS]
+    if all(value is not None for value in table):
+        alphas = np.linspace(0.0, 1.0, len(TRIM_TABLE_PARAMS))
+        targets = [float(value) for value in table]
+    else:
+        alphas = np.linspace(0.0, 1.0, 5)
+        trim_ret = control["lqr_pitch_trim_ret"]
+        trim_ext = control["lqr_pitch_trim_ext"]
+        targets = list(trim_ret + alphas * (trim_ext - trim_ret))
     fit_alphas = list(alphas)
     weights = [1.0] * len(fit_alphas)
 

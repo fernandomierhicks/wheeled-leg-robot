@@ -90,7 +90,7 @@ Exit 0 = safe, 2 = safety-maxima violation, 1 = couldn't analyze.
 §4.10. Whole-file statistics average the heights together and answer nothing.
 
 ```python
-from analysis.leg_height_sweep import plateau_report, fit_trim_schedule
+from analysis.leg_height_sweep import plateau_report, trim_table_from_plateaus
 rows = plateau_report(run, torque_limit_nm=..., rate_lim=..., theta_max_bwd=...)
 ```
 
@@ -118,7 +118,7 @@ what gets pulled into arrays — **add a field there before trying to use it.**
 | `pitch_rad`, `pitch_rate_rads` | rad, rad/s | +X forward, +Y left, +Z up |
 | `roll_rad`, `yaw_rad`, `*_rate_rads` | rad, rad/s | |
 | `theta_ref` | rad | pitch target from the velocity PI |
-| `pitch_trim_rad` | rad | balance-point offset, α-scheduled, **not small** (≈ −0.14 rad retracted). Part of the control target — see §4.8 |
+| `pitch_trim_rad` | rad | balance-point offset, α-scheduled, **can be large** (−0.12 rad retracted in the 2026-10-02 export). It is the *configured* trim, not the measured balance point — on `LOG0036` (2026-10-02) the true retracted balance point was ≈ −0.02 rad. Part of the control target — see §4.8 |
 | `whl_tau_l`, `whl_tau_r` | **N·m** | final *commanded* wheel torque — see §4.2 |
 | `tau_sym`, `tau_yaw` | N·m | LQR symmetric / yaw-PI differential parts of the above |
 | `wm_l_vel_turns_s`, `wm_r_vel_turns_s` | turns/s | ×2π×`WHEEL_R` → m/s. `WHEEL_R` = **0.056 m** from 2026-08-07; 0.075 m before — see §4.9 |
@@ -313,11 +313,17 @@ Traps this exists to stop:
   zero while the robot still creeps. Require the wheel-drift gate too. Plateaus
   that fail are reported with `equilibrium=False`, not dropped — "it never
   settled at this height" is the finding when a run went unstable up-stroke.
-- **`trim_ext` from a sweep that stopped short of α = 1 is an extrapolation.**
-  `fit_trim_schedule()` fits the firmware's own `scheduled_pitch_trim()` basis,
-  which includes a quadratic term and therefore extrapolates hard. It sets
-  `extrapolated` whenever the sweep topped out below α = 0.9. Do not type an
-  `_ext` anchor into params off an interior-only sweep.
+- **Table points outside the measured span are guesses.** The firmware trim is
+  a 9-point table over α (2026-10-02; it replaced the quadratic
+  `lqr_trim_curve` schedule). `trim_table_from_plateaus()` interpolates settled
+  plateaus onto those points and holds the end values flat beyond the measured
+  span, flagging each such point in `extrapolated`. Do not type a flagged point
+  into params; park the robot there with `trim_learn_en = 1` instead.
+- **Logs from 2026-10-02 on can carry trim learning.** With `trim_learn_en = 1`
+  the applied `pitch_trim_rad` walks toward the balance point while the robot
+  is parked, and the vel-PI integrator is offloaded by the same amount, so a
+  falling `theta_ref` with a rising trim (or the reverse) is the learner working,
+  not the velocity loop doing something. Check the HOST log for `Trim learn:` lines.
 
 ### 4.11 Band-split the pitch error before blaming a loop
 
@@ -414,6 +420,23 @@ print(f"|tau| p50 {np.percentile(abs(tau),50):.4f}  p99 {np.percentile(abs(tau),
 
 Newest first. Only entries that change the meaning of a field, a metric, or what
 a log can tell you — not every firmware change.
+
+### 2026-10-02 — jump phases reverted, then LANDING/HANDOFF restored
+
+| Change | Effect on analysis |
+|---|---|
+| **`jump_state` meaning depends on the firmware of the day** | 2026-08-11 → 2026-10-02 morning, and again from the 2026-10-02 evening restore: 0 crouch, 1 extend, 2 retract, **3 landing, 4 handoff**. In between (e.g. `LOG0042`): **3 = `JP_DONE`** (stiff hold, no detection) and 4 never appears. |
+| **No live touchdown marker in the reverted interval** | Infer it: liftoff is the wheel-speed spike (\|wm\| > 5 turns/s ~25–40 ms after RETRACT starts, wheels unloaded); first contact is a hip-torque spike (> ~4.5 N·m) plus a gyro spike. `accel_z` reads 0 on the integrated-only IMU, so it can't be used. |
+| **Airborne wheel hold + velocity-PI freeze (evening build)** | From `JUMP: liftoff detected` (HOST log) to the LANDING phase, `whl_tau_l/r` is the wheel-hold command and no longer equals `tau_sym ± tau_yaw`; `tau_sym` still shows the LQR request. `theta_ref` is flat from RETRACT until HANDOFF captures/times out — that is the freeze, not a dead velocity loop. |
+| **Jumps can bounce** | `LOG0042` jumps 3/4 touched down at ~+0.73 s, unloaded again, and recontacted at ~+0.85 s. A first-contact marker is not necessarily the settled landing. |
+
+### 2026-10-02 — trim table + learner, encoder yaw-rate option
+
+| Change | Effect on analysis |
+|---|---|
+| **Pitch trim is a 9-point table** (`lqr_pitch_trim_ret`, `_12` … `_88`, `_ext`); `lqr_trim_curve` (0x0450) retired | `pitch_trim_rad` is now a piecewise-linear function of α. Older `.PARAMS` sidecars still list `lqr_trim_curve`. |
+| **`trim_learn_en`** walks the table toward the parked balance point and offloads the vel-PI integrator by the same amount | During learning, `pitch_trim_rad` and `theta_ref` move in opposite directions with their sum fixed — see §4.10. |
+| **`yaw_rate_src`** (0 gyro, 1 encoders) | `yaw_rate_rads` in telemetry is always the gyro. With `yaw_rate_src = 1` the yaw PI closed on `(v_R − v_L)/0.340`, which you can rebuild from `wm_*_vel_turns_s`. A `.PARAMS` sidecar records which source was used. |
 
 ### 2026-08-10 — as-built mass inventory
 

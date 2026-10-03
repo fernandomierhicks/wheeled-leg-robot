@@ -540,3 +540,44 @@ TRIED AND REVERTED, both recorded in HANDOFF.md:
     gate without it.  THE BLIND SPOT IS STILL THERE.
 
 ---
+
+## 39 · global check + back grooves
+*2026-09-23*
+
+**Chose:** replace straight back_eng grooves with a routed circuit pattern
+
+**Said:** Fernando, 2026-09-23: do a once-over on every assumption in the code that creates the parts, check the parts are correct, then improve the aesthetics as I see fit. Specific note: some parts have small extruded cuts that are just LINES -- he wants a more elaborate circuit-board pattern instead: trapezoidal, 45-degree corners, not plain lines. Inspiration: artistic concepts/ and artistic concepts/circuit/ (routed traces, via pads, HUD corner brackets). The straight lines he means are back_eng on the Femur and the Coupler: four contour-following strips 3.2 and 2.4 mm wide running ~86% of the part's length. Replaced with a routed groove pattern, still engraved (not proud), so it cannot foul the assembly in any pose.
+
+RESULT (measured): Femur back 5 tracks / 321 mm2, Coupler 1 jumper / 32 mm2.
+Openings 0 changed, topology PASS, 21-pose sweep no new collisions on both.
+Thin wall introduced fell: Femur 3329/467 -> 3170/395 mm2 (<3 / <1.5), Coupler
+1167/202 -> 1075/201.  Rules the grooves needed: min_wall land to edges, holes
+and through-cuts; teardrops at 45-deg taps; clear of side-pocket reach; depth
+from the plate's measured face (ZGROOVE), not the quantised ZBACK.
+
+---
+
+
+## 40 · review of decision 39
+*2026-09-23*
+
+**Chose:** Femur back OK; Coupler colours need relief; blue ticks stay; guard the keep-out cache
+
+**Said:** Fernando, 2026-09-23: femur looks good. Coupler doesn't have any relief difference among colors, like the other parts do. Blue tick marks look good (keep them). Yes to fix 5: asmkeepout.load() returning None on a missing cache must stop the build instead of silently growing with no keep-out.
+
+RESULT (measured). THE COUPLER'S FLAT SHOW FACE WAS THE ZT BUG, a third time.
+Every show-face relief feature (raised frame/rail/pads, pockets, windows, the
+accent engraving) hung off ZT, the bbox top.  On the Femur that is the plate;
+on the Coupler it is the bearing-tube end 24.5 mm above it, so all of them were
+built in mid-air or clipped away.  Decision 33 fixed this for the inlay only.
+Now measured from ZS = the plate's own largest horizontal face (_flat_z).
+  Femur reproduces EXACTLY (85.28 cm3, thin 3170.1/394.9) -- ZS == ZT there.
+  Coupler 72.31 -> 73.00 cm3, accent 3.44 -> 2.88 cm3 (now truly recessed).
+  Coupler thin introduced 1075/201 -> 2185/386 mm2 (<3 / <1.5): the raised
+  frame and the windows through it, the same mechanism as the Femur's largest
+  patch.  Openings 0 changed, topology PASS, 21-pose sweep no new collisions.
+FIX 5: asmkeepout.load() now RAISES on a missing cache file (an empty layer
+still returns None -- that is a measurement, a missing file is not).
+
+---
+

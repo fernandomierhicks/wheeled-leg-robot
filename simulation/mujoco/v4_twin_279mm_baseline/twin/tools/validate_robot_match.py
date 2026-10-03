@@ -34,11 +34,7 @@ def simulate_case(alpha: float, perturb_deg: float, duration_s: float = 10.0,
     mujoco.mj_forward(model, data)
 
     controller = SimController(model, data, params, rng_seed=seed)
-    firmware = dict(params.firmware_params)
-    trim = (firmware["lqr_pitch_trim_ret"]
-            + alpha * (firmware["lqr_pitch_trim_ext"]
-                       - firmware["lqr_pitch_trim_ret"])
-            + firmware["lqr_trim_curve"] * alpha * (1.0 - alpha))
+    trim = 0.0  # the trim the twin controller actually applied, from each tick
     errors = []
     peak_command = 0.0
     fault = None
@@ -53,6 +49,7 @@ def simulate_case(alpha: float, perturb_deg: float, duration_s: float = 10.0,
                 use_impedance=False, use_roll_leveling=False,
                 use_suspension=True, use_ff1=True, use_ff2=True,
             )
+            trim = float(tick["pitch_trim"])
             errors.append(tick["pitch"] - tick["theta_ref"] - trim)
             peak_command = max(peak_command, abs(tick["tau_cmd_L"]),
                                abs(tick["tau_cmd_R"]))

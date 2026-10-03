@@ -26,10 +26,10 @@ boot. Set the receiver's own failsafe to **no pulses**, never "hold".
 
 | Ch  | TX Control         | Function             | Details                                                     |
 |-----|--------------------|----------------------|-------------------------------------------------------------|
-| C1  | Roll stick         | Roll setpoint        | 1000–2000 → −1…+1 × `RADIO_ROLL_MAX` → `PARAM_ROLL_CMD_RAD` (active-suspension roll controller; only acts when `roll_ctrl_en=1` in RUNNING) |
-| C2  | Pitch stick        | Forward velocity     | 1000–2000 → −1…+1 × `RADIO_VEL_MAX` → `PARAM_V_CMD_MS`   |
+| C1  | Roll stick         | Yaw rate             | 1000–2000 → −1…+1 × active profile's `yaw_max` → `PARAM_OMEGA_CMD_RDS`, slewed at `yaw_accel_max` [rad/s²] (default 8, 0 = off) so a snapped stick ramps the rate in and out instead of stepping it. One limit for all profiles: P3 takes longest to reach full rate. Also ramps to 0 on link loss. |
+| C2  | Pitch stick        | Forward velocity     | 1000–2000 → −1…+1 × active profile's `vel_max` → `PARAM_V_CMD_MS` |
 | C3  | Throttle stick     | Hip height / angle   | 1000–2000 → 0…1 → `PARAM_RADIO_HIP_CMD`                   |
-| C4  | Rudder stick       | Yaw rate             | 1000–2000 → −1…+1 × `RADIO_YAW_MAX` → `PARAM_OMEGA_CMD_RDS` |
+| C4  | Rudder stick       | Roll setpoint        | 1000–2000 → −1…+1 × active profile's `roll_max` → `PARAM_ROLL_CMD_RAD` (active-suspension roll controller; only acts when `roll_ctrl_en=1` in RUNNING) |
 | C5  | SB (top row, 2nd from left) | **SD logging** | **Up = start recording, down = stop.** Edge-triggered. A start is refused outside STANDBY/ESTOP (`"CH5 up ignored -- start the log before arming"`) because opening a log preallocates and blocks ~96 ms — but once started, **recording continues through RUNNING**, which is the whole point. Confirmed by a single G5 chirp, so check `buzzer_volume` — there is no LED cue. C5's level no longer gates arming. |
 | C6  | SF (momentary shoulder) | **Jump** | Rising edge > 1990 requests `STATE_JUMPING`. **One jump per edge** — drop C6 and raise it again for another; holding it up does not hop repeatedly. Refused unless the robot is in RUNNING *and* `jump_enable = 1` (default **0**, so this is inert until you deliberately enable it). |
 | C7  | S1 dial            | Live tune, slot 0 of active group | 1000–2000 → active group's slot-0 range → its mapped param. See "Live parameter tuning" below. |
@@ -47,6 +47,15 @@ There is **no "LEGACY mode"**. C5 is always the SD-log switch, C6 is always the
 jump trigger, and gain-group select is always C13. An earlier scheme borrowed
 C5/C6 for group select and is gone; if you find a comment describing it, the
 comment is stale, not the code.
+
+**C1/C4 swap (2026-10-02):** yaw rate moved from C4 to C1, and the roll
+setpoint moved from C1 to C4 (`main.cpp`). The physical stick bound to each
+channel number is unchanged (C1 is still the TX's roll/aileron stick, C4 is
+still the rudder stick) — only which robot command each channel drives
+changed. Both signs (roll's and yaw's inversion) were previously
+bench-verified on the *other* channel's stick and have **not** been
+re-verified on the hardware since the swap — check both directions on the
+bench before trusting them.
 
 ### Where to watch these channels
 

@@ -92,9 +92,16 @@ _ANGLE_PARAM_NAMES = frozenset({
     # standup_pitch_min/max above, checked mid-attempt rather than at arm time.
     "standup_div_fwd",
     "standup_div_bwd",
+    # 9-point pitch-trim table, alpha 0 (ret) ... 1 (ext).
     "lqr_pitch_trim_ret",
+    "lqr_pitch_trim_12",
+    "lqr_pitch_trim_25",
+    "lqr_pitch_trim_38",
+    "lqr_pitch_trim_50",
+    "lqr_pitch_trim_62",
+    "lqr_pitch_trim_75",
+    "lqr_pitch_trim_88",
     "lqr_pitch_trim_ext",
-    "lqr_trim_curve",
     "pitch_wd_fwd_ret",
     "pitch_wd_bwd_ret",
     "pitch_wd_fwd_ext",
@@ -106,15 +113,13 @@ _ANGLE_PARAM_NAMES = frozenset({
     # A hip position offset, not a body angle — but it is still a direct angular
     # quantity in rad, so degrees read better than the 0.15 rad it defaults to.
     "roll_offset_max",
-    # Roll setpoint limits. radio_roll_max is firmware-written from the active
-    # CH9 profile, so the three profile values are where these actually get set;
-    # all four display together or the comparison is unreadable.
-    "radio_roll_max",
+    # Roll setpoint limits: full CH4 deflection is the active CH9 profile's
+    # value. All three display together or the comparison is unreadable.
     "profile1_roll_max",
     "profile2_roll_max",
     "profile3_roll_max",
-    # Live roll setpoint (= CH1_norm * radio_roll_max) and the watchdog that
-    # trips on it — same [rad] shape as the setpoint limits above.
+    # Live roll setpoint (= CH4_norm * active profile's roll_max) and the
+    # watchdog that trips on it — same [rad] shape as the setpoint limits above.
     "roll_cmd_rad",
     "roll_watchdog_limit",
 })
@@ -138,17 +143,30 @@ _ANGULAR_RATE_PARAM_NAMES = frozenset({
     "jump_land_gyro_imp",
     "sim_pitch_rate",
     "standup_cap_rate",
-    "radio_yaw_max",
     "profile1_yaw_max",
     "profile2_yaw_max",
     "profile3_yaw_max",
     # Slew-rate limit on roll_cmd_rad (angle set above) before the PD loop.
     "roll_rate_lim",
 })
+_ANGULAR_ACCEL_PARAM_NAMES = frozenset({
+    # Slew limit on omega_cmd_rds; shown in deg/s² so it reads against the
+    # profileN_yaw_max rates above, which display in deg/s.
+    "yaw_accel_max",
+})
 _DISPLAY_UNIT_BY_PARAM = {
     **{_PARAM_BY_NAME[name]: "deg" for name in _ANGLE_PARAM_NAMES},
     **{_PARAM_BY_NAME[name]: "deg/s" for name in _ANGULAR_RATE_PARAM_NAMES},
+    **{_PARAM_BY_NAME[name]: "deg/s²" for name in _ANGULAR_ACCEL_PARAM_NAMES},
 }
+
+# Writable in firmware on purpose -- robot_ctl.py motion_set drives them, with
+# gui_motion_ctrl_en, through remote_control.py -- but in this tab they are
+# live readouts: unless gui_motion_ctrl_en is on, radio_update() overwrites
+# them every tick, so an edit box here only invites a stray write.
+_GUI_READONLY_PARAM_IDS = frozenset(
+    _PARAM_BY_NAME[name] for name in ("v_cmd_ms", "omega_cmd_rds")
+)
 _RAD_TO_DEG = 180.0 / math.pi
 
 
@@ -172,7 +190,7 @@ _GROUP_NAMES = {
     0x03: "Wheel",
     0x04: "Control",
     0x05: "Command",
-    0x06: "RC Receiver (iBus)",
+    0x06: "RC Link (CRSF)",
     0x07: "Safety / Watchdog / Bypass",
     0x08: "Standing Up",
     0x09: "Diagnostics",
@@ -261,6 +279,11 @@ _ROLL_HIP_OVERRIDE_PARAM_IDS = frozenset({
     0x0523,  # PARAM_HIP_ROLL_KP
     0x0524,  # PARAM_HIP_ROLL_KD
 })
+# Coordinated-turn lean (lean_turn.h): natively GROUP_CONTROL in
+# generated_param_table.inc, but allocated right after the 0x05xx jump tail
+# (0x054E-0x0553), so the id>>8 heuristic would also get these wrong — same
+# override pattern as the roll-controller set above.
+_LEAN_TURN_OVERRIDE_PARAM_IDS = frozenset(range(0x054E, 0x0554))
 # Jump params live natively in GROUP_CONTROL (param_ids.h) but are pulled into
 # their own top-level group here, the same move Standing Up made above: 38
 # params (2026-08-13) across two non-contiguous id blocks — 0x0415-0x0419,
@@ -311,11 +334,21 @@ _JUMP_RETRACT_PARAM_IDS = frozenset({
 })
 _JUMP_LANDING_PARAM_IDS = frozenset(range(0x053A, 0x053F))
 _JUMP_HANDOFF_PARAM_IDS = frozenset(range(0x053F, 0x0548))
-_BALANCE_TRIM_HIP_PARAM_IDS = frozenset({
-    0x043C,  # PARAM_LQR_PITCH_TRIM_RET
-    0x043D,  # PARAM_LQR_PITCH_TRIM_EXT
-    0x0450,  # PARAM_LQR_PITCH_TRIM_CURVE
-})
+# Display order within the subgroup: the learn switch, then the table points in
+# leg-height order (ret and ext have older, lower IDs than the interior points).
+_BALANCE_TRIM_DISPLAY_ORDER = (
+    0x0452,  # PARAM_TRIM_LEARN_EN
+    0x043C,  # PARAM_LQR_PITCH_TRIM_RET  (alpha 0)
+    0x0453,  # PARAM_LQR_PITCH_TRIM_12   (alpha 0.125)
+    0x0454,  # PARAM_LQR_PITCH_TRIM_25
+    0x0455,  # PARAM_LQR_PITCH_TRIM_38
+    0x0456,  # PARAM_LQR_PITCH_TRIM_50
+    0x0457,  # PARAM_LQR_PITCH_TRIM_62
+    0x0458,  # PARAM_LQR_PITCH_TRIM_75
+    0x0459,  # PARAM_LQR_PITCH_TRIM_88
+    0x043D,  # PARAM_LQR_PITCH_TRIM_EXT  (alpha 1)
+)
+_BALANCE_TRIM_HIP_PARAM_IDS = frozenset(_BALANCE_TRIM_DISPLAY_ORDER)
 
 # ── Bench-mode presets ────────────────────────────────────────────────────────
 # One-click sets of the params that decide whether RUNNING will arm, so a bench
@@ -410,6 +443,16 @@ _PRESET_TOLERANCE      = 1e-3
 # with a simultaneous burst. Unchanged params are silent by firmware design.
 _PRESET_SEND_SPACING_MS = 90
 
+# CRSF link statistics live natively in GROUP_COMMAND (0x0554-0x0558) but are
+# read-only link health, not commands. They take the top-level RC-link slot the
+# old iBus receiver params used (no 0x06xx ids remain in schema.json). Matched
+# by name prefix rather than an id range so a future crsf_* param lands here
+# too instead of silently dropping into Command.
+_GROUP_RC_LINK = 0x06
+_CRSF_PARAM_IDS = frozenset(
+    pid for name, pid in _PARAM_BY_NAME.items() if name.startswith("crsf_")
+)
+
 # Dev/debug params pulled out of their native group into their own top-level
 # Diagnostics section.
 _GROUP_DIAGNOSTICS = 0x09
@@ -434,12 +477,16 @@ def _effective_group(param_id: int) -> int:
         return _GROUP_DIAGNOSTICS
     if param_id in _SYSTEM_OVERRIDE_PARAM_IDS:
         return _GROUP_SYSTEM
+    if param_id in _CRSF_PARAM_IDS:
+        return _GROUP_RC_LINK
     if param_id in _ROLL_CONTROL_OVERRIDE_PARAM_IDS:
         return 0x04  # GROUP_CONTROL
     if param_id in _JUMP_PARAM_IDS:
         return _GROUP_JUMP
     if param_id in _ROLL_HIP_OVERRIDE_PARAM_IDS:
         return 0x02  # GROUP_HIP
+    if param_id in _LEAN_TURN_OVERRIDE_PARAM_IDS:
+        return 0x04  # GROUP_CONTROL
     if param_id in _BALANCE_TRIM_HIP_PARAM_IDS:
         return 0x02  # GROUP_HIP
     return (param_id >> 8) & 0xFF
@@ -481,10 +528,11 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     (frozenset({0x0400, 0x0402}), 0x04, "LQR Core"),
     (range(0x0424, 0x0429), 0x04, "LQR Gains"),
     (range(0x0404, 0x040C), 0x04, "Velocity PI"),
-    (range(0x040C, 0x0412), 0x04, "Yaw PI"),
+    (frozenset(range(0x040C, 0x0412)) | {0x0451, 0x045A}, 0x04, "Yaw PI"),  # + yaw_rate_src, yaw_accel_max
     (range(0x0412, 0x0415), 0x04, "Feedforward"),
     (frozenset({0x0401, 0x0420, 0x0421, 0x0422}), 0x04, "Sim Injection"),
     (_ROLL_CONTROL_OVERRIDE_PARAM_IDS, 0x04, "Roll"),
+    (_LEAN_TURN_OVERRIDE_PARAM_IDS, 0x04, "Coordinated Turn"),
     (range(0x043E, 0x0446), 0x04, "Pitch Envelope"),  # theta_max_*, pitch_wd_* (fwd/bwd x ret/ext)
     (_LQR_BARRIER_PARAM_IDS, 0x04, "Backward Pitch Barrier"),
 
@@ -504,11 +552,12 @@ _SUBGROUPS: list[tuple[range | frozenset[int], int, str]] = [
     # The roll members of these four sets were allocated later, out of the 0x052x
     # tail rather than next to their siblings, so they are listed explicitly —
     # they belong with the radio/profile values they are set alongside, not
-    # loose at the bottom of Command.
+    # loose at the bottom of Command. 0x0501/0x0502 (radio_vel/yaw_max) and
+    # 0x0526 (radio_roll_max) were read-only copies of the active profile and are
+    # retired; the sticks now scale straight off profileN_*.
     (frozenset(range(0x0500, 0x0504)) | frozenset({
-        0x0525,  # roll_cmd_rad   (live CH1 setpoint, same as radio_hip_cmd)
-        0x0526,  # radio_roll_max (readonly, copied from the active profile)
-    }), 0x05, "Radio Scale"),      # + radio_hip_cmd, radio_vel_max, radio_yaw_max, live_tune_ch7_val
+        0x0525,  # roll_cmd_rad   (live CH4 setpoint, same as radio_hip_cmd)
+    }), 0x05, "Radio Commands"),   # + radio_hip_cmd, live_tune_ch7_val
     (frozenset(range(0x0510, 0x0513)) | frozenset({0x0527}), 0x05, "Profile 1"),  # vel_max/yaw_max/torque_lim/roll_max
     (frozenset(range(0x0513, 0x0516)) | frozenset({0x0528}), 0x05, "Profile 2"),
     (frozenset(range(0x0516, 0x0519)) | frozenset({0x0529}), 0x05, "Profile 3"),
@@ -528,12 +577,13 @@ _SUBGROUP_COLORS: dict[str, str] = {
     "Feedforward":    "#ccaaff",
     "Sim Injection":  "#88ddcc",
     "Roll":           "#55ccff",
+    "Coordinated Turn": "#33ccaa",
     "Pitch Envelope": "#ff99aa",
     "Backward Pitch Barrier": "#ff7788",
     "Divergence Limits": "#ff8866",
     "Plant Identification": "#ffdd66",
     "Safety":         "#ff5555",
-    "Radio Scale":    "#ff88cc",
+    "Radio Commands": "#ff88cc",
     "Profile 1":      "#ffdd88",
     "Profile 2":      "#ffcc66",
     "Profile 3":      "#ffaa33",
@@ -613,12 +663,17 @@ def _flag_tooltip(flags: int) -> str:
     return "\n".join(lines) or "No flags"
 
 
+def _firmware_unit(unit: str) -> str:
+    """deg -> rad, deg/s -> rad/s, deg/s² -> rad/s²."""
+    return unit.replace("deg", "rad")
+
+
 def _display_description(description: str, unit: str | None) -> str:
     if unit is None:
         return description
-    converted = description.replace("[rad/s]", "[deg/s]").replace("[rad]", "[deg]")
-    firmware_unit = "rad/s" if unit == "deg/s" else "rad"
-    return f"{converted} GUI displays {unit}; firmware stores {firmware_unit}."
+    converted = (description.replace("[rad/s^2]", "[deg/s²]")
+                 .replace("[rad/s]", "[deg/s]").replace("[rad]", "[deg]"))
+    return f"{converted} GUI displays {unit}; firmware stores {_firmware_unit(unit)}."
 
 
 # ── One param row ─────────────────────────────────────────────────────────────
@@ -650,7 +705,7 @@ class _ParamRow(QWidget):
         self._confirmed = value is not None
         self._display_unit = _DISPLAY_UNIT_BY_PARAM.get(param_id)
         self._display_scale = _RAD_TO_DEG if self._display_unit else 1.0
-        readonly        = bool(flags & _FLAG_READONLY) if flags is not None else False
+        readonly        = self.is_readonly()
 
         self._flash_timer = QTimer(self)
         self._flash_timer.setSingleShot(True)
@@ -665,9 +720,9 @@ class _ParamRow(QWidget):
         )
         lbl.setFixedWidth(190)
         if self._display_unit:
-            firmware_unit = "rad/s" if self._display_unit == "deg/s" else "rad"
             lbl.setToolTip(
-                f"{name}: GUI uses {self._display_unit}; firmware uses {firmware_unit}."
+                f"{name}: GUI uses {self._display_unit}; "
+                f"firmware uses {_firmware_unit(self._display_unit)}."
             )
         lbl.setStyleSheet(f"color: {TEXT}; font-family: Consolas; font-size: 11px;")
         lay.addWidget(lbl)
@@ -687,7 +742,12 @@ class _ParamRow(QWidget):
             # never have to special-case it.
             self._edit.setPlaceholderText("?")
         self._edit.setFixedWidth(96)
-        if self._display_unit:
+        if param_id in _GUI_READONLY_PARAM_IDS:
+            self._edit.setToolTip(
+                "Live readout: written by the radio every tick, or by "
+                "robot_ctl.py motion_set (gui_motion_ctrl_en)."
+            )
+        elif self._display_unit:
             self._edit.setToolTip(
                 f"Enter {self._display_unit}; converted to radians when sent."
             )
@@ -735,7 +795,7 @@ class _ParamRow(QWidget):
     def update_value(self, value: float, min_val: float, max_val: float, flags: int):
         self._flags     = flags
         self._confirmed = True
-        readonly = bool(flags & _FLAG_READONLY)
+        readonly = self.is_readonly()
         self._edit.setEnabled(not readonly)
         self._btn.setEnabled(not readonly)
         self._range_lbl.set_full_text(self._format_range(min_val, max_val))
@@ -747,7 +807,8 @@ class _ParamRow(QWidget):
         self._flash_timer.start(700)
 
     def is_readonly(self) -> bool:
-        return bool(self._flags & _FLAG_READONLY)
+        return (bool(self._flags & _FLAG_READONLY)
+                or self._id in _GUI_READONLY_PARAM_IDS)
 
     def is_confirmed(self) -> bool:
         return self._confirmed
@@ -1531,7 +1592,13 @@ class ParamsTab(QWidget):
         return row
 
     def _populate_static_rows(self):
-        for param_id in sorted(_PARAM_DEFS):
+        def display_key(param_id: int) -> tuple[int, int]:
+            if param_id in _BALANCE_TRIM_HIP_PARAM_IDS:
+                return (_BALANCE_TRIM_DISPLAY_ORDER[0],
+                        _BALANCE_TRIM_DISPLAY_ORDER.index(param_id))
+            return (param_id, 0)
+
+        for param_id in sorted(_PARAM_DEFS, key=display_key):
             name, description = _PARAM_DEFS[param_id]
             self._ensure_row(param_id, name, description)
         self._reapply_visibility()

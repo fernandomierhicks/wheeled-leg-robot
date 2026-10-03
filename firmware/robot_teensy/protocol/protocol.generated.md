@@ -109,6 +109,7 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x040F` | `PARAM_YAW_PI_TORQUE_MAX` | `yaw_pi_torque_max` | 0.2 | 0 … 3 | persistent |
 | `0x0410` | `PARAM_YAW_PI_INT_MAX` | `yaw_pi_int_max` | 0.5 | 0 … 3 | persistent |
 | `0x0411` | `PARAM_OMEGA_CMD_RDS` | `omega_cmd_rds` | 0 | -4 … 4 | command |
+| `0x045A` | `PARAM_YAW_ACCEL_MAX` | `yaw_accel_max` | 8 | 0 … 200 | persistent |
 | `0x0412` | `PARAM_FF1_ALPHA` | `ff1_alpha` | 0 | 0 … 1 | - |
 | `0x0413` | `PARAM_FF2_ALPHA` | `ff2_alpha` | 0 | 0 … 1 | - |
 | `0x0414` | `PARAM_FF1_KT_HIP` | `ff1_kt_hip` | 1 | 0 … 5 | readonly |
@@ -150,10 +151,11 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x054A` | `PARAM_JUMP_ARM_MAX_YAW_RATE_RADS` | `jmp_arm_yaw_rate` | 1 | 0 … 6 | persistent |
 | `0x054B` | `PARAM_JUMP_ARM_MAX_ROLL_RAD` | `jmp_arm_roll` | 0.12 | 0 … 1 | persistent |
 | `0x054C` | `PARAM_JUMP_AIRBORNE_WHEEL_VEL_LIMIT` | `jmp_air_vel_lim` | 22 | 0 … 30 | persistent |
+| `0x0559` | `PARAM_JUMP_AIRBORNE_WHEEL_HOLD_KP` | `jmp_air_whl_kp` | 0.03 | 0 … 0.2 | persistent |
 | `0x0420` | `PARAM_ENABLE_SIM_PITCH_RAD` | `enable_sim_pitch` | 0 | 0 … 1 | - |
 | `0x0421` | `PARAM_SIM_PITCH_RATE_RAD_S` | `sim_pitch_rate` | 0 | -10 … 10 | - |
 | `0x0422` | `PARAM_ENABLE_SIM_PITCH_RATE` | `enable_sim_prate` | 0 | 0 … 1 | - |
-| `0x0423` | `PARAM_PITCH_WATCHDOG_ENABLE` | `pitch_watchdog_en` | 1 | 0 … 1 | - |
+| `0x0423` | `PARAM_PITCH_WATCHDOG_ENABLE` | `pitch_watchdog_en` | 1 | 0 … 1 | persistent |
 | `0x0424` | `PARAM_LQR_K_PITCH_RET` | `lqr_k_pitch_ret` | -0.3 | -20 … 0 | persistent |
 | `0x0425` | `PARAM_LQR_K_RATE_RET` | `lqr_k_rate_ret` | -0.1 | -5 … 0 | persistent |
 | `0x0426` | `PARAM_LQR_K_PITCH_EXT` | `lqr_k_pitch_ext` | -0.3 | -15 … 0 | persistent |
@@ -178,8 +180,8 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0439` | `PARAM_STANDUP_ATTEMPT_TIMEOUT_S` | `standup_timeout` | 1.5 | 0.2 … 5 | persistent |
 | `0x043A` | `PARAM_STANDUP_MAX_RETRIES` | `standup_max_retries` | 2 | 0 … 10 | persistent |
 | `0x043B` | `PARAM_STANDUP_RETRY_PAUSE_S` | `standup_retry_pause` | 0.3 | 0 … 3 | persistent |
-| `0x043C` | `PARAM_LQR_PITCH_TRIM_RET` | `lqr_pitch_trim_ret` | -0.14 | -0.3491 … 0.3491 | persistent |
-| `0x043D` | `PARAM_LQR_PITCH_TRIM_EXT` | `lqr_pitch_trim_ext` | 0 | -0.3491 … 0.3491 | persistent |
+| `0x043C` | `PARAM_LQR_PITCH_TRIM_RET` | `lqr_pitch_trim_ret` | -0.0244 | -0.3491 … 0.3491 | persistent |
+| `0x043D` | `PARAM_LQR_PITCH_TRIM_EXT` | `lqr_pitch_trim_ext` | -0.0297 | -0.3491 … 0.3491 | persistent |
 | `0x043E` | `PARAM_VEL_PI_THETA_MAX_FWD_RET` | `theta_max_fwd_ret` | 0.5235988 | 0.1 … 0.6981317 | persistent |
 | `0x043F` | `PARAM_VEL_PI_THETA_MAX_BWD_RET` | `theta_max_bwd_ret` | 0.1745329 | 0.1 … 0.6981317 | persistent |
 | `0x0440` | `PARAM_VEL_PI_THETA_MAX_FWD_EXT` | `theta_max_fwd_ext` | 0.5235988 | 0.1 … 0.6981317 | persistent |
@@ -199,20 +201,26 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x044D` | `PARAM_PLANT_ID_F0_HZ` | `plant_id_f0` | 0.2 | 0.2 … 40 | - |
 | `0x044E` | `PARAM_PLANT_ID_F1_HZ` | `plant_id_f1` | 10 | 0.2 … 40 | - |
 | `0x044F` | `PARAM_PLANT_ID_DURATION_S` | `plant_id_dur` | 5 | 0.5 … 20 | - |
-| `0x0450` | `PARAM_LQR_PITCH_TRIM_CURVE` | `lqr_trim_curve` | 0 | -0.3491 … 0.3491 | persistent |
+| `0x0451` | `PARAM_YAW_RATE_SRC` | `yaw_rate_src` | 0 | 0 … 1 | persistent |
+| `0x0452` | `PARAM_TRIM_LEARN_EN` | `trim_learn_en` | 0 | 0 … 1 | - |
+| `0x0453` | `PARAM_LQR_PITCH_TRIM_12` | `lqr_pitch_trim_12` | -0.0593 | -0.3491 … 0.3491 | persistent |
+| `0x0454` | `PARAM_LQR_PITCH_TRIM_25` | `lqr_pitch_trim_25` | -0.085 | -0.3491 … 0.3491 | persistent |
+| `0x0455` | `PARAM_LQR_PITCH_TRIM_38` | `lqr_pitch_trim_38` | -0.0803 | -0.3491 … 0.3491 | persistent |
+| `0x0456` | `PARAM_LQR_PITCH_TRIM_50` | `lqr_pitch_trim_50` | -0.067 | -0.3491 … 0.3491 | persistent |
+| `0x0457` | `PARAM_LQR_PITCH_TRIM_62` | `lqr_pitch_trim_62` | -0.0536 | -0.3491 … 0.3491 | persistent |
+| `0x0458` | `PARAM_LQR_PITCH_TRIM_75` | `lqr_pitch_trim_75` | -0.04 | -0.3491 … 0.3491 | persistent |
+| `0x0459` | `PARAM_LQR_PITCH_TRIM_88` | `lqr_pitch_trim_88` | -0.0283 | -0.3491 … 0.3491 | persistent |
 | `0x0500` | `PARAM_RADIO_HIP_CMD` | `radio_hip_cmd` | 0 | 0 … 1 | readonly, command |
-| `0x0501` | `PARAM_RADIO_VEL_MAX` | `radio_vel_max` | 0.5 | 0 … 2 | readonly, command |
-| `0x0502` | `PARAM_RADIO_YAW_MAX` | `radio_yaw_max` | 1 | 0 … 4 | readonly, command |
 | `0x0503` | `PARAM_LIVE_TUNE_CH7_VAL` | `live_tune_ch7_val` | 0 | -2 … 4 | readonly, command |
 | `0x051B` | `PARAM_LIVE_TUNE_CH8_VAL` | `live_tune_ch8_val` | 0 | -1 … 0.5 | readonly, command |
 | `0x0510` | `PARAM_PROFILE_1_VEL_MAX` | `profile1_vel_max` | 0.2 | 0 … 2 | persistent |
-| `0x0511` | `PARAM_PROFILE_1_YAW_MAX` | `profile1_yaw_max` | 0.5 | 0 … 4 | persistent |
+| `0x0511` | `PARAM_PROFILE_1_YAW_MAX` | `profile1_yaw_max` | 0.5 | 0 … 17.453293 | persistent |
 | `0x0512` | `PARAM_PROFILE_1_TORQUE_LIM` | `profile1_torque_lim` | 0.1 | 0 … 7 | persistent |
 | `0x0513` | `PARAM_PROFILE_2_VEL_MAX` | `profile2_vel_max` | 0.5 | 0 … 2 | persistent |
-| `0x0514` | `PARAM_PROFILE_2_YAW_MAX` | `profile2_yaw_max` | 1 | 0 … 4 | persistent |
+| `0x0514` | `PARAM_PROFILE_2_YAW_MAX` | `profile2_yaw_max` | 1 | 0 … 17.453293 | persistent |
 | `0x0515` | `PARAM_PROFILE_2_TORQUE_LIM` | `profile2_torque_lim` | 0.2 | 0 … 7 | persistent |
 | `0x0516` | `PARAM_PROFILE_3_VEL_MAX` | `profile3_vel_max` | 1 | 0 … 2 | persistent |
-| `0x0517` | `PARAM_PROFILE_3_YAW_MAX` | `profile3_yaw_max` | 2 | 0 … 4 | persistent |
+| `0x0517` | `PARAM_PROFILE_3_YAW_MAX` | `profile3_yaw_max` | 2 | 0 … 17.453293 | persistent |
 | `0x0518` | `PARAM_PROFILE_3_TORQUE_LIM` | `profile3_torque_lim` | 0.3 | 0 … 7 | persistent |
 | `0x0519` | `PARAM_ACTIVE_PROFILE` | `active_profile` | 0 | 0 … 2 | readonly, command |
 | `0x051A` | `PARAM_LIVE_TUNE_LATCH` | `live_tune_latch` | 0 | 0 … 1 | command |
@@ -230,7 +238,6 @@ Do not edit; generated from `protocol/schema.json`.
 | `0x0523` | `PARAM_HIP_ROLL_KP` | `hip_roll_kp` | 3 | 0 … 100 | persistent |
 | `0x0524` | `PARAM_HIP_ROLL_KD` | `hip_roll_kd` | 0.5 | 0 … 5 | persistent |
 | `0x0525` | `PARAM_ROLL_CMD_RAD` | `roll_cmd_rad` | 0 | -1 … 1 | readonly, command |
-| `0x0526` | `PARAM_RADIO_ROLL_MAX` | `radio_roll_max` | 0.1 | 0 … 0.7853982 | readonly, command |
 | `0x0527` | `PARAM_PROFILE_1_ROLL_MAX` | `profile1_roll_max` | 0.05 | 0 … 0.7853982 | persistent |
 | `0x0528` | `PARAM_PROFILE_2_ROLL_MAX` | `profile2_roll_max` | 0.1 | 0 … 0.7853982 | persistent |
 | `0x0529` | `PARAM_PROFILE_3_ROLL_MAX` | `profile3_roll_max` | 0.17 | 0 … 0.7853982 | persistent |

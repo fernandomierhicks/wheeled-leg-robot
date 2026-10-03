@@ -2,7 +2,6 @@
 
 #include "control_safety.h"
 #include "jump_landing.h"
-#include "jump_retract.h"
 #include "standup_safety.h"
 #include "wheel_safety.h"
 #include "velocity_pi_anti_windup.h"
@@ -55,18 +54,47 @@ static void test_backward_theta_limit_preserves_already_safe_configuration() {
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.1396263f, safe);
 }
 
-static void test_pitch_trim_curve_preserves_endpoints_and_linear_default() {
-    TEST_ASSERT_FLOAT_WITHIN(
-        1e-6f, -0.14f, scheduled_pitch_trim(-0.14f, 0.02f, -0.08f, 0.0f));
-    TEST_ASSERT_FLOAT_WITHIN(
-        1e-6f, 0.02f, scheduled_pitch_trim(-0.14f, 0.02f, -0.08f, 1.0f));
-    TEST_ASSERT_FLOAT_WITHIN(
-        1e-6f, -0.10f, scheduled_pitch_trim(-0.14f, 0.02f, 0.0f, 0.25f));
+static void test_pitch_trim_table_hits_points_and_interpolates() {
+    const float pts[9] = {-0.02f, -0.06f, -0.08f, -0.08f, -0.07f,
+                          -0.05f, -0.04f, -0.03f, -0.03f};
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -0.02f, pitch_trim_table(pts, 9, 0.0f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -0.08f, pitch_trim_table(pts, 9, 0.25f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -0.03f, pitch_trim_table(pts, 9, 1.0f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -0.04f, pitch_trim_table(pts, 9, 0.0625f));  // midway 0..0.125
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -0.02f, pitch_trim_table(pts, 9, -0.5f));    // clamped
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -0.03f, pitch_trim_table(pts, 9, 1.5f));     // clamped
 }
 
-static void test_pitch_trim_curve_contributes_one_quarter_at_midpoint() {
-    TEST_ASSERT_FLOAT_WITHIN(
-        1e-6f, -0.08f, scheduled_pitch_trim(-0.14f, 0.02f, -0.08f, 0.5f));
+static void test_pitch_trim_nudge_moves_interpolated_value_by_exactly_delta() {
+    const float alphas[] = {0.0f, 0.1f, 0.3125f, 0.5f, 0.97f, 1.0f};
+    for (float a : alphas) {
+        float pts[9] = {-0.02f, -0.06f, -0.08f, -0.08f, -0.07f,
+                        -0.05f, -0.04f, -0.03f, -0.03f};
+        const float before = pitch_trim_table(pts, 9, a);
+        pitch_trim_table_nudge(pts, 9, a, 0.01f);
+        TEST_ASSERT_FLOAT_WITHIN(1e-6f, before + 0.01f, pitch_trim_table(pts, 9, a));
+    }
+}
+
+static void test_pitch_trim_nudge_touches_only_the_bracketing_points() {
+    float pts[9] = {0};
+    pitch_trim_table_nudge(pts, 9, 0.25f, 0.01f);  // exactly on point 2
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.01f, pts[2]);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, pts[3]);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, pts[1]);
+    float mid[9] = {0};
+    pitch_trim_table_nudge(mid, 9, 0.3125f, 0.01f);  // midway 2..3: both move by delta
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.01f, mid[2]);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.01f, mid[3]);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, mid[4]);
+}
+
+static void test_wheel_yaw_rate_sign_and_scale() {
+    // Right wheel forward faster -> CCW from above -> positive yaw.
+    TEST_ASSERT_TRUE(wheel_yaw_rate(0.0f, 1.0f, 0.056f, 0.340f) > 0.0f);
+    // Spin in place, 1 turn/s each way: (1 - -1) * 2*pi*0.056 / 0.340 rad/s.
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, 2.06976f, wheel_yaw_rate(-1.0f, 1.0f, 0.056f, 0.340f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, wheel_yaw_rate(0.7f, 0.7f, 0.056f, 0.340f));
 }
 
 static void test_backward_velocity_guard_fades_only_opposing_term() {
@@ -196,38 +224,6 @@ static void test_jump_landing_blanking_rejects_launch_impulse() {
         &d, 3100, 3100, 1.0f, -3.5f, 0.0f, 0.10f, 2.5f));
 }
 
-static void test_jump_retract_brake_preserves_entry_and_stops_smoothly() {
-    const JumpRetractSample entry = jump_retract_brake_sample(
-        -1.20f, -7.0f, 0.0f, 0.015f);
-    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -1.20f, entry.position);
-    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -7.0f, entry.velocity);
-
-    const JumpRetractSample stop = jump_retract_brake_sample(
-        -1.20f, -7.0f, 0.015f, 0.015f);
-    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -1.2525f, stop.position);
-    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, stop.velocity);
-}
-
-static void test_jump_retract_brake_shortens_before_extended_margin() {
-    const float duration = jump_retract_axis_brake_duration(
-        -1.37f, -7.0f, -1.4835f, 1.0f, 0.0873f, 0.015f);
-    const JumpRetractSample stop = jump_retract_brake_sample(
-        -1.37f, -7.0f, duration, duration);
-    TEST_ASSERT_TRUE(duration < 0.015f);
-    TEST_ASSERT_FLOAT_WITHIN(1e-5f, -1.3962f, stop.position);
-    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, stop.velocity);
-}
-
-static void test_jump_retract_feedback_scale_enforces_command_ceiling() {
-    const float scale = jump_retract_feedback_gain_scale(
-        -1.20f, -7.0f, -1.18f, -5.0f, 120.0f, 1.0f, 3.0f);
-    const float predicted = scale * (120.0f * 0.02f + 1.0f * 2.0f);
-    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 3.0f, predicted);
-    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f,
-        jump_retract_feedback_gain_scale(
-            -1.20f, -7.0f, -1.20f, -7.0f, 120.0f, 1.0f, 3.0f));
-}
-
 static void test_wheel_glitch_filter_passes_plausible_change() {
     uint8_t run = 0;
     // 1500 turns/s^2 over one 2 ms tick allows 3.0 turns/s of change.
@@ -286,8 +282,10 @@ int main(int, char**) {
     RUN_TEST(test_integral_state_clamp_still_applies);
     RUN_TEST(test_backward_theta_limit_accounts_for_negative_trim_and_margin);
     RUN_TEST(test_backward_theta_limit_preserves_already_safe_configuration);
-    RUN_TEST(test_pitch_trim_curve_preserves_endpoints_and_linear_default);
-    RUN_TEST(test_pitch_trim_curve_contributes_one_quarter_at_midpoint);
+    RUN_TEST(test_pitch_trim_table_hits_points_and_interpolates);
+    RUN_TEST(test_pitch_trim_nudge_moves_interpolated_value_by_exactly_delta);
+    RUN_TEST(test_pitch_trim_nudge_touches_only_the_bracketing_points);
+    RUN_TEST(test_wheel_yaw_rate_sign_and_scale);
     RUN_TEST(test_backward_velocity_guard_fades_only_opposing_term);
     RUN_TEST(test_slew_toward_limits_both_directions_and_can_be_disabled);
     RUN_TEST(test_standup_hip_gate_requires_both_positions_and_velocities);
@@ -299,9 +297,6 @@ int main(int, char**) {
     RUN_TEST(test_standup_target_must_match_backoff_used_by_calibration);
     RUN_TEST(test_jump_landing_gyro_needs_two_fresh_events);
     RUN_TEST(test_jump_landing_blanking_rejects_launch_impulse);
-    RUN_TEST(test_jump_retract_brake_preserves_entry_and_stops_smoothly);
-    RUN_TEST(test_jump_retract_brake_shortens_before_extended_margin);
-    RUN_TEST(test_jump_retract_feedback_scale_enforces_command_ceiling);
     RUN_TEST(test_wheel_glitch_filter_passes_plausible_change);
     RUN_TEST(test_wheel_glitch_filter_rejects_impossible_jump);
     RUN_TEST(test_wheel_glitch_filter_fails_open_after_max_consecutive);

@@ -9,8 +9,9 @@ bottom.
 **Phase 2 — the add/remove map and the free-space measurement — DONE, 2026-09-20.**
 **Phase 3 — THE REBUILD — the three links are built; next is a GLOBAL CHECK.**
 
-State as of the last commit touching this pipeline (`cc829d3`, 2026-09-21).
-Nothing has been built since, so every number below is what is on disk.
+State as of 2026-09-23 (decision 39): GLOBAL CHECK RE-RUN from clean, and the
+Femur/Coupler back engraving redrawn as a circuit board.  Every number below
+was re-measured on disk that day.  See "Global check, 2026-09-23" below.
 
 | # | constraint | state on Femur / Coupler / Tibia |
 |---|---|---|
@@ -18,7 +19,7 @@ Nothing has been built since, so every number below is what is on disk.
 | 2 | collision free through the stroke | **PASSES** — 21 poses, no new collisions (three links only) |
 | 3 | no floating pieces | **PASSES** — one solid each; `_drop_detached` raises rather than ship |
 | 4 | no sharp edges | **PASSES** — topology gate: no non-manifold, no free edges, no needles |
-| 5 | no very thin walls | **FAILS** — gate at 1.5 mm: 467 / 202 / 927 mm² introduced |
+| 5 | no very thin walls | **FAILS** — gate at 1.5 mm: 395 / 386 / 927 mm² introduced (Coupler rose when its relief was finally built, dec. 40) |
 | 6 | no bare colour blocks on the back | **PASSES** — drawn grey trace, both faces |
 
 Every opening on all three: **0 changed, worst deviation 0.000 mm³.**
@@ -63,6 +64,53 @@ blind spots that no single gate covers:
    kernel that wrote the files, so none of them can catch an export defect
    (Phase 1). Fernando opening the three `_colour.step` files is the only
    independent check.
+
+### Global check, 2026-09-23 — what was re-run and what it found
+
+Re-run from clean, not trusted: `thinwall.py --selftest` PASS; `verify.py` x3;
+`collide.py --sweep 21` BEFORE and AFTER the change (both "no new collisions",
+model validated 0.0000 mm).  The Tibia reproduces this file to the digit
+(215.12 cm3, 2911.8 / 927.4 mm2).  Datums re-checked against CLAUDE.md:
+Femur |AC| 187.58, Coupler |FE| 169.54, Tibia |CE| 39.01 / |CW| 185.91 /
+|EW| 224.49 / C_offset 5.28 -- all agree.
+
+**The "lines" he complained about were `back_eng`** on the Femur and Coupler:
+four contour-following strips over 86% of the part.  (The short dashes on the
+Coupler and around the Tibia's eyes are SOURCE openings -- untouchable.)  They
+are now `accents.circuit_grooves()`: parallel buses turning together at true
+45 deg, taps with teardrops, 45-deg jumpers, chamfered via pads, laid out per
+part by `back_circuit` in the spec (fractions of length / half-width).
+Engraved 1.2 mm from the plate's MEASURED back face (`ZGROOVE`), never proud.
+
+Four rules the grooves needed, each found by measuring, not predicting:
+  * **min_wall of land** to the edge, source holes, other grooves and the
+    styling's own THROUGH cuts (a track tangent to a cutout sliver left 0.06 mm)
+  * **teardrop at every 45-deg tap** -- the acute wedge is a knife edge
+    (12.4 mm2 of sub-1.5 mm on the Coupler before, 0.2 after)
+  * **clear of the side-wall pockets' plan reach** where their z band touches
+    the groove floor (0.49 mm wall on the Coupler at x=-8.5)
+  * **ZBACK is quantised** (-5.36 on the Femur; the plate face is -5.00), so
+    the groove depth is taken from the plate's own horizontal faces
+
+Net: thin surface introduced FELL on both parts (Femur 3329/467 -> 3170/395,
+Coupler 1167/202 -> 1075/201) because the old strips were themselves making
+thin land.  Less than 2 mm2 of sub-1.5 mm wall remains within 4 mm of any
+groove.  **The Coupler keeps only one 45-deg jumper**: its back is almost all
+through-cuts, side pockets and lightening holes, and nothing else fits at
+min_wall.  Honest, but ask him whether he wants it or none.
+
+Still true, re-confirmed: the Femur drops the same 0.021 cm3 piece every build;
+the left femur has no recipe; the plates are unchecked; the keep-out samples 3
+poses.  NEW: `asmkeepout.load()` returns None when its cache is missing, and
+`_clip`/`_flange_at` then grow with NO keep-out, silently -- trap 16 again.
+FIXED (dec. 40): `asmkeepout.load()` now raises on a missing cache.
+FIXED (dec. 40): the Coupler's show face had NO relief -- frame/rail/pads,
+pockets, windows and the accent engraving all hung off ZT, which on the Coupler
+is the bearing-tube end.  They hang off ZS, the measured plate face, now.  The
+Femur reproduces exactly; the Coupler's thin wall doubled (1075/201 ->
+2185/386) because it now carries the raised frame + windows the Femur has.
+The OCC renders cannot show a 1.2 mm groove well (camera light, no edges);
+`*_colour.step` in SolidWorks is the real check.
 
 ---
 
@@ -631,8 +679,8 @@ of scope.
 
 ```
 part         fused      source    grew      flange     openings      thin <3 / <1.5
-Femur        84.40 cm3   86.74    +8.0 Y    1149 mm2   13, 0 changed   3329 / 467
-Coupler      70.95       74.27    +6.2 Y    1038       21, 0 changed   1167 / 202
+Femur        85.28 cm3   86.74    +8.0 Y    1149 mm2   13, 0 changed   3170 / 395
+Coupler      73.00       74.27    +6.2 Y    1038       21, 0 changed   2185 / 386
 Tibia       215.12      228.12   +12.6 Y    1297       35, 0 changed   2912 / 927
 Side panel   89.99       92.01    +7.2 Y     289        0 changed      (out of scope)
 RobotMount  107.07      110.32    +6.0 Y    1023        0 changed      (out of scope)

@@ -6,7 +6,8 @@ import numpy as np
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from analysis.leg_height_sweep import (
-    alpha_plateaus, band_rms, fit_trim_schedule, rate_limit_duty,
+    TRIM_TABLE_PARAMS, alpha_plateaus, band_rms, rate_limit_duty,
+    trim_table_from_plateaus,
 )
 
 
@@ -90,32 +91,30 @@ class RateLimitTests(unittest.TestCase):
         self.assertAlmostEqual(report["rate_lim"], limit, delta=0.02)
 
 
-class TrimFitTests(unittest.TestCase):
-    def test_fit_recovers_the_firmware_schedule_it_was_generated_from(self):
-        ret, ext, curve = -0.096, -0.060, -0.34
-        alphas = np.array([0.0, 0.25, 0.5, 0.75])
-        trims = ret + alphas * (ext - ret) + curve * alphas * (1 - alphas)
-        fit = fit_trim_schedule(alphas, trims)
-        self.assertAlmostEqual(fit["trim_ret"], ret, places=6)
-        self.assertAlmostEqual(fit["trim_ext"], ext, places=6)
-        self.assertAlmostEqual(fit["trim_curve"], curve, places=6)
-        self.assertLess(fit["max_residual_rad"], 1e-9)
+class TrimTableTests(unittest.TestCase):
+    def test_points_on_the_table_alphas_come_back_exactly(self):
+        alphas = [0.0, 0.25, 0.5, 1.0]
+        balances = [-0.02, -0.085, -0.067, -0.03]
+        table = trim_table_from_plateaus(alphas, balances)
+        self.assertEqual(table["params"], TRIM_TABLE_PARAMS)
+        self.assertAlmostEqual(table["points_rad"][0], -0.02, places=9)
+        self.assertAlmostEqual(table["points_rad"][2], -0.085, places=9)
+        self.assertAlmostEqual(table["points_rad"][4], -0.067, places=9)
+        self.assertAlmostEqual(table["points_rad"][8], -0.03, places=9)
+        self.assertAlmostEqual(table["points_rad"][1], -0.0525, places=9)  # midway 0..0.25
+        self.assertFalse(any(table["extrapolated"]))
 
-    def test_two_points_fit_a_line_and_leave_the_curve_at_zero(self):
-        fit = fit_trim_schedule([0.0, 0.5], [-0.10, -0.08])
-        self.assertEqual(fit["trim_curve"], 0.0)
-        self.assertAlmostEqual(fit["trim_ret"], -0.10, places=6)
-        self.assertAlmostEqual(fit["trim_ext"], -0.06, places=6)
+    def test_points_outside_the_measured_span_are_held_and_flagged(self):
+        table = trim_table_from_plateaus([0.46, 0.22], [-0.095, -0.085])  # unsorted on purpose
+        self.assertEqual(table["alpha_span"], (0.22, 0.46))
+        self.assertAlmostEqual(table["points_rad"][0], -0.085, places=9)
+        self.assertAlmostEqual(table["points_rad"][8], -0.095, places=9)
+        self.assertEqual(table["extrapolated"],
+                         [True, True, False, False, True, True, True, True, True])
 
-    def test_a_sweep_short_of_full_extension_is_flagged_as_extrapolated(self):
-        self.assertTrue(fit_trim_schedule([0.01, 0.25, 0.46],
-                                          [-0.096, -0.113, -0.095])["extrapolated"])
-        self.assertFalse(fit_trim_schedule([0.0, 0.5, 0.95],
-                                           [-0.10, -0.09, -0.07])["extrapolated"])
-
-    def test_a_single_height_cannot_define_a_schedule(self):
+    def test_no_measurement_is_an_error(self):
         with self.assertRaises(ValueError):
-            fit_trim_schedule([0.3], [-0.1])
+            trim_table_from_plateaus([], [])
 
 
 if __name__ == "__main__":

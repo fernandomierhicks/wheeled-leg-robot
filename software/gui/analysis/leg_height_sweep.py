@@ -23,8 +23,8 @@ What each piece is for:
 - `rate_limit_duty()` — how much of the time vel_pi_rate_lim is slewing
   theta_ref. A rate limiter inside a feedback loop is a describing-function
   limit-cycle source, and it is invisible in any RMS statistic.
-- `fit_trim_schedule()` — least-squares fit of measured balance points to the
-  firmware's own scheduled_pitch_trim() form, so the result is three numbers
+- `trim_table_from_plateaus()` — measured balance points interpolated onto the
+  firmware's 9-point trim table, so the result is nine numbers
   that can be typed straight into params.
 
 **The equilibrium gate is the whole game for the balance point.** A robot that
@@ -381,38 +381,35 @@ def plateau_report(run: DecodedRun,
     return out
 
 
-def fit_trim_schedule(alphas, balances) -> dict:
-    """Fit measured balance points to the firmware's own trim schedule.
+# Firmware trim table: 9 points evenly spaced over alpha [0, 1]
+# (control_loop.cpp TRIM_POINT_PARAMS), named by alpha in percent.
+TRIM_TABLE_PARAMS = ("lqr_pitch_trim_ret", "lqr_pitch_trim_12", "lqr_pitch_trim_25",
+                     "lqr_pitch_trim_38", "lqr_pitch_trim_50", "lqr_pitch_trim_62",
+                     "lqr_pitch_trim_75", "lqr_pitch_trim_88", "lqr_pitch_trim_ext")
+TRIM_TABLE_ALPHAS = tuple(np.linspace(0.0, 1.0, len(TRIM_TABLE_PARAMS)))
 
-    control_safety.h computes
-        trim(a) = trim_ret + a*(trim_ext - trim_ret) + trim_curve*a*(1 - a)
-    so fitting in that basis returns three numbers that go straight into
-    lqr_pitch_trim_ret / _ext / _curve with no further algebra.
 
-    With fewer than three points the quadratic term is dropped rather than
-    fitted to noise. `alpha_span` is reported because trim_ext is the value at
-    a=1: unless the sweep actually reached full extension it is an
-    extrapolation, and the quadratic basis extrapolates hard.
+def trim_table_from_plateaus(alphas, balances) -> dict:
+    """Turn measured balance points into values for the firmware's trim table.
+
+    The firmware interpolates linearly between its table points, so the
+    measured points are interpolated linearly onto the table's alphas. Table
+    points outside the measured span are held at the nearest measurement and
+    flagged in `extrapolated` — they are a guess, not a measurement; the
+    on-robot learner (trim_learn_en) is the way to fill them in.
     """
     alphas = np.asarray(alphas, dtype=np.float64)
     balances = np.asarray(balances, dtype=np.float64)
-    if alphas.size < 2:
-        raise ValueError("need at least two leg heights to fit a trim schedule")
-
-    use_curve = alphas.size >= 3
-    columns = [1.0 - alphas, alphas]
-    if use_curve:
-        columns.append(alphas * (1.0 - alphas))
-    design = np.column_stack(columns)
-    solution, *_ = np.linalg.lstsq(design, balances, rcond=None)
-    residuals = design @ solution - balances
+    if alphas.size < 1:
+        raise ValueError("need at least one measured leg height")
+    order = np.argsort(alphas)
+    alphas, balances = alphas[order], balances[order]
+    table_alphas = np.asarray(TRIM_TABLE_ALPHAS)
     return {
-        "trim_ret": float(solution[0]),
-        "trim_ext": float(solution[1]),
-        "trim_curve": float(solution[2]) if use_curve else 0.0,
-        "residual_rad": [float(r) for r in residuals],
-        "max_residual_rad": float(np.abs(residuals).max()),
+        "params": TRIM_TABLE_PARAMS,
+        "alphas": TRIM_TABLE_ALPHAS,
+        "points_rad": [float(v) for v in np.interp(table_alphas, alphas, balances)],
+        "extrapolated": [bool(a < alphas[0] or a > alphas[-1]) for a in table_alphas],
         "n_points": int(alphas.size),
-        "alpha_span": (float(alphas.min()), float(alphas.max())),
-        "extrapolated": bool(alphas.max() < 0.9),
+        "alpha_span": (float(alphas[0]), float(alphas[-1])),
     }

@@ -473,10 +473,18 @@ _ODRIVE_KEYWORDS = ["odrive_gui", "odrivetool", "odrive_gui_v2"]
 def _kill_stale_odrive_processes():
     """Find and kill other Python processes that might hold the ODrive USB handle."""
     my_pid = os.getpid()
+    try:
+        # Windows Store Python's python.exe is a launcher stub that re-execs
+        # itself as a child with an identical cmdline, so the stub (our own
+        # parent) also matches the keyword filter below and must be excluded
+        # too, or we kill our own parent and get torn down with it.
+        protected_pids = {my_pid, *(p.pid for p in psutil.Process(my_pid).parents())}
+    except psutil.NoSuchProcess:
+        protected_pids = {my_pid}
     killed = []
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
-            if proc.pid == my_pid:
+            if proc.pid in protected_pids:
                 continue
             name = (proc.info["name"] or "").lower()
             if "python" not in name:

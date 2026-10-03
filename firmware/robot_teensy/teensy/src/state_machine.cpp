@@ -9,7 +9,6 @@
 #include "param_registry.h"
 #include "control_loop.h"
 #include "jump_landing.h"
-#include "jump_retract.h"
 #include "standup_safety.h"
 #include "wheel_motors.h"
 #include "Buzzer.h"
@@ -150,14 +149,17 @@ static float     s_jp_ret_L        = 0.0f;    // RETRACT target — the intended
 static float     s_jp_ret_R        = 0.0f;
 static float     s_jp_from_L       = 0.0f;    // hip pos when RETRACT began
 static float     s_jp_from_R       = 0.0f;
-static float     s_jp_from_dq_L    = 0.0f;    // measured velocity when RETRACT began
-static float     s_jp_from_dq_R    = 0.0f;
-static float     s_jp_turn_L       = 0.0f;    // stationary end of braking blend
-static float     s_jp_turn_R       = 0.0f;
 static float     s_jp_crouch_dur_s = 0.0f;    // derived: angle travel / jump_crouch_speed
-static float     s_jp_retract_brake_dur_s = 0.0f;
-static float     s_jp_retract_dur_s = 0.0f;   // minimum-jerk return after braking
+static float     s_jp_retract_dur_s = 0.0f;   // derived when RETRACT begins, from actual travel
 static JumpLandingDetector s_jp_landing = {};
+// Liftoff: unloaded wheels spin up within ~10 ms of leaving the floor, which no
+// ground manoeuvre can do (5 turns/s is ~1.8 m/s). LOG0043 shows it 25-40 ms
+// into RETRACT on all nine jumps. A jump that never leaves the floor never
+// trips it, so the ground balance loop keeps the wheels.
+static constexpr float JUMP_LIFTOFF_WHEEL_DELTA = 5.0f;   // [turns/s]
+static bool      s_jp_airborne     = false;
+static float     s_jp_whl0_L       = 0.0f;    // wheel speed at RETRACT entry [turns/s]
+static float     s_jp_whl0_R       = 0.0f;
 static uint32_t  s_jp_handoff_capture_since_ms = 0;
 static bool      s_jp_handoff_captured = false;
 
@@ -252,8 +254,9 @@ static void on_disarming() {
         g_state.whl_tau_l = g_state.whl_tau_r = g_state.tau_sym = g_state.tau_yaw = 0.0f;
         s_jp_phase = JP_HANDOFF;
         s_jp_handoff_captured = false;
-        controlLoop_set_velocity_command_offset(0.0f);
         controlLoop_set_jump_handoff_active(false);
+        controlLoop_set_velocity_loop_frozen(false);
+        controlLoop_set_wheel_hold(false, 0.0f, 0.0f);
         s_su_captured = false;
         s_disarming_calibration = from_calib;
         if (s_disarming_calibration) {
@@ -331,8 +334,9 @@ static void on_running() {
         if (from_standing_up) {
             controlLoop_clear_hip_override();
         } else if (from_jumping) {
-            controlLoop_set_velocity_command_offset(0.0f);
             controlLoop_set_jump_handoff_active(false);
+            controlLoop_set_velocity_loop_frozen(false);
+            controlLoop_set_wheel_hold(false, 0.0f, 0.0f);
         } else {
             controlLoop_reset();  // C1: clear integrators/rate-limit state so each arm starts clean
         }
@@ -366,7 +370,7 @@ static void on_jumping() {
         s_jp_phase_ms = millis();
         s_jp_handoff_capture_since_ms = 0;
         s_jp_handoff_captured = false;
-        controlLoop_set_velocity_command_offset(0.0f);
+        s_jp_airborne = false;
         controlLoop_set_jump_handoff_active(false);
         s_jp_nom_L  = hm_L.pos_rad;
         s_jp_nom_R  = hm_R.pos_rad;
@@ -382,19 +386,15 @@ static void on_jumping() {
                                     fabsf(s_jp_crouch_R - s_jp_nom_R));
         s_jp_crouch_dur_s = jump_phase_duration_s(
             crouch_travel, param_get(PARAM_JUMP_CROUCH_SPEED));
-        s_jp_retract_brake_dur_s = 0.0f;
         s_jp_retract_dur_s = 0.0f;   // not known until EXTEND ends
     }
 
-    // The wheel loop runs unchanged through every phase, exactly as in RUNNING.
-    // Zeroing wheel torque across EXTEND/RETRACT was tried and removed: crouched,
-    // l_eff is ~0.09 m and the inverted pendulum's time constant is ~0.1 s, so a
-    // 0.4 s window of free wheels multiplies any pitch error by ~50x if the robot
-    // does not in fact leave the ground — trading a real, every-attempt fall risk
-    // against a benefit that only materialises on a successful jump. The live
-    // detector below establishes the contact timing needed for a future dedicated
-    // airborne reaction-wheel controller; the ground-tuned loop remains active
-    // until that controller is implemented and separately validated.
+    // The wheel loop runs as in RUNNING except between detected liftoff and
+    // detected landing, when each wheel is held at its RETRACT-entry speed.
+    // Releasing the wheels by *phase* was tried and removed: crouched, l_eff is
+    // ~0.09 m and the pendulum time constant ~0.1 s, so free wheels on a jump
+    // that never leaves the floor are an every-attempt fall risk. Gating on the
+    // liftoff wheel spike means such a jump never enters the hold.
     g_state.jump_state = (uint8_t)s_jp_phase;
 
     // Both gates below skip the phase machine entirely, so the phase would
@@ -404,7 +404,6 @@ static void on_jumping() {
     auto retire_unstarted = [] {
         s_jp_phase = JP_HANDOFF;
         s_jp_handoff_captured = true;
-        controlLoop_set_velocity_command_offset(0.0f);
         controlLoop_set_jump_handoff_active(false);
     };
 
@@ -413,17 +412,13 @@ static void on_jumping() {
     const bool limits_valid = hm_limits_L.valid && hm_limits_R.valid;
 
     float phase_elapsed = (millis() - s_jp_phase_ms) / 1000.0f;
-    float velocity_offset = 0.0f;
-    if (jump_enabled && limits_valid && s_jp_phase == JP_CROUCH) {
-        float nudge_dur = param_get(PARAM_JUMP_NUDGE_FWD_DURATION_S);
-        float remaining = s_jp_crouch_dur_s - phase_elapsed;
-        if (nudge_dur > 0.0f && remaining <= nudge_dur) {
-            velocity_offset = param_get(PARAM_JUMP_NUDGE_FWD_VEL_MS);
-        }
-    }
-    controlLoop_set_velocity_command_offset(velocity_offset);
     controlLoop_set_jump_handoff_active(
         s_jp_phase == JP_LANDING || s_jp_phase == JP_HANDOFF);
+    controlLoop_set_velocity_loop_frozen(
+        s_jp_phase == JP_RETRACT || s_jp_phase == JP_LANDING ||
+        (s_jp_phase == JP_HANDOFF && !s_jp_handoff_captured));
+    controlLoop_set_wheel_hold(s_jp_airborne && s_jp_phase == JP_RETRACT,
+                               s_jp_whl0_L, s_jp_whl0_R);
     controlLoop_run();
 
     if (!jump_enabled) { retire_unstarted(); return; }
@@ -546,8 +541,6 @@ static void on_jumping() {
         if (near_ext || cutoff || timed_out) {
             s_jp_from_L   = hip_q_L;
             s_jp_from_R   = hip_q_R;
-            s_jp_from_dq_L = hip_dq_L;
-            s_jp_from_dq_R = hip_dq_R;
 
             // Landing pose. A negative jump_retract_angle means "return to the
             // pose we launched from" — the behaviour before the parameter
@@ -565,34 +558,13 @@ static void on_jumping() {
             // actually got as well as on the target. Deriving the duration here
             // is what makes jump_retract_speed mean a speed rather than, as the
             // old hardcoded 0.20 s did, whatever speed that distance implied.
-            // Preserve the measured EXTEND velocity through a short smooth
-            // braking blend. Shorten it if needed so the stationary turnaround
-            // point stays outside jump_hs_margin at the calibrated hard stop.
-            float brake_L = jump_retract_axis_brake_duration(
-                s_jp_from_L, s_jp_from_dq_L, lim_L, dir_L, margin,
-                JUMP_RETRACT_BRAKE_NOMINAL_S);
-            float brake_R = jump_retract_axis_brake_duration(
-                s_jp_from_R, s_jp_from_dq_R, lim_R, dir_R, margin,
-                JUMP_RETRACT_BRAKE_NOMINAL_S);
-            s_jp_retract_brake_dur_s = fminf(brake_L, brake_R);
-            JumpRetractSample turn_L = jump_retract_brake_sample(
-                s_jp_from_L, s_jp_from_dq_L,
-                s_jp_retract_brake_dur_s, s_jp_retract_brake_dur_s);
-            JumpRetractSample turn_R = jump_retract_brake_sample(
-                s_jp_from_R, s_jp_from_dq_R,
-                s_jp_retract_brake_dur_s, s_jp_retract_brake_dur_s);
-            s_jp_turn_L = turn_L.position;
-            s_jp_turn_R = turn_R.position;
-
-            float retract_travel = fmaxf(fabsf(s_jp_ret_L - s_jp_turn_L),
-                                         fabsf(s_jp_ret_R - s_jp_turn_R));
+            float retract_travel = fmaxf(fabsf(s_jp_ret_L - s_jp_from_L),
+                                         fabsf(s_jp_ret_R - s_jp_from_R));
             s_jp_retract_dur_s = jump_phase_duration_s(
                 retract_travel, param_get(PARAM_JUMP_RETRACT_SPEED));
-            comm_log(LOG_LEVEL_INFO,
-                     "JUMP: retract seed dq=(%.2f,%.2f) brake=%.3f s torque=%.2f",
-                     s_jp_from_dq_L, s_jp_from_dq_R,
-                     s_jp_retract_brake_dur_s,
-                     param_get(PARAM_JUMP_RETRACT_TORQUE_LIMIT_NM));
+            s_jp_whl0_L   = wm_L.vel_turns_s;
+            s_jp_whl0_R   = wm_R.vel_turns_s;
+            s_jp_airborne = false;
             s_jp_phase    = JP_RETRACT;
             s_jp_phase_ms = millis();
             jump_landing_reset(&s_jp_landing,
@@ -604,43 +576,24 @@ static void on_jumping() {
         }
     }
     else if (s_jp_phase == JP_RETRACT) {
-        float cmd_q_L, cmd_q_R, cmd_dq_L, cmd_dq_R;
-        if (elapsed < s_jp_retract_brake_dur_s) {
-            JumpRetractSample cmd_L = jump_retract_brake_sample(
-                s_jp_from_L, s_jp_from_dq_L, elapsed,
-                s_jp_retract_brake_dur_s);
-            JumpRetractSample cmd_R = jump_retract_brake_sample(
-                s_jp_from_R, s_jp_from_dq_R, elapsed,
-                s_jp_retract_brake_dur_s);
-            cmd_q_L = cmd_L.position;
-            cmd_q_R = cmd_R.position;
-            cmd_dq_L = cmd_L.velocity;
-            cmd_dq_R = cmd_R.velocity;
-        } else {
-            float return_elapsed = elapsed - s_jp_retract_brake_dur_s;
-            float u = (s_jp_retract_dur_s > 0.0f)
-                    ? (return_elapsed / s_jp_retract_dur_s) : 1.0f;
-            if (u > 1.0f) u = 1.0f;
-            float s    = standup_min_jerk_position(u);
-            float rate = standup_min_jerk_rate(u, s_jp_retract_dur_s);
-            cmd_q_L  = s_jp_turn_L + s * (s_jp_ret_L - s_jp_turn_L);
-            cmd_q_R  = s_jp_turn_R + s * (s_jp_ret_R - s_jp_turn_R);
-            cmd_dq_L = (s_jp_ret_L - s_jp_turn_L) * rate;
-            cmd_dq_R = (s_jp_ret_R - s_jp_turn_R) * rate;
+        // Held at the landing pose once the tuck completes, until landing is
+        // detected or jump_land_timeout expires.
+        float u = (s_jp_retract_dur_s > 0.0f) ? (elapsed / s_jp_retract_dur_s) : 1.0f;
+        if (u > 1.0f) u = 1.0f;
+        float s    = standup_min_jerk_position(u);
+        float rate = standup_min_jerk_rate(u, s_jp_retract_dur_s);
+        float dq_L = (s_jp_ret_L - s_jp_from_L) * rate;
+        float dq_R = (s_jp_ret_R - s_jp_from_R) * rate;
+        hip_motors_set_setpoint_L(s_jp_from_L + s * (s_jp_ret_L - s_jp_from_L), dq_L, kp, kd, 0.0f);
+        hip_motors_set_setpoint_R(s_jp_from_R + s * (s_jp_ret_R - s_jp_from_R), dq_R, kp, kd, 0.0f);
+
+        if (!s_jp_airborne &&
+            (fabsf(wm_L.vel_turns_s - s_jp_whl0_L) > JUMP_LIFTOFF_WHEEL_DELTA ||
+             fabsf(wm_R.vel_turns_s - s_jp_whl0_R) > JUMP_LIFTOFF_WHEEL_DELTA)) {
+            s_jp_airborne = true;
+            comm_log(LOG_LEVEL_INFO, "JUMP: liftoff detected at %.3f s", elapsed);
         }
 
-        // MIT has no separate current-limit field. Bound its predicted PD
-        // request by scaling kp/kd together; external back-driving can still
-        // produce measured shaft torque above this command ceiling.
-        float retract_torque = param_get(PARAM_JUMP_RETRACT_TORQUE_LIMIT_NM);
-        float scale_L = jump_retract_feedback_gain_scale(
-            hip_q_L, hip_dq_L, cmd_q_L, cmd_dq_L, kp, kd, retract_torque);
-        float scale_R = jump_retract_feedback_gain_scale(
-            hip_q_R, hip_dq_R, cmd_q_R, cmd_dq_R, kp, kd, retract_torque);
-        hip_motors_set_setpoint_L(
-            cmd_q_L, cmd_dq_L, kp * scale_L, kd * scale_L, 0.0f);
-        hip_motors_set_setpoint_R(
-            cmd_q_R, cmd_dq_R, kp * scale_R, kd * scale_R, 0.0f);
         bool landed = jump_landing_update(
             &s_jp_landing,
             millis(),
@@ -660,32 +613,20 @@ static void on_jumping() {
             s_jp_phase    = JP_LANDING;
             s_jp_phase_ms = millis();
         } else if (elapsed >= param_get(PARAM_JUMP_LANDING_TIMEOUT_S)) {
-            // The gyro path did not confirm touchdown within the window.
-            // Not a fault either way: the ground-tuned wheel/balance loop has
-            // been running unbroken since CROUCH regardless of jump phase
-            // (controlLoop_run() runs every tick, every phase — see the
-            // comment above g_state.jump_state), so a missed *detection* is a
-            // bookkeeping gap, not a loss of control. Hand back to the
-            // ordinary RUNNING controller from wherever RETRACT left the legs
-            // — same ramp-seeding the real landing path above uses — rather
-            // than ESTOPping a jump that most likely landed cleanly. Until
-            // 2026-08-12 an unconfirmed landing still faulted here; in
-            // practice a real, energetic jump (large RETRACT-entry
-            // hip velocities) faulted this way because the new gentler
-            // braking-blend RETRACT produces a touchdown signature too soft
-            // for the tuned gyro threshold to reliably catch, not
-            // because anything was actually out of control.
+            // A missed detection is not a fault: the balance loop has run every
+            // tick since CROUCH. Enter HANDOFF uncaptured rather than jumping
+            // straight to RUNNING, so the handoff wheel-speed limit still
+            // applies — the wheels can still be near jmp_air_vel_lim here, and
+            // RUNNING's 2x wm_vel_limit runaway trip (LOG0042 jump 4) would
+            // fire within 50 ms.
             comm_log(LOG_LEVEL_WARN,
-                     "JUMP: gyro landing not detected within %.3f s — handing off to RUNNING",
+                     "JUMP: gyro landing not detected within %.3f s — entering HANDOFF",
                      elapsed);
             controlLoop_reset_hip_ramp();
             controlLoop_complete_hip_ramp();
             s_jp_handoff_capture_since_ms = 0;
-            s_jp_phase             = JP_HANDOFF;
-            s_jp_phase_ms          = millis();
-            s_jp_handoff_captured  = true;
-            controlLoop_set_velocity_command_offset(0.0f);
-            controlLoop_set_jump_handoff_active(false);
+            s_jp_phase    = JP_HANDOFF;
+            s_jp_phase_ms = millis();
         }
     }
     else if (s_jp_phase == JP_LANDING) {
@@ -731,7 +672,6 @@ static void on_jumping() {
                      "JUMP: handoff not captured within %.3f s — releasing to RUNNING anyway",
                      elapsed);
             s_jp_handoff_captured = true;
-            controlLoop_set_velocity_command_offset(0.0f);
             controlLoop_set_jump_handoff_active(false);
         }
     }
@@ -1086,8 +1026,9 @@ static void on_estop() {
         // for whatever state comes next.
         s_jp_phase = JP_HANDOFF;
         s_jp_handoff_captured = false;
-        controlLoop_set_velocity_command_offset(0.0f);
         controlLoop_set_jump_handoff_active(false);
+        controlLoop_set_velocity_loop_frozen(false);
+        controlLoop_set_wheel_hold(false, 0.0f, 0.0f);
         hip_motors_clear_setpoints();
         estop_cut_hip();
     }
@@ -1450,7 +1391,7 @@ bool stateMachine_request_soft_clear() {
 // request time — not re-checked during the jump, which leans on the (still
 // fully live, per 2026-08-12 review) pitch watchdog for that. Forward speed
 // is deliberately given more headroom than backward/yaw/roll: a bit of
-// forward speed helps the launch (see jump_nudge_fwd_vel), the others don't.
+// forward speed helps the launch, the others don't.
 static bool jump_arm_motion_ok() {
     float v = g_state.wheel_vel_avg_ms;
     if (v > param_get(PARAM_JUMP_ARM_MAX_FWD_SPEED_MS)) {

@@ -24,7 +24,7 @@ from analysis.jump_analysis import (
 from analysis.param_sidecar import (
     ParamSidecar, active_profile_series, load_host_param_sidecar, load_matching_sidecar,
 )
-from analysis.leg_height_sweep import PlateauMetrics, fit_trim_schedule, plateau_report
+from analysis.leg_height_sweep import PlateauMetrics, plateau_report, trim_table_from_plateaus
 from analysis.wlog_metrics import (
     HIP_TORQUE_LIMIT_NM, SETTLE_DEG, compute_metrics, decode_run,
 )
@@ -1293,25 +1293,24 @@ class LogAnalyzerTab(QWidget):
                 f"{plateau.mean_hip_torque_nm:+.2f} N·m."))
 
         settled = [p for p in plateaus if p.equilibrium]
-        if len(settled) >= 2:
-            fit = fit_trim_schedule([p.alpha for p in settled],
-                                    [p.balance_rad for p in settled])
-            note = (f"Least-squares fit of the {fit['n_points']} settled plateaus to "
-                    f"control_safety.h's scheduled_pitch_trim(); worst residual "
-                    f"{np.degrees(fit['max_residual_rad']):.2f}°.")
-            if fit["extrapolated"]:
-                note += (f" The sweep only reached α={fit['alpha_span'][1]:.2f}, so "
-                         f"trim_ext (the α=1 value) is an extrapolation, not a "
-                         f"measurement — do not trust it above the measured span.")
-            rows.append((
-                "Fitted trim schedule",
-                f"{fit['trim_ret']:+.4f} / {fit['trim_ext']:+.4f} / {fit['trim_curve']:+.4f}",
-                "lqr_pitch_trim_ret / _ext / _curve [rad]. " + note))
+        if settled:
+            table = trim_table_from_plateaus([p.alpha for p in settled],
+                                             [p.balance_rad for p in settled])
+            for name, alpha, value, guessed in zip(table["params"], table["alphas"],
+                                                   table["points_rad"], table["extrapolated"]):
+                rows.append((
+                    f"{name} (α {alpha:.3f})",
+                    f"{value:+.4f} rad ({np.degrees(value):+.2f}°)",
+                    ("Held flat from the nearest settled plateau — outside the measured "
+                     f"α {table['alpha_span'][0]:.2f}–{table['alpha_span'][1]:.2f}, a guess. "
+                     "trim_learn_en can measure it on the robot."
+                     if guessed else
+                     f"Interpolated from {table['n_points']} settled plateau(s).")))
         else:
             rows.append((
-                "Fitted trim schedule", "not enough settled heights",
-                "At least two plateaus must pass the equilibrium gate before a trim "
-                "schedule can be fitted."))
+                "Trim table", "no settled heights",
+                "No plateau passed the equilibrium gate, so there is no balance point "
+                "to put in the trim table. trim_learn_en measures it on the robot."))
         return rows
 
     def _update_status(self, t: np.ndarray, health: np.ndarray, metrics: dict):

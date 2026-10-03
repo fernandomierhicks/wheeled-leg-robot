@@ -85,8 +85,10 @@ def test_robust_mujoco_search_is_schema_bounded_and_dry_run_pushable():
     changes = planned_changes(candidate, live)
     assert {change["name"] for change in changes} == set(INTEGRATED_SPACE.names)
     assert len(candidate) == len(PARAMS_BY_NAME)
+    # Re-locked 2026-10-02 when lqr_trim_curve was retired (RETIRED_PARAMS in
+    # param_snapshot.py); the old digest was this snapshot plus that one entry.
     assert control_snapshot_sha256(candidate) == (
-        "9248a7c574614d31577a05aa98bd618369a60ab1919a76231ed9d510fee0fb55"
+        "161681b2c7c305b85e4427cd8a8145b3b12cf9ebf254a535f5436eb5a37e0738"
     )
 
 

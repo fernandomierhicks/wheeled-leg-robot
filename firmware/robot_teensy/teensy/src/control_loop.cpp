@@ -99,15 +99,52 @@ static constexpr float L_EFF_EXT    = 0.363396f;  // [m] alpha=1, q=-57°
 static constexpr float M_BODY       = 2.5620f;    // [kg] 2026-08-09 scale inventory, battery in / wheels out
 static constexpr float GRAVITY      = 9.81f;      // [m/s²]
 static constexpr float WHEEL_R      = 0.056f;     // [m] wheel radius (112 mm OD)
+// [m] wheel contact-patch spacing, measured on the v4 robot. LOG0036
+// (2026-10-02) confirms it: encoder-derived yaw rate matches the gyro at
+// 0.99-1.00 gain below 1 Hz. Only used when yaw_rate_src = 1.
+static constexpr float WHEEL_TRACK  = 0.340f;
 // MOTOR_TRQ_MAX now lives in control_loop.h — shared with state_machine.cpp's standup recovery law
+
+// ── Pitch-trim table (alpha 0, 0.125, ... 1) ─────────────────────────────────
+static constexpr int TRIM_POINTS = 9;
+static const uint16_t TRIM_POINT_PARAMS[TRIM_POINTS] = {
+    PARAM_LQR_PITCH_TRIM_RET, PARAM_LQR_PITCH_TRIM_12, PARAM_LQR_PITCH_TRIM_25,
+    PARAM_LQR_PITCH_TRIM_38,  PARAM_LQR_PITCH_TRIM_50, PARAM_LQR_PITCH_TRIM_62,
+    PARAM_LQR_PITCH_TRIM_75,  PARAM_LQR_PITCH_TRIM_88, PARAM_LQR_PITCH_TRIM_EXT,
+};
+
+// ── Trim learner (trim_learn_en) ─────────────────────────────────────────────
+// Standing still with no wheel torque and no drift, the pitch the robot holds
+// IS its balance point, whatever the trim says. The learner averages pitch
+// over a still window and walks the table toward it. Gate values replayed on
+// LOG0036: they pass ~40% of still time and reproduce the offline balance
+// points within 0.2 deg.
+static constexpr float TRIM_LEARN_SETTLE_S  = 2.0f;    // still before averaging starts
+static constexpr float TRIM_LEARN_WINDOW_S  = 6.0f;    // averaged before learning starts
+static constexpr float TRIM_LEARN_TAU_S     = 5.0f;    // convergence time constant
+static constexpr float TRIM_LEARN_TAU_NM    = 0.005f;  // |mean tau_sym| gate
+static constexpr float TRIM_LEARN_DRIFT_MS  = 0.05f;   // |mean wheel speed| gate
+static constexpr float TRIM_LEARN_ALPHA_TOL = 0.01f;   // leg height must hold this still
+static constexpr float TRIM_LEARN_V_STILL   = 0.02f;   // |v_cmd| counted as no stick [m/s]
+static constexpr float TRIM_LEARN_W_STILL   = 0.05f;   // |omega_cmd| likewise [rad/s]
+static float    s_tl_still_s    = 0.0f;
+static float    s_tl_alpha0     = 0.0f;
+static uint32_t s_tl_n          = 0;
+static double   s_tl_sum_pitch  = 0.0;   // double: a long park is tens of thousands of samples
+static double   s_tl_sum_tau    = 0.0;
+static double   s_tl_sum_vel    = 0.0;
+static bool     s_tl_learning   = false;
 
 // ── Controller state ──────────────────────────────────────────────────────────
 // Phase 3 — Velocity PI
 static float s_vel_integral    = 0.0f;
 static float s_prev_v_desired  = 0.0f;
 static float s_theta_ref_rlt   = 0.0f;  // rate-limited theta_ref
-static float s_velocity_command_offset_ms = 0.0f;
 static bool  s_jump_handoff_active = false;
+static bool  s_vel_loop_frozen     = false;
+static bool  s_wheel_hold_active   = false;
+static float s_wheel_hold_L        = 0.0f;  // [turns/s] per-wheel hold target
+static float s_wheel_hold_R        = 0.0f;
 
 // Rate-limited RUNNING hip-height command, in the same normalized [0,1]
 // extension space as PARAM_RADIO_HIP_CMD/hip_cmd_to_setpoints(). Invalid
@@ -202,8 +239,14 @@ void controlLoop_reset() {
     s_hip_cmd_rlt_valid   = false;
     s_plant_id_active     = false;
     s_hip_override_active = false;
-    s_velocity_command_offset_ms = 0.0f;
     s_jump_handoff_active = false;
+    s_vel_loop_frozen     = false;
+    s_wheel_hold_active   = false;
+    s_tl_still_s   = 0.0f;
+    s_tl_alpha0    = -1.0f;  // forces a fresh window on the first tick
+    s_tl_n         = 0;
+    s_tl_sum_pitch = s_tl_sum_tau = s_tl_sum_vel = 0.0;
+    s_tl_learning  = false;
 }
 
 // STANDING_UP-scoped authority overrides. The catch needs far more wheel torque
@@ -217,6 +260,8 @@ void controlLoop_reset() {
 // the same off-by-default contract every other standup param has. These are the
 // params originally reserved for the removed inline catch law; this is what
 // they now do.
+// The jump LANDING/HANDOFF phases get the same kind of scoped override, keyed
+// off s_jump_handoff_active rather than robot state.
 static float authority_scoped(uint16_t standup_param,
                               uint16_t jump_handoff_param,
                               float running_value) {
@@ -231,16 +276,13 @@ static float authority_scoped(uint16_t standup_param,
     return running_value;
 }
 
-// Not routed through authority_scoped(): that helper's jump branch keys off
-// s_jump_handoff_active, true only for LANDING/HANDOFF. The wheel loop runs
-// unchanged through CROUCH/EXTEND/RETRACT too (see on_jumping()), and airborne
-// wheels are genuinely unloaded there, so they need real headroom before the
-// soft governor and the 2x runaway watchdog react — jmp_handoff_vel_lim is the
-// wrong number for that (it's deliberately tight because a HANDOFF-phase
-// runaway means the wheel is back on the ground). A real jump on 2026-08-13
-// tripped FAULT_WHEEL_RUNAWAY at wm_r=-12.97 turns/s against the plain 12.0
-// (2x wm_vel_limit=6.0) ceiling that used to apply through all of JUMPING —
-// mid-RETRACT, before landing could even be evaluated.
+// CROUCH/EXTEND/RETRACT use jmp_air_vel_lim: wheels are genuinely unloaded and
+// legitimately spin fast in the air, so they need real headroom before the soft
+// governor and the 2x runaway watchdog react. A real jump on 2026-08-13 tripped
+// FAULT_WHEEL_RUNAWAY at wm_r=-12.97 turns/s against the plain 12.0 (2x
+// wm_vel_limit=6.0) ceiling mid-RETRACT. LANDING/HANDOFF use jmp_handoff_vel_lim
+// instead: the wheels are back on the ground but can still be near the
+// airborne speed at contact (~20 turns/s in LOG0042).
 float controlLoop_wheel_vel_limit() {
     if (g_state.state == STATE_STANDING_UP) {
         float v = param_get(PARAM_STANDUP_WHEEL_VEL_LIMIT_TURNS_S);
@@ -257,12 +299,18 @@ float controlLoop_wheel_vel_limit() {
     return param_get(PARAM_WHEEL_VEL_LIMIT_TURNS_S);
 }
 
-void controlLoop_set_velocity_command_offset(float offset_ms) {
-    s_velocity_command_offset_ms = offset_ms;
-}
-
 void controlLoop_set_jump_handoff_active(bool active) {
     s_jump_handoff_active = active;
+}
+
+void controlLoop_set_velocity_loop_frozen(bool frozen) {
+    s_vel_loop_frozen = frozen;
+}
+
+void controlLoop_set_wheel_hold(bool active, float target_L, float target_R) {
+    s_wheel_hold_active = active;
+    s_wheel_hold_L      = target_L;
+    s_wheel_hold_R      = target_R;
 }
 
 void controlLoop_set_hip_override(float t) {
@@ -371,6 +419,76 @@ bool controlLoop_run_estop_ramp() {
     return t < 1.0f;
 }
 
+// One tick of the trim learner (trim_learn_en). Called after the LQR so it sees
+// this tick's tau_sym. A table change takes effect next tick together with an
+// equal and opposite shift of the vel-PI integrator and theta_ref rate-limiter
+// state, so the lean target theta_ref + trim does not move: the robot does not
+// lurch, and the pitch it settles at (what is being averaged) is unaffected by
+// the learning itself.
+static void trim_learn_step(bool enabled, float alpha, float pitch,
+                            float tau_sym, float vel_avg_ms, float pitch_trim) {
+    static constexpr float RAD2DEG = 57.29578f;
+    bool still = enabled &&
+                 fabsf(param_get(PARAM_V_CMD_MS)) < TRIM_LEARN_V_STILL &&
+                 fabsf(param_get(PARAM_OMEGA_CMD_RDS)) < TRIM_LEARN_W_STILL &&
+                 fabsf(alpha - s_tl_alpha0) < TRIM_LEARN_ALPHA_TOL;
+    if (!still) {
+        if (s_tl_learning) {
+            comm_log(LOG_LEVEL_INFO, "Trim learn: alpha %.2f done, trim %.2f deg (balance %.2f deg over %.1f s)",
+                     s_tl_alpha0, pitch_trim * RAD2DEG,
+                     (float)(s_tl_sum_pitch / s_tl_n) * RAD2DEG, s_tl_n * DT);
+        }
+        s_tl_still_s   = 0.0f;
+        s_tl_alpha0    = alpha;
+        s_tl_n         = 0;
+        s_tl_sum_pitch = s_tl_sum_tau = s_tl_sum_vel = 0.0;
+        s_tl_learning  = false;
+        return;
+    }
+
+    s_tl_still_s += DT;
+    if (s_tl_still_s < TRIM_LEARN_SETTLE_S) return;
+    s_tl_n++;
+    s_tl_sum_pitch += pitch;
+    s_tl_sum_tau   += tau_sym;
+    s_tl_sum_vel   += vel_avg_ms;
+    if (s_tl_n * DT < TRIM_LEARN_WINDOW_S) return;
+
+    // Equilibrium: no mean torque and no creep. A limit cycle averages tau to
+    // ~0 while still drifting, hence both. A slope needs holding torque, so it
+    // fails the tau half (~0.3 deg of slope already exceeds 5 mN·m).
+    float mean_pitch = (float)(s_tl_sum_pitch / s_tl_n);
+    if (fabsf((float)(s_tl_sum_tau / s_tl_n)) >= TRIM_LEARN_TAU_NM ||
+        fabsf((float)(s_tl_sum_vel / s_tl_n)) >= TRIM_LEARN_DRIFT_MS) return;
+
+    if (!s_tl_learning) {
+        s_tl_learning = true;
+        comm_log(LOG_LEVEL_INFO, "Trim learn: alpha %.2f learning, balance %.2f deg, trim %.2f deg",
+                 alpha, mean_pitch * RAD2DEG, pitch_trim * RAD2DEG);
+    }
+
+    float points[TRIM_POINTS];
+    for (int i = 0; i < TRIM_POINTS; i++) points[i] = param_get(TRIM_POINT_PARAMS[i]);
+    float before = pitch_trim_table(points, TRIM_POINTS, alpha);
+    pitch_trim_table_nudge(points, TRIM_POINTS, alpha,
+                           (mean_pitch - before) * DT / TRIM_LEARN_TAU_S);
+    int lo;
+    float w_hi;
+    pitch_trim_bracket(alpha, TRIM_POINTS, &lo, &w_hi);
+    param_set(TRIM_POINT_PARAMS[lo],     points[lo]);      // persistent: flushed after disarm
+    param_set(TRIM_POINT_PARAMS[lo + 1], points[lo + 1]);
+
+    // Offload what actually landed (param_set clamps to the schema range).
+    for (int i = 0; i < TRIM_POINTS; i++) points[i] = param_get(TRIM_POINT_PARAMS[i]);
+    float moved = pitch_trim_table(points, TRIM_POINTS, alpha) - before;
+    float ki      = live_tune_value(PARAM_VEL_PI_KI);
+    float int_max = param_get(PARAM_VEL_PI_INT_MAX);
+    s_vel_integral -= moved / ki;
+    if (s_vel_integral >  int_max) s_vel_integral =  int_max;
+    if (s_vel_integral < -int_max) s_vel_integral = -int_max;
+    s_theta_ref_rlt -= moved;
+}
+
 void controlLoop_run() {
     // ── Phase 5: Hip gain scheduling ─────────────────────────────────────────
     // alpha ∈ [0,1]: 0 = fully retracted (high gains), 1 = fully extended (low gains).
@@ -391,12 +509,14 @@ void controlLoop_run() {
                          (g_state.state == STATE_STANDING_UP &&
                           param_get(PARAM_STANDUP_USE_RET_GAINS) >= 0.5f);
     float alpha = 0.0f;  // default: retracted, used whenever calibration is invalid
+    bool  alpha_measured = false;  // false when pinned or uncalibrated (trim learner needs a real height)
     if (pin_retracted) {
         alpha = 0.0f;
     } else {
         bool  alpha_valid = false;
         float measured     = measured_hip_alpha(&alpha_valid);
         if (alpha_valid) alpha = measured;
+        alpha_measured = alpha_valid;
     }
     g_state.gain_sched_alpha = alpha;
 
@@ -577,20 +697,19 @@ void controlLoop_run() {
 
     // ── Balance-point pitch trim ─────────────────────────────────────────────
     // The lean that holds zero velocity isn't pitch=0 when the CG isn't exactly
-    // over the wheel axle; it also shifts with leg height. Schedule the trim
-    // by the same alpha as the LQR gains, using fixed ret/ext endpoints plus
-    // a quadratic interior-curvature term.
-    // trim_ret goes through live_tune_value() too (live_tune.h) but currently
-    // has no LIVE_TUNE_SLOTS entry, so it always falls through to the latched
-    // persisted value -- CH7/CH8 are presently assigned to the LQR gains below.
-    // trim_ext and trim_curve have no knob and read persisted values directly.
+    // over the wheel axle; it also shifts with leg height, and not smoothly
+    // (LOG0036: -1.4 deg retracted, -4.9 deg at alpha 0.22, -1.7 deg extended),
+    // so it is a 9-point table on the same alpha as the LQR gains.
+    // The alpha=0 point goes through live_tune_value() too (live_tune.h) but
+    // currently has no LIVE_TUNE_SLOTS entry, so it always falls through to the
+    // latched persisted value -- CH7/CH8 are presently assigned to the LQR gains.
     // Offsets only the LQR pitch error, never the velocity setpoint. Computed
     // here (after alpha, before the velocity PI) because the velocity PI's
     // safe backward lean clamp below needs it.
-    float trim_ret = live_tune_value(PARAM_LQR_PITCH_TRIM_RET);
-    float trim_ext = param_get(PARAM_LQR_PITCH_TRIM_EXT);
-    float trim_curve = param_get(PARAM_LQR_PITCH_TRIM_CURVE);
-    float pitch_trim = scheduled_pitch_trim(trim_ret, trim_ext, trim_curve, alpha);
+    float trim_points[TRIM_POINTS];
+    trim_points[0] = live_tune_value(TRIM_POINT_PARAMS[0]);
+    for (int i = 1; i < TRIM_POINTS; i++) trim_points[i] = param_get(TRIM_POINT_PARAMS[i]);
+    float pitch_trim = pitch_trim_table(trim_points, TRIM_POINTS, alpha);
     g_state.applied_pitch_trim = pitch_trim;
 
     // ── Pitch watchdog ────────────────────────────────────────────────────────
@@ -649,9 +768,9 @@ void controlLoop_run() {
     // spins the wheels past 2x the governor. It is persistent, so main.cpp
     // logs a loud WARN at boot whenever it comes back off flash cleared.
     //
-    // The trip follows whichever limit is actually in force, so raising a
-    // standup or jump-handoff limit for an energetic catch doesn't ESTOP the
-    // moment wheels pass 2x the lower RUNNING governor they aren't held to.
+    // The trip follows whichever limit is actually in force, so raising
+    // standup_vel_limit for an energetic catch doesn't ESTOP the moment the
+    // wheels pass 2x the (lower) RUNNING governor they aren't being held to.
     float wheel_vel_limit = controlLoop_wheel_vel_limit();
     if (param_get(PARAM_WHEEL_RUNAWAY_EN) >= 0.5f) {
         float hard_limit = wheel_vel_limit * 2.0f;
@@ -691,11 +810,16 @@ void controlLoop_run() {
     float l_eff = L_EFF_RET + alpha * (L_EFF_EXT - L_EFF_RET);
 
     // ── Phase 3: Velocity PI ──────────────────────────────────────────────────
-    float v_desired = param_get(PARAM_V_CMD_MS) + s_velocity_command_offset_ms;
-    g_state.v_ref = v_desired;
+    float v_desired = param_get(PARAM_V_CMD_MS);
     float theta_ref = 0.0f;
 
-    if (param_get(PARAM_VEL_PI_EN) >= 0.5f) {
+    if (s_vel_loop_frozen) {
+        // From jump RETRACT until the handoff finishes, wheel speed is not
+        // ground speed (unloaded wheels in the air, skidding at contact).
+        // Integrating it wound theta_ref to +20 deg in LOG0043 and drove the
+        // post-landing overshoot, so hold the lean target and integral.
+        theta_ref = s_theta_ref_rlt;
+    } else if (param_get(PARAM_VEL_PI_EN) >= 0.5f) {
         float v_err = v_desired - vel_avg_ms;
 
         // Reset integrator on direction reversal to prevent windup carryover
@@ -763,16 +887,22 @@ void controlLoop_run() {
     s_prev_v_desired = v_desired;
 
     g_state.theta_ref        = theta_ref;
-    // main.cpp keeps g_state.v_ref live in non-controlled states. Here it is
-    // overwritten with the effective command so telemetry and the direct LQR
-    // velocity term both include a jump nudge while it is active.
+    // g_state.v_ref is set every tick in main.cpp's radio_update(), not here —
+    // it needs to stay live in STANDBY too (controlLoop_run() only runs in
+    // RUNNING/JUMPING), same as v_cmd_ms/omega_cmd_rds.
 
     // ── Phase 4: Yaw PI ───────────────────────────────────────────────────────
     float tau_yaw = 0.0f;
 
     if (param_get(PARAM_YAW_PI_EN) >= 0.5f) {
         float omega_desired  = param_get(PARAM_OMEGA_CMD_RDS);
-        float omega_measured = imu_yaw_rate();
+        // yaw_rate_src: 0 = body gyro, 1 = wheel encoders. The gyro sits on the
+        // far side of the legs' 12-17 Hz roll/yaw compliance from the wheel
+        // motors, ~160 deg out of phase with them at that mode, so raising
+        // yaw_pi_kp on it pumps the mode; the encoders are on the motors' side.
+        float omega_measured = (param_get(PARAM_YAW_RATE_SRC) >= 0.5f)
+            ? wheel_yaw_rate(wm_L.vel_turns_s, wm_R.vel_turns_s, WHEEL_R, WHEEL_TRACK)
+            : imu_yaw_rate();
         float err = omega_desired - omega_measured;
 
         float yaw_int_max = param_get(PARAM_YAW_PI_INT_MAX);
@@ -865,6 +995,16 @@ void controlLoop_run() {
     if (g_state.tau_sym >  torque_limit) g_state.tau_sym =  torque_limit;
     if (g_state.tau_sym < -torque_limit) g_state.tau_sym = -torque_limit;
 
+    // Trim learner (trim_learn_en). RUNNING only: STANDING_UP pins the legs and
+    // JUMPING never stands still. Needs a real measured alpha, and a vel-PI
+    // integrator to offload into.
+    bool trim_learn_en = param_get(PARAM_TRIM_LEARN_EN) >= 0.5f &&
+                         g_state.state == STATE_RUNNING && alpha_measured &&
+                         !s_plant_id_active &&
+                         param_get(PARAM_VEL_PI_EN) >= 0.5f &&
+                         live_tune_value(PARAM_VEL_PI_KI) > 0.0f;
+    trim_learn_step(trim_learn_en, alpha, pitch, g_state.tau_sym, vel_avg_ms, pitch_trim);
+
     // ── Phase 6: Feedforward FF1 + FF2 ───────────────────────────────────────
     float tau_ff1 = 0.0f;
     float tau_ff2 = 0.0f;
@@ -898,6 +1038,16 @@ void controlLoop_run() {
         float tau_ff_sym = tau_ff1 + tau_ff2;
         tau_L = g_state.tau_sym - tau_yaw + tau_ff_sym;
         tau_R = g_state.tau_sym + tau_yaw + tau_ff_sym;
+
+        // Airborne: the ground LQR would spin the unloaded wheels to the
+        // governor ceiling, and they'd land skidding. Hold each wheel at its
+        // pre-liftoff speed instead. tau_sym telemetry still shows what the
+        // LQR asked for; whl_tau_* shows what was sent.
+        float kp_hold = param_get(PARAM_JUMP_AIRBORNE_WHEEL_HOLD_KP);
+        if (s_wheel_hold_active && kp_hold > 0.0f) {
+            tau_L = kp_hold * (s_wheel_hold_L - wm_L.vel_turns_s);
+            tau_R = kp_hold * (s_wheel_hold_R - wm_R.vel_turns_s);
+        }
 
         // C2: clamp the mixed output (incl. FF) to the adjustable test limit —
         // FF terms are no longer exempt from PARAM_LQR_TORQUE_LIMIT.

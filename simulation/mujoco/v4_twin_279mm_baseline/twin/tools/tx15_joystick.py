@@ -16,8 +16,10 @@ FIRMWARE decodes the radio: HID -> channel microseconds -> the scaling in
 
   * the thresholds are the firmware's own absolute microsecond literals
     (> 1990, < 1010), not re-derived ones
-  * the command scaling reads ``radio_vel_max`` / ``radio_yaw_max`` /
-    ``radio_roll_max`` from the shared schema, so sim and robot cannot drift
+  * the command scaling reads the speed profile's ``profileN_vel_max`` /
+    ``profileN_yaw_max`` / ``profileN_roll_max`` from the shared schema, so
+    sim and robot cannot drift. The firmware picks N from CH9; over HID CH9 is
+    a boolean (below), so here N is chosen by the caller instead
 
 ── EdgeTX's HID mapping ──────────────────────────────────────────────────────
 
@@ -95,11 +97,32 @@ class ChannelDecoder:
     is the half that has to agree with ``radio_update()`` in main.cpp.
     """
 
-    def __init__(self, vel_max: float, yaw_max: float, roll_max: float):
+    def __init__(self, vel_max: float, yaw_max: float, roll_max: float,
+                 yaw_accel_max: float = 0.0):
         self.vel_max = float(vel_max)
         self.yaw_max = float(yaw_max)
         self.roll_max = float(roll_max)
+        # radio_update() slews omega_cmd_rds toward the stick at this rate
+        # [rad/s^2] instead of stepping to it. 0 = no limit, as in firmware.
+        self.yaw_accel_max = float(yaw_accel_max)
+        self._omega = 0.0
+        self._t_prev: float | None = None
         self._jump_prev = False
+
+    def _slew_omega(self, target: float, t: float | None) -> float:
+        """radio_update()'s slew_toward() on omega_cmd_rds, on the caller's clock.
+
+        `t` is sim time [s]. Without a clock (t=None) there is no dt to slew
+        over, so the command steps, the same as yaw_accel_max = 0.
+        """
+        if t is None or self.yaw_accel_max <= 0.0:
+            self._omega, self._t_prev = target, t
+            return target
+        dt = 0.0 if self._t_prev is None else max(0.0, t - self._t_prev)
+        self._t_prev = t
+        step = self.yaw_accel_max * dt
+        self._omega += max(-step, min(step, target - self._omega))
+        return self._omega
 
     @staticmethod
     def _norm_bipolar(us: int) -> float:
@@ -111,8 +134,10 @@ class ChannelDecoder:
         """1000..2000 -> 0..1, the firmware's (ch - 1000) / 1000."""
         return max(0.0, min(1.0, (us - CH_MIN_US) / 1000.0))
 
-    def decode(self, ch: dict[int, int], link_alive: bool = True) -> RadioCommands:
-        """`ch` maps 1-indexed channel number to microseconds.
+    def decode(self, ch: dict[int, int], link_alive: bool = True,
+               t: float | None = None) -> RadioCommands:
+        """`ch` maps 1-indexed channel number to microseconds; `t` is the sim
+        time [s] the yaw ramp runs on (None = no ramp).
 
         A channel the transmitter did not send reads as 0, matching the
         driver's behaviour on a dead link -- see the FAILSAFE CONTRACT in
@@ -142,14 +167,18 @@ class ChannelDecoder:
         cmd = RadioCommands(link_alive=link_alive)
         if not link_alive:
             self._jump_prev = False
+            # Firmware ramps the yaw rate down rather than snapping it to 0.
+            cmd.omega_cmd_rds = self._slew_omega(0.0, t)
             return cmd
 
-        # radio_update(): CH1 roll, CH2 velocity, CH3 hip, CH4 yaw. The yaw
-        # sign is inverted in firmware so stick-left yaws the robot left.
-        cmd.roll_cmd_rad = self._norm_bipolar(get(1, CH_MID_US)) * self.roll_max
+        # radio_update(): CH1 yaw, CH2 velocity, CH3 hip, CH4 roll (the C1/C4
+        # swap of 2026-10-02). The yaw sign is inverted in firmware so
+        # stick-left yaws the robot left; roll is not.
+        cmd.roll_cmd_rad = self._norm_bipolar(get(4, CH_MID_US)) * self.roll_max
         cmd.v_cmd_ms = self._norm_bipolar(get(2, CH_MID_US)) * self.vel_max
         cmd.radio_hip_cmd = self._norm_unipolar(get(3))
-        cmd.omega_cmd_rds = -self._norm_bipolar(get(4, CH_MID_US)) * self.yaw_max
+        cmd.omega_cmd_rds = self._slew_omega(
+            -self._norm_bipolar(get(1, CH_MID_US)) * self.yaw_max, t)
 
         cmd.tune_a = self._norm_unipolar(get(7))
         cmd.tune_b = self._norm_unipolar(get(8))
@@ -262,8 +291,8 @@ class Tx15Joystick:
             pass
 
 
-def make_decoder_from_params(params) -> ChannelDecoder:
-    """Build a decoder using the SHARED schema limits.
+def make_decoder_from_params(params, profile: int = 2) -> ChannelDecoder:
+    """Build a decoder using the SHARED schema limits of speed `profile` (1-3).
 
     `params` is twin/params_control's value mapping. Reading the limits from
     there rather than hardcoding them is what keeps a sim session and a robot
@@ -277,7 +306,8 @@ def make_decoder_from_params(params) -> ChannelDecoder:
             return fallback
 
     return ChannelDecoder(
-        vel_max=val("radio_vel_max", 0.5),
-        yaw_max=val("radio_yaw_max", 1.0),
-        roll_max=val("radio_roll_max", 0.17),
+        vel_max=val(f"profile{profile}_vel_max", 0.5),
+        yaw_max=val(f"profile{profile}_yaw_max", 1.0),
+        roll_max=val(f"profile{profile}_roll_max", 0.17),
+        yaw_accel_max=val("yaw_accel_max", 8.0),
     )

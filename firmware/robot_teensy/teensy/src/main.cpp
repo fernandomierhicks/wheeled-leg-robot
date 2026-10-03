@@ -4,6 +4,7 @@
 #include "robot_state.h"
 #include "state_machine.h"
 #include "control_loop.h"
+#include "control_safety.h"
 #include "CommLink.h"
 #include "comm_protocol.h"
 #include "command_validation.h"
@@ -1737,14 +1738,41 @@ static void radio_update() {
         gui_motion_ctrl = false;
     }
 
+    // Yaw-rate ramp state (yaw_accel_max). Kept here rather than in the param
+    // so a stray omega_cmd_rds write (e.g. the Params tab) is overwritten next
+    // tick, as it always was, instead of becoming the ramp's starting point.
+    // While the GUI drives motion it tracks the GUI's value, so any handback
+    // to the radio -- including the watchdog timeout above -- ramps on from
+    // where the GUI left off rather than snapping.
+    static float s_omega_ref = 0.0f;
+    if (gui_motion_ctrl) s_omega_ref = param_get(PARAM_OMEGA_CMD_RDS);
+
     if (alive) {
         float t = constrain((g_rc.channel(3) - 1000.0f) / 1000.0f, 0.0f, 1.0f);  // CH3 (1-indexed)
         param_force_set(PARAM_RADIO_HIP_CMD, t);
 
-        // CH1: roll setpoint for the active-suspension roll controller. Ungated by
-        // gui_motion_ctrl (that override only covers v/omega). Sign bench-verified.
-        float roll_norm = constrain((g_rc.channel(1) - 1500.0f) / 500.0f, -1.0f, 1.0f);
-        const float roll_stick = roll_norm * param_get(PARAM_RADIO_ROLL_MAX);
+        // CH9: speed profile selector (3-position switch → profile 0/1/2).
+        // Read before the sticks: full deflection is the active profile's max,
+        // scaled straight off profileN_* with no copy in between. Read every
+        // tick (not latched on a switch edge) so a GUI edit to
+        // profileN_vel_max/yaw_max/roll_max/torque_lim takes effect immediately.
+        static const uint16_t PROFILE_VEL[]    = {PARAM_PROFILE_1_VEL_MAX,    PARAM_PROFILE_2_VEL_MAX,    PARAM_PROFILE_3_VEL_MAX};
+        static const uint16_t PROFILE_YAW[]    = {PARAM_PROFILE_1_YAW_MAX,    PARAM_PROFILE_2_YAW_MAX,    PARAM_PROFILE_3_YAW_MAX};
+        static const uint16_t PROFILE_TORQUE[] = {PARAM_PROFILE_1_TORQUE_LIM, PARAM_PROFILE_2_TORQUE_LIM, PARAM_PROFILE_3_TORQUE_LIM};
+        static const uint16_t PROFILE_ROLL[]   = {PARAM_PROFILE_1_ROLL_MAX,   PARAM_PROFILE_2_ROLL_MAX,   PARAM_PROFILE_3_ROLL_MAX};
+        uint16_t ch9 = g_rc.channel(9);
+        uint8_t profile = (ch9 < 1333) ? 0 : (ch9 < 1667) ? 1 : 2;
+        param_force_set(PARAM_ACTIVE_PROFILE, (float)profile);
+        const float vel_max  = param_get(PROFILE_VEL[profile]);
+        const float yaw_max  = param_get(PROFILE_YAW[profile]);
+        const float roll_max = param_get(PROFILE_ROLL[profile]);
+
+        // CH4: roll setpoint for the active-suspension roll controller. Ungated by
+        // gui_motion_ctrl (that override only covers v/omega). Moved from CH1 ->
+        // CH4; re-verify sign on the bench before trusting it (the old
+        // "bench-verified" check was done on CH1's stick, not CH4's).
+        float roll_norm = constrain((g_rc.channel(4) - 1500.0f) / 500.0f, -1.0f, 1.0f);
+        const float roll_stick = roll_norm * roll_max;
 
         // ── Coordinated-turn lean ────────────────────────────────────────────
         // Turning at speed throws the mass sideways; leaning into the turn puts
@@ -1795,36 +1823,50 @@ static void radio_update() {
         // The stick still adds on top, so manual counter-lean stays available
         // for recovery. Clamped to the profile's roll limit so the automatic
         // term can never exceed what the operator could have commanded by hand.
-        const float roll_lim = param_get(PARAM_RADIO_ROLL_MAX);
         float roll_cmd = roll_stick + lean;
-        if (roll_cmd >  roll_lim) roll_cmd =  roll_lim;
-        if (roll_cmd < -roll_lim) roll_cmd = -roll_lim;
+        if (roll_cmd >  roll_max) roll_cmd =  roll_max;
+        if (roll_cmd < -roll_max) roll_cmd = -roll_max;
         param_force_set(PARAM_ROLL_CMD_RAD, roll_cmd);
 
         if (!gui_motion_ctrl) {
             float vel_norm = constrain((g_rc.channel(2) - 1500.0f) / 500.0f, -1.0f, 1.0f);
-            param_force_set(PARAM_V_CMD_MS, vel_norm * param_get(PARAM_RADIO_VEL_MAX));
+            param_force_set(PARAM_V_CMD_MS, vel_norm * vel_max);
 
-            float yaw_norm = -constrain((g_rc.channel(4) - 1500.0f) / 500.0f, -1.0f, 1.0f);  // inverted: stick left -> robot yaws left
-            param_force_set(PARAM_OMEGA_CMD_RDS, yaw_norm * param_get(PARAM_RADIO_YAW_MAX));
+            // CH1: yaw rate. Moved from CH4 -> CH1; re-verify the inversion sign
+            // on the bench before trusting it (it was previously verified on
+            // CH4's stick, not CH1's).
+            float yaw_norm = -constrain((g_rc.channel(1) - 1500.0f) / 500.0f, -1.0f, 1.0f);  // inverted: stick left -> robot yaws left
+            // Yaw acceleration limit: slew toward the stick rather than step to
+            // it. A full-stick step saturated yaw_pi_torque_max in one tick (P3
+            // reached 500 deg/s in ~0.1 s). Ramped here, at the source, so the
+            // logged omega_cmd_rds and the lean-turn feedforward both see the
+            // shaped setpoint.
+            s_omega_ref = slew_toward(s_omega_ref, yaw_norm * yaw_max,
+                                      param_get(PARAM_YAW_ACCEL_MAX), 0.002f);
+            param_force_set(PARAM_OMEGA_CMD_RDS, s_omega_ref);
         }
 
-        // CH9: speed profile selector (3-position switch → profile 0/1/2)
-        static const uint16_t PROFILE_VEL[]    = {PARAM_PROFILE_1_VEL_MAX,    PARAM_PROFILE_2_VEL_MAX,    PARAM_PROFILE_3_VEL_MAX};
-        static const uint16_t PROFILE_YAW[]    = {PARAM_PROFILE_1_YAW_MAX,    PARAM_PROFILE_2_YAW_MAX,    PARAM_PROFILE_3_YAW_MAX};
-        static const uint16_t PROFILE_TORQUE[] = {PARAM_PROFILE_1_TORQUE_LIM, PARAM_PROFILE_2_TORQUE_LIM, PARAM_PROFILE_3_TORQUE_LIM};
-        static const uint16_t PROFILE_ROLL[]   = {PARAM_PROFILE_1_ROLL_MAX,   PARAM_PROFILE_2_ROLL_MAX,   PARAM_PROFILE_3_ROLL_MAX};
         static uint8_t s_last_profile = 255;   // force apply on first packet
-        static float   s_trq_target   = -1.0f; // <0 = no pending slew
-        uint16_t ch9 = g_rc.channel(9);
-        uint8_t profile = (ch9 < 1333) ? 0 : (ch9 < 1667) ? 1 : 2;
+
+        // Chase PARAM_LQR_TORQUE_LIMIT toward the profile target at 5 N·m/s,
+        // continuously (not just on a switch edge) so a live torque_lim edit
+        // ramps down safely too. Upward steps apply immediately (safe);
+        // downward steps are ramped to avoid destabilising the balancer mid-run.
+        {
+            static constexpr float TRQ_SLEW_STEP = 5.0f * 0.002f; // 5 N·m/s @ 500 Hz
+            float trq_target = param_get(PROFILE_TORQUE[profile]);
+            float cur = param_get(PARAM_LQR_TORQUE_LIMIT);
+            if (trq_target >= cur) {
+                param_force_set(PARAM_LQR_TORQUE_LIMIT, trq_target);
+            } else {
+                float next = cur - TRQ_SLEW_STEP;
+                if (next <= trq_target) next = trq_target;
+                param_force_set(PARAM_LQR_TORQUE_LIMIT, next);
+            }
+        }
+
         if (profile != s_last_profile) {
             s_last_profile = profile;
-            param_force_set(PARAM_ACTIVE_PROFILE, (float)profile);
-            param_force_set(PARAM_RADIO_VEL_MAX, param_get(PROFILE_VEL[profile]));
-            param_force_set(PARAM_RADIO_YAW_MAX, param_get(PROFILE_YAW[profile]));
-            param_force_set(PARAM_RADIO_ROLL_MAX, param_get(PROFILE_ROLL[profile]));
-            s_trq_target = param_get(PROFILE_TORQUE[profile]); // applied via slew below
             comm_log(LOG_LEVEL_INFO, "Radio: speed profile %u", (unsigned)(profile + 1));
 
             // LED flash: green=slow, yellow=medium, red=fast
@@ -1845,22 +1887,6 @@ static void radio_update() {
             g_buzzer.play(PROFILE_MELODIES[profile], profile + 1);
         }
 
-        // Slew PARAM_LQR_TORQUE_LIMIT toward the profile target at 5 N·m/s.
-        // Upward steps apply immediately (safe); downward steps are ramped to
-        // avoid destabilising the balancer mid-run.
-        if (s_trq_target >= 0.0f) {
-            static constexpr float TRQ_SLEW_STEP = 5.0f * 0.002f; // 5 N·m/s @ 500 Hz
-            float cur = param_get(PARAM_LQR_TORQUE_LIMIT);
-            if (s_trq_target >= cur) {
-                param_force_set(PARAM_LQR_TORQUE_LIMIT, s_trq_target);
-                s_trq_target = -1.0f;
-            } else {
-                float next = cur - TRQ_SLEW_STEP;
-                if (next <= s_trq_target) { next = s_trq_target; s_trq_target = -1.0f; }
-                param_force_set(PARAM_LQR_TORQUE_LIMIT, next);
-            }
-        }
-
     } else {
         // Radio link dead: never hold a lean. Roll isn't part of gui_motion_ctrl,
         // so zero it regardless; v/omega only when the GUI isn't driving them.
@@ -1868,7 +1894,11 @@ static void radio_update() {
         param_force_set(PARAM_LEAN_CMD_RAD, 0.0f);
         if (!gui_motion_ctrl) {
             param_force_set(PARAM_V_CMD_MS, 0.0f);
-            param_force_set(PARAM_OMEGA_CMD_RDS, 0.0f);
+            // Ramp, don't snap: stopping a 500 deg/s spin in one tick is the
+            // same jerk as starting one.
+            s_omega_ref = slew_toward(s_omega_ref, 0.0f,
+                                      param_get(PARAM_YAW_ACCEL_MAX), 0.002f);
+            param_force_set(PARAM_OMEGA_CMD_RDS, s_omega_ref);
         }
     }
 

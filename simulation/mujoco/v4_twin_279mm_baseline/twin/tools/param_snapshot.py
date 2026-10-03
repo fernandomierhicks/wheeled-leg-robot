@@ -9,6 +9,23 @@ from typing import Mapping
 
 from ..params_control import PARAMS_BY_ID, PARAMS_BY_NAME, validate_values
 
+# Parameters deliberately removed from protocol/schema.json. Older GUI exports
+# and older firmware still carry them; they are skipped (by matching ID *and*
+# name) instead of being treated as schema drift. Firmware and the GUI importer
+# already skip unknown IDs the same way.
+RETIRED_PARAMS = {
+    0x0450: "lqr_trim_curve",  # 2026-10-02: trim schedule became a 9-point table
+    # 2026-10-02: read-only copies of the active profile's limits; the sticks
+    # now scale straight off profileN_vel/yaw/roll_max.
+    0x0501: "radio_vel_max",
+    0x0502: "radio_yaw_max",
+    0x0526: "radio_roll_max",
+}
+
+
+def _is_retired(param_id: int, name: str) -> bool:
+    return RETIRED_PARAMS.get(param_id) == name
+
 
 def _normalise_wire_value(name: str, value: float) -> float:
     """Clamp only float32-sized endpoint round-off from robot/GUI exports.
@@ -37,6 +54,8 @@ def snapshot_from_live(items: list[dict], source: str = "robot") -> dict:
         raw_id = item["id"]
         param_id = int(raw_id, 0) if isinstance(raw_id, str) else int(raw_id)
         definition = PARAMS_BY_ID.get(param_id)
+        if definition is None and _is_retired(param_id, str(item.get("name", ""))):
+            continue
         if definition is None:
             raise ValueError(f"robot reported unknown parameter ID 0x{param_id:04X}")
         name = next(name for name, value in PARAMS_BY_NAME.items() if value.id == param_id)
@@ -66,6 +85,8 @@ def load_snapshot(path: Path, *, require_schema_match: bool = True) -> dict[str,
         except ValueError as exc:
             raise ValueError(f"{path}: invalid parameter ID {id_text!r}") from exc
         definition = PARAMS_BY_ID.get(param_id)
+        if definition is None and _is_retired(param_id, str(item.get("name", ""))):
+            continue
         if definition is None:
             raise ValueError(f"{path}: unknown parameter ID {id_text}")
         name = str(item["name"])

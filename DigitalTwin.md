@@ -169,7 +169,7 @@ already uses.
 | IMU noise | BNO086 bench numbers | re-take **on the assembled robot with motors energised** | T3.2 |
 
 **Every speed tuned in m/s is stale by 0.747×** because of the Ø150→Ø112 change —
-`vel_pi_*`, `v_cmd_ms`, `radio_vel_max`, `profileN_vel_max`. The twin should not
+`vel_pi_*`, `v_cmd_ms`, `profileN_vel_max`. The twin should not
 inherit any of them; it pulls live values from the robot (§3.2).
 
 Critical files: `v4_twin_279mm_baseline/{params.py, physics.py, sim_loop.py,

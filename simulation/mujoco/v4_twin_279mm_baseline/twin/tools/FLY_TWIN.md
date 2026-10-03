@@ -2,7 +2,8 @@
 
     python twin/tools/fly_twin.py --check     # list HID devices
     python twin/tools/fly_twin.py --monitor   # live channel dump, no sim
-    python twin/tools/fly_twin.py             # fly it
+    python twin/tools/fly_twin.py             # fly it (speed profile 2)
+    python twin/tools/fly_twin.py --profile 3 # fly with profile 3's limits
 
 ## Setup
 
@@ -37,7 +38,7 @@ Concretely, it lets you:
 | Transfers | Does **not** transfer |
 |---|---|
 | Stick feel and the channel map | Anything about the radio link |
-| Command scaling (`radio_*_max`, from the shared schema) | CRSF framing, failsafe, LQ |
+| Command scaling (`profileN_*_max` and the `yaw_accel_max` ramp, from the shared schema) | CRSF framing, failsafe, LQ |
 | Arm and jump semantics | Link-loss behaviour |
 | Gain values, via the shared parameter namespace | Real ELRS endpoint quirks |
 
@@ -56,7 +57,8 @@ buttons 1..8          ->  channels 9..16  "on if channel > 0"
 So **channels 9–16 arrive as booleans**. Two consequences:
 
 - **CH9 (speed profile)** is a 3-position switch, so over USB its middle
-  position is indistinguishable from its up position.
+  position is indistinguishable from its up position. The twin therefore
+  ignores CH9 and takes the profile from `--profile` (default 2).
 - **CH13 (encoded live-tune group)** collapses entirely — every non-zero level
   reads as "on".
 

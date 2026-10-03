@@ -10,10 +10,12 @@ from PyQt6.QtWidgets import QApplication
 from tabs.generated_protocol import PARAM_BY_NAME
 from tabs.params_tab import (
     _ANGLE_PARAM_NAMES,
+    _ANGULAR_ACCEL_PARAM_NAMES,
     _ANGULAR_RATE_PARAM_NAMES,
     _BENCH_PRESETS,
     _DISPLAY_UNIT_BY_PARAM,
     _ParamRow,
+    _display_description,
     _effective_group,
     _get_subgroup,
     _migrate_import_value,
@@ -25,7 +27,7 @@ _APP = QApplication.instance() or QApplication([])
 
 class ParamsTabAngleDisplayTests(unittest.TestCase):
     def test_every_declared_angle_name_resolves_to_a_generated_parameter(self):
-        names = _ANGLE_PARAM_NAMES | _ANGULAR_RATE_PARAM_NAMES
+        names = _ANGLE_PARAM_NAMES | _ANGULAR_RATE_PARAM_NAMES | _ANGULAR_ACCEL_PARAM_NAMES
         # Bump this whenever the two sets change. It had drifted to a stale 33
         # against an actual 38 before the jump angle/speed params were added;
         # the real guard is the set equality below, this is just a tripwire that
@@ -35,8 +37,11 @@ class ParamsTabAngleDisplayTests(unittest.TestCase):
         # that had never been added: +jmp_handoff_pitch, +jmp_handoff_rate,
         # +jump_land_gyro_imp, +lqr_barrier_th_ret, +lqr_barrier_th_ext,
         # +roll_cmd_rad, +roll_rate_lim, +roll_watchdog_limit, +standup_div_fwd,
-        # +standup_div_bwd.
-        self.assertEqual(len(names), 55)
+        # +standup_div_bwd. 61 as of 2026-10-02: the trim schedule became a
+        # 9-point table, -lqr_trim_curve, +lqr_pitch_trim_12/25/38/50/62/75/88.
+        # 60 later on 2026-10-02: +yaw_accel_max (first [rad/s^2] param, deg/s²),
+        # -radio_yaw_max, -radio_roll_max (read-only profile copies, retired).
+        self.assertEqual(len(names), 60)
         self.assertEqual(
             {PARAM_BY_NAME[name] for name in names},
             set(_DISPLAY_UNIT_BY_PARAM),
@@ -63,9 +68,9 @@ class ParamsTabAngleDisplayTests(unittest.TestCase):
 
     def test_degree_edit_is_converted_to_radians_when_sent(self):
         row = _ParamRow(
-            PARAM_BY_NAME["omega_cmd_rds"],
-            "omega_cmd_rds",
-            "Yaw rate [rad/s].",
+            PARAM_BY_NAME["roll_rate_lim"],
+            "roll_rate_lim",
+            "Roll setpoint slew limit [rad/s].",
             0.0,
             -math.pi,
             math.pi,
@@ -84,8 +89,29 @@ class ParamsTabAngleDisplayTests(unittest.TestCase):
 
         send_param_set.assert_called_once()
         param_id, raw_value = send_param_set.call_args.args
-        self.assertEqual(param_id, PARAM_BY_NAME["omega_cmd_rds"])
+        self.assertEqual(param_id, PARAM_BY_NAME["roll_rate_lim"])
         self.assertAlmostEqual(raw_value, math.pi)
+
+    def test_motion_commands_are_readonly_in_the_tab_but_not_in_firmware(self):
+        # The firmware leaves them writable for robot_ctl.py motion_set; the
+        # tab must not offer an edit box the radio overwrites every tick.
+        for name in ("omega_cmd_rds", "v_cmd_ms"):
+            row = _ParamRow(PARAM_BY_NAME[name], name, "", 0.0, -1.0, 1.0, 0)
+            self.assertTrue(row.is_readonly(), name)
+            self.assertFalse(row._edit.isEnabled(), name)
+            self.assertFalse(row._btn.isEnabled(), name)
+            row.update_value(0.5, -1.0, 1.0, 0)   # firmware flags: writable
+            self.assertFalse(row._edit.isEnabled(), name)
+
+    def test_angular_accel_reports_the_right_firmware_unit(self):
+        row = _ParamRow(PARAM_BY_NAME["yaw_accel_max"], "yaw_accel_max",
+                        "Yaw acceleration limit [rad/s^2].", 8.0, 0.0, 200.0, 0)
+        self.assertTrue(row._edit.isEnabled())
+        self.assertAlmostEqual(row.current_value(), 8.0, places=3)
+        self.assertEqual(
+            _display_description("Limit [rad/s^2].", "deg/s²"),
+            "Limit [deg/s²]. GUI displays deg/s²; firmware stores rad/s².",
+        )
 
     def test_angle_gains_remain_in_firmware_units(self):
         row = _ParamRow(
@@ -131,13 +157,37 @@ class ParamsTabAngleDisplayTests(unittest.TestCase):
 
     def test_balance_trim_schedule_is_grouped_under_hip(self):
         for name in (
+            "trim_learn_en",
             "lqr_pitch_trim_ret",
+            "lqr_pitch_trim_12",
+            "lqr_pitch_trim_25",
+            "lqr_pitch_trim_38",
+            "lqr_pitch_trim_50",
+            "lqr_pitch_trim_62",
+            "lqr_pitch_trim_75",
+            "lqr_pitch_trim_88",
             "lqr_pitch_trim_ext",
-            "lqr_trim_curve",
         ):
             param_id = PARAM_BY_NAME[name]
             self.assertEqual(_effective_group(param_id), 0x02)
             self.assertEqual(_get_subgroup(param_id), "Pitch Trim vs Leg Height")
+
+    def test_yaw_rate_source_sits_with_the_yaw_pi(self):
+        param_id = PARAM_BY_NAME["yaw_rate_src"]
+        self.assertEqual(_effective_group(param_id), 0x04)
+        self.assertEqual(_get_subgroup(param_id), "Yaw PI")
+
+    def test_yaw_accel_limit_sits_with_the_yaw_pi(self):
+        param_id = PARAM_BY_NAME["yaw_accel_max"]
+        self.assertEqual(_effective_group(param_id), 0x04)
+        self.assertEqual(_get_subgroup(param_id), "Yaw PI")
+        self.assertEqual(_DISPLAY_UNIT_BY_PARAM[param_id], "deg/s²")
+
+    def test_crsf_link_parameters_have_their_own_group(self):
+        crsf = [name for name in PARAM_BY_NAME if name.startswith("crsf_")]
+        self.assertEqual(len(crsf), 5)
+        for name in crsf:
+            self.assertEqual(_effective_group(PARAM_BY_NAME[name]), 0x06, name)
 
     def test_standup_divergence_limits_are_grouped_with_standing_up(self):
         for name in ("standup_div_fwd", "standup_div_bwd"):

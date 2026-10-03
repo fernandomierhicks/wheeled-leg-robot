@@ -887,6 +887,19 @@
       "description": "Desired yaw rate [rad/s]; positive = CCW from above."
     },
     {
+      "symbol": "PARAM_YAW_ACCEL_MAX",
+      "id": 1114,
+      "group": "GROUP_CONTROL",
+      "name": "yaw_accel_max",
+      "default": 8.0,
+      "min": 0.0,
+      "max": 200.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Yaw acceleration limit [rad/s^2] on the radio yaw-rate command: omega_cmd_rds slews toward CH1 * the active profile's yaw_max at no more than this, in both directions and when ramping to 0 on radio link loss. One limit for all profiles, so a faster profile simply takes longer to reach full rate (at 8: P1 0.87 rad/s in 0.11 s, P3 8.73 rad/s in 1.1 s). Without it a full-stick step saturates yaw_pi_torque_max in one tick. GUI motion-control commands are not ramped. 0 = no limit."
+    },
+    {
       "symbol": "PARAM_FF1_ALPHA",
       "id": 1042,
       "group": "GROUP_CONTROL",
@@ -1416,6 +1429,19 @@
       "description": "CROUCH/EXTEND/RETRACT-scoped wheel soft-governor threshold [turns/s]; the runaway watchdog trips at 2x this while airborne, same relationship jmp_handoff_vel_lim has to LANDING/HANDOFF. 0 inherits wm_vel_limit. Wheels are unloaded and legitimately spin fast in the air, unlike jmp_handoff_vel_lim's post-landing on-ground case, so this wants real headroom: added 2026-08-13 after a genuine airborne RETRACT (accel_z dipped to -28 m/s2) tripped FAULT_WHEEL_RUNAWAY at wm_r=-12.97 turns/s against the plain 12.0 (2x wm_vel_limit=6.0) ceiling that used to apply through the whole pre-landing sequence."
     },
     {
+      "symbol": "PARAM_JUMP_AIRBORNE_WHEEL_HOLD_KP",
+      "id": 1369,
+      "group": "GROUP_CONTROL",
+      "name": "jmp_air_whl_kp",
+      "default": 0.03,
+      "min": 0.0,
+      "max": 0.2,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Airborne wheel hold gain [N·m per turn/s]. From detected liftoff (a wheel departs its RETRACT-entry speed by more than 5 turns/s) until landing is detected, each wheel's balance-loop torque is replaced by kp*(w_entry - w), so the wheels touch down near ground speed instead of the ~20 turns/s the ground LQR spins them to when unloaded (LOG0042/LOG0043). Still clamped by the torque limit and soft governor. 0 disables the hold."
+    },
+    {
       "symbol": "PARAM_ENABLE_SIM_PITCH_RAD",
       "id": 1056,
       "group": "GROUP_CONTROL",
@@ -1456,8 +1482,8 @@
       "default": 1.0,
       "min": 0.0,
       "max": 1.0,
-      "flags": [],
-      "description": "1 = ESTOP (FAULT_PITCH_WATCHDOG) if pitch exceeds pitch_watchdog_fwd_ret/ext or pitch_watchdog_bwd_ret/ext (gain-scheduled by leg height) for > 200 ms. Default on and NOT persisted — always starts back on after reboot so a bench-test disable can't silently survive into a real run."
+      "flags": ["persistent"],
+      "description": "1 = ESTOP (FAULT_PITCH_WATCHDOG) if pitch exceeds pitch_watchdog_fwd_ret/ext or pitch_watchdog_bwd_ret/ext (gain-scheduled by leg height) for > 200 ms. Default on; now persisted across reboots so a deliberate disable (e.g. for bench testing) survives a power cycle instead of silently re-arming."
     },
     {
       "symbol": "PARAM_LQR_K_PITCH_RET",
@@ -1774,26 +1800,26 @@
       "id": 1084,
       "group": "GROUP_CONTROL",
       "name": "lqr_pitch_trim_ret",
-      "default": -0.14,
+      "default": -0.0244,
       "min": -0.3491,
       "max": 0.3491,
       "flags": [
         "persistent"
       ],
-      "description": "Balance-point pitch offset [rad], fully retracted leg (alpha=0). This is the retracted endpoint of trim(alpha) = trim_ret + alpha*(trim_ext-trim_ret) + trim_curve*alpha*(1-alpha). The lean the LQR holds for zero velocity compensates a CG that is not exactly over the wheel axle. Default -0.14 rad (~-8 deg), measured on the bench 2026-07-25: with this at 0 the vel-PI integrator was doing the trim's job, permanently eating ~8 deg of the backward lean budget. Not currently a live-tune target (see LIVE_TUNE_SLOTS in main.cpp) — edit via the Params tab, or repoint a live-tune slot at this param for a future bench session."
+      "description": "Balance-point pitch offset [rad] at alpha=0 (fully retracted): the first point of the 9-point trim table (alpha 0, 0.125, ... 1; linear interpolation between points). The lean the LQR holds for zero velocity compensates a CG that is not exactly over the wheel axle; a wrong value is carried by the vel-PI integrator instead. Default -0.0244 rad (-1.4 deg), measured 2026-10-02 (LOG0036). Learnable on the robot with trim_learn_en. Not currently a live-tune target (see LIVE_TUNE_SLOTS in main.cpp)."
     },
     {
       "symbol": "PARAM_LQR_PITCH_TRIM_EXT",
       "id": 1085,
       "group": "GROUP_CONTROL",
       "name": "lqr_pitch_trim_ext",
-      "default": 0.0,
+      "default": -0.0297,
       "min": -0.3491,
       "max": 0.3491,
       "flags": [
         "persistent"
       ],
-      "description": "Balance-point pitch offset [rad], fully extended leg (alpha=1). This is the extended endpoint of the quadratic height schedule; lqr_trim_curve changes only the interior of the alpha range."
+      "description": "Balance-point pitch offset [rad] at alpha=1 (fully extended): the last point of the 9-point trim table. Default -0.0297 rad (-1.7 deg), measured 2026-10-02 (LOG0036, alpha 0.96). Learnable on the robot with trim_learn_en."
     },
     {
       "symbol": "PARAM_VEL_PI_THETA_MAX_FWD_RET",
@@ -2033,17 +2059,119 @@
       "description": "Plant-identification chirp duration [s]. The excitation auto-disarms when this time elapses. Non-persistent."
     },
     {
-      "symbol": "PARAM_LQR_PITCH_TRIM_CURVE",
-      "id": 1104,
+      "symbol": "PARAM_YAW_RATE_SRC",
+      "id": 1105,
       "group": "GROUP_CONTROL",
-      "name": "lqr_trim_curve",
+      "name": "yaw_rate_src",
       "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Yaw-rate measurement fed to the yaw PI. 0 = IMU gyro Z (previous behaviour). 1 = wheel encoders, (v_R - v_L)/0.340 m track. The encoders sit on the same side of the leg compliance as the wheel motors, so feedback on them damps the 12-17 Hz roll/yaw body mode instead of exciting it, which is what limits yaw gain on the gyro (LOG0036, 2026-10-02: gyro yaw ~160 deg out of phase with the wheels at that mode). The two agree to 1-2% below 1 Hz. Encoders cannot see wheel slip."
+    },
+    {
+      "symbol": "PARAM_TRIM_LEARN_EN",
+      "id": 1106,
+      "group": "GROUP_CONTROL",
+      "name": "trim_learn_en",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "flags": [],
+      "description": "1 = learn the pitch-trim table while RUNNING. Park the robot with no stick input at a leg height; after 2 s settle + 6 s of averaging, if mean tau_sym < 5 mN·m and mean wheel speed < 0.05 m/s, the table at the current alpha is moved toward the measured balance pitch (5 s time constant). The vel-PI integrator is offloaded by the same amount so the lean target does not jump. Learned values are ordinary persistent params and save to flash after disarm. Needs valid hip calibration, alpha not pinned, vel PI enabled with vel_pi_ki > 0. Non-persistent: boots off."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_12",
+      "id": 1107,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_pitch_trim_12",
+      "default": -0.0593,
       "min": -0.3491,
       "max": 0.3491,
       "flags": [
         "persistent"
       ],
-      "description": "Interior curvature [rad] for the balance-point pitch-trim height schedule: trim(alpha) = trim_ret + alpha*(trim_ext-trim_ret) + lqr_trim_curve*alpha*(1-alpha). It is zero at alpha=0 and alpha=1, contributes one quarter of its value at alpha=0.5, and default 0 preserves the previous linear interpolation. Negative values add more backward (negative) trim at intermediate leg heights."
+      "description": "Pitch-trim table point [rad] at alpha=0.125. Seeded -3.4 deg by interpolating LOG0036 (2026-10-02) balance points. Learnable with trim_learn_en."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_25",
+      "id": 1108,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_pitch_trim_25",
+      "default": -0.085,
+      "min": -0.3491,
+      "max": 0.3491,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch-trim table point [rad] at alpha=0.25. Seeded -4.9 deg from LOG0036 (measured -4.9 deg at alpha 0.22). Learnable with trim_learn_en."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_38",
+      "id": 1109,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_pitch_trim_38",
+      "default": -0.0803,
+      "min": -0.3491,
+      "max": 0.3491,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch-trim table point [rad] at alpha=0.375. Seeded -4.6 deg from LOG0036 (measured -4.8 deg at alpha 0.35). Learnable with trim_learn_en."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_50",
+      "id": 1110,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_pitch_trim_50",
+      "default": -0.067,
+      "min": -0.3491,
+      "max": 0.3491,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch-trim table point [rad] at alpha=0.5. Seeded -3.8 deg by linear interpolation (no LOG0036 data between alpha 0.35 and 0.86). Learnable with trim_learn_en."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_62",
+      "id": 1111,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_pitch_trim_62",
+      "default": -0.0536,
+      "min": -0.3491,
+      "max": 0.3491,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch-trim table point [rad] at alpha=0.625. Seeded -3.1 deg by linear interpolation (no LOG0036 data here). Learnable with trim_learn_en."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_75",
+      "id": 1112,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_pitch_trim_75",
+      "default": -0.04,
+      "min": -0.3491,
+      "max": 0.3491,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch-trim table point [rad] at alpha=0.75. Seeded -2.3 deg by linear interpolation (no LOG0036 data here). Learnable with trim_learn_en."
+    },
+    {
+      "symbol": "PARAM_LQR_PITCH_TRIM_88",
+      "id": 1113,
+      "group": "GROUP_CONTROL",
+      "name": "lqr_pitch_trim_88",
+      "default": -0.0283,
+      "min": -0.3491,
+      "max": 0.3491,
+      "flags": [
+        "persistent"
+      ],
+      "description": "Pitch-trim table point [rad] at alpha=0.875. Seeded -1.6 deg from LOG0036 (measured -1.6 deg at alpha 0.86). Learnable with trim_learn_en."
     },
     {
       "symbol": "PARAM_RADIO_HIP_CMD",
@@ -2058,34 +2186,6 @@
         "command"
       ],
       "description": "Hip extension command from CH3 [0=retracted, 1=extended]; firmware-written, stale when the radio link is dead."
-    },
-    {
-      "symbol": "PARAM_RADIO_VEL_MAX",
-      "id": 1281,
-      "group": "GROUP_COMMAND",
-      "name": "radio_vel_max",
-      "default": 0.5,
-      "min": 0.0,
-      "max": 2.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "Max forward speed mapped from full CH2 deflection [m/s]. READONLY — copied from the active CH9 profile's vel_max. Edit profile1/2/3_vel_max instead."
-    },
-    {
-      "symbol": "PARAM_RADIO_YAW_MAX",
-      "id": 1282,
-      "group": "GROUP_COMMAND",
-      "name": "radio_yaw_max",
-      "default": 1.0,
-      "min": 0.0,
-      "max": 4.0,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "Max yaw rate mapped from full CH4 deflection [rad/s]. READONLY — copied from the active CH9 profile's yaw_max. Edit profile1/2/3_yaw_max instead."
     },
     {
       "symbol": "PARAM_LIVE_TUNE_CH7_VAL",
@@ -2135,7 +2235,7 @@
       "name": "profile1_yaw_max",
       "default": 0.5,
       "min": 0.0,
-      "max": 4.0,
+      "max": 17.453293,
       "flags": [
         "persistent"
       ],
@@ -2174,7 +2274,7 @@
       "name": "profile2_yaw_max",
       "default": 1.0,
       "min": 0.0,
-      "max": 4.0,
+      "max": 17.453293,
       "flags": [
         "persistent"
       ],
@@ -2213,7 +2313,7 @@
       "name": "profile3_yaw_max",
       "default": 2.0,
       "min": 0.0,
-      "max": 4.0,
+      "max": 17.453293,
       "flags": [
         "persistent"
       ],
@@ -2440,21 +2540,7 @@
         "readonly",
         "command"
       ],
-      "description": "Roll setpoint [rad] from CH1, = CH1_norm * radio_roll_max; firmware-written, zeroed when the radio link is dead. READONLY."
-    },
-    {
-      "symbol": "PARAM_RADIO_ROLL_MAX",
-      "id": 1318,
-      "group": "GROUP_COMMAND",
-      "name": "radio_roll_max",
-      "default": 0.1,
-      "min": 0.0,
-      "max": 0.7853982,
-      "flags": [
-        "readonly",
-        "command"
-      ],
-      "description": "Max roll setpoint mapped from full CH1 deflection [rad]. READONLY — copied from the active CH9 profile's roll_max. Edit profile1/2/3_roll_max instead."
+      "description": "Roll setpoint [rad] from CH4, = CH4_norm * the active CH9 profile's roll_max (plus any coordinated-turn lean, clamped to that limit); firmware-written, zeroed when the radio link is dead. READONLY."
     },
     {
       "symbol": "PARAM_PROFILE_1_ROLL_MAX",
