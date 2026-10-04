@@ -1,0 +1,4 @@
+Bearings on the inside link allow you to press from the outside links. Bearing doesn't go anywhere
+
+
+Bearings on the outside link are only constrained in by the fasteners joining both ouside links. 
