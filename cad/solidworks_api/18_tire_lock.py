@@ -13,8 +13,10 @@ it in rotation: friction alone, and it slips (his report, 2026-10-03).
          end is a RAMP (revolve cut) so the tyre, pushed on from the top over
          the wedge lip, rides up and drops onto the ribs.
   tyre   36 axial GROOVES through its bore, same angles, RIB_W wide (line to
-         line), floor at RIB_H + bore - FIT: the rib tops keep the same FIT
-         radial press fit the plain band has now.
+         line), floor level with the rib tops (TOP_FIT 0): the press fit stays
+         on the band between the grooves, where it grips.  The floor cannot go
+         much deeper: the tyre's end faces are flat only to r 48.0 before the
+         shoulder, so a floor past it notches the corner at both ends.
   asm    TL_TyreLock: Right Plane of the tyre coincident with the rim's.  The
          tyre's rotation was free (only Concentric4 + Coincident8), so without
          it nothing puts the grooves on the ribs.  The 36-fold pattern makes
@@ -47,7 +49,12 @@ A0 = 2.38           # deg, first spoke root in the rim's frame (measured)
 BAND_OD = 46.70     # rim band outer radius
 BAND_ID = 45.85     # rim band inner radius (the spokes start inside this)
 BORE = 46.00        # tyre bore radius
-FIT = BAND_OD - BORE    # 0.70 radial press fit, kept on the rib tops too
+FIT = BAND_OD - BORE    # 0.70 radial press fit of the tyre on the band (as designed)
+TOP_FIT = 0.0       # radial interference at the rib tops: 0 = groove floor level with them.
+                    # 0.70 (= FIT) was the first try: in CAD the rib then stood 0.7 mm into
+                    # the TPU (his look, 2026-10-03); stretched on, ~line to line.  At 0 the
+                    # stretched tyre leaves ~0.7 mm over the rib tops: torque goes through
+                    # the flanks either way, and it presses on more easily.
 RIB_W = 3.0         # rib width = groove width (line to line)
 RIB_H = 1.2         # rib height above the band
 RIB_CH = 0.3        # chamfer on the rib's two top corners
@@ -72,7 +79,7 @@ def ribs():
 
 
 def grooves():
-    return unary_union([rect(BORE - 0.5, BAND_OD + RIB_H - FIT, RIB_W, A0 + k * 360 / N)
+    return unary_union([rect(BORE - 0.5, BAND_OD + RIB_H - TOP_FIT, RIB_W, A0 + k * 360 / N)
                         for k in range(N)])
 
 

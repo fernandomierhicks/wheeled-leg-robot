@@ -84,18 +84,25 @@ and slipped. Now:
   cut) turns the top 2.6 mm of each into a lead-in ramp: the tyre goes on from
   the top, over the wedge lip, and rides up onto the ribs. +3149.7 mm3.
 * **tyre** `TL_Grooves`: 36 axial grooves through the bore, same angles,
-  3.0 wide (line to line with the ribs), floor r 47.2 -- the rib tops keep the
-  same 0.70 mm radial press fit the band has. -3496.5 mm3.
+  3.0 wide (line to line with the ribs), floor r 47.9 = level with the rib
+  tops (`TOP_FIT` 0), 1.9 mm deep from the bore. -5530.8 mm3. First try had
+  the floor at r 47.2 (the band's 0.7 mm press fit carried onto the rib
+  tops): in CAD the rib then stood 0.7 mm into the TPU and he judged the
+  grooves too shallow. Now the press fit is only on the band between the
+  grooves, where it grips; stretched on, ~0.7 mm clears the rib tops; torque
+  goes through the flanks either way. **Do not go deeper than ~r 47.9**: the
+  tyre's end faces are flat only to r 48.0 before the round shoulder (r 48.7
+  at 0.05 mm in, 49.7 at 0.2), so a deeper floor notches both corners.
 * **WheelMotorASM** `TL_TyreLock` (Right Planes coincident: the tyre's rotation
   was FREE before, so nothing put grooves on ribs) and `TL_TyreSeat` (Front
   Planes coincident, both parts' seat is local z 0). TL_TyreSeat REPLACES his
   `Coincident8` (tyre bottom face to a rim edge), which the grooves broke
   (error 51: they cut through that face's inner boundary); it was deleted.
 * **checked:** 1 body each; mates 0 in error everywhere; rim x tyre overlap
-  (OCC boolean) 5506.92 -> 5240.00 mm3 = the press fit kept, ribs IN the
-  grooves (1461.5 mm3 of it is rib tops on groove floors); the same tyre
-  turned half a pitch reads 6620.81, so the number does detect misalignment.
-  Nothing new outside the tyre, so no collision sweep.
+  (OCC boolean) 5506.92 -> 3489.64 mm3 = the band press fit between the
+  grooves, ribs IN the grooves (15.2 mm3 left at the rib-top radius, 0.4 per
+  rib); the same tyre turned half a pitch reads 6620.81, so the number does
+  detect misalignment. Nothing new outside the tyre, so no collision sweep.
 * **tune after a test print:** RIB_W (groove width) first -- FDM TPU slots
   print narrow and PLA ribs wide, so line-to-line may come out tight; FIT;
   RIB_H. `18 --redo` rebuilds with the new numbers. Originals in `_originals/`.
