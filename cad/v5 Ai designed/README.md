@@ -74,6 +74,32 @@ contact lost 0, inside new/grown 0; full 86-pose sweep (`14`, right leg):
 follows. The part's second configuration, `AttachedToHipMotor`, was not
 opened (switching configurations would cycle the colour features, gotcha 32).
 
+**Tyre lock, 2026-10-03 (his request; mechanical, not styling): `18_tire_lock.py`.**
+The TPU tyre (10 mm ring, bore r 46.00, z 0..27) was held on the rim band
+(OD r 46.70, 0.85 mm wall, 36 S-spokes) by a 0.70 mm radial press fit alone,
+and slipped. Now:
+* **rim** `TL_Ribs`: 36 axial ribs, 3.0 wide x 1.2 tall (r 46.7 -> 47.9, top
+  corners chamfered 0.3), one on every spoke root (2.38 + k*10 deg in the
+  rim's frame, measured), z 0 (the bottom lip) .. 26.0; `TL_RibRamp` (revolve
+  cut) turns the top 2.6 mm of each into a lead-in ramp: the tyre goes on from
+  the top, over the wedge lip, and rides up onto the ribs. +3149.7 mm3.
+* **tyre** `TL_Grooves`: 36 axial grooves through the bore, same angles,
+  3.0 wide (line to line with the ribs), floor r 47.2 -- the rib tops keep the
+  same 0.70 mm radial press fit the band has. -3496.5 mm3.
+* **WheelMotorASM** `TL_TyreLock` (Right Planes coincident: the tyre's rotation
+  was FREE before, so nothing put grooves on ribs) and `TL_TyreSeat` (Front
+  Planes coincident, both parts' seat is local z 0). TL_TyreSeat REPLACES his
+  `Coincident8` (tyre bottom face to a rim edge), which the grooves broke
+  (error 51: they cut through that face's inner boundary); it was deleted.
+* **checked:** 1 body each; mates 0 in error everywhere; rim x tyre overlap
+  (OCC boolean) 5506.92 -> 5240.00 mm3 = the press fit kept, ribs IN the
+  grooves (1461.5 mm3 of it is rib tops on groove floors); the same tyre
+  turned half a pitch reads 6620.81, so the number does detect misalignment.
+  Nothing new outside the tyre, so no collision sweep.
+* **tune after a test print:** RIB_W (groove width) first -- FDM TPU slots
+  print narrow and PLA ribs wide, so line-to-line may come out tight; FIT;
+  RIB_H. `18 --redo` rebuilds with the new numbers. Originals in `_originals/`.
+
 **Open, honestly:** the colour features do not survive suppress/unsuppress or
 upstream edits cleanly (gotcha 32 -- re-run `--restyle`); the Tibia's colour
 bodies overlap by 10 um films (0.18 %, gotcha on SKETCH shrink); one Coupler
@@ -110,6 +136,7 @@ C:/Users/ferna/cadenv/Scripts/python.exe cad/solidworks_api/01_hello.py
 | `14_sweep_compare.py on / off / compare` | the collision sweep, one phase per run, results on disk | works |
 | `16_check_and_save.py [--dry]` | **the way to save after automation** (not Save All): refuses if any styled part is unstyled in memory, deletes `AI_HipDrive`, refuses on mate errors, saves every dirty v5 doc (parts, sub-assemblies, `ROBOT.SLDASM` last) | works |
 | `15_style_washers.py preview` / `[--restyle]` / `render` | the green retaining washers (BearingWasher, SmallBearingWahser, InsideFemurShaft) -> graphite + blue/white circuit inlays, COLOUR ONLY (shape unchanged); 2D preview without SolidWorks; mates; 3MFs; close-ups at the F and E joints | works -- partition exact, 0 mate errors |
+| `18_tire_lock.py [--redo]` | NOT styling: locks the TPU tyre to the rim against slip -- 36 axial ribs on the rim band (one per spoke root, lead-in ramp at the top), 36 matching grooves in the tyre bore, and the `TL_TyreLock` / `TL_TyreSeat` plane mates in WheelMotorASM. Parameters at the top of the file | works -- see "Tyre lock" below |
 | `17_contact_keepout.py` | the contacts the robot is DESIGNED to make (pairs of the OFF baseline whose volume changes with the hip, touching a styled part) -> their interference bodies with styling OFF, in each part's frame -> `out/contact_keepout.json`; `08` keeps every removal and addition off them | works -- limit switch + retract hard stop on Femur_inside (127 mm2), the hard stop on the Coupler (22 mm2) |
 
 Interpreter: **`C:/Users/ferna/cadenv/Scripts/python.exe`** (has pywin32).
@@ -395,6 +422,15 @@ model = wrap(sw.ActiveDoc, sld.IModelDoc2)
     "new or bigger" compares stay silent. `14 compare` now also lists
     contacts of styled parts that SHRANK or VANISHED, and `17` keeps the
     styling off them in the first place.
+40. **SolidWorks' interference VOLUME can come back 0.00 on a real overlap.**
+    After the tyre lock, Interference Detection still flagged
+    `TPU wheel-1 x Wheel-1` but with 0.00 mm3, before and after fixing the
+    mates; an OCC boolean of the same two parts gives 5240.00 (and 5506.92
+    before, where SolidWorks agreed to 0.01). A flagged pair with zero volume
+    is a failed boolean, not "no overlap": measure it another way.
+41. **The InterferenceDetectionManager of a document that is not ACTIVE is
+    None.** `ActivateDoc3` the assembly first (a sub-assembly opened with
+    `OpenDoc6` is not activated by it).
 
 ### Design rules added on top of the locked look (all in 08/09)
 
