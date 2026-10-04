@@ -1,0 +1,33 @@
+styled parts loaded: 5/5
+
+1. MATES with styling ON: 0 in error
+   styling OFF: 65 touching pairs, 65 interfering (28 s)
+   styling ON : 67 touching pairs, 67 interfering (120 s)
+
+2. CONTACT lost by the styling: 0
+
+3. INSIDE (full detail, Middle pose) new or grown: 14
+        0.00 ->   2557.21 mm3  BODY-1/SIDE PANEL-1/Side panel-1 x COUPLER-1/Coupler-1
+        0.00 ->    211.77 mm3  COUPLER-1/BearingWasher-1 x COUPLER-1/Coupler-1
+        8.91 ->     62.37 mm3  COUPLER-1/Coupler-1 x Tibia-1/Bearing 6804-2RS (20x32x7)-1
+        8.91 ->     62.37 mm3  COUPLER-1/Coupler-1 x Tibia-1/Bearing 6804-2RS (20x32x7)-4
+        7.09 ->     49.66 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-3
+        7.09 ->     49.66 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-2
+        7.09 ->     49.66 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-4
+        7.09 ->     49.66 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-1
+        0.80 ->      7.38 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-8
+        0.80 ->      7.38 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-7
+        0.73 ->      6.91 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-6
+        0.73 ->      6.91 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-9
+        0.73 ->      6.58 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-10
+        0.73 ->      5.46 mm3  COUPLER-1/Coupler-1 x COUPLER-1/M3 Roundhead-5
+   sweep styling OFF: 86 poses in 321 s
+   sweep styling ON : 86 poses in 840 s
+
+4. SWEEP 86 poses, new or grown by the styling: 6
+   + 4053.72 mm3 at hip  -28.0 (0.00 -> 4053.72)  COUPLER-1/Coupler-1 x Femur-1/Femur-1
+   + 2768.17 mm3 at hip  +57.0 (0.00 -> 2768.17)  BODY-1/SIDE PANEL-1/Side panel-1 x COUPLER-1/Coupler-1
+   +   53.46 mm3 at hip  +21.0 (8.91 -> 62.37)  COUPLER-1/Coupler-1 x Tibia-1/Bearing 6804-2RS (20x32x7)-1
+   +   53.46 mm3 at hip   +9.0 (8.91 -> 62.37)  COUPLER-1/Coupler-1 x Tibia-1/Bearing 6804-2RS (20x32x7)-4
+   +   17.73 mm3 at hip  -28.0 (0.00 -> 17.73)  COUPLER-1/Coupler-1 x Tibia-1/Tibia-1
+   +    1.35 mm3 at hip  -28.0 (0.23 -> 1.58)  COUPLER-1/Coupler-1 x FEMUR_INSIDE-1/Femur_inside-1

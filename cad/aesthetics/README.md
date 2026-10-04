@@ -1,5 +1,13 @@
 # Aesthetics pipeline
 
+> **2026-10-03 — the styling now lives in SolidWorks.** Fernando re-approved
+> driving SolidWorks over COM (2026-10-02). GLACIER is rebuilt as native,
+> editable SolidWorks features on the parts in `cad/v5 Ai designed/`, by the
+> scripts in `cad/solidworks_api/`. **Start from `cad/v5 Ai designed/README.md`**
+> (the cheatsheet: status, scripts, the tweak-and-verify loop, gotchas). The
+> recipes and specs in this folder are still the source of the look; the OCC
+> build below is no longer the delivery route.
+
 ## ▶ The tournament is OVER — the look is locked
 
 **GLACIER**, in `specs/tibia.json` and `specs/femur.json`. See `TOURNAMENT.md`

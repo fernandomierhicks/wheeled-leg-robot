@@ -1,5 +1,10 @@
 # Handoff — copy the prompt below to continue in a new session
 
+> **2026-10-03: superseded as the starting point.** The styling is now built
+> natively in SolidWorks (`cad/solidworks_api/`, parts in `cad/v5 Ai designed/`).
+> Start from **`cad/v5 Ai designed/README.md`**. This file remains the record
+> of the OCC pipeline that produced the locked look.
+
 `README.md` and `TOURNAMENT.md` both point here. This file is the current
 restart prompt plus everything a new session needs. `TOURNAMENT.md` holds the
 locked look; `DECISIONS.md` is every decision Fernando made, newest at the
@@ -664,6 +669,10 @@ Bambu, that is evidence of nothing.
   (`TYPE_E_ELEMENTNOTFOUND`) and the Python route needs `pywin32`, which is now
   installed in `C:/Users/ferna/cadenv` and otherwise unused. He checks files
   himself and sends screenshots. **Do not re-automate SolidWorks without asking.**
+  **SUPERSEDED 2026-10-02:** he asked for SolidWorks automation again. The
+  Python route works (`EnsureModule` on the type library + QueryInterface; the
+  `TYPE_E_ELEMENTNOTFOUND` above is gotcha 2 there), and GLACIER is now built as
+  native SolidWorks features. Start from `cad/v5 Ai designed/README.md`.
 - Renders from the pipeline come from the same OCC kernel that writes the files,
   so they agree with the build by construction and **cannot** catch an export
   defect.
