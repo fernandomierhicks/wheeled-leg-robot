@@ -36,7 +36,8 @@ from swlib import c, wrap, sld
 
 interferences = import_module("05_interference").interferences
 STYLED = [r"Links\Femur.SLDPRT", r"Links\Coupler.SLDPRT", r"Links\Tibia.SLDPRT",
-          r"Body\Side panel.SLDPRT", r"Body\OldRobotBodyMount\RobotMount.SLDPRT"]
+          r"Body\Side panel.SLDPRT", r"Body\OldRobotBodyMount\RobotMount.SLDPRT",
+          r"Links\Femur_inside.SLDPRT"]
 LO, HI = -28.0, 57.0
 TOL = 1.0      # mm3
 

@@ -70,6 +70,23 @@ def compare():
     print(f"SWEEP {len(on)} poses, -28..+57 deg: {len(worst)} pair(s) the styling made new or bigger")
     for k, (a, d, b, v) in sorted(worst.items(), key=lambda t: -t[1][1]):
         print(f"   +{d:8.2f} mm3 at hip {a:+6.1f} ({b:.2f} -> {v:.2f})  {k}")
+    # The other way round: a contact of a STYLED part that got smaller or went
+    # away -- the limit switch and the retract hard stop are designed contacts
+    # (17_contact_keepout.py), and a removal over one deletes it silently.
+    # Only pairs touching a styled component: the suppressed left leg is
+    # missing from a right-leg-only ON for that reason alone.
+    styled = import_module("13_collision_keepout").STYLED_COMPONENTS
+    lost = {}
+    for a, b in zip(on, off):
+        for k, v in b["pairs"].items():
+            if not any(n in styled for n in k.split(" x ")):
+                continue
+            d = v - a["pairs"].get(k, 0.0)
+            if d > max(0.01, 0.02 * v) and (k not in lost or d > lost[k][1]):
+                lost[k] = (a["hip"], d, v, a["pairs"].get(k, 0.0))
+    print(f"CONTACTS of styled parts that shrank or vanished: {len(lost)}")
+    for k, (a, d, b, v) in sorted(lost.items(), key=lambda t: -t[1][1]):
+        print(f"   -{d:8.3f} mm3 at hip {a:+6.1f} ({b:.3f} -> {v:.3f})  {k}")
     return worst
 
 

@@ -17,6 +17,13 @@ venv/
 *.STP
 *.f3d
 *.f3z
+# ...except the per-part SOURCE STEPs the styling recipes read
+# (cad/aesthetics/lib/paths.part_step; 0.2-0.8 MB each).  The 68 MB assembly
+# pose exports stay out.
+!cad/aesthetics/input/parts/*.step
+!cad/v4 Larger Ball bearings/STEP exports/Middle multiple parts/Femur.STEP
+!cad/v4 Larger Ball bearings/STEP exports/Middle multiple parts/Tibia.STEP
+!cad/v4 Larger Ball bearings/STEP exports/Middle multiple parts/RobotMount.STEP
 
 # Generated / large data files
 *.npz

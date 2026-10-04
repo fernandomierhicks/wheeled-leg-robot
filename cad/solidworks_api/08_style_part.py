@@ -49,6 +49,7 @@ PARTS = {   # part -> (recipe module, spec, v5 file)
     "Coupler":    ("coupler", "coupler.json", r"Links\Coupler.SLDPRT"),
     "Side panel": ("side_panel", "side panel.json", r"Body\Side panel.SLDPRT"),
     "RobotMount": ("robotmount", "robotmount.json", r"Body\OldRobotBodyMount\RobotMount.SLDPRT"),
+    "Femur_inside": ("femur_inside", "femur_inside.json", r"Links\Femur_inside.SLDPRT"),
 }
 ORIGINALS = os.path.join(swlib.V5, "_originals")
 
@@ -124,6 +125,16 @@ def main(part, dry=False, fresh=False, restyle=False):
         pass
     print(f"  {len(ops)} openings -> mechanical keep-out {M.area:.0f} mm2 "
           f"(the recipe's own kb was {P['kb'].area:.0f} mm2)")
+    # the contacts the robot is DESIGNED to make (17_contact_keepout.py): the
+    # limit switch and the retract hard stop land on Femur_inside, and a removal
+    # there deletes them without a trace -- nothing is cut or added there
+    _cc = os.path.join(HERE, "out", "contact_keepout.json")
+    if os.path.exists(_cc):
+        from shapely.geometry import shape as _shape
+        _kc = [_shape(g) for g in json.load(open(_cc)).get(part, [])]
+        if _kc:
+            M = unary_union([M] + _kc)
+            print(f"  contact keep-out (designed contacts): {unary_union(_kc).area:.0f} mm2")
     if part in EXTRA:       # hand-laid features for ground the recipe leaves bare
         print(f"  extras.py: {EXTRA[part](P, M)}")
 

@@ -77,6 +77,36 @@ DATUMS, DERIVED:
 SHOW FACE local +Z.  This is the innermost part in the stack (global Z 80..99),
 so much of it is hidden by the Side panel; only the region beyond the Side
 panel's footprint actually shows.'''),
+
+    "Femur_inside": dict(
+        module="femur_inside", show="-Z",
+        datums=[("A", (-93.79, 0.0), 21.75), ("C", (93.79, 0.0), 16.50)],
+        doc='''Femur_inside v4 -- the inner femur plate, the Femur's inboard twin.
+
+A 10 mm plate (z -5..+5) with a knee TUBE to z +31 that meets the Femur's own
+knee tube: the two plates bolt together there into one box-section link, with
+the Side panel between them.  The hip end carries a D26 bore on the
+InsideFemurShaft and six M3 on an R18 circle; a D10 notch at x ~ -70 on the
+-Y edge clears a screw.
+
+DATUMS, DERIVED (they match the Femur's):
+
+    A = (-93.790, 0)   the D26 bore, six M3 counterbored from the -Z side on a
+                       circle of r 18.00 about it -- the hip axis.
+    C = (+93.790, 0)   the knee: four M3 on a 7.00 mm cross, counterbored from
+                       -Z, tube bore r 13.70 at z +5.
+    |AC| = 187.58 mm, CLAUDE.md's femur length.
+
+The lobes are NOT the same size -- hip 21.75, knee 16.50 -- so RAD is per datum.
+
+SHOW FACE local -Z: +Z faces the Side panel (the knee tube points that way),
+-Z faces the robot's centre line, which is the face seen between the legs.
+
+TWO CONTACTS LIVE ON THIS PART and must survive the styling: the coupler's
+retract hard stop lands on the knee tube wall (inside the knee seat keep-out),
+and the limit switch is actuated by the -Y edge at x -26..-15 over the last
+2 degrees of retract.  Both are measured in SolidWorks and kept clear by
+08_style_part.py's contact keep-out.'''),
 }
 
 

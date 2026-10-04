@@ -1,13 +1,13 @@
-styled parts loaded: 5/5
+styled parts loaded: 6/6
 
 1. MATES with styling ON: 0 in error
-   styling ON : 65 touching pairs, 65 interfering (101 s)
-   styling OFF: 65 touching pairs, 65 interfering (34 s)
+   styling ON : 65 touching pairs, 65 interfering (90 s)
+   styling OFF: 65 touching pairs, 65 interfering (28 s)
 
 2. CONTACT lost by the styling: 0
 
 3. INSIDE (full detail, Middle pose) new or grown: 0
-   sweep styling OFF: 2 poses in 16 s
-   sweep styling ON : 2 poses in 12 s
+   sweep styling OFF: 2 poses in 8 s
+   sweep styling ON : 2 poses in 24 s
 
 4. SWEEP 2 poses, new or grown by the styling: 0

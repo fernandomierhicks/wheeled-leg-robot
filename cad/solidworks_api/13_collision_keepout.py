@@ -44,7 +44,8 @@ TOL = 1.0            # mm3
 MIDDLE = 19.98
 STYLED_COMPONENTS = {"Femur-1/Femur-1": "Femur", "COUPLER-1/Coupler-1": "Coupler",
                      "Tibia-1/Tibia-1": "Tibia", "BODY-1/SIDE PANEL-1/Side panel-1": "Side panel",
-                     "BODY-1/SIDE PANEL-1/RobotMount-1": "RobotMount"}
+                     "BODY-1/SIDE PANEL-1/RobotMount-1": "RobotMount",
+                     "FEMUR_INSIDE-1/Femur_inside-1": "Femur_inside"}
 
 
 def _reload_all(sw, model):

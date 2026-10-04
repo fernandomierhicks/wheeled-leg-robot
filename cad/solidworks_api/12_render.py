@@ -19,7 +19,8 @@ OUT = os.path.join(HERE, "out", "renders")
 POSES = {"retracted": -28.0, "middle": 19.98, "extended": 57.0}
 PARTS = {"Femur": r"Links\Femur.SLDPRT", "Coupler": r"Links\Coupler.SLDPRT",
          "Tibia": r"Links\Tibia.SLDPRT", "Side panel": r"Body\Side panel.SLDPRT",
-         "RobotMount": r"Body\OldRobotBodyMount\RobotMount.SLDPRT"}
+         "RobotMount": r"Body\OldRobotBodyMount\RobotMount.SLDPRT",
+         "Femur_inside": r"Links\Femur_inside.SLDPRT"}
 
 
 LEAF = {"Femur-1/Femur-1": r"Links\Femur.SLDPRT", "COUPLER-1/Coupler-1": r"Links\Coupler.SLDPRT",

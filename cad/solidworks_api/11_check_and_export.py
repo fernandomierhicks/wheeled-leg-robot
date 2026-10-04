@@ -33,7 +33,8 @@ from swlib import c, wrap, sld
 
 PARTS = {"Femur": r"Links\Femur.SLDPRT", "Coupler": r"Links\Coupler.SLDPRT",
          "Tibia": r"Links\Tibia.SLDPRT", "Side panel": r"Body\Side panel.SLDPRT",
-         "RobotMount": r"Body\OldRobotBodyMount\RobotMount.SLDPRT"}
+         "RobotMount": r"Body\OldRobotBodyMount\RobotMount.SLDPRT",
+         "Femur_inside": r"Links\Femur_inside.SLDPRT"}
 COLOUR_FEATURE = re.compile(r"^GL_(blue|graphite|Cap|Skin|Graphite|Blue|Inset|White|DropDebris|C_)")
 FILAMENT = {"white": 1, "graphite": 2, "blue": 3}
 OUT = os.path.join(HERE, "out")
