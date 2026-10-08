@@ -1,0 +1,108 @@
+{
+ "part": "FacetFront",
+ "file": "Box\\Facet\\FacetFront.SLDPRT",
+ "dirty": true,
+ "bodies": [
+  {
+   "name": "FacetFront.step<1>[4]",
+   "volume": 3.7756,
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "colour_from": "part",
+   "box": [
+    64.2,
+    34.0,
+    -48.4,
+    64.5667,
+    53.7,
+    -47.3
+   ],
+   "group": null
+  },
+  {
+   "name": "FacetFront.step<1>[1]",
+   "volume": 57355.9038,
+   "rgb": [
+    0.949,
+    0.9569,
+    0.9686
+   ],
+   "colour_from": "body",
+   "box": [
+    50.0,
+    15.0,
+    -80.0,
+    65.0,
+    75.0,
+    80.0
+   ],
+   "group": "white"
+  },
+  {
+   "name": "FacetFront.step<1>[2]",
+   "volume": 5750.4346,
+   "rgb": [
+    0.1686,
+    0.1843,
+    0.2118
+   ],
+   "colour_from": "body",
+   "box": [
+    53.0,
+    27.5,
+    -43.0,
+    65.0,
+    75.0,
+    43.0
+   ],
+   "group": "graphite"
+  },
+  {
+   "name": "FacetFront.step<1>[3]",
+   "volume": 3.7756,
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "colour_from": "part",
+   "box": [
+    64.2,
+    34.0,
+    47.3,
+    64.5667,
+    53.7,
+    48.4
+   ],
+   "group": null
+  }
+ ],
+ "instances": [
+  {
+   "name": "Box-1/FacetFront-1",
+   "placement": [
+    [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     1.0,
+     0.0
+    ]
+   ]
+  }
+ ]
+}

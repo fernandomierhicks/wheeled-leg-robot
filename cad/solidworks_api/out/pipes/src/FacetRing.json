@@ -1,0 +1,51 @@
+{
+ "part": "FacetRing",
+ "file": "Box\\Facet\\FacetRing.SLDPRT",
+ "dirty": true,
+ "bodies": [
+  {
+   "name": "FacetRing.step<1>",
+   "volume": 54407.2483,
+   "rgb": [
+    0.4941,
+    0.5294,
+    0.5804
+   ],
+   "colour_from": "part",
+   "box": [
+    -165.5,
+    75.0,
+    -77.5,
+    66.5,
+    85.5,
+    77.5
+   ],
+   "group": null
+  }
+ ],
+ "instances": [
+  {
+   "name": "Box-1/FacetRing-1",
+   "placement": [
+    [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     1.0,
+     0.0
+    ]
+   ]
+  }
+ ]
+}

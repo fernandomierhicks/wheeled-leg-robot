@@ -1,0 +1,35 @@
+{
+ "part": "Side panel",
+ "R": 2.5,
+ "pipes": [
+  {
+   "name": "arc",
+   "face": "out",
+   "visible_mm": 35.0,
+   "min_bend": 12.8,
+   "ends": [
+    "collar",
+    "collar"
+   ],
+   "hose_mm3": 228.5,
+   "collars_mm3": [
+    43.8,
+    43.8
+   ],
+   "out_of_free_mm2": 0.0,
+   "under_face_mm3": 0.0,
+   "overhang": null,
+   "checks": {
+    "one hose body": true,
+    "one body per collar": true,
+    "bend radius >= 8.0": true,
+    "visible 20..50 mm": true,
+    "footprint on free ground (< 0.5 mm2 out)": true,
+    "nothing under the face (< 0.5 mm3)": true,
+    "printable overhang": true,
+    "volume sane (< half tube)": true
+   },
+   "ok": true
+  }
+ ]
+}

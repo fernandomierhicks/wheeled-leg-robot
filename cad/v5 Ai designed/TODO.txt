@@ -1,6 +1,16 @@
-Bring body over to new version and properly done
+DONE 2026-10-04: Bring body over to new version and properly done
+  (Box/ + Box-1 in ROBOT.SLDASM, see README "The body box")
+  Still open from it:
+  - DONE 2026-10-06: CAD body was 10 mm wider than the box -> Distance1 = 75
+    (real track 340 -> 330 mm: update the firmware track constant when built)
+  - left corner brackets 30/31 are 4.5 mm off the mirrored RobotMount holes
+
+DONE 2026-10-06: box printability -- D FACET print parts (Box/Facet/, README
+  "The print box"), old box suppressed. Print files: cad/solidworks_api/out/print/
 
 Zip tie holes on other side of cable hole
 
 
 Odrive USB hole on body
+  (the ODrive's USB block sits at ROBOT x -67..-56, y 27.5..33.5 and pokes
+  through the RobotMount -- inside the femur_inside swing from hip -28 to -7)

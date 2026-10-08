@@ -1,0 +1,53 @@
+{
+ "part": "RobotMount",
+ "R": 2.5,
+ "pipes": [
+  {
+   "name": "trench",
+   "face": "out",
+   "visible_mm": 45.7,
+   "min_bend": 10.4,
+   "ends": [
+    "clamp",
+    "clamp"
+   ],
+   "hose_mm3": 449.9,
+   "collars_mm3": [
+    39.8,
+    39.8
+   ],
+   "out_of_free_mm2": 0.0,
+   "under_face_mm3": 0.0,
+   "overhang": null,
+   "checks": {
+    "one hose body": true,
+    "one body per collar": true,
+    "bend radius >= 8.0": true,
+    "visible 20..50 mm": true,
+    "footprint on free ground (< 0.5 mm2 out)": true,
+    "nothing under the face (< 0.5 mm3)": true,
+    "printable overhang": true,
+    "solid under the slot (< 0.5 mm3 void)": true,
+    "crest <= 0.8": true,
+    "volume sane (< half tube)": true
+   },
+   "ok": true,
+   "kind": "trench",
+   "cutter_mm3": 1320.682,
+   "removed": [
+    {
+     "body": 11,
+     "volume": 92706.4678,
+     "removed": 340.1129
+    },
+    {
+     "body": 13,
+     "volume": 4214.8785,
+     "removed": 240.5261
+    }
+   ],
+   "void_under_mm3": 0,
+   "crest_mm": 0.8
+  }
+ ]
+}

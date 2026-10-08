@@ -1,0 +1,62 @@
+{
+ "part": "Femur",
+ "R": 2.5,
+ "pipes": [
+  {
+   "name": "strip",
+   "face": "out",
+   "visible_mm": 32.1,
+   "min_bend": 20.2,
+   "ends": [
+    "dive",
+    "collar"
+   ],
+   "hose_mm3": 218.5,
+   "collars_mm3": [
+    43.8
+   ],
+   "out_of_free_mm2": 0.0,
+   "under_face_mm3": 0.0,
+   "overhang": null,
+   "checks": {
+    "one hose body": true,
+    "one body per collar": true,
+    "bend radius >= 8.0": true,
+    "visible 20..50 mm": true,
+    "footprint on free ground (< 0.5 mm2 out)": true,
+    "nothing under the face (< 0.5 mm3)": true,
+    "printable overhang": true,
+    "volume sane (< half tube)": true
+   },
+   "ok": true
+  },
+  {
+   "name": "field",
+   "face": "out",
+   "visible_mm": 26.4,
+   "min_bend": 16.4,
+   "ends": [
+    "collar",
+    "dive"
+   ],
+   "hose_mm3": 173.9,
+   "collars_mm3": [
+    43.8
+   ],
+   "out_of_free_mm2": 0.0,
+   "under_face_mm3": 0.0,
+   "overhang": null,
+   "checks": {
+    "one hose body": true,
+    "one body per collar": true,
+    "bend radius >= 8.0": true,
+    "visible 20..50 mm": true,
+    "footprint on free ground (< 0.5 mm2 out)": true,
+    "nothing under the face (< 0.5 mm3)": true,
+    "printable overhang": true,
+    "volume sane (< half tube)": true
+   },
+   "ok": true
+  }
+ ]
+}

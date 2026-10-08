@@ -5,11 +5,20 @@
 
 ---Fernandos note dont change below
 
-JUMPING
+----------------------------------------------------------CAD
+
+-How to allow human to edit parts?
+-Hole for USB on right side panel. 
+-No flat colors, any line or thing of different color has a different height, even if minimal.
+-Make blue accents round so they shine better?
+-Optimize color intrusions for less waste? color is only 2 layers or so deep? eveything else is white. 
+-find easier way for AI to work with SW so I can save 
+-whenever you save generate .3mf or print ready files? show me where scripts are....
+ 
 
 
-ChatGPT_findings.md in digital twwin simualation
-
+------------------------------firmware
+-reduce speed limit on profile3, hitting traction wheel limitation. 
 
 ---------------------------------------------------------SIMULATION
 TYPO on mechanical dimensions. Revisit for highest jump???

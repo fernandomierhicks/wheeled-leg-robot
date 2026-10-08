@@ -66,6 +66,32 @@ def _solids(shape):
     return out
 
 
+def read(path):
+    """[(solid, (r, g, b) 0..1 sRGB or None)] -- every solid of a STEP written by write(),
+    with the colour write() put on its sub-shape.  For an importer that drops STEP colour
+    (SolidWorks' 3D Interconnect, 2026-10-07): colour the bodies from this instead."""
+    from OCP.STEPCAFControl import STEPCAFControl_Reader
+    from OCP.TDF import TDF_LabelSequence
+    doc = TDocStd_Document(TCollection_ExtendedString("XmlOcaf"))
+    r = STEPCAFControl_Reader()
+    r.SetColorMode(True)
+    if r.ReadFile(path) != IFSelect_RetDone or not r.Transfer(doc):
+        raise RuntimeError(f"STEP read failed: {path}")
+    st = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
+    ct = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
+    free = TDF_LabelSequence()
+    st.GetFreeShapes(free)
+    out = []
+    for i in range(1, free.Length() + 1):
+        for s in _solids(st.GetShape_s(free.Value(i))):
+            col = Quantity_Color()
+            rgb = None
+            if ct.GetColor(s, XCAFDoc_ColorSurf, col) or ct.GetColor(s, XCAFDoc_ColorGen, col):
+                rgb = tuple(float(x) for x in col.Values(Quantity_TOC_sRGB))
+            out.append((s, rgb))
+    return out
+
+
 def write(bodies, path, schema="AP214IS", part=None, weld=True, say=print):
     """bodies = [(name, shape, (r, g, b) 0-255)] -> one coloured STEP."""
     part = part or os.path.splitext(os.path.basename(path))[0]

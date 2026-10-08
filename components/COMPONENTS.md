@@ -70,7 +70,7 @@ for BOM provenance. Do not use them for simulation mass accounting.
 | WHEEL_CTRL | ODESC 3.6 Dual Drive | 1 | 160 | 160 | 41 | 41 | purchased | ODrive v0.5.x, axis0=L axis1=R, CAN id=3 |
 | CAN_XCVR | SN65HVD230 | 1 | 1 | 1 | 4 | 4 | designed | 3.3V CAN transceiver |
 | BUCK_5V | DC-DC buck 24V→5V | 1 | 20 | 20 | 8 | 8 | designed | Powers MCU + IMU |
-| RECEIVER | FlySky FS-iA6B | 1 | 15 | 15 | 10 | 10 | purchased | AFHDS 2A, iBUS to Arduino Serial1, Telemetry |
+| RECEIVER | ExpressLRS 2.4 GHz receiver, 40 mm T antenna ([Amazon B0H3NC7X1D](https://www.amazon.com/dp/B0H3NC7X1D)) | 1 | — | — | — | — | purchased | CRSF @ 420 kbaud on Teensy Serial4 (RX 16 / TX 17, telemetry out), powered from 5 V. Replaced the FlySky FS-iA6B (iBUS) |
 
 **Subtotal electronics:** 244 g / $111
 

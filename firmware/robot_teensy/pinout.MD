@@ -1,22 +1,25 @@
 # Pinout Reference — Wheeled-Leg Robot
 
+Main board (Teensy + ESP32 + CAN transceivers + JST-XH I/O): KiCad project in
+[`pcb/`](../../pcb/README.md) — connector pin orders are listed there.
+
 ---
 
 # 0 · Peripheral → µC Summary
 
 | Peripheral | µC | Interface | Notes |
 |---|---|---|---|
-| BNO086 IMU | Teensy 4.1 | SPI0 (pins 10–13, INT=2, RST=3) | 9-DoF attitude |
+| BNO086 IMU | Teensy 4.1 | SPI0 (pins 10–13, INT=9, RST=6) | 9-DoF attitude |
 | AK45-10 hip motors (L + R) | Teensy 4.1 | CAN2 (pins 0/1) | MIT Cheetah protocol, IDs 11/12 |
 | ODrive wheel motors (axis 0/1) | Teensy 4.1 | CAN3 (pins 30/31) | ODrive CAN v2, fw 0.5.6 |
-| FlySky receiver (iBUS) | Teensy 4.1 | Serial4 RX (pin 16) | 115200 baud, RX-only |
+| ExpressLRS receiver (CRSF) | Teensy 4.1 | Serial4 (RX 16, TX 17) | 420000 baud, bidirectional: RC in, telemetry out |
 | AK45 UART | Teensy 4.1 | Serial2 / Serial3 | 2-wire TX/RX, pins 7–8 / 14–15 |
 | RGB status LED | Teensy 4.1 | PWM (pins 2/3/4) | 33 Ω series resistor |
 | Passive buzzer | Teensy 4.1 | PWM (pin 5) | PWM tone output |
 | ESP32 link | Teensy 4.1 ↔ ESP32 | Serial5 / UART2 | 4 Mbaud, pins 20/21 ↔ GPIO16/17 |
 | 2.0″ TFT display (ST7789) | ESP32 | VSPI (GPIO18/23, CS=5, DC=2, RST=4, BLK=15) | 240×320, adafruit ST7789 lib |
-| VL53L1X ToF sensors (×4) | ESP32 | I2C (GPIO21/22) + XSHUT (GPIO14, 27, 26, 25) | Addresses 0x30–0x33 |
-| NeoPixel strip (WS2812B, 30 LEDs) | ESP32 | GPIO13 (FastLED) | 5V power from buck; level-shift if needed |
+| VL53L1X ToF sensors (×4) | ESP32 | I2C (GPIO21/22) + XSHUT (GPIO14, 27, 26, 25) + INT (GPIO34, 35, 36, 39) | Addresses 0x30–0x33 |
+| NeoPixel strip (WS2812B, 30 LEDs) | ESP32 | GPIO13 (FastLED) | 5V power from buck; 74AHCT125 buffer on the main board |
 | WiFi — telemetry / command / OTA | ESP32 | Integrated radio | UDP 5005 / TCP 5006 / espota |
 
 ---
@@ -29,7 +32,7 @@
 |-------|--------|-------|
 | 24V → 5V | Buck converter (e.g. Pololu D24V50F5, or LM2596 module) | Must supply ≥1A for Teensy + peripherals |
 | 5V → 3.3V | Teensy 4.1 built-in regulator (250 mA) | Powers Teensy logic, IMU, CAN transceivers |
-| 5V consumers | FlySky receiver, ESP32 DevKit V1 VIN pin, CAN transceiver VCC (if TJA1050) | |
+| 5V consumers | ELRS receiver, ESP32 DevKit V1 VIN pin, CAN transceiver VCC (if TJA1050) | |
 
 Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN65HVD230) or add level shifters.
 
@@ -55,8 +58,8 @@ Teensy 4.1 is **3.3V logic — not 5V tolerant**. Use 3.3V CAN transceivers (SN6
 | 13 | SPI0_SCK | BNO086 | SPI0 | 3.3V | Also drives built-in orange LED |
 | 14 | AK45_2_TX | AK45-2 UART | Serial3 | 3.3V | |
 | 15 | AK45_2_RX | AK45-2 UART | Serial3 | 3.3V | |
-| 16 | IBUS_RX | FlySky receiver iBUS | Serial4 RX | 3.3V* | See iBUS note below |
-| 17 | (spare) | Serial4 TX unused | — | — | iBUS is RX-only |
+| 16 | RC_RX (`PIN_IBUS_RX`) | ELRS receiver TX | Serial4 RX | 3.3V | CRSF in; 1 kΩ series resistor on the main board |
+| 17 | RC_TX | ELRS receiver RX | Serial4 TX | 3.3V | CRSF telemetry out |
 | 18 | I2C_SDA | Spare / future sensor | Wire | 3.3V | |
 | 19 | I2C_SCL | Spare / future sensor | Wire | 3.3V | |
 | 20 | EXT_MCU_TX | ESP32 | Serial5 | 3.3V | Teensy TX → ESP32 GPIO16 (RX2) |
@@ -104,12 +107,13 @@ No pin collision with CAN — CAN1/CAN2 do not share any SPI0 pins on Teensy 4.1
 
 ---
 
-## FlySky iBUS
+## ExpressLRS receiver (CRSF)
 
-- **Protocol:** 115200 baud, single-wire, receiver → controller only (RX pin only needed)
-- **Signal voltage:** Most FlySky receivers (FS-iA6B, FS-X6B) output iBUS at **3.3V logic** when powered from 5V. Some older/clone units output 5V.
-- **Safe wiring:** Add a **1 kΩ series resistor** between receiver iBUS pin and Teensy pin 16. This protects against a 5V unit without a full level shifter.
-- **Library:** `IBusBM` (Arduino) — non-blocking, interrupt-driven, works on any Teensy Serial port.
+- **Receiver:** ExpressLRS 2.4 GHz receiver (replaced the FlySky FS-iA6B / iBUS).
+- **Protocol:** CRSF, 420000 baud, full duplex on Serial4: receiver TX → Teensy pin 16 (RC in), Teensy pin 17 → receiver RX (telemetry out). See `radio_channels.md` and `teensy/src/crsf_protocol.h`.
+- **Power / levels:** receiver VCC from **5 V**; signals are 3.3 V logic.
+- **Main board:** J3 (`ELRS_RX`), 1 kΩ series resistor R5 in the receiver TX → Teensy 16 line.
+- **Legacy:** `teensy/src/ibus_demo` still targets the old FlySky receiver on pin 16.
 
 ---
 
@@ -169,7 +173,7 @@ Default I2C address is 0x29; firmware reassigns each to 0x30–0x33 in sequence.
 | GPIO25 | XSHUT 3 | sensor 3 | → address 0x33 (DAC1 — works in practice) |
 | 3.3V | VCC | all | |
 | GND | GND | all | |
-| *(INT pins)* | *(not wired — spare)* | all | GPIO1/INT on each sensor left unconnected; polling used instead of interrupt-driven reads |
+| GPIO34 / 35 / 36 (VP) / 39 (VN) | INT 0 / 1 / 2 / 3 | sensor 0..3 | Wired on the main board with 10 kΩ pull-ups to 3.3 V (GPIO1 is open-drain; 34–39 are input-only, no internal pull-ups). Firmware still polls — the lines are spare until interrupts are wanted |
 
 Library: `pololu/VL53L1X` · Env: `vl53l1x_demo` · Distance mode: Short (≤1.3 m) · Timing budget: 50 ms
 Firmware: `esp32/src/vl53l1x/main.cpp`
@@ -188,7 +192,7 @@ Firmware: `esp32/src/vl53l1x/main.cpp`
 
 30 LEDs · 800 kHz · Animation task pinned to core 0 · Library: `fastled/FastLED`
 Firmware: `esp32/src/neopixel/main.cpp`
-Note: ESP32 outputs 3.3V logic; WS2812B spec minimum is 3.5V — add 74AHCT125 level shifter if flickering occurs.
+Note: ESP32 outputs 3.3V logic; WS2812B spec minimum is 3.5V — the main board buffers GPIO13 through a 74AHCT125 (5 V) and a 330 Ω series resistor.
 
 ---
 
@@ -224,10 +228,10 @@ Teensy GND            →  ESP32 GND     (shared ground required)
 | Serial1 | 1 | 0 | **UNAVAILABLE** — pins used by CAN2 |
 | Serial2 | 8 | 7 | AK45-1 UART |
 | Serial3 | 14 | 15 | AK45-2 UART |
-| Serial4 | 17 | 16 | FlySky iBUS RX |
+| Serial4 | 17 | 16 | ELRS receiver (CRSF in + telemetry out) |
 | Serial5 | 20 | 21 | ESP32 link |
-| Serial6 | 24 | 25 | Spare |
-| Serial7 | 29 | 28 | Spare |
+| Serial6 | 24 | 25 | Spare — main board J20 (`UART6`) |
+| Serial7 | 29 | 28 | Spare — main board J21 (`UART7`) |
 | Serial8 | 35 | 34 | Spare (bottom pads) |
 
 ---

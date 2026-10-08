@@ -2,12 +2,417 @@
 
 **This folder is a full copy of `cad/v4 Larger Ball bearings/` that the AI is
 free to break** (Fernando, 2026-10-02). v4 stays the master and is never
-touched by automation. Not tracked by git (452 MB). The original v4 design
-notes (bearings, 2 mm link-to-link clearance, ...) are in
+touched by automation. **It IS tracked by git** (committed in 59dd8db; this
+line used to say otherwise), so a Save All -- or `16_check_and_save.py`, which
+saves every rebuilt document -- shows dozens of binaries as modified with no
+real change: `git restore` the ones you did not mean to change. The original
+v4 design notes (bearings, 2 mm link-to-link clearance, ...) are in
 `../v4 Larger Ball bearings/README.txt`.
 
 The scripts that drive SolidWorks live in **`cad/solidworks_api/`** (tracked by
 git). This file is the cheatsheet: read it before touching SolidWorks from code.
+
+> **RULE (his, 2026-10-06): save the assemblies, and save them often.** Never
+> leave an edited part saved while the assemblies above it are not -- that is a
+> fragile assembly (mate references updated only in memory). After EVERY part
+> edit, and at every working checkpoint in between, run
+> `16_check_and_save.py --chain <v5-relative part> ...`: it saves the part(s)
+> and every open v5 assembly containing them at any depth, sub-assemblies
+> first, ROBOT.SLDASM last, refusing on a mate error or an unstyled styled part,
+> and deleting AI_HipDrive first. Nothing else is saved (the ~30 parts that come
+> up dirty on load stay out of git). A script that edits a part ends with
+> `chain()` itself (22, 23); a new one must too. Don't end a session -- or start
+> a long sweep -- with unsaved assemblies.
+
+## ▶ Hood B "PLATES", 2026-10-08 -- the FacetHood's top redone, in the robot
+
+His brief: "make the facet hood more aggressive looking -- large area, little detail; the
+links are more densely populated".  His calls: reshape the TOP only and fill it to link
+density (skirt, tier 1, strip channel, ring fit, screws unchanged); graphite-heavy like
+the links; **nothing above today's armour top, y 117.2**; 2-3 variants as offline renders
+first.  `cad/aesthetics/parts/hood_variants.py` built A SPINE (gable roof, raked slats),
+B PLATES, C TERRACES (stepped chevrons); boards in `cad/solidworks_api/out/renders/hood_variants/`.
+**He picked B**, then: the armour "too regular, like an arrow" -> made asymmetric; two of
+its traces -> corrugated hoses (his marks).
+
+* **What B is:** a white rim with 45-deg frame tabs round a graphite field pressed 1.6
+  (y 111.4); bites out of the deck edge; graphite rim rivets; an asymmetric armour stack
+  (graphite chamfered base routed round the circuit -- tip off-centre, different jogs each
+  side, lopsided tail -- and two white plates split by a diagonal gap, slits / windows /
+  pads / a bus with a comb on them); raked white gills; two traces with combs; dark
+  windows; every side facet of tier 2 graphite with raked vents; fangs on the nose; dark
+  exhaust slots on the tail; a visor on the nose (graphite brow, a dark hexagonal slot
+  pressed in, blue combs -- it replaced a row of fangs, his call 2026-10-08:
+  `nose_visor()`).  4 filaments now (dark = 4), was 3.  163.4 cm3 + pipes (was 153.6).
+* **Recesses are pressed into the hood's cavity** (`Hood.press*`): the outline grown by the
+  2.5 wall is backed under the face first, so no wall thins; the cavity is empty above
+  y 80 (checked against all 226 components of the 24 sweep).
+* **Checked offline (`hood_variants.py <dir> B`):** below y 99.5 identical to the previous
+  hood (0.0000 mm3: skirt, ring fit, 10 screws, tier 1, strip channel) and tier 2's base
+  outline unchanged (the strip's lip); no colour solid floats; outside overhangs > 50 deg
+  identical to before (189 mm2, the tier-1 pockets, worst 53); y <= 117.2, |z| <= 78.
+* **Pipes:** `wave` + `corner` (deck) are GONE -- B's gills and rear trace sit there.
+  New, on face `field` (y 111.4): `hook` collar -> dive round the armour's tail (-z, rear),
+  `sweep` dive -> collar, a shallow S (+z, front); `tier` unchanged.  `24 preview`: all
+  OK, 0.00 mm2 off free ground.  The same routes are `hood_variants.B_PIPES` (its renders)
+  -- keep the two in step.
+* **Into SolidWorks without closing anything** (72 documents were open and dirty, so
+  `21 import`'s delete-the-file route was out): `21 reimport FacetHood` deletes the old
+  `MBimport` + PP_ features in the OPEN part and inserts the new STEP
+  (`IPartDoc.InsertImportedFeature`), refusing unless every mate on the component is a
+  Lock (the hood's two are: `FX_Hood_lock_Ring`, `FX_Strip_lock_Hood`); 66 bodies =
+  the STEP to 0.01 mm3; Box 30 components fully defined, 0 mate errors.  Then
+  `16 --chain`, `24 export / preview / build FacetHood` (72 bodies = 72 predicted,
+  worst 0.0000 mm3), `24 print FacetHood`.
+* **Gotcha: 3D Interconnect drops the STEP's colours** -- every body came in uncoloured
+  (`24 export` read them all from the part).  `21 colour <Part>` (also run by
+  `reimport`) colours each body from the STEP itself (`stepcolor.read`, matched by centre
+  of mass + volume: 66/66, worst 0.0000 mm).
+* **Print:** `out/print/FacetHood_bambu.3mf`, 72 bodies, filament 1 x10 / 2 x31 / 3 x16 /
+  4 x15, 233 x 156 x 39 mm, skirt down.  No collision sweep: the hood's envelope did not
+  grow (y <= 117.2, |z| <= 78) and nothing moves over its top.
+* **Backups** of everything replaced: `_originals/pre_hoodB_2026-10-07/` (the part, its
+  STEP, the 3MF, 24's FacetHood export + pipe files); `_originals/pre_visor_2026-10-08/`
+  (B with the fangs).  The previous top is still
+  `box_facet_print.hood_details()` (hood_variants' "today" reference).
+* **To change the hood:** edit `variant_B()` in `hood_variants.py`, check with
+  `hood_variants.py <dir> B --sheets`, then `box_facet_print.py <scratch dir>`, copy ONLY
+  `FacetHood.step` into `Box/Facet/` (the other parts' 3MFs carry pipes -- never re-run it
+  with `--3mf`), `21 reimport FacetHood`, `16 --chain Box/Facet/FacetHood.SLDPRT`,
+  `24 export`, `preview`, `build`, `print FacetHood`.
+
+## ▶ Corrugated pipes, 2026-10-07 -- blue ribbed hoses half-buried in the parts
+
+His brief (reference: a sci-fi wall panel with ribbed hoses): a few corrugated
+half-pipes per part, 5 mm wide, 20-50 mm long, in the blue accent, a TRUE HALF
+cylinder (centre line on the face, 2.5 mm proud) so it reads as buried, routes
+allowed to curve "to break the straight edges", ends a clamp collar or a dive
+back into the part. His picks: graphite collars; trench pipes where a link
+sweeps over the part; skip the parts with no room.
+
+All of it is `cad/solidworks_api/24_pipes.py`; the design (routes, ends) is the
+`PIPES` dict in it -- explicit (u, v) waypoints in mm on a named face, edit them.
+
+| part | pipes | |
+|---|---|---|
+| Femur | `strip` 32 mm dive -> collar, `field` 26 mm collar -> dive | its free ground is straight strips between GLACIER frames |
+| Side panel | `arc` 35 mm, collars both ends | clear of the coupler's swing |
+| FacetBack | `cheek` 35 mm, left cheek beside the I/O bay | vertical |
+| FacetHood | hood B (2026-10-08): `hook` 43 mm collar -> dive and `sweep` 46 mm dive -> collar on the pressed `field`, `tier` 30 mm on tier 1 | `wave` / `corner` (the first hood's deck) removed with that top |
+| TailStrut | `keel` 30 mm on the down-facing keel facet | |
+| RobotMount | `trench` 46 mm, TRENCH: a slot round the bearing boss, flush graphite clamps | the inner femur plate passes 1.9 mm over this field |
+| skipped | Coupler (the tibia sweeps half its face, staggered slots fill the rest), Tibia (no 5 mm-wide flat run: pockets and rims), FacetFront (bumper posts over the cheeks, screen well), FacetRing (7.5-10 mm visible band), Femur_inside (inside the box), wheel, TPU bumpers | his call |
+
+**The pipe.** Core r 1.95 + a torus rib (minor r 0.55) every 1.7 mm: crest r 2.5.
+Proud pipes are clipped AT the face (the proud half only -- the FacetBack relief
+is a skin thinner than 2 mm, a deeper clip printed blue out of its back) and cut by
+the part (raised features it runs into). Collar r 3.1 x 3, 0.4 chamfer, graphite
+(filament 2). A dive bends 40 deg into the face on r 9 and disappears 4.05 mm past
+its waypoint (`dive_reach()`: cos phi = Rd/(Rd+R)) -- the run is shortened by that,
+so the hose sinks into the face right at the end waypoint. Ribs stop where a dive
+starts (see gotcha below), so the last ~4 mm is plain tube. TRENCH: centre line
+1.7 under the face (crest 0.8 proud, >= 1.1 mm to the femur plate), slot R + 0.2 wide
+cut down to the axis, the part hugs the hose's lower half (no undercuts), hose
+clipped flat 2.5 deep (the RobotMount field is a 5 mm plate), clamps r R flush in
+the slot ends.
+
+**How a route is found (`24 routes [Part ...] [--trench]`).** Per face, offline:
+* `ground()`: the part's face-level top triangles minus anything above (frames,
+  bosses) = flat ground; EDGE 1 mm in from its boundary; ROUND openings < 120 mm2
+  get the fastener seat (3.5 + 0.6), slots and windows only the edge margin;
+  existing blue accents + 1.5 mm are out (blue on blue merges).
+* `swept()`: every OTHER component at every hip angle of `24 sweep` (86 poses,
+  placements from SolidWorks, meshes cached in `out/pipes/sweep/`), clipped to the
+  slab just outside the face (w -0.3 .. collar crest + 1), projected, + 1 mm.
+* `propose()`: on the free ground eroded by the collar radius, the longest
+  geodesic path per region (Dijkstra, kept to the middle), smoothed, best 45 mm
+  windows by curvature with every bend >= 8 mm.
+Maps in `out/pipes/maps/`, candidates in `out/pipes/routes/<Part>__<face>.png/.json`
+(orange = edge/seat, red = swept by a neighbour).
+
+**The loop.** `24 export` (READ-ONLY: multi-body STEP + colours + placements of
+the parts as they are in SolidWorks -> `out/pipes/src/`), `24 sweep` (once; ~30
+min, in memory, hip put back, helper mate deleted), `24 routes`, edit `PIPES`,
+`24 preview` (builds, checks, writes `out/pipes/<Part>_pipes.step` + board
+`<Part>_pipes.png`; a trench also `<Part>_trench.step`, the cutter), `24 robot`
+(offline whole-robot render), `24 build` (into SolidWorks + `16 --chain`), `24 print`
+(Bambu 3MFs). `preview` refuses nothing silently: every pipe prints its checks --
+one hose body, one body per collar, bend >= 8, visible 20..50 mm, footprint on
+free ground, nothing under the face, printable overhang (box parts: their print
+orientation; links: assumed show face up, as the raised styling), volume sane;
+trench also: solid 3.5 mm under the whole slot, crest <= 0.8.
+
+**In SolidWorks (`24 build`).** Each pipe body goes in as an `Imported` feature
+(`CreateFeatureFromBody3` on a copy of the body of a temporary STEP import) at the
+END of the tree, named `PP_<pipe>` / `PP_<pipe>_collarN`, coloured with the part's
+own palette (links: swstyle GROUPS; box: box_concept_facet BLUE / GRAPHITE; the
+TailStrut's graphite is drawn DARK, so its collars are too). A trench first adds
+the cutter (`PT_toolN`) and Combine-subtracts it from each body it crosses
+(`PT_trenchN`) -- the original bodies stay the ones mates hold. Checks, body for
+body by volume: every original exactly as before (a trenched one exactly minus the
+predicted removal) + exactly the STEP's pipe bodies; then `16 --chain`. Re-running
+`build` deletes the PP_/PT_ features first and proves the part is the export again.
+**After `08/09 --restyle` of a part, re-run `24 build <Part>`** (the PP_ bodies sit
+after the GL_ features; a restyle rebuilds those).
+
+**Checked:**
+* `build`, 6 parts: every original body exactly as before (RobotMount: the white
+  plate and one graphite inlay exactly minus the predicted 340.11 + 240.53 mm3),
+  plus exactly the STEP's pipe bodies (worst 0.0007 mm3); `16 --chain` 0 mate
+  errors, GL_ styling intact everywhere (0 suppressed). Saved: Femur, Side panel,
+  RobotMount, FacetBack, FacetHood, TailStrut + Femur.SLDASM, SIDE PANEL, BODY,
+  BottomPanelWithAvionics, Box, ROBOT.
+* Collision sweep, 86 poses, SolidWorks (`06_sweep.py`, whole robot), first set
+  (5 parts, 8 pipes) vs `out/sweep_wheel_1deg.csv`: **0 pairs new, gone or
+  changed** at any pose (`out/sweep_pipes_1deg.csv`). The 4 hip-dependent pairs are
+  the known ones (ODrive USB block, limit switch, styled Side panel x Coupler 0.49,
+  retract hard stop).
+* The same sweep after the RobotMount trench (the inner femur plate passes ~1.9 mm
+  over that field, crest 0.8): again **0 new, gone or changed**
+  (`out/sweep_trench_1deg.csv`; `sweep_diff.py`).
+* Offline, before any of that: the swept keep-out (`24 sweep`, 226 components x 86
+  poses) and the checks listed above; 3MFs per part = the original filament counts
+  + one per hose (3) and per collar/clamp (2).
+
+Backups of everything `build` saved: `_originals/pre_pipes_2026-10-07/` (Box/ is
+not in git). Print files: `out/print/<Part>_glacier_native.3mf` (links) and
+`<Part>_bambu.3mf` (box, print orientation), filament 1 white / 2 graphite /
+3 blue (/ 4 dark); the pre-pipe 3MFs were overwritten.
+
+**Gotchas paid for (OCC):**
+* A rib torus whose spine circle lies ON a tube swept along an ARC is one of that
+  tube-torus's own meridian circles: OCC returns NO intersection and the rib comes
+  back as a loose torus (and the clip then fails round it). Moving the spine
+  0.05 inside made it 20x slower and still loose or inverted. Ribs are not placed on
+  arc edges (dives; fillet arcs of `bend` = number routes), nor within 0.85 mm of a
+  seam between edges. Spline runs are fine.
+* `Edge.make_spline_approx` of the whole centre line (to avoid seams) makes
+  `MakePipeShell` fail outright (curvature jump between arc and line).
+* A waypoint 1 mm from the next makes a spline hook and the sweep produced a
+  1.6e9 mm3 inverted solid -- waypoints closer than 2.5 mm are dropped, and the
+  "volume sane" check catches the rest.
+
+## ▶ The tail strut, 2026-10-06 -- replaces the v3 BackWheelSupport (suppressed, kept)
+
+`Box/TailStrut/TailStrut.SLDPRT` in `BottomPanelWithAvionics.SLDASM`, built by
+`cad/aesthetics/parts/tail_strut.py` (build123d, ROBOT d75 frame; source of
+truth -- change it, re-run, re-import) and put in by `cad/solidworks_api/23_tail_strut.py`
+(`import / install / check / save / render`). His brief: "free to edit the shape
+aggressively"; round 1 (a calm graphite keel) was sent back for "more aggressive
+shape + colours".
+
+* **Shape:** a 10 mm pad (chevron nose, chevron heel, drafted, |z| 32) and a
+  swept keel to the caster fork: a sharp V ridge down its back (crystal facets
+  that run out to nothing above the fork -- no ledges), facets on the under
+  edge, three raked teeth, a V window, two graphite fangs splayed down-back
+  under the pad's outer edges (a jaw from behind).
+* **Colours:** white body; graphite facets, fangs, teeth; blue ridge line,
+  window lining (both flanks), chevrons on the pad flanks. 66.4 cm3 (v3 65.1).
+* **Kept exactly, so the v3 mates re-made on it by geometry:** top face y 15 on
+  the floor; 4 M3 clearance holes (x -147 / -112, z +-20), heads on the pad
+  underside at y 5 (10 mm grip, as v3), key clearance r 3.3 below each head;
+  caster axle (-171.676, -32): r 1.7 through the +z arm, r 1.4 self-tap in the
+  -z arm, fork inner faces z +-5, outer faces +-16 (the v3 axle screw fits).
+* **Kept out of:** below y -35 (the v3 fork bottom; caster to -39.5), behind
+  the tip-over line (caster back -> bumper heel, 0.4 mm clear), |z| > 40.
+* **Print:** pad down, no supports by construction (every face that looks up
+  in the robot is >= ~40 deg off horizontal; the window's floor is a V).
+  `out/print/TailStrut_bambu.3mf`, 86 x 68 x 50 mm, filament 1 white /
+  2 graphite / 3 blue.
+* **Checked:** `install` re-made all 4 mates (`TS_*`: strut concentric-lock +
+  coincident to BottomPanel, caster axle concentric + 1.000 gap), 0 refused;
+  strut fully defined, caster UNDER (its spin) as before, moved 0.0004 mm;
+  mate errors 0 in BottomPanelWithAvionics, Box, ROBOT; Interference Detection
+  in Box: 0 involving the strut. No hip sweep: the strut stays inside |z| 34
+  and the legs never come inside |z| 75. Saved with `16 --chain`: TailStrut,
+  BottomPanelWithAvionics, Box, ROBOT.
+
+**The bottom plate was left as is (measured, his question):** BottomPanel-1
+coloured magenta in memory, pixels counted in the robot renders: 0.00-0.05 % of
+the robot in every view from the side, front, back, top and the three isos (the
+2 % from the left side is the open left wall -- the left leg and its side panel
+are suppressed in CAD); 52 % only from straight below. Not worth restyling.
+
+## ▶ The wheel hub, 2026-10-06 -- GLACIER "chip" on the rim, dark wheel
+
+`Motor/Wheel Motor/Wheel.SLDPRT`, built by `cad/solidworks_api/22_style_wheel.py`
+(design + 2D `preview` + build + `verify` + `render`). His pick: palette **B,
+the graphite wheel, to contrast the white links**.
+
+* **Outboard is the rim's part -Z** (wheel frame z = robot -Z; nothing in the
+  robot is outboard of it). The face: flat disc z -4.0527, r <= 20.91, on a
+  **0.8 mm floor**; 4 holes r 1.45 on r 17.00 at 45.681 + k*90 (screw heads on
+  this face); a 1 x 1 mm centre nub (his call: buried).
+* **Raised, inside the screw circle only:** white octagon chip (circumradius
+  11, +1.6, 45-deg bevel, a NEW body) + graphite crown (circumradius 7.2,
+  turned 22.5, +1.2, 45-deg bevel, merged into the rim through a column in the
+  chip) with a blue die, legs to the screws, white pin-1 dot.
+* **Flush 0.6 mm inlays on the flat:** a white chevron bracket round each
+  screw head, a different blue trace on each lobe between screws, white pads,
+  a white chevron panel under a three-line bus.
+* **Why nothing raised goes round the screws:** their seats (r 11.45..22.55)
+  fill the face, and every plate shaped round them came out four-lobed --
+  flared lobes read as a cross pattee, hooked ones as a swastika (both built
+  in preview and dropped). Keep raised motifs on this face non-four-armed.
+* **Checked:** additions 608.87 mm3 = predicted (frustums - nub) to 0.001;
+  inlays partition exactly; 23 bodies (graphite 1, white 11, blue 11); mates
+  0 in error (WheelMotorASM, ROBOT); `22 verify` (OCC, styled STEP vs
+  `out/styled/Wheel_source.step`): removed 0, everything inboard of the inlays
+  identical (37909.406 mm3), 4 holes empty, 4 head seats (r 5.55) clear.
+* **Printing:** the 3MF (`out/print/Wheel_glacier_native.3mf`) is in PRINT
+  orientation, cup down / hub face up, so the chip and inlays are the last
+  layers. Not yet printed; the orientation was his "not sure".
+* `22 --restyle` rebuilds from the recipe (deletes the `GL_*` features, proves
+  the original by volume), then saves the rim + WheelMotorASM, Tibia, ROBOT
+  (`16 --chain`).
+
+## ▶ The print box (D FACET), 2026-10-06 -- in the robot, old box suppressed
+
+Concept D split into **six printable, bolt-together parts** + the strip, in
+`Box/Facet/` (STEP + SLDPRT), built by `cad/aesthetics/parts/box_facet_print.py`
+(build123d; source of truth -- change the script, re-run, re-import) and put
+in by `cad/solidworks_api/21_box_facet.py`. Bambu 3MFs (print orientation,
+filament 1 white / 2 graphite / 3 blue / 4 dark; TPU single) in
+`cad/solidworks_api/out/print/<Part>_bambu.3mf`; renders in
+`out/renders/box_facet_print/`.
+
+| part | what | print |
+|---|---|---|
+| FacetFront | the v3 FrontPanel ITSELF as a 3 mm plate (window, M2, 8 bracket holes exact) + solid faceted relief to x 65; screen at the bottom of a dark-lined well | plate down |
+| FacetBack | the v3 BackPanel itself (switch + notches, LED, buzzer, 2 USB slots, bracket holes) + relief to x -164; dark I/O bay (USB) and control pod (switch, LED, buzzer) down to plate depth, so plugs and the switch nut see 3 mm | plate down |
+| BumperFront/Back | grey TPU U: cheek posts + chin, 6 mm proud of the face (4 proud of the hood); 7 long M3 socket heads each through the bracket holes (12 x M3x20 + 2 x M3x25), counterbored, 3 mm TPU under the head | face down |
+| FacetRing | graphite; replaces Cap + NeopixelSupport + NeoPixelCage: the v3 Cap's 9 bracket screws (M3x8 csk), wall with 10 Ø2.8 self-tap bosses | flange down |
+| FacetHood | skirt + tier 1 + strip channel + tier 2 + armour, 2.5 mm wall; 10 x M3x10 csk through the skirt into the ring; 233 x 156 x 39. Top = hood B PLATES since 2026-10-08 (see above) | skirt down, tree supports INSIDE only |
+| NeopixelStrip | not printed: his 5.1 x 2.7 strip on its route -- round tier 2's base (the irregular crystal outline), above the legs; 623 of 975 mm, both ends + data wire (Ø5 hole) at the back centre | -- |
+
+His rules it follows (2026-10-04): no heat-set inserts (captive nuts or Ø2.8
+self-tap), more screws, visible heads OK; bumpers front AND back in grey TPU;
+strip already diffused; old parts kept, suppressed.
+
+**`Distance1` 80 -> 75 (his call: keep the v3 floor, no reprint).** RobotMount
+inner faces at z +-75: the 150 mm box now meets BOTH side walls (gap 0.000 each
+side, was 0 / 10). **The wheel track drops 340 -> 330 mm on the real robot** --
+firmware track constant (encoder yaw (vR-vL)/0.340) and roll tuning to update
+when it is built; nothing in firmware changed. Everything above the box top
+stays |z| <= 78 (femur plates >= 81.9).
+
+In Box.SLDASM (all `FX_*` mates, each refused if it moved anything):
+* the 22 old components (panels, cap, neopixel stack, lid + its 12 screws, TPU
+  protector, cushions) **suppressed, not deleted**; their mates suppress with them;
+* **PLANE1** (mirror plane of the left side) was the mid-plane of FrontPanel-1's
+  side faces -- suppressing the panel would have taken every left bracket with
+  it. Re-pointed to FacetFront-1's identical side faces (same place, nothing
+  moved). `ModifyDefinition` REFUSES a switch to a one-reference offset plane;
+  `SetReference(1, None)` cannot be passed from Python;
+* 26 old mates re-made on the new parts' identical faces (brackets, OLED,
+  switch, ring); the panels' datum mates, the ring's x/z (v3 used the Cap's
+  corner radii -- now a rotation-locked concentric on CornerBracket-26) and the
+  hood (locked to the ring: its only contact is the skirt on the flange, every
+  screw concentric repeats that translation, gotcha 45) by `21 fixup`.
+* **30 components fully defined, 0 mate errors**; ROBOT: Box-1 fully defined,
+  0 errors. `19_box_check`: right 10/10 holes 0.0000 mm; left as before.
+* **Collision sweep, 86 poses, saved robot (`out/sweep_facet_1deg.csv`): identical
+  to the 2026-10-04 box sweep** -- 0 pairs new, gone or changed; no new part
+  touches a leg anywhere in the stroke. The 4 hip-dependent pairs are the known
+  ones (ODrive USB block x Femur_inside, limit switch, styled Side panel x
+  Coupler 0.49 mm3, retract hard stop). Offline OCC check (the parts against
+  every box part and both RobotMounts): 0 overlaps besides the inherited switch
+  tabs; all 9 ring holes on bracket holes 0.000 mm.
+
+**Run `21` with Box.SLDASM ALONE** (`install` does): with ROBOT open too, the
+rebuild loop ran the NVIDIA OpenGL driver out of memory and SolidWorks died
+mid-run (2026-10-06; nothing was saved). Save with `21 save-box` / `save-robot`
+(each refuses on mate errors / unstyled links), not Save All: after a load,
+~30 untouched parts come up dirty and would only be git noise.
+
+Open: the switch model's key tabs overlap the v3 BackPanel notches by 6.6 mm3
+(inherited, unchanged); the bumper screws are longer than the M3x8 flatheads
+modelled inside CornerBracket.SLDASM (shared by every bracket, left alone);
+mass about +100-150 g, mostly high up (M_BODY / balance trim).
+
+## ▶ The body box, 2026-10-04 -- imported from v3, re-mated, in the robot
+
+`Box/` holds the v3 body box (`cad/v3 .../Box`), Pack-and-Go'd by hand
+(file copy + `ReplaceReferencedDocument`, gotcha 46): printed parts in `Box/`,
+the v2 electronics in `Box/Electronics/`. **The two RobotMounts ARE the box's
+side walls**: RobotMount was drawn in the old `SinePanel`'s frame
+(`OldRobotBodyMount/ROBOT_MOUNT.SLDASM` coordinate-mates both to one origin)
+and carries its 10-hole M3 pattern, so `SinePanel`, `MirrorSinePanel` and the
+v3 limit-switch mount (superseded by `Body/LimitSwitch`) were left out.
+`Box-1` sits in `ROBOT.SLDASM` (backup of the file before:
+`_originals/pre_box_2026-10-04/ROBOT.SLDASM`). Check it with
+`19_box_check.py`.
+
+**Hierarchy -- one rule: every part is mated to what it is bolted to, inside the
+lowest assembly that contains both.** In Box.SLDASM the Box planes stand in for
+the right side wall: Front Plane = its inner face, Right Plane = its back edge,
+Top Plane = its bottom edge (the old SinePanel frame = the RobotMount frame).
+
+| | |
+|---|---|
+| Box.SLDASM | 45 components, **all fully defined, 0 mate errors**. Floor -> the three Box planes; back/front panels -> Right/Top Plane + 5 mm side overhang; cap -> front panel top + screw hole (rotation locked); each right-side corner bracket -> side datum + panel face + its screw hole; lid screws concentric in their holes; neopixel strip, bumper, lasers on their real contacts. Left brackets, left cushion and half the lid screws stay the v3 mirror features (about PLANE1, the front panel's mid-plane). Power `Switch` moved in here from the v3 robot level (bezel on the back panel, body in its Ø20 hole). All new mates are named `BX_*` |
+| BottomPanelWithAvionics | fully defined except `SupportWheel`'s spin (a real DOF). Its 2 floor brackets now bolt to the floor (were mated to each other and dimensioned off the ODrive); 4 M2 standoffs locked in their board holes; the resistor/ODrive lock conflict removed. `BatteryCap` moved in here from Box (it only touches the battery holder); `BackWheelSupport` + `SupportWheel` moved in from the v3 robot level |
+| CornerBracket, CustomBoard | fully defined; screws rotation-locked; Teensy and CAN boards locked to the board (the ESP32 lock conflict removed) |
+| in-context references | the box parts were designed in the context of v3's **ROBOT.SLDASM** (BackPanel, BottomPanel) and v3's Box -- **all broken** (geometry checked unchanged to 0.0000 mm3), so every part edits on its own. SolidWorks still lists them (status 0 = broken, gotcha 47) |
+| Box-1 in ROBOT | fully defined: `BOX_1` CornerBracket-13's side face on the RobotMount inner face, `BOX_2` its side screw concentric with RobotMount hole (10, 32.5), `BOX_3` Box Top Plane parallel to RobotMount Top Plane |
+
+**Holes: right side 10 of 10 RobotMount holes on the box's bracket screws, worst
+0.0000 mm.** Open, for him to decide (not changed):
+
+* **RESOLVED 2026-10-06: `Distance1` = 75** (see the print box above). Was:
+  **The body is 10 mm wider in CAD than the box.** `Distance1` = 80.000 mm puts
+  each RobotMount inner face 80 from the robot mid-plane (160 apart); the v3
+  box is 150 between its side faces. Mated to the right RobotMount, the box's
+  left face is at z = -70 against the left RobotMount at -80, and the box
+  mid-plane is at z = +5. `Distance1` 80 -> 75 would centre it (and narrow the
+  wheel track by 10 mm -- the control model uses the track).
+* **Left-side brackets:** 0.23 mm off the mirrored holes (the v3 box is itself
+  asymmetric: back panel left holes at y 9.77 / 32.73 / 54.77 vs 10 / 32.5 / 55),
+  and CornerBracket-30/31 (top, left) 4.53 mm off: the v3 mirror feature
+  ROTATES that asymmetric bracket instead of mirroring it. The left leg is
+  suppressed, so nothing shows today.
+* **ODrive USB block vs the femur plate.** An 11 x 6 x 30 mm block on the
+  ODrive's edge (ROBOT x -67..-56, y 27.5..33.5, z 75..105 -- the USB plug)
+  runs through the RobotMount and into the leg's Side panel (constant 301 /
+  173 mm3), and `Femur_inside` sweeps through it from hip -28 to -7 deg (617 mm3
+  at -26). Relevant to TODO "Odrive USB hole on body": that spot is in the
+  femur plate's swing.
+* The RobotMount's own M3 roundheads and the brackets' v3 flatheads sit in
+  the same 10 holes (two models of one screw -- it also proves the holes
+  align); the flathead cones overlap the RobotMount's plain holes by 13 mm3.
+
+Sweep with the box, 86 poses (`out/sweep_box_1deg.csv`): besides the above,
+only the known contacts -- limit switch (-28..-26), retract hard stop
+(-28..-27) -- and `Side panel x Coupler` 0.49 mm3 at +42..+57, which is NOT
+the box: it is in the 2026-10-03 styled sweep (`sweep_on.json`) and absent
+with styling off (`sweep_off.json`), so the styling introduced it.
+
+**Concepts for an aesthetic upgrade** (concept only, nothing printed or
+checked for printing): `cad/aesthetics/parts/box_concepts.py` builds three
+shells in ROBOT coordinates -- A HELM (forward-leaning helmet, wrap-around
+dark visor, crest), B CARAPACE (superelliptic dome, halo light ring),
+C SHELLS (GLACIER stepped plates, a cap floating over a glowing seam) -- all
+keeping the electronics, floor, screen, switch and the RobotMounts as side
+walls, with the RGB band all the way round near the top and |z| <= 80 (C's
+cap lip reaches 83 above y = 83, clear of the femur plates which stay at
+z >= 86.9). `20_box_concepts.py` imports them as
+`Box/Concepts/BoxConcept_*.SLDPRT` and puts each on the real robot in
+`Box/Concepts/Concept_*.SLDASM`; board in
+`cad/solidworks_api/out/renders/box_concepts/board_concepts.png`.
+
+**His verdict on A-C: right direction, wrong surfaces -- "round instead of
+jagged angled".** Round 2 is **D FACET** (`cad/aesthetics/parts/box_concept_facet.py`,
+`Concept_D_facet.SLDASM`): only planar faces, the links' vocabulary -- a
+two-tier faceted cap (steep tier 1 with a row of chamfered windows; tier 2 on a
+4 mm ledge with a chevron nose, vent slashes through the side slopes on graphite
+fields, chevron brows + hatch combs on the nose faces), a stepped armour plate
+(graphite chamfered base, white jogged top with the graphite bus and blue
+traces), the RGB band in a recessed channel under the cap's overhang, and the
+screen at the back of a dark chamfered face well. Build it with
+`box_concept_facet.py <dir>`, then `20_box_concepts.py import <dir>
+--names=D_facet`, `assemble --names=D_facet`, `render --names=D_facet`.
+Trap paid for: building a CONCAVE (jogged) outline as a half-space
+intersection silently trims it -- extrude concave outlines instead.
 
 ## ▶ Status, 2026-10-03 — the styled assembly
 
@@ -142,8 +547,17 @@ C:/Users/ferna/cadenv/Scripts/python.exe cad/solidworks_api/01_hello.py
 | `13_collision_keepout.py sweep / bodies [n]` | styling-caused collisions -> interference bodies -> keep-out for ADDITIONS (resumable) | works |
 | `14_sweep_compare.py on / off / compare` | the collision sweep, one phase per run, results on disk | works |
 | `16_check_and_save.py [--dry]` | **the way to save after automation** (not Save All): refuses if any styled part is unstyled in memory, deletes `AI_HipDrive`, refuses on mate errors, saves every dirty v5 doc (parts, sub-assemblies, `ROBOT.SLDASM` last) | works |
+| `16_check_and_save.py --chain <part> ... [--dry]` | **after every part edit** (the rule at the top): saves the part(s) + every open v5 assembly containing them, bottom-up, ROBOT last, same guards; nothing else. `chain(sw, parts)` from Python | works -- first run 2026-10-06: Wheel + TailStrut + WheelMotorASM, BottomPanelWithAvionics, Tibia, Box, ROBOT, each verified clean after its save |
 | `15_style_washers.py preview` / `[--restyle]` / `render` | the green retaining washers (BearingWasher, SmallBearingWahser, InsideFemurShaft) -> graphite + blue/white circuit inlays, COLOUR ONLY (shape unchanged); 2D preview without SolidWorks; mates; 3MFs; close-ups at the F and E joints | works -- partition exact, 0 mate errors |
 | `18_tire_lock.py [--redo]` | NOT styling: locks the TPU tyre to the rim against slip -- 36 axial ribs on the rim band (one per spoke root, lead-in ramp at the top), 36 matching grooves in the tyre bore, and the `TL_TyreLock` / `TL_TyreSeat` plane mates in WheelMotorASM. Parameters at the top of the file | works -- see "Tyre lock" below |
+| `swmate.py` | geometry-driven mating that never moves anything: faces found by geometry in the assembly frame, `plan()` picks a minimal mate set from real contacts (touching faces, coaxial holes, flush faces) under SolidWorks' redundancy rule, `Mater.mate()` rejects and rolls back any mate that moves a component | works -- built the box hierarchy (2026-10-04) |
+| `19_box_check.py` | the body box: constraint status + mate errors in Box and every sub-assembly, live in-context references, Box-1 in ROBOT, the 10 side-panel holes both sides | works -- see "The body box" |
+| `20_box_concepts.py import <dir>` / `assemble` / `render` | the box concepts (from `cad/aesthetics/parts/box_concepts.py`) as parts, each on the real robot in its own concept assembly; renders. Never edits or saves ROBOT or Box | works |
+| `21_box_facet.py import / install / fixup / save-box / distance / save-robot / check` | the D FACET print box into Box.SLDASM: STEP -> SLDPRT, old box suppressed, PLANE1 re-pointed, old mates re-made on the new parts, Distance1 75, guarded saves. Opens Box ALONE for the edits (GPU out-of-memory crash otherwise) | works -- see "The print box" |
+| `21_box_facet.py reimport <Part>` / `colour <Part>` | a changed STEP into the existing, OPEN Facet part in place (lock-mated parts only; nothing closed or saved), bodies checked against the STEP by volume and coloured from it (3D Interconnect drops STEP colour) | works -- see "Hood B" |
+| `22_style_wheel.py preview / [--restyle] / verify / render` | the wheel rim's outboard hub face: raised octagon chip + crown inside the screw circle, flush circuit inlays, dark wheel; checks volumes, mates, then OCC verify vs the source STEP; STEP + print-oriented Bambu 3MF | works -- see "The wheel hub" |
+| `23_tail_strut.py import / install / check / save / render` | the tail strut (from `cad/aesthetics/parts/tail_strut.py`) replaces the v3 BackWheelSupport in BottomPanelWithAvionics: insert, record + suppress + re-make the old mates by geometry, checks, guarded save | works -- see "The tail strut" |
+| `24_pipes.py export / sweep / map / routes [--trench] / preview / robot / build / print` | corrugated half-pipes and trench pipes on the printed parts: offline route finding against the swept keep-out, previews, then Imported PP_ bodies (and PT_ trench cuts) in the v5 parts, checked body by body, `16 --chain`; Bambu 3MFs | works -- see "Corrugated pipes" |
 | `17_contact_keepout.py` | the contacts the robot is DESIGNED to make (pairs of the OFF baseline whose volume changes with the hip, touching a styled part) -> their interference bodies with styling OFF, in each part's frame -> `out/contact_keepout.json`; `08` keeps every removal and addition off them | works -- limit switch + retract hard stop on Femur_inside (127 mm2), the hard stop on the Coupler (22 mm2) |
 
 Interpreter: **`C:/Users/ferna/cadenv/Scripts/python.exe`** (has pywin32).
@@ -169,6 +583,10 @@ phases. Never save `ROBOT.SLDASM` while the `AI_HipDrive` helper mate exists
 | Femur / Coupler / Side panel / RobotMount look | the recipe `cad/aesthetics/parts/<part>.py` + `specs/<part>.json` (the LOCKED GLACIER look; `side_panel.py` and `robotmount.py` are GENERATED from `femur.py` by `cad/aesthetics/tools/mkpart.py` -- edit the generator, not them) | `08 <Part> --dry` (lists every op and what seats / keep-outs took from it), then `08 <Part> --restyle` (RobotMount ~4 min) |
 | local additions where the recipe leaves ground bare | `extras.py` (`EXTRA[part](P, M)`, part-local mm, show-face coordinates) | same as above -- `08` applies them |
 | Tibia look | `cad/aesthetics/parts/tibia.py` | `09 --dry`, `09 --restyle` |
+| tail strut (Box/TailStrut) | `cad/aesthetics/parts/tail_strut.py` (its checks + old-vs-new preview run on every build) | `tail_strut.py "cad/v5 Ai designed/Box/TailStrut" --3mf cad/solidworks_api/out/print`, delete TailStrut.SLDPRT, `23 import`. NOT automated past that: a re-imported part gets new face IDs, so check the 4 `TS_*` mates (`23 check`) and re-make any in error by hand (`install` only transfers mates from the active v3 part, which is now suppressed) |
+| wheel hub (Wheel.SLDPRT outboard face) | `design()` in `22_style_wheel.py` | `22 preview` (2D, no SolidWorks; spokes from `out/styled/wheel_ctx.json`), `22 --restyle`, `22 verify`, `22 render` |
+| FacetHood top (hood B) | `variant_B()` in `cad/aesthetics/parts/hood_variants.py` (its pipes: `B_PIPES` there AND `PIPES["FacetHood"]` in 24) | `hood_variants.py <dir> B --sheets` (checks + 4 views), `box_facet_print.py <scratch>`, copy only `FacetHood.step` to `Box/Facet/`, `21 reimport FacetHood`, `16 --chain`, `24 export / preview / build / print FacetHood` |
+| corrugated pipes (any part) | `PIPES` in `24_pipes.py` (waypoints on a named face; `24 routes` proposes them) | `24 preview <Part>`, look at `out/pipes/<Part>_pipes.png`, `24 build <Part>`, `24 print <Part>`; a proud pipe on a moving part or a trench: `06_sweep.py`, copy `out/sweep_1deg.csv` to a named file, `sweep_diff.py <last> <new>` |
 | washers (BearingWasher, SmallBearingWahser, InsideFemurShaft) | `faces()` in `15_style_washers.py` | `15 preview` (2D, 1 s, no SolidWorks), `15 --restyle`, `15 render` |
 | a design rule (seat sizes, margins) | `08_style_part.seat()` / `mech()` | `--restyle` every affected part |
 | Femur_inside look | `specs/femur_inside.json` (recipe `parts/femur_inside.py` is GENERATED by `mkpart.py`, like Side panel / RobotMount) | `08 Femur_inside --dry`, then `--restyle` |
@@ -180,10 +598,13 @@ phases. Never save `ROBOT.SLDASM` while the `AI_HipDrive` helper mate exists
 2. `10_verify_styled.py 85` -- mates in every assembly, contacts lost, collisions inside sub-assemblies, plus a 2-pose sweep (~5 min). `10 1.0` is the full 86-pose version.
 3. Only if the change ADDED material (flange, frame, bosses): `14_sweep_compare.py on`, then `compare`. The OFF baseline `out/sweep_off.json` stays valid while the SOURCE parts are unchanged. If it reports collisions: `13_collision_keepout.py sweep`, then `bodies` (repeat until done), then `--restyle` again (08 / 09 load `out/collision_keepout.json` themselves). Colour-only changes and removals cannot collide, so skip this step for them.
 4. `12_render.py` (assembly at 3 poses + each part) / `15 render` -- look at the PNGs in `out/renders/`.
-5. `16_check_and_save.py` -- saves everything ONLY if every styled part is
-   really styled in memory (gotcha 37). Tell him not to use Save All in
-   SolidWorks while a script that toggles styling (`10`, `11`, `13`, `14`) has
-   run since the last load.
+5. `16_check_and_save.py --chain <part>` -- saves the part and every assembly
+   above it, ONLY if every styled part is really styled in memory (gotcha 37)
+   and those assemblies have 0 mate errors. Do it after every part edit, not
+   once at the end (the rule at the top). Plain `16_check_and_save.py` saves
+   every dirty v5 doc, git noise included -- only when that is wanted. Tell him
+   not to use Save All in SolidWorks while a script that toggles styling
+   (`10`, `11`, `13`, `14`) has run since the last load.
 
 **His own edits in SolidWorks:** the `GL_*` features are ordinary, editable
 features, but the colour features after them hold references to specific
@@ -438,6 +859,42 @@ model = wrap(sw.ActiveDoc, sld.IModelDoc2)
 41. **The InterferenceDetectionManager of a document that is not ACTIVE is
     None.** `ActivateDoc3` the assembly first (a sub-assembly opened with
     `OpenDoc6` is not activated by it).
+42. **Opening a part with live in-context references loads the assembly they
+    point at -- and gotcha 38 then binds it to what is in memory.** Giving the
+    copied box parts a window (to break their references) silently opened
+    **v3's ROBOT.SLDASM**, visibly; its `Box-1` resolved to the *v5*
+    Box.SLDASM already open. It was never saved (the save script refused:
+    documents open outside the target folder). Before any save, list the open
+    documents; break in-context references on a copy before mixing versions.
+43. **A refused `AddMate5` can still leave a broken mate behind.**
+    `swAddMateError_OverDefinedAssembly` (5) came back with a new
+    `DistanceN` in the tree each time. Compare the mate list before/after and
+    delete what appeared (`swmate.Mater.mate` does).
+44. **`EditUndo2` does not undo an API `AddMate5`.** To roll back: delete the
+    mate, then put the moved component back with `Transform2` -- that sticks
+    along free DOF only, which is exactly where a rejected mate moved it.
+45. **SolidWorks refuses TRANSLATIONAL redundancy, even when consistent.** A
+    face coincidence plus a concentric whose axis lies in that face, or two
+    parallel concentrics (two screws), are refused at `AddMate5` with
+    OverDefinedAssembly. Rotational overlap (a face plus a hole perpendicular
+    to it) is fine. Fix the last rotation with a lock-rotation concentric or a
+    parallel mate. On a still-free component a concentric can also slide it
+    (18 mm, once): mate a face first.
+46. **Pack and Go cannot be driven from Python here.**
+    `IModelDocExtension.GetPackAndGo` raises "Parameter not optional" with
+    every calling convention (typed, late-bound, property-get). The same job:
+    close everything, copy the files, then
+    `ISldWorks.ReplaceReferencedDocument(copy, old, new)` for every reference of
+    every copied assembly (works on closed files), and verify with
+    `GetDocumentDependencies2(path, True, False, False)` with nothing loaded --
+    with documents open it reports the in-memory resolution instead.
+47. **Broken external references stay listed, with status 0.**
+    `BreakAllExternalFileReferences2(False)` works (geometry unchanged), but
+    `ListExternalFileReferencesCount` does not drop: `swExternalReferenceBroken`
+    is 0, live in-context is 3, out-of-context 4, dangling 5.
+48. **Face normals:** negate `ISurface.PlaneParams`' normal when
+    `IFace2.FaceInSurfaceSense()` is True to get the outward normal (measured
+    on every box part; the other way round reports every face inside out).
 
 ### Design rules added on top of the locked look (all in 08/09)
 
@@ -511,9 +968,10 @@ model = wrap(sw.ActiveDoc, sld.IModelDoc2)
 
 `ROBOT.SLDASM`, one configuration (`Default`), opens in ~6 s via the API.
 
-* **12 top-level components**, all sub-assemblies except `WheelHanger-1`:
+* **13 top-level components**, all sub-assemblies except `WheelHanger-1`:
   `BODY-1`, `Femur-1`, `FEMUR_INSIDE-1`, `COUPLER-1`, `Tibia-1`, their `Mirror*`
-  twins (the left leg), plus `AK_SIM-1` and `WheelHanger-1`, both hidden.
+  twins (the left leg), plus `AK_SIM-1` and `WheelHanger-1`, both hidden, and
+  (since 2026-10-04) `Box-1`, the body box ("The body box" above).
 * **`AK_SIM-1` and `WheelHanger-1` do not count for collisions** (his call).
 * **The left leg has no mates.** No top-level mate references a `Mirror*`
   component, so it is presumably placed by a Mirror Components feature.

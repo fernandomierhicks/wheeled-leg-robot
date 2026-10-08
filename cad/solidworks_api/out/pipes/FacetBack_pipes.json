@@ -1,0 +1,34 @@
+{
+ "part": "FacetBack",
+ "R": 2.5,
+ "pipes": [
+  {
+   "name": "cheek",
+   "face": "cheek_l",
+   "visible_mm": 34.5,
+   "min_bend": 31.8,
+   "ends": [
+    "dive",
+    "collar"
+   ],
+   "hose_mm3": 235.7,
+   "collars_mm3": [
+    43.8
+   ],
+   "out_of_free_mm2": 0.0,
+   "under_face_mm3": 0.0,
+   "overhang": -0.316,
+   "checks": {
+    "one hose body": true,
+    "one body per collar": true,
+    "bend radius >= 8.0": true,
+    "visible 20..50 mm": true,
+    "footprint on free ground (< 0.5 mm2 out)": true,
+    "nothing under the face (< 0.5 mm3)": true,
+    "printable overhang": true,
+    "volume sane (< half tube)": true
+   },
+   "ok": true
+  }
+ ]
+}
