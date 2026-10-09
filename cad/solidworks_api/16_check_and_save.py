@@ -34,6 +34,7 @@ from swlib import c, wrap, sld
 mate_errors = import_module("10_verify_styled").mate_errors
 STYLED = import_module("10_verify_styled").STYLED + [
     r"Links\BearingWasher.SLDPRT", r"Body\SmallBearingWahser.SLDPRT", r"Body\InsideFemurShaft.SLDPRT"]
+STYLED_LATER = [r"Links\EncoderCarrier.SLDPRT", r"Links\EncoderCableClamp.SLDPRT"]   # 26: guarded once styled
 
 
 def v5_docs(sw):
@@ -48,12 +49,14 @@ def v5_docs(sw):
 def styled_ok(sw, docs):
     """[] if every styled part is loaded and styled in memory (gotcha 37)."""
     bad = []
-    for rel in STYLED:
+    for rel in STYLED + STYLED_LATER:
         d = docs.get(os.path.normcase(os.path.join(swlib.V5, rel)))
         if d is None:
             bad.append(f"{rel}: not loaded")
             continue
         gl = [f for f in S._iter_features(d) if f.Name.startswith("GL_")]
+        if rel in STYLED_LATER and not gl:       # not styled yet (26 not run): nothing to guard
+            continue
         sup = [f.Name for f in gl if f.IsSuppressed2(c.swThisConfiguration, None)[0]]
         n = len(S.bodies(d))
         print(f"  {rel:42s} GL {len(gl):3d}, suppressed {len(sup):3d}, bodies {n:3d}"
