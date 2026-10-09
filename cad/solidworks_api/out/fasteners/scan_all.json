@@ -1,0 +1,10988 @@
+{
+"comps": [
+{
+"name": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+"file": "Motor\\AK45-10 Stator.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.000142,
+0.0,
+1.0,
+0.0
+],
+[
+-1.0,
+-0.0,
+0.000142,
+0.0
+],
+[
+0.0,
+-1.0,
+-0.0,
+134.5
+]
+],
+"fastener": false,
+"step": "AK45-10 Stator__Default"
+},
+{
+"name": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+"file": "Body\\InsideFemurShaft.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-0.0
+],
+[
+1.0,
+-0.0,
+0.0,
+0.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+94.0
+]
+],
+"fastener": false,
+"step": "InsideFemurShaft__Default"
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-1",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+19.483972
+],
+[
+-1.0,
+0.0,
+0.0,
+11.25277
+],
+[
+0.0,
+0.0,
+-1.0,
+96.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-2",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+19.487171
+],
+[
+-1.0,
+0.0,
+0.0,
+-11.24723
+],
+[
+0.0,
+0.0,
+-1.0,
+96.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-3",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+0.003199
+],
+[
+-1.0,
+0.0,
+0.0,
+-22.5
+],
+[
+0.0,
+0.0,
+-1.0,
+96.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-4",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-19.483972
+],
+[
+-1.0,
+0.0,
+0.0,
+-11.25277
+],
+[
+0.0,
+0.0,
+-1.0,
+96.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-5",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-19.487171
+],
+[
+-1.0,
+0.0,
+0.0,
+11.24723
+],
+[
+0.0,
+0.0,
+-1.0,
+96.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.824379,
+-0.566039,
+0.0,
+-36.42
+],
+[
+0.566039,
+0.824379,
+0.0,
+44.54
+],
+[
+-0.0,
+0.0,
+1.0,
+106.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "30mm",
+"visible": true,
+"M": [
+[
+0.256431,
+0.966563,
+0.0,
+-34.41884
+],
+[
+-0.966563,
+0.256431,
+-0.0,
+67.632866
+],
+[
+-0.0,
+-0.0,
+1.0,
+87.0
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-11",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-9.0
+],
+[
+0.0,
+1.0,
+0.0,
+65.0
+],
+[
+0.0,
+0.0,
+1.0,
+84.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-12",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-9.0
+],
+[
+0.0,
+1.0,
+0.0,
+30.0
+],
+[
+0.0,
+0.0,
+1.0,
+84.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-13",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+40.0
+],
+[
+0.0,
+1.0,
+0.0,
+70.0
+],
+[
+0.0,
+0.0,
+1.0,
+84.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-14",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+40.0
+],
+[
+0.0,
+1.0,
+0.0,
+25.0
+],
+[
+0.0,
+0.0,
+1.0,
+84.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-15",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+40.0
+],
+[
+0.0,
+1.0,
+0.0,
+47.5
+],
+[
+0.0,
+0.0,
+1.0,
+84.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-16",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+-0.684703,
+-0.728822,
+0.0,
+4.949747
+],
+[
+-0.728822,
+0.684703,
+-0.0,
+4.949747
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-17",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+-0.728822,
+0.684703,
+-0.0,
+4.949747
+],
+[
+0.684703,
+0.728822,
+-0.0,
+-4.949747
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-18",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+0.684703,
+0.728822,
+-0.0,
+-4.949747
+],
+[
+0.728822,
+-0.684703,
+0.0,
+-4.949747
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-19",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+0.728822,
+-0.684703,
+0.0,
+-4.949747
+],
+[
+-0.684703,
+-0.728822,
+0.0,
+4.949747
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.566039,
+0.824379,
+0.0,
+-29.42
+],
+[
+-0.824379,
+0.566039,
+-0.0,
+37.54
+],
+[
+-0.0,
+0.0,
+1.0,
+106.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-20",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "30mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-61.467121
+],
+[
+0.0,
+1.0,
+0.0,
+60.446735
+],
+[
+0.0,
+0.0,
+1.0,
+87.0
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+-0.824379,
+0.566039,
+-0.0,
+-36.42
+],
+[
+-0.566039,
+-0.824379,
+-0.0,
+30.54
+],
+[
+-0.0,
+0.0,
+1.0,
+106.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+-0.566039,
+-0.824379,
+-0.0,
+-43.42
+],
+[
+0.824379,
+-0.566039,
+0.0,
+37.54
+],
+[
+-0.0,
+0.0,
+1.0,
+106.5
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+-0.923728,
+-0.383049,
+0.0,
+-7.0
+],
+[
+-0.383049,
+0.923728,
+-0.0,
+0.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+95.0
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+-0.383049,
+0.923728,
+-0.0,
+0.0
+],
+[
+0.923728,
+0.383049,
+-0.0,
+7.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+95.0
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+0.923728,
+0.383049,
+-0.0,
+7.0
+],
+[
+0.383049,
+-0.923728,
+0.0,
+-0.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+95.0
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+0.383049,
+-0.923728,
+0.0,
+-0.0
+],
+[
+-0.923728,
+-0.383049,
+0.0,
+-7.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+95.0
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "30mm",
+"visible": true,
+"M": [
+[
+0.12207,
+0.992521,
+0.0,
+-57.451341
+],
+[
+-0.992521,
+0.12207,
+0.0,
+68.501144
+],
+[
+0.0,
+0.0,
+1.0,
+87.0
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/RobotMount-1",
+"file": "Body\\OldRobotBodyMount\\RobotMount.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-150.0
+],
+[
+0.0,
+1.0,
+0.0,
+15.0
+],
+[
+0.0,
+0.0,
+1.0,
+75.0
+]
+],
+"fastener": false,
+"step": "RobotMount__Default"
+},
+{
+"name": "BODY-1/SIDE PANEL-1/Side panel-1",
+"file": "Body\\Side panel.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+94.0
+]
+],
+"fastener": false,
+"step": "Side panel__Default"
+},
+{
+"name": "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+"file": "Body\\SmallBearingWahser.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-36.42
+],
+[
+0.0,
+0.0,
+1.0,
+37.54
+],
+[
+0.0,
+-1.0,
+0.0,
+116.5
+]
+],
+"fastener": false,
+"step": "SmallBearingWahser__Default"
+},
+{
+"name": "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+"file": "Body\\LimitSwitch\\LimitSwitch.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.446198,
+-0.894934,
+-50.975857
+],
+[
+-0.0,
+-0.894934,
+0.446198,
+56.836214
+],
+[
+-1.0,
+0.0,
+-0.0,
+90.0
+]
+],
+"fastener": false,
+"step": "LimitSwitch__Default"
+},
+{
+"name": "BODY-1/SIDE PANEL-1/SwicthMount-1/M2 Roundhead-1",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+-0.894934,
+0.446198,
+-0.0,
+-53.862083
+],
+[
+0.446198,
+0.894934,
+-0.0,
+58.331103
+],
+[
+0.0,
+0.0,
+-1.0,
+84.3
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/SwicthMount-1/M2 Roundhead-2",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+-0.894934,
+0.446198,
+-0.0,
+-48.04501
+],
+[
+0.446198,
+0.894934,
+-0.0,
+55.430818
+],
+[
+0.0,
+0.0,
+-1.0,
+84.3
+]
+],
+"fastener": true
+},
+{
+"name": "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1",
+"file": "Body\\LimitSwitch\\Switch_Mount.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.894934,
+-0.0,
+0.446198,
+-50.953547
+],
+[
+-0.446198,
+-0.0,
+0.894934,
+56.88096
+],
+[
+0.0,
+-1.0,
+-0.0,
+94.0
+]
+],
+"fastener": false,
+"step": "Switch_Mount__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+"file": "Box\\Battery holder.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+11.439276
+],
+[
+0.0,
+1.0,
+0.0,
+20.0
+],
+[
+0.0,
+0.0,
+1.0,
+-0.0
+]
+],
+"fastener": false,
+"step": "Battery holder__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/Battery-1",
+"file": "Box\\Electronics\\Battery.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+30.089276
+],
+[
+-0.0,
+-0.0,
+-1.0,
+22.0
+],
+[
+1.0,
+0.0,
+-0.0,
+-57.35
+]
+],
+"fastener": false,
+"step": "Battery__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+"file": "Box\\BatteryCap.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-1.0,
+0.0,
+0.0,
+11.439276
+],
+[
+0.0,
+1.0,
+0.0,
+56.8
+],
+[
+0.0,
+0.0,
+-1.0,
+10.0
+]
+],
+"fastener": false,
+"step": "BatteryCap__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+"file": "Box\\BottomPanel.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-50.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+15.0
+],
+[
+1.0,
+0.0,
+0.0,
+-0.0
+]
+],
+"fastener": false,
+"step": "BottomPanel__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.0,
+1.0,
+-89.168582
+],
+[
+0.0,
+1.0,
+0.0,
+20.0
+],
+[
+-1.0,
+0.0,
+-0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+1.0,
+0.0,
+-84.168582
+],
+[
+0.0,
+0.0,
+-1.0,
+23.7
+],
+[
+-1.0,
+0.0,
+-0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.866025,
+-0.5,
+0.0,
+-84.168582
+],
+[
+0.5,
+0.866025,
+0.0,
+30.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3x8 flathead-1",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-84.168582
+],
+[
+0.0,
+1.0,
+0.0,
+30.0
+],
+[
+0.0,
+0.0,
+1.0,
+74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3x8 flathead-2",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+-0.0,
+1.0,
+0.0,
+-84.168582
+],
+[
+0.0,
+0.0,
+-1.0,
+21.0
+],
+[
+-1.0,
+-0.0,
+-0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+1.0,
+-14.0
+],
+[
+0.0,
+1.0,
+-0.0,
+20.0
+],
+[
+-1.0,
+0.0,
+-0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+1.0,
+-0.0,
+-9.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+23.7
+],
+[
+-1.0,
+0.0,
+-0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.866025,
+-0.5,
+-0.0,
+-9.0
+],
+[
+0.5,
+0.866025,
+0.0,
+30.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3x8 flathead-2",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+-0.0,
+1.0,
+0.0,
+-9.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+21.0
+],
+[
+-1.0,
+-0.0,
+-0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+0.0,
+1.0,
+-14.0
+],
+[
+1.0,
+0.0,
+-0.0,
+20.0
+],
+[
+-0.0,
+1.0,
+0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+1.0,
+0.0,
+-9.0
+],
+[
+1.0,
+-0.0,
+-0.0,
+30.0
+],
+[
+-0.0,
+0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.866025,
+-0.5,
+0.0,
+-9.0
+],
+[
+0.0,
+0.0,
+-1.0,
+23.7
+],
+[
+0.5,
+0.866025,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3x8 flathead-1",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-9.0
+],
+[
+-0.0,
+-0.0,
+-1.0,
+21.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.0,
+1.0,
+-89.168582
+],
+[
+1.0,
+0.0,
+0.0,
+20.0
+],
+[
+-0.0,
+1.0,
+0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+1.0,
+0.0,
+-84.168582
+],
+[
+1.0,
+-0.0,
+-0.0,
+30.0
+],
+[
+-0.0,
+0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.866025,
+-0.5,
+0.0,
+-84.168582
+],
+[
+0.0,
+0.0,
+-1.0,
+23.7
+],
+[
+0.5,
+0.866025,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3x8 flathead-1",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-84.168582
+],
+[
+0.0,
+-0.0,
+-1.0,
+21.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3x8 flathead-2",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+-0.0,
+1.0,
+-0.0,
+-84.168582
+],
+[
+1.0,
+0.0,
+0.0,
+30.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+-74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+"file": "Box\\Electronics\\CAN.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-105.242169
+],
+[
+-1.0,
+0.0,
+-0.0,
+62.0
+],
+[
+0.0,
+1.0,
+0.0,
+19.381138
+]
+],
+"fastener": false,
+"step": "CAN__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2",
+"file": "Box\\Electronics\\CAN.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-105.242169
+],
+[
+-1.0,
+0.0,
+-0.0,
+62.0
+],
+[
+0.0,
+1.0,
+0.0,
+14.301138
+]
+],
+"fastener": false,
+"step": "CAN__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1",
+"file": "Box\\Electronics\\CustomBoard.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-149.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+35.0
+],
+[
+1.0,
+0.0,
+0.0,
+-59.0
+]
+],
+"fastener": false,
+"step": "CustomBoard__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/ESP32-1",
+"file": "Box\\Electronics\\ESP32.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+1.0,
+0.0,
+-117.700622
+],
+[
+-0.0,
+-0.0,
+1.0,
+-5.3
+],
+[
+1.0,
+-0.0,
+0.0,
+-22.236134
+]
+],
+"fastener": false,
+"step": "ESP32__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/Teensy 4.1-1",
+"file": "Box\\Electronics\\Teensy 4.1.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+-0.0,
+-115.440474
+],
+[
+0.0,
+0.0,
+1.0,
+48.185
+],
+[
+-0.0,
+-1.0,
+0.0,
+-0.295564
+]
+],
+"fastener": false,
+"step": "Teensy 4.1__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/DC_DC-1",
+"file": "Box\\Electronics\\DC_DC.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.0,
+1.0,
+-118.456314
+],
+[
+0.0,
+1.0,
+0.0,
+20.0
+],
+[
+-1.0,
+0.0,
+-0.0,
+-17.577604
+]
+],
+"fastener": false,
+"step": "DC_DC__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+"file": "Box\\Electronics\\IMU BNO085.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-102.127368
+],
+[
+-0.0,
+1.0,
+-0.0,
+29.12642
+],
+[
+1.0,
+0.0,
+0.0,
+48.555942
+]
+],
+"fastener": false,
+"step": "IMU BNO085__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M2 standoff-1",
+"file": "Box\\M2 standoff.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-147.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+20.0
+],
+[
+1.0,
+0.0,
+0.0,
+-57.0
+]
+],
+"fastener": true,
+"step": "M2 standoff__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M2 standoff-2",
+"file": "Box\\M2 standoff.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-147.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+20.0
+],
+[
+1.0,
+0.0,
+0.0,
+29.0
+]
+],
+"fastener": true,
+"step": "M2 standoff__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M2 standoff-3",
+"file": "Box\\M2 standoff.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-81.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+20.0
+],
+[
+1.0,
+0.0,
+0.0,
+-57.0
+]
+],
+"fastener": true,
+"step": "M2 standoff__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M2 standoff-4",
+"file": "Box\\M2 standoff.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-81.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+20.0
+],
+[
+1.0,
+0.0,
+0.0,
+29.0
+]
+],
+"fastener": true,
+"step": "M2 standoff__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Flathead-1",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+12.0
+],
+[
+0.0,
+-0.0,
+1.0,
+19.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+-20.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Flathead-2",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+12.0
+],
+[
+0.0,
+-0.0,
+1.0,
+19.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+20.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-1.0,
+-0.0,
+0.0,
+-112.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+12.0
+],
+[
+0.0,
+-1.0,
+0.0,
+-20.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-71.499999
+],
+[
+0.0,
+-0.0,
+1.0,
+30.710324
+],
+[
+-0.0,
+-1.0,
+0.0,
+66.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-11",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-71.499999
+],
+[
+0.0,
+-0.0,
+1.0,
+30.710324
+],
+[
+-0.0,
+-1.0,
+0.0,
+-69.500001
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-12",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-28.0
+],
+[
+0.0,
+-0.0,
+1.0,
+30.710324
+],
+[
+-0.0,
+-1.0,
+0.0,
+-69.500001
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-13",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-53.1
+],
+[
+0.0,
+-0.0,
+1.0,
+38.310324
+],
+[
+-0.0,
+-1.0,
+0.0,
+-25.000001
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-14",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-29.625611
+],
+[
+0.0,
+-0.0,
+1.0,
+38.310324
+],
+[
+-0.0,
+-1.0,
+0.0,
+13.509778
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-15",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-102.183291
+],
+[
+0.0,
+-0.0,
+1.0,
+26.12642
+],
+[
+-0.0,
+-1.0,
+0.0,
+45.495942
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-16",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-81.983291
+],
+[
+0.0,
+-0.0,
+1.0,
+26.12642
+],
+[
+-0.0,
+-1.0,
+0.0,
+45.495942
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-1.0,
+-0.0,
+0.0,
+-112.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+12.0
+],
+[
+0.0,
+-1.0,
+0.0,
+20.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-1.0,
+-0.0,
+0.0,
+-147.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+12.0
+],
+[
+0.0,
+-1.0,
+0.0,
+20.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-1.0,
+-0.0,
+0.0,
+-147.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+12.0
+],
+[
+0.0,
+-1.0,
+0.0,
+-20.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "30mm",
+"visible": true,
+"M": [
+[
+-1.0,
+0.0,
+0.0,
+-171.676
+],
+[
+-0.0,
+-1.0,
+0.0,
+-32.0
+],
+[
+0.0,
+0.0,
+1.0,
+1.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "30mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+27.439276
+],
+[
+0.0,
+-0.0,
+1.0,
+46.8
+],
+[
+-0.0,
+-1.0,
+0.0,
+54.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "30mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-4.560724
+],
+[
+0.0,
+-0.0,
+1.0,
+46.8
+],
+[
+-0.0,
+-1.0,
+0.0,
+54.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-28.0
+],
+[
+0.0,
+-0.0,
+1.0,
+30.710324
+],
+[
+-0.0,
+-1.0,
+0.0,
+66.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-53.1
+],
+[
+0.0,
+-0.0,
+1.0,
+30.710324
+],
+[
+-0.0,
+-1.0,
+0.0,
+13.500001
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-1",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-28.0
+],
+[
+0.0,
+-0.0,
+1.0,
+20.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+66.0
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__12mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-10",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-102.183291
+],
+[
+0.0,
+-0.0,
+1.0,
+20.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+45.495942
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__8mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-11",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-81.983291
+],
+[
+0.0,
+-0.0,
+1.0,
+20.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+45.495942
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__8mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-2",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-53.1
+],
+[
+0.0,
+-0.0,
+1.0,
+20.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+13.500001
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__12mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-3",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-71.499999
+],
+[
+0.0,
+-0.0,
+1.0,
+20.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+66.0
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__12mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-4",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-71.499999
+],
+[
+0.0,
+-0.0,
+1.0,
+20.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+-69.500001
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__12mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-5",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-28.0
+],
+[
+0.0,
+-0.0,
+1.0,
+20.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+-69.500001
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__12mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-6",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-53.1
+],
+[
+0.0,
+-0.0,
+1.0,
+20.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+-25.000001
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__12mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-7",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "5mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-53.1
+],
+[
+0.0,
+-0.0,
+1.0,
+33.710324
+],
+[
+-0.0,
+-1.0,
+0.0,
+-25.000001
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__5mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-8",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-29.499999
+],
+[
+0.0,
+-0.0,
+1.0,
+20.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+13.500001
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__12mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-9",
+"file": "Common\\M3 standoff MF.SLDPRT",
+"config": "5mm",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-29.499999
+],
+[
+0.0,
+-0.0,
+1.0,
+33.710324
+],
+[
+-0.0,
+-1.0,
+0.0,
+13.500001
+]
+],
+"fastener": true,
+"step": "M3 standoff MF__5mm"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+"file": "Box\\Electronics\\Odrive.sldprt",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+-1.0,
+-0.0,
+-24.0
+],
+[
+0.0,
+-0.0,
+1.0,
+33.710324
+],
+[
+-1.0,
+0.0,
+0.0,
+68.5
+]
+],
+"fastener": false,
+"step": "Odrive__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/Receiver-1",
+"file": "Box\\Electronics\\Receiver.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-118.65626
+],
+[
+0.0,
+-0.0,
+-1.0,
+30.5
+],
+[
+-0.0,
+1.0,
+-0.0,
+49.058176
+]
+],
+"fastener": false,
+"step": "Receiver__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/Resistor-1",
+"file": "Box\\Electronics\\Resistor.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.05301,
+0.998594,
+-0.0,
+-41.362806
+],
+[
+-0.0,
+0.0,
+1.0,
+38.710324
+],
+[
+0.998594,
+-0.05301,
+0.0,
+-5.745112
+]
+],
+"fastener": false,
+"step": "Resistor__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/SupportWheel-1",
+"file": "Box\\SupportWheel.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-171.676
+],
+[
+0.0,
+1.0,
+0.0,
+-32.0
+],
+[
+0.0,
+0.0,
+1.0,
+-4.0
+]
+],
+"fastener": false,
+"step": "SupportWheel__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+"file": "Box\\TailStrut\\TailStrut.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+0.0
+]
+],
+"fastener": false,
+"step": "TailStrut__Default"
+},
+{
+"name": "Box-1/BottomPanelWithAvionics-1/XT30-1",
+"file": "Box\\Electronics\\XT30.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-27.218668
+],
+[
+0.0,
+0.0,
+-1.0,
+45.110324
+],
+[
+-0.0,
+1.0,
+0.0,
+-10.313647
+]
+],
+"fastener": false,
+"step": "XT30__Default"
+},
+{
+"name": "Box-1/BumperBack-1",
+"file": "Box\\Facet\\BumperBack.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+0.0
+]
+],
+"fastener": false,
+"step": "BumperBack__Default"
+},
+{
+"name": "Box-1/BumperFront-1",
+"file": "Box\\Facet\\BumperFront.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+0.0
+]
+],
+"fastener": false,
+"step": "BumperFront__Default"
+},
+{
+"name": "Box-1/CornerBracket-1/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+-0.0,
+-150.0
+],
+[
+0.0,
+0.0,
+1.0,
+65.0
+],
+[
+0.0,
+-1.0,
+-0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-1/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-140.0
+],
+[
+0.0,
+1.0,
+0.0,
+70.0
+],
+[
+0.0,
+0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-1/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-146.3
+],
+[
+0.866025,
+-0.5,
+-0.0,
+70.0
+],
+[
+-0.5,
+-0.866025,
+-0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-1/M3x8 flathead-2",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-140.0
+],
+[
+0.0,
+1.0,
+0.0,
+70.0
+],
+[
+0.0,
+0.0,
+1.0,
+74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/CornerBracket-10/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+1.0,
+-0.0,
+-150.0
+],
+[
+0.0,
+0.0,
+1.0,
+20.0
+],
+[
+1.0,
+-0.0,
+0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-10/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-146.3
+],
+[
+0.0,
+1.0,
+-0.0,
+25.0
+],
+[
+1.0,
+-0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-10/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.5,
+0.866025,
+0.0,
+-140.0
+],
+[
+0.866025,
+-0.5,
+0.0,
+25.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-10/M3x8 flathead-1",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+-0.0,
+1.0,
+-0.0,
+-140.0
+],
+[
+1.0,
+0.0,
+-0.0,
+25.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+-74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/CornerBracket-11/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+-1.0,
+0.0,
+50.0
+],
+[
+-0.0,
+-0.0,
+-1.0,
+30.0
+],
+[
+1.0,
+-0.0,
+0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-11/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.0,
+0.0,
+1.0,
+46.3
+],
+[
+-0.0,
+-1.0,
+0.0,
+25.0
+],
+[
+1.0,
+-0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-11/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.5,
+-0.866025,
+-0.0,
+40.0
+],
+[
+-0.866025,
+0.5,
+0.0,
+25.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-12/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-1.0,
+0.0,
+-0.0,
+50.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+65.0
+],
+[
+0.0,
+1.0,
+0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-12/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-1.0,
+0.0,
+-0.0,
+40.0
+],
+[
+0.0,
+1.0,
+0.0,
+70.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-12/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.0,
+1.0,
+46.3
+],
+[
+0.866025,
+-0.5,
+0.0,
+70.0
+],
+[
+0.5,
+0.866025,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-13/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+1.0,
+-0.0,
+-150.0
+],
+[
+-0.0,
+-0.0,
+-1.0,
+52.5
+],
+[
+-1.0,
+0.0,
+0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-13/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-146.3
+],
+[
+-0.0,
+-1.0,
+0.0,
+47.5
+],
+[
+-1.0,
+0.0,
+-0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-13/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.5,
+0.866025,
+0.0,
+-140.0
+],
+[
+-0.866025,
+0.5,
+-0.0,
+47.5
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-13/M3x8 flathead-1",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+-0.0,
+1.0,
+-0.0,
+-140.0
+],
+[
+-1.0,
+-0.0,
+0.0,
+47.5
+],
+[
+-0.0,
+0.0,
+1.0,
+74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/CornerBracket-14/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+-1.0,
+-0.0,
+50.0
+],
+[
+0.0,
+-0.0,
+1.0,
+42.5
+],
+[
+-1.0,
+0.0,
+0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-14/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.0,
+1.0,
+46.3
+],
+[
+0.0,
+1.0,
+0.0,
+47.5
+],
+[
+-1.0,
+0.0,
+-0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-14/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.5,
+-0.866025,
+-0.0,
+40.0
+],
+[
+0.866025,
+-0.5,
+-0.0,
+47.5
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-17/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-1.0,
+-0.0,
+-0.0,
+50.0
+],
+[
+-0.0,
+0.0,
+1.0,
+42.5
+],
+[
+-0.0,
+1.0,
+-0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-17/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-1.0,
+0.0,
+0.0,
+40.0
+],
+[
+0.0,
+1.0,
+-0.0,
+47.5
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-17/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.0,
+1.0,
+46.3
+],
+[
+0.866025,
+-0.5,
+0.0,
+47.5
+],
+[
+0.5,
+0.866025,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-18/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+-0.0,
+-150.0
+],
+[
+-0.0,
+-0.0,
+-1.0,
+52.5
+],
+[
+-0.0,
+1.0,
+-0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-18/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+-0.0,
+-140.0
+],
+[
+-0.0,
+-1.0,
+0.0,
+47.5
+],
+[
+-0.0,
+0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-18/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-146.3
+],
+[
+-0.866025,
+0.5,
+0.0,
+47.5
+],
+[
+0.5,
+0.866025,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-18/M3x8 flathead-2",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+-0.0,
+-140.0
+],
+[
+0.0,
+-1.0,
+0.0,
+47.5
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/CornerBracket-2/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+-0.0,
+-150.0
+],
+[
+0.0,
+0.0,
+1.0,
+20.0
+],
+[
+0.0,
+-1.0,
+-0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-2/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-140.0
+],
+[
+0.0,
+1.0,
+0.0,
+25.0
+],
+[
+0.0,
+0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-2/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-146.3
+],
+[
+0.866025,
+-0.5,
+-0.0,
+25.0
+],
+[
+-0.5,
+-0.866025,
+-0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-2/M3x8 flathead-2",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-140.0
+],
+[
+0.0,
+1.0,
+0.0,
+25.0
+],
+[
+0.0,
+0.0,
+1.0,
+74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/CornerBracket-21/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-78.5
+],
+[
+0.0,
+-1.0,
+-0.0,
+75.0
+],
+[
+-1.0,
+-0.0,
+-0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-21/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.0,
+-1.0,
+-0.0,
+-83.5
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+],
+[
+-1.0,
+0.0,
+-0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-21/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.866025,
+0.5,
+-0.0,
+-83.5
+],
+[
+-0.5,
+-0.866025,
+-0.0,
+65.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-21/M3x8 flathead-1",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+-1.0,
+0.0,
+-0.0,
+-83.5
+],
+[
+-0.0,
+-1.0,
+0.0,
+65.0
+],
+[
+-0.0,
+0.0,
+1.0,
+74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/CornerBracket-26/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+-0.0,
+-150.0
+],
+[
+0.0,
+-1.0,
+0.0,
+75.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+5.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-26/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+-0.0,
+-140.0
+],
+[
+0.0,
+-0.0,
+1.0,
+71.3
+],
+[
+-0.0,
+-1.0,
+0.0,
+0.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-26/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-146.3
+],
+[
+-0.5,
+-0.866025,
+-0.0,
+65.0
+],
+[
+-0.866025,
+0.5,
+-0.0,
+0.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-27/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-150.0
+],
+[
+0.0,
+1.0,
+0.0,
+20.0
+],
+[
+0.0,
+0.0,
+1.0,
+-5.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-27/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+1.0,
+-0.0,
+0.0,
+-140.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+23.7
+],
+[
+0.0,
+1.0,
+0.0,
+-0.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-27/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-146.3
+],
+[
+0.5,
+0.866025,
+0.0,
+30.0
+],
+[
+0.866025,
+-0.5,
+0.0,
+-0.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-27/M3x8 flathead-2",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-140.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+21.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+-0.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/CornerBracket-28/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+0.0,
+-1.0,
+-4.0
+],
+[
+0.0,
+-1.0,
+-0.0,
+75.0
+],
+[
+-1.0,
+-0.0,
+0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-28/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.0,
+-1.0,
+-0.0,
+-9.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+],
+[
+-1.0,
+0.0,
+-0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-28/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.866025,
+0.5,
+0.0,
+-9.0
+],
+[
+-0.5,
+-0.866025,
+-0.0,
+65.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-3/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-1.0,
+-0.0,
+0.0,
+50.0
+],
+[
+-0.0,
+-0.0,
+-1.0,
+30.0
+],
+[
+0.0,
+-1.0,
+-0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-3/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-1.0,
+0.0,
+0.0,
+40.0
+],
+[
+-0.0,
+-1.0,
+-0.0,
+25.0
+],
+[
+0.0,
+-0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-3/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.0,
+1.0,
+46.3
+],
+[
+-0.866025,
+0.5,
+0.0,
+25.0
+],
+[
+-0.5,
+-0.866025,
+-0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-30/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-4.0
+],
+[
+-1.0,
+0.0,
+-0.0,
+75.0
+],
+[
+0.0,
+1.0,
+-0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-30/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.0,
+-1.0,
+0.0,
+-9.0
+],
+[
+-1.0,
+0.0,
+-0.0,
+65.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-30/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.866025,
+0.5,
+-0.0,
+-9.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+],
+[
+0.5,
+0.866025,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-31/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-78.5
+],
+[
+-1.0,
+0.0,
+-0.0,
+75.0
+],
+[
+0.0,
+1.0,
+0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-31/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.0,
+-1.0,
+-0.0,
+-83.5
+],
+[
+-1.0,
+0.0,
+-0.0,
+65.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-31/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.866025,
+0.5,
+-0.0,
+-83.5
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+],
+[
+0.5,
+0.866025,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-31/M3x8 flathead-2",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-83.5
+],
+[
+-1.0,
+-0.0,
+-0.0,
+65.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+-74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/CornerBracket-4/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+-0.0,
+50.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+65.0
+],
+[
+-1.0,
+-0.0,
+0.0,
+75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-4/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+1.0,
+46.3
+],
+[
+0.0,
+1.0,
+0.0,
+70.0
+],
+[
+-1.0,
+0.0,
+0.0,
+65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-4/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.5,
+-0.866025,
+-0.0,
+40.0
+],
+[
+0.866025,
+-0.5,
+-0.0,
+70.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-9/CornerBracket-1",
+"file": "Box\\CornerBracket.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+1.0,
+-0.0,
+-150.0
+],
+[
+0.0,
+0.0,
+1.0,
+65.0
+],
+[
+1.0,
+-0.0,
+0.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "CornerBracket__Default"
+},
+{
+"name": "Box-1/CornerBracket-9/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.0,
+-0.0,
+-1.0,
+-146.3
+],
+[
+0.0,
+1.0,
+-0.0,
+70.0
+],
+[
+1.0,
+-0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-9/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.5,
+0.866025,
+0.0,
+-140.0
+],
+[
+0.866025,
+-0.5,
+0.0,
+70.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-71.3
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/CornerBracket-9/M3x8 flathead-1",
+"file": "Box\\M3x8 flathead.SLDPRT",
+"config": "92125A128",
+"visible": true,
+"M": [
+[
+-0.0,
+1.0,
+-0.0,
+-140.0
+],
+[
+1.0,
+0.0,
+-0.0,
+70.0
+],
+[
+0.0,
+-0.0,
+-1.0,
+-74.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/FacetBack-1",
+"file": "Box\\Facet\\FacetBack.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+0.0
+]
+],
+"fastener": false,
+"step": "FacetBack__Default"
+},
+{
+"name": "Box-1/FacetFront-1",
+"file": "Box\\Facet\\FacetFront.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+0.0
+]
+],
+"fastener": false,
+"step": "FacetFront__Default"
+},
+{
+"name": "Box-1/FacetHood-1",
+"file": "Box\\Facet\\FacetHood.SLDPRT",
+"config": "Default",
+"visible": false,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+0.0
+]
+],
+"fastener": false,
+"step": "FacetHood__Default"
+},
+{
+"name": "Box-1/FacetRing-1",
+"file": "Box\\Facet\\FacetRing.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+0.0
+]
+],
+"fastener": false,
+"step": "FacetRing__Default"
+},
+{
+"name": "Box-1/LaserRange-1",
+"file": "Box\\Electronics\\LaserRange.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+0.866025,
+-0.5,
+40.77365
+],
+[
+0.0,
+-0.5,
+-0.866025,
+-6.892305
+],
+[
+-1.0,
+-0.0,
+-0.0,
+-5.773318
+]
+],
+"fastener": false,
+"step": "LaserRange__Default"
+},
+{
+"name": "Box-1/LaserRange-2",
+"file": "Box\\Electronics\\LaserRange.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+1.0,
+0.0,
+46.639675
+],
+[
+-0.0,
+0.0,
+-1.0,
+3.0
+],
+[
+-1.0,
+0.0,
+0.0,
+-5.773318
+]
+],
+"fastener": false,
+"step": "LaserRange__Default"
+},
+{
+"name": "Box-1/M2 Roundhead-1",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "4mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+48.8
+],
+[
+0.0,
+-1.0,
+0.0,
+61.5
+],
+[
+-1.0,
+0.0,
+0.0,
+-29.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M2 Roundhead-2",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "4mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+48.8
+],
+[
+0.0,
+-1.0,
+0.0,
+33.5
+],
+[
+-1.0,
+0.0,
+0.0,
+-29.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M2 Roundhead-3",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "4mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+48.8
+],
+[
+0.0,
+-1.0,
+0.0,
+33.5
+],
+[
+-1.0,
+0.0,
+0.0,
+29.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M2 Roundhead-4",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "4mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+48.8
+],
+[
+0.0,
+-1.0,
+0.0,
+61.5
+],
+[
+-1.0,
+0.0,
+0.0,
+29.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-1",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+62.0
+],
+[
+0.0,
+-1.0,
+0.0,
+82.0
+],
+[
+1.0,
+0.0,
+0.0,
+-32.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-10",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-120.0
+],
+[
+-1.0,
+0.0,
+0.0,
+82.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-73.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-11",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-145.0
+],
+[
+0.0,
+0.0,
+1.0,
+71.0
+],
+[
+-1.0,
+0.0,
+0.0,
+70.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-12",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-83.5
+],
+[
+0.0,
+0.0,
+1.0,
+73.0
+],
+[
+-1.0,
+0.0,
+0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-13",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-140.0
+],
+[
+0.0,
+0.0,
+1.0,
+73.0
+],
+[
+-1.0,
+0.0,
+0.0,
+0.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-14",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-9.0
+],
+[
+0.0,
+0.0,
+1.0,
+73.0
+],
+[
+-1.0,
+0.0,
+0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-15",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+45.0
+],
+[
+0.0,
+0.0,
+1.0,
+71.0
+],
+[
+-1.0,
+0.0,
+0.0,
+70.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-16",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-145.0
+],
+[
+0.0,
+0.0,
+1.0,
+71.0
+],
+[
+-1.0,
+0.0,
+0.0,
+-70.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-17",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-83.5
+],
+[
+0.0,
+0.0,
+1.0,
+73.0
+],
+[
+-1.0,
+0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-18",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-9.0
+],
+[
+0.0,
+0.0,
+1.0,
+73.0
+],
+[
+-1.0,
+0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-19",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+45.0
+],
+[
+0.0,
+0.0,
+1.0,
+71.0
+],
+[
+-1.0,
+0.0,
+0.0,
+-70.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-2",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+62.0
+],
+[
+0.0,
+-1.0,
+0.0,
+82.0
+],
+[
+1.0,
+0.0,
+0.0,
+32.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-20",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-148.01
+],
+[
+-0.0,
+-1.0,
+0.0,
+65.0
+],
+[
+-1.0,
+0.0,
+0.0,
+0.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-3",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+25.0
+],
+[
+1.0,
+0.0,
+0.0,
+82.0
+],
+[
+0.0,
+0.0,
+1.0,
+73.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-4",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-45.0
+],
+[
+1.0,
+0.0,
+0.0,
+82.0
+],
+[
+0.0,
+0.0,
+1.0,
+73.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-5",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-120.0
+],
+[
+1.0,
+0.0,
+0.0,
+82.0
+],
+[
+0.0,
+0.0,
+1.0,
+73.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-6",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-161.0
+],
+[
+0.0,
+-1.0,
+0.0,
+82.0
+],
+[
+-1.0,
+0.0,
+0.0,
+-32.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-7",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-161.0
+],
+[
+0.0,
+-1.0,
+0.0,
+82.0
+],
+[
+-1.0,
+0.0,
+0.0,
+32.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-8",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+25.0
+],
+[
+-1.0,
+0.0,
+0.0,
+82.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-73.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Flathead-9",
+"file": "Common\\M3 Flathead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-45.0
+],
+[
+-1.0,
+0.0,
+0.0,
+82.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-73.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+55.034483
+],
+[
+0.0,
+-1.0,
+0.0,
+25.0
+],
+[
+1.0,
+0.0,
+0.0,
+-0.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+51.7
+],
+[
+0.0,
+-1.0,
+0.0,
+70.229
+],
+[
+1.0,
+0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-11",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+51.7
+],
+[
+0.0,
+-1.0,
+0.0,
+47.271
+],
+[
+1.0,
+0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-12",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+51.7
+],
+[
+0.0,
+-1.0,
+0.0,
+70.0
+],
+[
+1.0,
+0.0,
+0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-13",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+51.7
+],
+[
+0.0,
+-1.0,
+0.0,
+47.5
+],
+[
+1.0,
+0.0,
+0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-14",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+51.7
+],
+[
+0.0,
+-1.0,
+0.0,
+25.0
+],
+[
+1.0,
+0.0,
+0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-152.871429
+],
+[
+0.0,
+-1.0,
+0.0,
+30.0
+],
+[
+-1.0,
+0.0,
+0.0,
+-0.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-151.4
+],
+[
+0.0,
+-1.0,
+0.0,
+24.771
+],
+[
+-1.0,
+0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-151.4
+],
+[
+0.0,
+-1.0,
+0.0,
+47.729
+],
+[
+-1.0,
+0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-151.4
+],
+[
+0.0,
+-1.0,
+0.0,
+69.771
+],
+[
+-1.0,
+0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-151.4
+],
+[
+0.0,
+-1.0,
+0.0,
+70.0
+],
+[
+-1.0,
+0.0,
+0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-151.4
+],
+[
+0.0,
+-1.0,
+0.0,
+47.5
+],
+[
+-1.0,
+0.0,
+0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+-1.0,
+-151.4
+],
+[
+0.0,
+-1.0,
+0.0,
+25.0
+],
+[
+-1.0,
+0.0,
+0.0,
+65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+51.7
+],
+[
+0.0,
+-1.0,
+0.0,
+25.229
+],
+[
+1.0,
+0.0,
+0.0,
+-65.0
+]
+],
+"fastener": true
+},
+{
+"name": "Box-1/M3 nut-1",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.258819,
+-0.965926,
+-0.0,
+-145.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+66.148
+],
+[
+-0.965926,
+0.258819,
+-0.0,
+70.000009
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/M3 nut-2",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+-0.965926,
+0.258819,
+-0.0,
+45.0
+],
+[
+-0.0,
+0.0,
+1.0,
+66.148
+],
+[
+0.258819,
+0.965926,
+-0.0,
+70.000009
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/M3 nut-3",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.965926,
+-0.258819,
+-0.0,
+-145.0
+],
+[
+0.0,
+-0.0,
+1.0,
+66.148
+],
+[
+-0.258819,
+-0.965926,
+0.0,
+-69.999991
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/M3 nut-4",
+"file": "Box\\M3 nut.SLDPRT",
+"config": "91828A211",
+"visible": true,
+"M": [
+[
+0.258819,
+0.965926,
+-0.0,
+45.0
+],
+[
+-0.0,
+0.0,
+1.0,
+66.148
+],
+[
+0.965926,
+-0.258819,
+0.0,
+-69.999991
+]
+],
+"fastener": true,
+"step": "M3 nut__91828A211"
+},
+{
+"name": "Box-1/NeopixelStrip-1",
+"file": "Box\\Facet\\NeopixelStrip.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+0.0
+]
+],
+"fastener": false,
+"step": "NeopixelStrip__Default"
+},
+{
+"name": "Box-1/OLED-1",
+"file": "Box\\Electronics\\OLED.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+1.0,
+0.0,
+48.8
+],
+[
+1.0,
+0.0,
+0.0,
+29.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-31.0
+]
+],
+"fastener": false,
+"step": "OLED__Default"
+},
+{
+"name": "Box-1/Switch-1",
+"file": "Box\\Switch.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+-0.0,
+-129.9
+],
+[
+0.0,
+-0.0,
+1.0,
+45.0
+],
+[
+-1.0,
+-0.0,
+0.0,
+45.0
+]
+],
+"fastener": false,
+"step": "Switch__Default"
+},
+{
+"name": "COUPLER-1/Bearing 6804-2RS (20x32x7)-1",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+0.0,
+-0.101765,
+0.994808,
+-36.42
+],
+[
+0.0,
+-0.994808,
+-0.101765,
+37.54
+],
+[
+1.0,
+0.0,
+-0.0,
+111.0
+]
+],
+"fastener": false
+},
+{
+"name": "COUPLER-1/BearingWasher-1",
+"file": "Links\\BearingWasher.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.635415,
+-0.0,
+-0.772171,
+-36.42
+],
+[
+0.772171,
+-0.0,
+0.635415,
+37.54
+],
+[
+-0.0,
+-1.0,
+-0.0,
+116.0
+]
+],
+"fastener": false,
+"step": "BearingWasher__Default"
+},
+{
+"name": "COUPLER-1/Coupler-1",
+"file": "Links\\Coupler.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.635415,
+0.772171,
+-0.0,
+-90.284162
+],
+[
+0.772171,
+-0.635415,
+-0.0,
+-27.916894
+],
+[
+-0.0,
+0.0,
+-1.0,
+111.0
+]
+],
+"fastener": false,
+"step": "Coupler__Default"
+},
+{
+"name": "COUPLER-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+-0.88273,
+0.46988,
+0.0,
+-138.74313
+],
+[
+-0.46988,
+-0.88273,
+0.0,
+-97.821696
+],
+[
+0.0,
+0.0,
+1.0,
+125.5
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+-0.034437,
+0.999407,
+0.0,
+-18.60554
+],
+[
+-0.999407,
+-0.034437,
+0.0,
+44.217995
+],
+[
+0.0,
+-0.0,
+1.0,
+115.0
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+-0.46988,
+-0.88273,
+0.0,
+-148.596231
+],
+[
+0.88273,
+-0.46988,
+0.0,
+-98.778982
+],
+[
+-0.0,
+0.0,
+1.0,
+125.5
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+0.88273,
+-0.46988,
+0.0,
+-149.553517
+],
+[
+0.46988,
+0.88273,
+0.0,
+-88.92588
+],
+[
+-0.0,
+-0.0,
+1.0,
+125.5
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+0.46988,
+0.88273,
+0.0,
+-139.700416
+],
+[
+-0.88273,
+0.46988,
+0.0,
+-87.968595
+],
+[
+0.0,
+-0.0,
+1.0,
+125.5
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+-0.88273,
+0.46988,
+0.0,
+-21.729456
+],
+[
+-0.46988,
+-0.88273,
+0.0,
+25.451222
+],
+[
+0.0,
+0.0,
+1.0,
+115.0
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+-0.848293,
+-0.529527,
+0.0,
+-39.543917
+],
+[
+0.529527,
+-0.848293,
+0.0,
+18.773227
+],
+[
+-0.0,
+0.0,
+1.0,
+115.0
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+0.034437,
+-0.999407,
+0.0,
+-54.23446
+],
+[
+0.999407,
+0.034437,
+0.0,
+30.862005
+],
+[
+-0.0,
+-0.0,
+1.0,
+115.0
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+0.88273,
+-0.46988,
+0.0,
+-51.110544
+],
+[
+0.46988,
+0.88273,
+0.0,
+49.628778
+],
+[
+-0.0,
+-0.0,
+1.0,
+115.0
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+0.848293,
+0.529527,
+0.0,
+-33.296083
+],
+[
+-0.529527,
+0.848293,
+0.0,
+56.306773
+],
+[
+0.0,
+-0.0,
+1.0,
+115.0
+]
+],
+"fastener": true
+},
+{
+"name": "COUPLER-1/SmallBearingWahser-2",
+"file": "Body\\SmallBearingWahser.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.635415,
+0.0,
+0.772171,
+-144.148323
+],
+[
+0.772171,
+0.0,
+-0.635415,
+-93.373788
+],
+[
+-0.0,
+1.0,
+0.0,
+141.0
+]
+],
+"fastener": false,
+"step": "SmallBearingWahser__Default"
+},
+{
+"name": "FEMUR_INSIDE-1/Bearing 6804-2RS (20x32x7)-1",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+-0.0,
+0.698832,
+0.715286,
+0.0
+],
+[
+0.0,
+-0.715286,
+0.698832,
+0.0
+],
+[
+1.0,
+0.0,
+-0.0,
+87.5
+]
+],
+"fastener": false
+},
+{
+"name": "FEMUR_INSIDE-1/Femur_inside-1",
+"file": "Links\\Femur_inside.SLDPRT",
+"config": "InsideBox",
+"visible": true,
+"M": [
+[
+-0.715286,
+0.698832,
+-0.0,
+-67.086659
+],
+[
+-0.698832,
+-0.715286,
+0.0,
+-65.543454
+],
+[
+0.0,
+0.0,
+1.0,
+87.0
+]
+],
+"fastener": false,
+"step": "Femur_inside__InsideBox"
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+-0.329256,
+0.944241,
+-0.0,
+12.578976
+],
+[
+0.944241,
+0.329256,
+0.0,
+-12.875145
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "18mm",
+"visible": true,
+"M": [
+[
+0.715286,
+0.698832,
+-0.0,
+-129.166317
+],
+[
+0.698832,
+-0.715286,
+0.0,
+-126.195083
+],
+[
+-0.0,
+-0.0,
+-1.0,
+94.0
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+0.653109,
+0.757264,
+0.0,
+-4.860715
+],
+[
+0.757264,
+-0.653109,
+0.0,
+-17.331285
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+0.982364,
+-0.186977,
+0.0,
+-17.439691
+],
+[
+-0.186977,
+-0.982364,
+0.0,
+-4.45614
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+0.329256,
+-0.944241,
+0.0,
+-12.578976
+],
+[
+-0.944241,
+-0.329256,
+-0.0,
+12.875145
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+-0.653109,
+-0.757264,
+-0.0,
+4.860715
+],
+[
+-0.757264,
+0.653109,
+-0.0,
+17.331285
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+-0.982364,
+0.186977,
+-0.0,
+17.439691
+],
+[
+0.186977,
+0.982364,
+-0.0,
+4.45614
+],
+[
+0.0,
+-0.0,
+-1.0,
+87.5
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "50mm",
+"visible": true,
+"M": [
+[
+0.393043,
+0.91952,
+-0.0,
+-129.281494
+],
+[
+0.91952,
+-0.393043,
+0.0,
+-136.093908
+],
+[
+0.0,
+-0.0,
+-1.0,
+110.0
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "50mm",
+"visible": true,
+"M": [
+[
+0.393043,
+0.91952,
+-0.0,
+-139.065142
+],
+[
+0.91952,
+-0.393043,
+0.0,
+-126.079906
+],
+[
+0.0,
+-0.0,
+-1.0,
+110.0
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "18mm",
+"visible": true,
+"M": [
+[
+0.715286,
+0.698832,
+-0.0,
+-139.180318
+],
+[
+0.698832,
+-0.715286,
+0.0,
+-135.978731
+],
+[
+-0.0,
+-0.0,
+-1.0,
+94.0
+]
+],
+"fastener": true
+},
+{
+"name": "FEMUR_INSIDE-1/M3 washer-1",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.715286,
+0.0,
+-0.698832,
+12.578976
+],
+[
+-0.698832,
+-0.0,
+0.715286,
+-12.875145
+],
+[
+0.0,
+1.0,
+0.0,
+83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "FEMUR_INSIDE-1/M3 washer-2",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.962849,
+-0.0,
+0.27004,
+-4.860715
+],
+[
+0.27004,
+-0.0,
+0.962849,
+-17.331285
+],
+[
+-0.0,
+1.0,
+0.0,
+83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "FEMUR_INSIDE-1/M3 washer-3",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.247563,
+-0.0,
+0.968872,
+-17.439691
+],
+[
+0.968872,
+-0.0,
+0.247563,
+-4.45614
+],
+[
+-0.0,
+1.0,
+0.0,
+83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "FEMUR_INSIDE-1/M3 washer-4",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.715286,
+-0.0,
+0.698832,
+-12.578976
+],
+[
+0.698832,
+0.0,
+-0.715286,
+12.875145
+],
+[
+-0.0,
+1.0,
+0.0,
+83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "FEMUR_INSIDE-1/M3 washer-5",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.962849,
+0.0,
+-0.27004,
+4.860715
+],
+[
+-0.27004,
+0.0,
+-0.962849,
+17.331285
+],
+[
+0.0,
+1.0,
+0.0,
+83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "FEMUR_INSIDE-1/M3 washer-6",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.247563,
+0.0,
+-0.968872,
+17.439691
+],
+[
+-0.968872,
+0.0,
+-0.247563,
+4.45614
+],
+[
+0.0,
+1.0,
+0.0,
+83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "Femur-1/AK45-10 Rotor-1",
+"file": "Motor\\AK45-10 Rotor.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.715286,
+0.0,
+0.698832,
+0.0
+],
+[
+-0.698832,
+-0.0,
+-0.715286,
+0.0
+],
+[
+0.0,
+-1.0,
+0.0,
+134.5
+]
+],
+"fastener": false,
+"step": "AK45-10 Rotor__Default"
+},
+{
+"name": "Femur-1/Femur-1",
+"file": "Links\\Femur.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.715286,
+-0.698832,
+0.0,
+-67.086659
+],
+[
+-0.698832,
+0.715286,
+-0.0,
+-65.543454
+],
+[
+0.0,
+-0.0,
+-1.0,
+152.0
+]
+],
+"fastener": false,
+"step": "Femur__Default"
+},
+{
+"name": "Femur-1/M2.5 Roundhead-1",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+0.698832,
+0.715286,
+-0.0,
+-3.645536
+],
+[
+-0.715286,
+0.698832,
+0.0,
+-12.998464
+],
+[
+0.0,
+0.0,
+1.0,
+157.0
+]
+],
+"fastener": true
+},
+{
+"name": "Femur-1/M2.5 Roundhead-2",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+0.698832,
+0.715286,
+-0.0,
+13.079768
+],
+[
+-0.715286,
+0.698832,
+0.0,
+3.342105
+],
+[
+0.0,
+0.0,
+1.0,
+157.0
+]
+],
+"fastener": true
+},
+{
+"name": "Femur-1/M2.5 Roundhead-3",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+0.698832,
+0.715286,
+-0.0,
+-9.434232
+],
+[
+-0.715286,
+0.698832,
+0.0,
+9.656359
+],
+[
+0.0,
+0.0,
+1.0,
+157.0
+]
+],
+"fastener": true
+},
+{
+"name": "Femur-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+-0.484144,
+-0.874989,
+-0.0,
+-129.281494
+],
+[
+0.874989,
+-0.484144,
+0.0,
+-136.093908
+],
+[
+-0.0,
+0.0,
+1.0,
+147.0
+]
+],
+"fastener": true
+},
+{
+"name": "Femur-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.928416,
+-0.371541,
+0.0,
+-139.065142
+],
+[
+0.371541,
+0.928416,
+0.0,
+-126.079906
+],
+[
+-0.0,
+-0.0,
+1.0,
+147.0
+]
+],
+"fastener": true
+},
+{
+"name": "Femur-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "50mm",
+"visible": true,
+"M": [
+[
+0.715286,
+-0.698832,
+0.0,
+-139.180318
+],
+[
+0.698832,
+0.715286,
+0.0,
+-135.978731
+],
+[
+-0.0,
+-0.0,
+1.0,
+129.0
+]
+],
+"fastener": true
+},
+{
+"name": "Femur-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "50mm",
+"visible": true,
+"M": [
+[
+0.715286,
+-0.698832,
+0.0,
+-129.166317
+],
+[
+0.698832,
+0.715286,
+0.0,
+-126.195083
+],
+[
+-0.0,
+-0.0,
+1.0,
+129.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftFemur-1/AK45-10 Rotor-1",
+"file": "Motor\\AK45-10 Rotor.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.715286,
+-0.0,
+0.698832,
+0.0
+],
+[
+0.698832,
+-0.0,
+-0.715286,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+-134.5
+]
+],
+"fastener": false,
+"step": "AK45-10 Rotor__Default"
+},
+{
+"name": "LeftFemur-1/M2.5 Roundhead-4",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+-0.698832,
+0.715286,
+-0.0,
+-3.645536
+],
+[
+0.715286,
+0.698832,
+-0.0,
+-12.998464
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-157.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftFemur-1/M2.5 Roundhead-5",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+-0.698832,
+0.715286,
+-0.0,
+13.079768
+],
+[
+0.715286,
+0.698832,
+-0.0,
+3.342105
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-157.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftFemur-1/M2.5 Roundhead-6",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+-0.698832,
+0.715286,
+-0.0,
+-9.434232
+],
+[
+0.715286,
+0.698832,
+-0.0,
+9.656359
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-157.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftFemur-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.484144,
+-0.874989,
+0.0,
+-129.281494
+],
+[
+-0.874989,
+-0.484144,
+-0.0,
+-136.093908
+],
+[
+0.0,
+0.0,
+-1.0,
+-147.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftFemur-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+-0.928416,
+-0.371541,
+0.0,
+-139.065142
+],
+[
+-0.371541,
+0.928416,
+-0.0,
+-126.079906
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-147.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftFemur-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "50mm",
+"visible": true,
+"M": [
+[
+-0.715286,
+-0.698832,
+0.0,
+-139.180318
+],
+[
+-0.698832,
+0.715286,
+0.0,
+-135.978731
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-129.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftFemur-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "50mm",
+"visible": true,
+"M": [
+[
+-0.715286,
+-0.698832,
+0.0,
+-129.166317
+],
+[
+-0.698832,
+0.715286,
+0.0,
+-126.195083
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-129.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftFemur-1/MirrorFemur-1",
+"file": "Links\\MirrorFemur.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.715286,
+-0.698832,
+0.0,
+-67.086659
+],
+[
+-0.698832,
+0.715286,
+0.0,
+-65.543454
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-152.0
+]
+],
+"fastener": false,
+"step": "MirrorFemur__Default"
+},
+{
+"name": "LeftTibia-1/Bearing 6804-2RS (20x32x7)-1",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+0.0,
+0.687726,
+-0.725971,
+-144.148323
+],
+[
+0.0,
+0.725971,
+0.687726,
+-93.373788
+],
+[
+1.0,
+-0.0,
+0.0,
+-137.5
+]
+],
+"fastener": false
+},
+{
+"name": "LeftTibia-1/Bearing 6804-2RS (20x32x7)-2",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+0.0,
+0.21623,
+0.976342,
+-134.173318
+],
+[
+0.0,
+-0.976342,
+0.21623,
+-131.086907
+],
+[
+1.0,
+-0.0,
+-0.0,
+-141.5
+]
+],
+"fastener": false
+},
+{
+"name": "LeftTibia-1/Bearing 6804-2RS (20x32x7)-3",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+-0.0,
+0.99999,
+-0.004436,
+-134.173318
+],
+[
+-0.0,
+-0.004436,
+-0.99999,
+-131.086907
+],
+[
+-1.0,
+-0.0,
+0.0,
+-121.5
+]
+],
+"fastener": false
+},
+{
+"name": "LeftTibia-1/Bearing 6804-2RS (20x32x7)-4",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+-0.0,
+0.923249,
+0.384201,
+-144.148323
+],
+[
+-0.0,
+0.384201,
+-0.923249,
+-93.373788
+],
+[
+-1.0,
+-0.0,
+-0.0,
+-121.5
+]
+],
+"fastener": false
+},
+{
+"name": "LeftTibia-1/EncoderCableClamp-1",
+"file": "Links\\EncoderCableClamp.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.384201,
+0.0,
+-0.923249,
+-57.900561
+],
+[
+-0.923249,
+0.0,
+-0.384201,
+-300.630396
+],
+[
+-0.0,
+1.0,
+0.0,
+-113.0
+]
+],
+"fastener": false,
+"step": "EncoderCableClamp__Default"
+},
+{
+"name": "LeftTibia-1/EncoderCarrier-1",
+"file": "Links\\EncoderCarrier.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.0,
+-0.384201,
+-57.900561
+],
+[
+0.384201,
+-0.0,
+0.923249,
+-300.630396
+],
+[
+-0.0,
+-1.0,
+0.0,
+-105.2
+]
+],
+"fastener": false,
+"step": "EncoderCarrier__Default"
+},
+{
+"name": "LeftTibia-1/M2 Roundhead-1",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-52.591877
+],
+[
+-0.384201,
+0.923249,
+0.0,
+-298.421241
+],
+[
+0.0,
+0.0,
+-1.0,
+-106.8
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M2 Roundhead-2",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-63.209245
+],
+[
+-0.384201,
+0.923249,
+0.0,
+-302.839552
+],
+[
+0.0,
+0.0,
+-1.0,
+-106.8
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-84.291168
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-266.121087
+],
+[
+-0.0,
+0.0,
+1.0,
+-118.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-79.728431
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-259.889826
+],
+[
+-0.0,
+0.0,
+1.0,
+-110.1
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-11",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-71.419185
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-256.432016
+],
+[
+-0.0,
+0.0,
+1.0,
+-110.1
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-63.78284
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-257.586751
+],
+[
+-0.0,
+0.0,
+1.0,
+-118.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-52.137546
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-314.479138
+],
+[
+-0.0,
+0.0,
+1.0,
+-118.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-44.051819
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-294.867381
+],
+[
+-0.0,
+0.0,
+1.0,
+-118.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-71.749303
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-306.393412
+],
+[
+-0.0,
+0.0,
+1.0,
+-118.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-55.967886
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-279.246646
+],
+[
+-0.0,
+0.0,
+1.0,
+-110.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-74.432875
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-286.930667
+],
+[
+-0.0,
+0.0,
+1.0,
+-110.0
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-68.345577
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-263.818012
+],
+[
+-0.0,
+0.0,
+1.0,
+-110.1
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-76.654822
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-267.275821
+],
+[
+-0.0,
+0.0,
+1.0,
+-110.1
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M4 roundhead-1",
+"file": "Common\\M4 roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+0.875779,
+0.482712,
+0.0,
+-44.032954
+],
+[
+-0.482712,
+0.875779,
+0.0,
+-306.347869
+],
+[
+-0.0,
+-0.0,
+1.0,
+-132.5
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M4 roundhead-2",
+"file": "Common\\M4 roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+0.482712,
+-0.875779,
+0.0,
+-52.183089
+],
+[
+0.875779,
+0.482712,
+-0.0,
+-286.76279
+],
+[
+-0.0,
+0.0,
+1.0,
+-132.5
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M4 roundhead-3",
+"file": "Common\\M4 roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+-0.875779,
+-0.482712,
+0.0,
+-71.768168
+],
+[
+0.482712,
+-0.875779,
+0.0,
+-294.912924
+],
+[
+0.0,
+0.0,
+1.0,
+-132.5
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/M4 roundhead-4",
+"file": "Common\\M4 roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+-0.482712,
+0.875779,
+0.0,
+-63.618033
+],
+[
+-0.875779,
+-0.482712,
+0.0,
+-314.498003
+],
+[
+0.0,
+-0.0,
+1.0,
+-132.5
+]
+],
+"fastener": true
+},
+{
+"name": "LeftTibia-1/MP30 connector-1",
+"file": "Links\\MP30 connector.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-77.897641
+],
+[
+0.384201,
+0.923249,
+0.0,
+-251.275262
+],
+[
+-0.0,
+0.0,
+1.0,
+-134.988678
+]
+],
+"fastener": false,
+"step": "MP30 connector__Default"
+},
+{
+"name": "LeftTibia-1/MirrorTibia-1",
+"file": "Links\\MirrorTibia.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.384201,
+0.923249,
+0.0,
+-144.148323
+],
+[
+-0.923249,
+0.384201,
+0.0,
+-93.373788
+],
+[
+-0.0,
+-0.0,
+1.0,
+-131.5
+]
+],
+"fastener": false,
+"step": "MirrorTibia__Default"
+},
+{
+"name": "LeftTibia-1/WheelMotorASM-1/Encoder-1",
+"file": "Motor\\Wheel Motor\\Encoder.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.0,
+0.384201,
+-57.900561
+],
+[
+-0.384201,
+-0.0,
+-0.923249,
+-300.630396
+],
+[
+0.0,
+-1.0,
+-0.0,
+-105.2
+]
+],
+"fastener": false,
+"step": "Encoder__Default"
+},
+{
+"name": "LeftTibia-1/WheelMotorASM-1/Magnet-2",
+"file": "Motor\\Wheel Motor\\Magnet.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.384201,
+-0.0,
+-0.923249,
+-57.900561
+],
+[
+0.923249,
+-0.0,
+-0.384201,
+-300.630396
+],
+[
+0.0,
+-1.0,
+0.0,
+-108.8
+]
+],
+"fastener": false,
+"step": "Magnet__Default"
+},
+{
+"name": "LeftTibia-1/WheelMotorASM-1/Mount-1",
+"file": "Motor\\Wheel Motor\\Mount.SLDPRT",
+"config": "Default",
+"visible": false,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-57.900561
+],
+[
+0.384201,
+0.923249,
+0.0,
+-300.630396
+],
+[
+-0.0,
+0.0,
+1.0,
+-136.5
+]
+],
+"fastener": false,
+"step": "Mount__Default"
+},
+{
+"name": "LeftTibia-1/WheelMotorASM-1/Rotor-1",
+"file": "Motor\\Wheel Motor\\Rotor.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+0.98216,
+0.188045,
+-57.900561
+],
+[
+0.0,
+-0.188045,
+0.98216,
+-300.630396
+],
+[
+1.0,
+-0.0,
+-0.0,
+-196.3
+]
+],
+"fastener": false,
+"step": "Rotor__Default"
+},
+{
+"name": "LeftTibia-1/WheelMotorASM-1/Stator-1",
+"file": "Motor\\Wheel Motor\\Stator.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.923249,
+0.384201,
+-57.900561
+],
+[
+0.0,
+-0.384201,
+-0.923249,
+-300.630396
+],
+[
+1.0,
+0.0,
+-0.0,
+-145.0
+]
+],
+"fastener": false,
+"step": "Stator__Default"
+},
+{
+"name": "LeftTibia-1/WheelMotorASM-1/TPU wheel-1",
+"file": "Motor\\Wheel Motor\\TPU wheel.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.834071,
+0.551656,
+0.0,
+-57.900561
+],
+[
+-0.551656,
+-0.834071,
+0.0,
+-300.630396
+],
+[
+0.0,
+-0.0,
+1.0,
+-193.047299
+]
+],
+"fastener": false,
+"step": "TPU wheel__Default"
+},
+{
+"name": "LeftTibia-1/WheelMotorASM-1/Wheel-1",
+"file": "Motor\\Wheel Motor\\Wheel.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.834071,
+0.551656,
+0.0,
+-57.900561
+],
+[
+-0.551656,
+-0.834071,
+0.0,
+-300.630396
+],
+[
+0.0,
+-0.0,
+1.0,
+-193.047299
+]
+],
+"fastener": false,
+"step": "Wheel__Default"
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+"file": "Motor\\AK45-10 Stator.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.000142,
+0.0,
+-1.0,
+-0.0
+],
+[
+-1.0,
+-0.0,
+-0.000142,
+0.0
+],
+[
+-0.0,
+1.0,
+-0.0,
+-134.5
+]
+],
+"fastener": false,
+"step": "AK45-10 Stator__Default"
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+"file": "Body\\InsideFemurShaft.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+0.0,
+1.0,
+-0.0
+],
+[
+1.0,
+-0.0,
+-0.0,
+0.0
+],
+[
+0.0,
+1.0,
+0.0,
+-94.0
+]
+],
+"fastener": false,
+"step": "InsideFemurShaft__Default"
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-1",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+19.483972
+],
+[
+1.0,
+0.0,
+0.0,
+11.25277
+],
+[
+0.0,
+0.0,
+1.0,
+-96.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-2",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+19.487171
+],
+[
+1.0,
+0.0,
+0.0,
+-11.24723
+],
+[
+0.0,
+0.0,
+1.0,
+-96.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-3",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+0.003199
+],
+[
+1.0,
+0.0,
+0.0,
+-22.5
+],
+[
+0.0,
+0.0,
+1.0,
+-96.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-4",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-19.483972
+],
+[
+1.0,
+0.0,
+0.0,
+-11.25277
+],
+[
+0.0,
+0.0,
+1.0,
+-96.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-5",
+"file": "Common\\M2.5 Roundhead.SLDPRT",
+"config": "12mm",
+"visible": true,
+"M": [
+[
+0.0,
+-1.0,
+0.0,
+-19.487171
+],
+[
+1.0,
+0.0,
+0.0,
+11.24723
+],
+[
+0.0,
+0.0,
+1.0,
+-96.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.824379,
+0.566039,
+0.0,
+-36.42
+],
+[
+0.566039,
+-0.824379,
+0.0,
+44.54
+],
+[
+0.0,
+0.0,
+-1.0,
+-106.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "30mm",
+"visible": true,
+"M": [
+[
+0.256431,
+-0.966563,
+0.0,
+-34.41884
+],
+[
+-0.966563,
+-0.256431,
+-0.0,
+67.632866
+],
+[
+0.0,
+-0.0,
+-1.0,
+-87.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-11",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-9.0
+],
+[
+0.0,
+-1.0,
+0.0,
+65.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-84.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-12",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-9.0
+],
+[
+0.0,
+-1.0,
+0.0,
+30.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-84.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-13",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+40.0
+],
+[
+0.0,
+-1.0,
+0.0,
+70.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-84.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-14",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+40.0
+],
+[
+0.0,
+-1.0,
+0.0,
+25.0
+],
+[
+0.0,
+0.0,
+-1.0,
+-84.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-15",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+40.0
+],
+[
+0.0,
+-1.0,
+0.0,
+47.5
+],
+[
+0.0,
+0.0,
+-1.0,
+-84.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-16",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+0.684703,
+-0.728822,
+0.0,
+4.949747
+],
+[
+0.728822,
+0.684703,
+-0.0,
+4.949747
+],
+[
+0.0,
+0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-17",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+-0.728822,
+-0.684703,
+-0.0,
+4.949747
+],
+[
+0.684703,
+-0.728822,
+-0.0,
+-4.949747
+],
+[
+-0.0,
+-0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-18",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+-0.684703,
+0.728822,
+-0.0,
+-4.949747
+],
+[
+-0.728822,
+-0.684703,
+0.0,
+-4.949747
+],
+[
+0.0,
+0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-19",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+0.728822,
+0.684703,
+0.0,
+-4.949747
+],
+[
+-0.684703,
+0.728822,
+0.0,
+4.949747
+],
+[
+-0.0,
+-0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+-0.566039,
+0.824379,
+0.0,
+-29.42
+],
+[
+0.824379,
+0.566039,
+-0.0,
+37.54
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-106.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-20",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "30mm",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-61.467121
+],
+[
+0.0,
+-1.0,
+0.0,
+60.446735
+],
+[
+0.0,
+0.0,
+-1.0,
+-87.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+-0.824379,
+-0.566039,
+-0.0,
+-36.42
+],
+[
+-0.566039,
+0.824379,
+-0.0,
+30.54
+],
+[
+0.0,
+0.0,
+-1.0,
+-106.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "20mm",
+"visible": true,
+"M": [
+[
+0.566039,
+-0.824379,
+-0.0,
+-43.42
+],
+[
+-0.824379,
+-0.566039,
+0.0,
+37.54
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-106.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+-0.923728,
+0.383049,
+0.0,
+-7.0
+],
+[
+-0.383049,
+-0.923728,
+-0.0,
+0.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+-95.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+0.383049,
+0.923728,
+-0.0,
+0.0
+],
+[
+-0.923728,
+0.383049,
+-0.0,
+7.0
+],
+[
+0.0,
+0.0,
+1.0,
+-95.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+0.923728,
+-0.383049,
+-0.0,
+7.0
+],
+[
+0.383049,
+0.923728,
+0.0,
+-0.0
+],
+[
+-0.0,
+-0.0,
+1.0,
+-95.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "16mm",
+"visible": true,
+"M": [
+[
+-0.383049,
+-0.923728,
+0.0,
+-0.0
+],
+[
+0.923728,
+-0.383049,
+0.0,
+-7.0
+],
+[
+0.0,
+0.0,
+1.0,
+-95.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "30mm",
+"visible": true,
+"M": [
+[
+-0.12207,
+0.992521,
+0.0,
+-57.451341
+],
+[
+0.992521,
+0.12207,
+0.0,
+68.501144
+],
+[
+0.0,
+0.0,
+-1.0,
+-87.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+"file": "Body\\OldRobotBodyMount\\MirrorRobotMount.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-150.0
+],
+[
+0.0,
+1.0,
+0.0,
+15.0
+],
+[
+0.0,
+0.0,
+1.0,
+-75.0
+]
+],
+"fastener": false,
+"step": "MirrorRobotMount__Default"
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+"file": "Body\\MirrorSide panel.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-0.0
+],
+[
+0.0,
+1.0,
+0.0,
+0.0
+],
+[
+0.0,
+0.0,
+1.0,
+-94.0
+]
+],
+"fastener": false,
+"step": "MirrorSide panel__Default"
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/LimitSwitch-1",
+"file": "Body\\LimitSwitch\\LimitSwitch.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.0,
+-0.446198,
+-0.894934,
+-50.975857
+],
+[
+0.0,
+-0.894934,
+0.446198,
+56.836214
+],
+[
+-1.0,
+-0.0,
+0.0,
+-84.3
+]
+],
+"fastener": false,
+"step": "LimitSwitch__Default"
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/M2 Roundhead-1",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+0.894934,
+0.446198,
+-0.0,
+-53.862083
+],
+[
+-0.446198,
+0.894934,
+-0.0,
+58.331103
+],
+[
+-0.0,
+0.0,
+1.0,
+-84.3
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/M2 Roundhead-2",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+0.894934,
+0.446198,
+-0.0,
+-48.04501
+],
+[
+-0.446198,
+0.894934,
+-0.0,
+55.430818
+],
+[
+-0.0,
+0.0,
+1.0,
+-84.3
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/MirrorSwitch_Mount-1",
+"file": "Body\\LimitSwitch\\MirrorSwitch_Mount.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.894934,
+-0.0,
+-0.446198,
+-50.953547
+],
+[
+-0.446198,
+-0.0,
+-0.894934,
+56.88096
+],
+[
+-0.0,
+1.0,
+-0.0,
+-94.0
+]
+],
+"fastener": false,
+"step": "MirrorSwitch_Mount__Default"
+},
+{
+"name": "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1",
+"file": "Body\\SmallBearingWahser.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+1.0,
+0.0,
+0.0,
+-36.42
+],
+[
+0.0,
+0.0,
+-1.0,
+37.54
+],
+[
+0.0,
+1.0,
+0.0,
+-116.5
+]
+],
+"fastener": false,
+"step": "SmallBearingWahser__Default"
+},
+{
+"name": "MirrorCOUPLER-2/Bearing 6804-2RS (20x32x7)-1",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.101765,
+-0.994808,
+-36.42
+],
+[
+-0.0,
+-0.994808,
+0.101765,
+37.54
+],
+[
+-1.0,
+0.0,
+0.0,
+-111.0
+]
+],
+"fastener": false
+},
+{
+"name": "MirrorCOUPLER-2/BearingWasher-1",
+"file": "Links\\BearingWasher.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.635415,
+0.0,
+-0.772171,
+-36.42
+],
+[
+-0.772171,
+0.0,
+0.635415,
+37.54
+],
+[
+0.0,
+1.0,
+-0.0,
+-116.0
+]
+],
+"fastener": false,
+"step": "BearingWasher__Default"
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+-0.88273,
+-0.46988,
+-0.0,
+-138.74313
+],
+[
+-0.46988,
+0.88273,
+-0.0,
+-97.821696
+],
+[
+0.0,
+-0.0,
+-1.0,
+-125.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+0.034437,
+0.999407,
+-0.0,
+-18.60554
+],
+[
+0.999407,
+-0.034437,
+-0.0,
+44.217995
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-115.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+0.46988,
+-0.88273,
+-0.0,
+-148.596231
+],
+[
+-0.88273,
+-0.46988,
+-0.0,
+-98.778982
+],
+[
+0.0,
+0.0,
+-1.0,
+-125.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+0.88273,
+0.46988,
+-0.0,
+-149.553517
+],
+[
+0.46988,
+-0.88273,
+-0.0,
+-88.92588
+],
+[
+-0.0,
+0.0,
+-1.0,
+-125.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "35mm",
+"visible": true,
+"M": [
+[
+-0.46988,
+0.88273,
+-0.0,
+-139.700416
+],
+[
+0.88273,
+0.46988,
+-0.0,
+-87.968595
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-125.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+-0.88273,
+-0.46988,
+-0.0,
+-21.729456
+],
+[
+-0.46988,
+0.88273,
+-0.0,
+25.451222
+],
+[
+0.0,
+-0.0,
+-1.0,
+-115.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+0.848293,
+-0.529527,
+-0.0,
+-39.543917
+],
+[
+-0.529527,
+-0.848293,
+-0.0,
+18.773227
+],
+[
+0.0,
+0.0,
+-1.0,
+-115.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+-0.034437,
+-0.999407,
+-0.0,
+-54.23446
+],
+[
+-0.999407,
+0.034437,
+-0.0,
+30.862005
+],
+[
+0.0,
+0.0,
+-1.0,
+-115.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+0.88273,
+0.46988,
+-0.0,
+-51.110544
+],
+[
+0.46988,
+-0.88273,
+-0.0,
+49.628778
+],
+[
+-0.0,
+0.0,
+-1.0,
+-115.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+-0.848293,
+0.529527,
+-0.0,
+-33.296083
+],
+[
+0.529527,
+0.848293,
+-0.0,
+56.306773
+],
+[
+-0.0,
+-0.0,
+-1.0,
+-115.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorCOUPLER-2/MirrorCoupler-1",
+"file": "Links\\MirrorCoupler.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.635415,
+0.772171,
+-0.0,
+-90.284162
+],
+[
+0.772171,
+-0.635415,
+-0.0,
+-27.916894
+],
+[
+-0.0,
+0.0,
+-1.0,
+-111.0
+]
+],
+"fastener": false,
+"step": "MirrorCoupler__Default"
+},
+{
+"name": "MirrorCOUPLER-2/SmallBearingWahser-1",
+"file": "Body\\SmallBearingWahser.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.635415,
+0.0,
+0.772171,
+-144.148323
+],
+[
+0.772171,
+0.0,
+-0.635415,
+-93.373788
+],
+[
+-0.0,
+1.0,
+0.0,
+-143.0
+]
+],
+"fastener": false,
+"step": "SmallBearingWahser__Default"
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/Bearing 6804-2RS (20x32x7)-1",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+0.0,
+0.698832,
+-0.715286,
+0.0
+],
+[
+-0.0,
+-0.715286,
+-0.698832,
+0.0
+],
+[
+-1.0,
+0.0,
+0.0,
+-87.5
+]
+],
+"fastener": false
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+0.329256,
+0.944241,
+-0.0,
+12.578976
+],
+[
+-0.944241,
+0.329256,
+0.0,
+-12.875145
+],
+[
+0.0,
+0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "18mm",
+"visible": true,
+"M": [
+[
+0.715286,
+-0.698832,
+-0.0,
+-129.166317
+],
+[
+0.698832,
+0.715286,
+0.0,
+-126.195083
+],
+[
+-0.0,
+-0.0,
+1.0,
+-94.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+0.653109,
+-0.757264,
+0.0,
+-4.860715
+],
+[
+0.757264,
+0.653109,
+0.0,
+-17.331285
+],
+[
+-0.0,
+-0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+-0.982364,
+-0.186977,
+0.0,
+-17.439691
+],
+[
+0.186977,
+-0.982364,
+0.0,
+-4.45614
+],
+[
+0.0,
+0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+-0.329256,
+-0.944241,
+0.0,
+-12.578976
+],
+[
+0.944241,
+-0.329256,
+-0.0,
+12.875145
+],
+[
+0.0,
+0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+0.653109,
+-0.757264,
+-0.0,
+4.860715
+],
+[
+0.757264,
+0.653109,
+-0.0,
+17.331285
+],
+[
+0.0,
+0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "8mm",
+"visible": true,
+"M": [
+[
+0.982364,
+0.186977,
+-0.0,
+17.439691
+],
+[
+-0.186977,
+0.982364,
+-0.0,
+4.45614
+],
+[
+0.0,
+0.0,
+1.0,
+-87.5
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "50mm",
+"visible": true,
+"M": [
+[
+-0.393043,
+0.91952,
+-0.0,
+-129.281494
+],
+[
+-0.91952,
+-0.393043,
+0.0,
+-136.093908
+],
+[
+0.0,
+0.0,
+1.0,
+-110.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "50mm",
+"visible": true,
+"M": [
+[
+-0.393043,
+0.91952,
+-0.0,
+-139.065142
+],
+[
+-0.91952,
+-0.393043,
+0.0,
+-126.079906
+],
+[
+0.0,
+0.0,
+1.0,
+-110.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "18mm",
+"visible": true,
+"M": [
+[
+0.715286,
+-0.698832,
+-0.0,
+-139.180318
+],
+[
+0.698832,
+0.715286,
+0.0,
+-135.978731
+],
+[
+-0.0,
+-0.0,
+1.0,
+-94.0
+]
+],
+"fastener": true
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 washer-1",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.715286,
+0.0,
+0.698832,
+12.578976
+],
+[
+-0.698832,
+-0.0,
+-0.715286,
+-12.875145
+],
+[
+0.0,
+-1.0,
+0.0,
+-83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 washer-2",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.962849,
+-0.0,
+-0.27004,
+-4.860715
+],
+[
+0.27004,
+-0.0,
+-0.962849,
+-17.331285
+],
+[
+-0.0,
+-1.0,
+0.0,
+-83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 washer-3",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.247563,
+-0.0,
+-0.968872,
+-17.439691
+],
+[
+0.968872,
+-0.0,
+-0.247563,
+-4.45614
+],
+[
+-0.0,
+-1.0,
+0.0,
+-83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 washer-4",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.715286,
+-0.0,
+-0.698832,
+-12.578976
+],
+[
+0.698832,
+0.0,
+0.715286,
+12.875145
+],
+[
+-0.0,
+-1.0,
+0.0,
+-83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 washer-5",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.962849,
+0.0,
+0.27004,
+4.860715
+],
+[
+-0.27004,
+0.0,
+0.962849,
+17.331285
+],
+[
+0.0,
+-1.0,
+0.0,
+-83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/M3 washer-6",
+"file": "Common\\M3 washer.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.247563,
+0.0,
+0.968872,
+17.439691
+],
+[
+-0.968872,
+0.0,
+0.247563,
+4.45614
+],
+[
+0.0,
+-1.0,
+0.0,
+-83.5
+]
+],
+"fastener": true,
+"step": "M3 washer__Default"
+},
+{
+"name": "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1",
+"file": "Links\\MirrorFemur_inside.SLDPRT",
+"config": "InsideBox",
+"visible": true,
+"M": [
+[
+-0.715286,
+0.698832,
+-0.0,
+-67.086659
+],
+[
+-0.698832,
+-0.715286,
+0.0,
+-65.543454
+],
+[
+0.0,
+0.0,
+1.0,
+-87.0
+]
+],
+"fastener": false,
+"step": "MirrorFemur_inside__InsideBox"
+},
+{
+"name": "Tibia-1/Bearing 6804-2RS (20x32x7)-1",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+-0.0,
+0.687726,
+0.725971,
+-144.148323
+],
+[
+0.0,
+0.725971,
+-0.687726,
+-93.373788
+],
+[
+-1.0,
+-0.0,
+-0.0,
+137.5
+]
+],
+"fastener": false
+},
+{
+"name": "Tibia-1/Bearing 6804-2RS (20x32x7)-2",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+-0.0,
+0.21623,
+-0.976342,
+-134.173318
+],
+[
+0.0,
+-0.976342,
+-0.21623,
+-131.086907
+],
+[
+-1.0,
+-0.0,
+0.0,
+141.5
+]
+],
+"fastener": false
+},
+{
+"name": "Tibia-1/Bearing 6804-2RS (20x32x7)-3",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+0.0,
+0.99999,
+0.004436,
+-134.173318
+],
+[
+-0.0,
+-0.004436,
+0.99999,
+-131.086907
+],
+[
+1.0,
+-0.0,
+0.0,
+121.5
+]
+],
+"fastener": false
+},
+{
+"name": "Tibia-1/Bearing 6804-2RS (20x32x7)-4",
+"file": "Links\\Bearing 6804-2RS (20x32x7).SLDPRT",
+"config": "\u041f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e",
+"visible": true,
+"M": [
+[
+0.0,
+0.923249,
+-0.384201,
+-144.148323
+],
+[
+-0.0,
+0.384201,
+0.923249,
+-93.373788
+],
+[
+1.0,
+-0.0,
+0.0,
+121.5
+]
+],
+"fastener": false
+},
+{
+"name": "Tibia-1/EncoderCableClamp-1",
+"file": "Links\\EncoderCableClamp.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.384201,
+-0.0,
+0.923249,
+-57.900561
+],
+[
+-0.923249,
+0.0,
+0.384201,
+-300.630396
+],
+[
+-0.0,
+-1.0,
+-0.0,
+113.0
+]
+],
+"fastener": false,
+"step": "EncoderCableClamp__Default"
+},
+{
+"name": "Tibia-1/EncoderCarrier-1",
+"file": "Links\\EncoderCarrier.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.923249,
+0.0,
+-0.384201,
+-57.900561
+],
+[
+-0.384201,
+-0.0,
+0.923249,
+-300.630396
+],
+[
+0.0,
+1.0,
+0.0,
+105.2
+]
+],
+"fastener": false,
+"step": "EncoderCarrier__Default"
+},
+{
+"name": "Tibia-1/M2 Roundhead-1",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-52.591877
+],
+[
+0.384201,
+0.923249,
+0.0,
+-298.421241
+],
+[
+-0.0,
+0.0,
+1.0,
+106.8
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M2 Roundhead-2",
+"file": "Common\\M2 Roundhead.SLDPRT",
+"config": "6mm",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-63.209245
+],
+[
+0.384201,
+0.923249,
+0.0,
+-302.839552
+],
+[
+-0.0,
+0.0,
+1.0,
+106.8
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-1",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-84.291168
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-266.121087
+],
+[
+0.0,
+0.0,
+-1.0,
+118.0
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-10",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-79.728431
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-259.889826
+],
+[
+0.0,
+0.0,
+-1.0,
+110.1
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-11",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-71.419185
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-256.432016
+],
+[
+0.0,
+0.0,
+-1.0,
+110.1
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-2",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-63.78284
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-257.586751
+],
+[
+0.0,
+0.0,
+-1.0,
+118.0
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-3",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-52.137546
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-314.479138
+],
+[
+0.0,
+0.0,
+-1.0,
+118.0
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-4",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-44.051819
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-294.867381
+],
+[
+0.0,
+0.0,
+-1.0,
+118.0
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-5",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "10mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-71.749303
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-306.393412
+],
+[
+0.0,
+0.0,
+-1.0,
+118.0
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-6",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-55.967886
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-279.246646
+],
+[
+0.0,
+0.0,
+-1.0,
+110.0
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-7",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-74.432875
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-286.930667
+],
+[
+0.0,
+0.0,
+-1.0,
+110.0
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-8",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-68.345577
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-263.818012
+],
+[
+0.0,
+0.0,
+-1.0,
+110.1
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M3 Roundhead-9",
+"file": "Common\\M3 Roundhead.SLDPRT",
+"config": "14mm",
+"visible": true,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-76.654822
+],
+[
+-0.384201,
+0.923249,
+-0.0,
+-267.275821
+],
+[
+0.0,
+0.0,
+-1.0,
+110.1
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M4 roundhead-1",
+"file": "Common\\M4 roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+-0.875779,
+0.482712,
+-0.0,
+-44.032954
+],
+[
+0.482712,
+0.875779,
+0.0,
+-306.347869
+],
+[
+0.0,
+-0.0,
+-1.0,
+132.5
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M4 roundhead-2",
+"file": "Common\\M4 roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+-0.482712,
+-0.875779,
+-0.0,
+-52.183089
+],
+[
+-0.875779,
+0.482712,
+0.0,
+-286.76279
+],
+[
+0.0,
+0.0,
+-1.0,
+132.5
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M4 roundhead-3",
+"file": "Common\\M4 roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+0.875779,
+-0.482712,
+-0.0,
+-71.768168
+],
+[
+-0.482712,
+-0.875779,
+0.0,
+-294.912924
+],
+[
+-0.0,
+0.0,
+-1.0,
+132.5
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/M4 roundhead-4",
+"file": "Common\\M4 roundhead.SLDPRT",
+"config": "25mm",
+"visible": true,
+"M": [
+[
+0.482712,
+0.875779,
+-0.0,
+-63.618033
+],
+[
+0.875779,
+-0.482712,
+0.0,
+-314.498003
+],
+[
+-0.0,
+-0.0,
+-1.0,
+132.5
+]
+],
+"fastener": true
+},
+{
+"name": "Tibia-1/MP30 connector-1",
+"file": "Links\\MP30 connector.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.923249,
+-0.384201,
+0.0,
+-77.897641
+],
+[
+0.384201,
+0.923249,
+-0.0,
+-251.275262
+],
+[
+-0.0,
+0.0,
+1.0,
+126.988678
+]
+],
+"fastener": false,
+"step": "MP30 connector__Default"
+},
+{
+"name": "Tibia-1/Tibia-1",
+"file": "Links\\Tibia.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.384201,
+0.923249,
+0.0,
+-144.148323
+],
+[
+-0.923249,
+0.384201,
+-0.0,
+-93.373788
+],
+[
+-0.0,
+-0.0,
+1.0,
+131.5
+]
+],
+"fastener": false,
+"step": "Tibia__Default"
+},
+{
+"name": "Tibia-1/WheelMotorASM-1/Encoder-1",
+"file": "Motor\\Wheel Motor\\Encoder.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.923249,
+0.0,
+0.384201,
+-57.900561
+],
+[
+0.384201,
+-0.0,
+-0.923249,
+-300.630396
+],
+[
+-0.0,
+1.0,
+-0.0,
+105.2
+]
+],
+"fastener": false,
+"step": "Encoder__Default"
+},
+{
+"name": "Tibia-1/WheelMotorASM-1/Magnet-2",
+"file": "Motor\\Wheel Motor\\Magnet.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.384201,
+0.0,
+0.923249,
+-57.900561
+],
+[
+0.923249,
+-0.0,
+0.384201,
+-300.630396
+],
+[
+0.0,
+1.0,
+-0.0,
+108.8
+]
+],
+"fastener": false,
+"step": "Magnet__Default"
+},
+{
+"name": "Tibia-1/WheelMotorASM-1/Mount-1",
+"file": "Motor\\Wheel Motor\\Mount.SLDPRT",
+"config": "Default",
+"visible": false,
+"M": [
+[
+-0.923249,
+-0.384201,
+-0.0,
+-57.900561
+],
+[
+-0.384201,
+0.923249,
+0.0,
+-300.630396
+],
+[
+0.0,
+0.0,
+-1.0,
+136.5
+]
+],
+"fastener": false,
+"step": "Mount__Default"
+},
+{
+"name": "Tibia-1/WheelMotorASM-1/Rotor-1",
+"file": "Motor\\Wheel Motor\\Rotor.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+-0.558802,
+-0.829301,
+-57.900561
+],
+[
+0.0,
+-0.829301,
+0.558802,
+-300.630396
+],
+[
+-1.0,
+0.0,
+0.0,
+196.3
+]
+],
+"fastener": false,
+"step": "Rotor__Default"
+},
+{
+"name": "Tibia-1/WheelMotorASM-1/Stator-1",
+"file": "Motor\\Wheel Motor\\Stator.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+-0.0,
+0.923249,
+0.384201,
+-57.900561
+],
+[
+0.0,
+0.384201,
+-0.923249,
+-300.630396
+],
+[
+-1.0,
+-0.0,
+-0.0,
+145.0
+]
+],
+"fastener": false,
+"step": "Stator__Default"
+},
+{
+"name": "Tibia-1/WheelMotorASM-1/TPU wheel-1",
+"file": "Motor\\Wheel Motor\\TPU wheel.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.979196,
+0.202917,
+-0.0,
+-57.900561
+],
+[
+0.202917,
+-0.979196,
+0.0,
+-300.630396
+],
+[
+-0.0,
+-0.0,
+-1.0,
+193.047299
+]
+],
+"fastener": false,
+"step": "TPU wheel__Default"
+},
+{
+"name": "Tibia-1/WheelMotorASM-1/Wheel-1",
+"file": "Motor\\Wheel Motor\\Wheel.SLDPRT",
+"config": "Default",
+"visible": true,
+"M": [
+[
+0.979196,
+0.202917,
+-0.0,
+-57.900561
+],
+[
+0.202917,
+-0.979196,
+0.0,
+-300.630396
+],
+[
+-0.0,
+-0.0,
+-1.0,
+193.047299
+]
+],
+"fastener": false,
+"step": "Wheel__Default"
+}
+],
+"exported": {
+"AK45-10 Stator__Default": "cached",
+"InsideFemurShaft__Default": "cached",
+"RobotMount__Default": "cached",
+"Side panel__Default": "cached",
+"SmallBearingWahser__Default": "cached",
+"LimitSwitch__Default": "cached",
+"Switch_Mount__Default": "cached",
+"Battery holder__Default": "cached",
+"Battery__Default": "cached",
+"BatteryCap__Default": "cached",
+"BottomPanel__Default": "cached",
+"CornerBracket__Default": "cached",
+"M3 nut__91828A211": "cached",
+"CAN__Default": "cached",
+"CustomBoard__Default": "cached",
+"ESP32__Default": "cached",
+"Teensy 4.1__Default": "cached",
+"DC_DC__Default": "cached",
+"IMU BNO085__Default": "cached",
+"M2 standoff__Default": "cached",
+"M3 standoff MF__12mm": "SKIPPED: active config '5mm' != '12mm' (gotcha 32: not switched)",
+"M3 standoff MF__8mm": "SKIPPED: active config '5mm' != '8mm' (gotcha 32: not switched)",
+"M3 standoff MF__5mm": "cached",
+"Odrive__Default": "cached",
+"Receiver__Default": "cached",
+"Resistor__Default": "cached",
+"SupportWheel__Default": "cached",
+"TailStrut__Default": "cached",
+"XT30__Default": "cached",
+"BumperBack__Default": "cached",
+"BumperFront__Default": "cached",
+"FacetBack__Default": "cached",
+"FacetFront__Default": "cached",
+"FacetHood__Default": "cached",
+"FacetRing__Default": "cached",
+"LaserRange__Default": "cached",
+"NeopixelStrip__Default": "cached",
+"OLED__Default": "cached",
+"Switch__Default": "cached",
+"BearingWasher__Default": "cached",
+"Coupler__Default": "cached",
+"Femur_inside__InsideBox": "cached",
+"M3 washer__Default": "cached",
+"AK45-10 Rotor__Default": "cached",
+"Femur__Default": "cached",
+"MirrorFemur__Default": "cached",
+"EncoderCableClamp__Default": "cached",
+"EncoderCarrier__Default": "cached",
+"MP30 connector__Default": "cached",
+"MirrorTibia__Default": "cached",
+"Encoder__Default": "cached",
+"Magnet__Default": "cached",
+"Mount__Default": "cached",
+"Rotor__Default": "cached",
+"Stator__Default": "cached",
+"TPU wheel__Default": "cached",
+"Wheel__Default": "cached",
+"MirrorRobotMount__Default": "cached",
+"MirrorSide panel__Default": "cached",
+"MirrorSwitch_Mount__Default": "cached",
+"MirrorCoupler__Default": "cached",
+"MirrorFemur_inside__InsideBox": "cached",
+"Tibia__Default": "cached"
+}
+}

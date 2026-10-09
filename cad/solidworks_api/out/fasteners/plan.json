@@ -1,0 +1,2240 @@
+{
+ "add": [
+  {
+   "group": "carrier-tibia",
+   "line": 161,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "10mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -84.8878,
+    -300.2304,
+    113.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCarrier-1",
+   "bore_mid": [
+    -84.8878,
+    -300.2304,
+    115.75
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Tibia-1/EncoderCarrier-1",
+   "t": -0.5,
+   "probe": 2.4
+  },
+  {
+   "group": "carrier-tibia",
+   "line": 162,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "10mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -62.9611,
+    -296.6742,
+    113.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCarrier-1",
+   "bore_mid": [
+    -62.9611,
+    -296.6742,
+    115.75
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Tibia-1/EncoderCarrier-1",
+   "t": -0.5,
+   "probe": 2.4
+  },
+  {
+   "group": "carrier-tibia",
+   "line": 163,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "10mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -64.7991,
+    -354.7171,
+    113.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCarrier-1",
+   "bore_mid": [
+    -64.7991,
+    -354.7171,
+    115.75
+   ],
+   "bore_r": 1.6,
+   "seat_part": "Tibia-1/EncoderCarrier-1",
+   "t": -0.5,
+   "probe": 2.4
+  },
+  {
+   "group": "carrier-tibia",
+   "line": 164,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "10mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -52.394,
+    -337.5092,
+    113.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCarrier-1",
+   "bore_mid": [
+    -52.394,
+    -337.5092,
+    115.75
+   ],
+   "bore_r": 1.6,
+   "seat_part": "Tibia-1/EncoderCarrier-1",
+   "t": -0.5,
+   "probe": 2.4
+  },
+  {
+   "group": "carrier-tibia",
+   "line": 166,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "10mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -82.007,
+    -342.312,
+    113.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCarrier-1",
+   "bore_mid": [
+    -82.007,
+    -342.312,
+    115.75
+   ],
+   "bore_r": 1.6,
+   "seat_part": "Tibia-1/EncoderCarrier-1",
+   "t": -0.5,
+   "probe": 2.4
+  },
+  {
+   "group": "clamp-carrier",
+   "line": 155,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -60.3713,
+    -319.5547,
+    103.0
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCableClamp-1",
+   "bore_mid": [
+    -60.3713,
+    -319.5547,
+    108.5
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Tibia-1/EncoderCableClamp-1",
+   "t": 10.0,
+   "probe": 2.8
+  },
+  {
+   "group": "clamp-carrier",
+   "line": 156,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -80.1133,
+    -322.7566,
+    103.0
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCableClamp-1",
+   "bore_mid": [
+    -80.1133,
+    -322.7566,
+    108.5
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Tibia-1/EncoderCableClamp-1",
+   "t": 10.0,
+   "probe": 2.8
+  },
+  {
+   "group": "clamp-carrier-dome",
+   "line": 157,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -68.8421,
+    -301.6803,
+    103.1
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCableClamp-1",
+   "bore_mid": [
+    -68.8421,
+    -301.6803,
+    108.5
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Tibia-1/EncoderCableClamp-1",
+   "t": 9.9,
+   "probe": 2.2,
+   "ref": {
+    "point": [
+     -60.3713,
+     -319.5547,
+     103.0
+    ],
+    "part": "Tibia-1/EncoderCableClamp-1",
+    "r": 3.3,
+    "dist": 0.1
+   }
+  },
+  {
+   "group": "clamp-carrier-dome",
+   "line": 158,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -77.726,
+    -303.1212,
+    103.1
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCableClamp-1",
+   "bore_mid": [
+    -77.726,
+    -303.1212,
+    108.5
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Tibia-1/EncoderCableClamp-1",
+   "t": 9.9,
+   "probe": 2.2,
+   "ref": {
+    "point": [
+     -60.3713,
+     -319.5547,
+     103.0
+    ],
+    "part": "Tibia-1/EncoderCableClamp-1",
+    "r": 3.3,
+    "dist": 0.1
+   }
+  },
+  {
+   "group": "clamp-carrier-dome",
+   "line": 159,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -79.0068,
+    -295.2243,
+    103.1
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCableClamp-1",
+   "bore_mid": [
+    -79.0068,
+    -295.2243,
+    108.5
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Tibia-1/EncoderCableClamp-1",
+   "t": 9.9,
+   "probe": 2.2,
+   "ref": {
+    "point": [
+     -60.3713,
+     -319.5547,
+     103.0
+    ],
+    "part": "Tibia-1/EncoderCableClamp-1",
+    "r": 3.3,
+    "dist": 0.1
+   }
+  },
+  {
+   "group": "clamp-carrier-dome",
+   "line": 160,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -70.1229,
+    -293.7835,
+    103.1
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "Tibia-1/EncoderCableClamp-1",
+   "bore_mid": [
+    -70.1229,
+    -293.7835,
+    108.5
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Tibia-1/EncoderCableClamp-1",
+   "t": 9.9,
+   "probe": 2.2,
+   "ref": {
+    "point": [
+     -60.3713,
+     -319.5547,
+     103.0
+    ],
+    "part": "Tibia-1/EncoderCableClamp-1",
+    "r": 3.3,
+    "dist": 0.1
+   }
+  },
+  {
+   "group": "encoder-pcb",
+   "line": 169,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -61.5247,
+    -338.9901,
+    106.8
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "bore_mid": [
+    -61.5247,
+    -338.9901,
+    106.0
+   ],
+   "bore_r": 1.075,
+   "seat_part": "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "t": 6.6,
+   "probe": 1.5
+  },
+  {
+   "group": "encoder-pcb",
+   "line": 170,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Links\\Tibia.SLDASM",
+   "seat": [
+    -72.8763,
+    -340.8311,
+    106.8
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "bore_mid": [
+    -72.8763,
+    -340.8311,
+    106.0
+   ],
+   "bore_r": 1.075,
+   "seat_part": "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "t": 6.6,
+   "probe": 1.5
+  },
+  {
+   "group": "stator-sidepanel",
+   "line": 107,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\SIDE PANEL.SLDASM",
+   "seat": [
+    19.484,
+    11.2528,
+    96.5
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "bore_mid": [
+    19.484,
+    11.2528,
+    100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "t": 20.5,
+   "probe": 2.0
+  },
+  {
+   "group": "stator-sidepanel",
+   "line": 108,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\SIDE PANEL.SLDASM",
+   "seat": [
+    19.4872,
+    -11.2472,
+    96.5
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "bore_mid": [
+    19.4872,
+    -11.2472,
+    100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "t": 20.5,
+   "probe": 2.0
+  },
+  {
+   "group": "stator-sidepanel",
+   "line": 109,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\SIDE PANEL.SLDASM",
+   "seat": [
+    0.0032,
+    -22.5,
+    96.5
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "bore_mid": [
+    0.0032,
+    -22.5,
+    100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "t": 20.5,
+   "probe": 2.0
+  },
+  {
+   "group": "stator-sidepanel",
+   "line": 110,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\SIDE PANEL.SLDASM",
+   "seat": [
+    -19.484,
+    -11.2528,
+    96.5
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "bore_mid": [
+    -19.484,
+    -11.2528,
+    100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "t": 20.5,
+   "probe": 2.0
+  },
+  {
+   "group": "stator-sidepanel",
+   "line": 111,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\SIDE PANEL.SLDASM",
+   "seat": [
+    -19.4872,
+    11.2472,
+    96.5
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "bore_mid": [
+    -19.4872,
+    11.2472,
+    100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "BODY-1/SIDE PANEL-1/Side panel-1",
+   "t": 20.5,
+   "probe": 2.0
+  },
+  {
+   "group": "femur-rotor",
+   "line": 152,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "16mm",
+   "asm": "Links\\Femur.SLDASM",
+   "seat": [
+    -0.7065,
+    -13.4815,
+    157.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    1.0
+   ],
+   "bore": "Femur-1/Femur-1",
+   "bore_mid": [
+    -0.7065,
+    -13.4815,
+    152.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Femur-1/Femur-1",
+   "t": -10.0,
+   "probe": 2.0
+  },
+  {
+   "group": "femur-rotor",
+   "line": 153,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "16mm",
+   "asm": "Links\\Femur.SLDASM",
+   "seat": [
+    12.0286,
+    6.1289,
+    157.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    1.0
+   ],
+   "bore": "Femur-1/Femur-1",
+   "bore_mid": [
+    12.0286,
+    6.1289,
+    152.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Femur-1/Femur-1",
+   "t": -10.0,
+   "probe": 2.0
+  },
+  {
+   "group": "femur-rotor",
+   "line": 154,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "16mm",
+   "asm": "Links\\Femur.SLDASM",
+   "seat": [
+    -11.3221,
+    7.3527,
+    157.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    1.0
+   ],
+   "bore": "Femur-1/Femur-1",
+   "bore_mid": [
+    -11.3221,
+    7.3527,
+    152.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Femur-1/Femur-1",
+   "t": -10.0,
+   "probe": 2.0
+  },
+  {
+   "group": "tailstrut-floor",
+   "line": 125,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -112.0,
+    5.0,
+    -20.0
+   ],
+   "dir": [
+    -0.0,
+    -1.0,
+    -0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "bore_mid": [
+    -112.0,
+    10.0,
+    -20.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "t": -10.0,
+   "probe": 2.4
+  },
+  {
+   "group": "tailstrut-floor",
+   "line": 126,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -112.0,
+    5.0,
+    20.0
+   ],
+   "dir": [
+    -0.0,
+    -1.0,
+    -0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "bore_mid": [
+    -112.0,
+    10.0,
+    20.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "t": -10.0,
+   "probe": 2.4
+  },
+  {
+   "group": "tailstrut-floor",
+   "line": 127,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -147.0,
+    5.0,
+    20.0
+   ],
+   "dir": [
+    -0.0,
+    -1.0,
+    -0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "bore_mid": [
+    -147.0,
+    10.0,
+    20.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "t": -10.0,
+   "probe": 2.4
+  },
+  {
+   "group": "tailstrut-floor",
+   "line": 128,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "14mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -147.0,
+    5.0,
+    -20.0
+   ],
+   "dir": [
+    -0.0,
+    -1.0,
+    -0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "bore_mid": [
+    -147.0,
+    10.0,
+    -20.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "t": -10.0,
+   "probe": 2.4
+  },
+  {
+   "group": "caster-axle",
+   "line": 140,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "30mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -171.676,
+    -32.0,
+    16.0
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "bore_mid": [
+    -171.676,
+    -32.0,
+    10.5
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "t": 20.0,
+   "probe": 2.4
+  },
+  {
+   "group": "battery-cap",
+   "line": 114,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "30mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    27.4393,
+    61.8,
+    54.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+   "bore_mid": [
+    27.4393,
+    50.9,
+    54.0
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+   "t": 41.8,
+   "probe": 2.8
+  },
+  {
+   "group": "battery-cap",
+   "line": 115,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "30mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -4.5607,
+    61.8,
+    54.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+   "bore_mid": [
+    -4.5607,
+    50.9,
+    54.0
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+   "t": 41.8,
+   "probe": 2.8
+  },
+  {
+   "group": "battery-holder",
+   "line": 116,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    12.0,
+    22.0,
+    -20.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    12.0,
+    17.5,
+    -20.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "t": 2.0,
+   "probe": 3.6
+  },
+  {
+   "group": "battery-holder",
+   "line": 117,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    12.0,
+    22.0,
+    20.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    12.0,
+    17.5,
+    20.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "t": 2.0,
+   "probe": 3.6
+  },
+  {
+   "group": "limit-switch",
+   "line": 112,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "8mm",
+   "asm": "Body\\LimitSwitch\\SwicthMount.SLDASM",
+   "seat": [
+    -53.8621,
+    58.3311,
+    84.8
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "bore_mid": [
+    -53.8621,
+    58.3311,
+    87.15
+   ],
+   "bore_r": 1.1,
+   "seat_part": "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "t": 5.2,
+   "probe": 1.3
+  },
+  {
+   "group": "limit-switch",
+   "line": 113,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "8mm",
+   "asm": "Body\\LimitSwitch\\SwicthMount.SLDASM",
+   "seat": [
+    -48.045,
+    55.4308,
+    84.8
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "bore_mid": [
+    -48.045,
+    55.4308,
+    87.15
+   ],
+   "bore_r": 1.1,
+   "seat_part": "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "t": 5.2,
+   "probe": 1.3
+  },
+  {
+   "group": "hood-ring+",
+   "line": 147,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    67.0,
+    82.0,
+    -32.0
+   ],
+   "dir": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    60.2,
+    82.0,
+    -32.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": 2.5,
+   "probe": 3.6
+  },
+  {
+   "group": "hood-ring+",
+   "line": 148,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    67.0,
+    82.0,
+    32.0
+   ],
+   "dir": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    60.2,
+    82.0,
+    32.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": 2.5,
+   "probe": 3.6
+  },
+  {
+   "group": "hood-ring+",
+   "line": 149,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    25.0,
+    82.0,
+    78.0
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    25.0,
+    82.0,
+    71.2
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": 2.5,
+   "probe": 3.6
+  },
+  {
+   "group": "hood-ring+",
+   "line": 150,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -45.0,
+    82.0,
+    78.0
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -45.0,
+    82.0,
+    71.2
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": 2.5,
+   "probe": 3.6
+  },
+  {
+   "group": "hood-ring+",
+   "line": 151,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -120.0,
+    82.0,
+    78.0
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -120.0,
+    82.0,
+    71.2
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": 2.5,
+   "probe": 3.6
+  },
+  {
+   "group": "hood-ring-",
+   "line": 147,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -166.0,
+    82.0,
+    -32.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -159.2,
+    82.0,
+    -32.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": -230.5,
+   "probe": 3.6
+  },
+  {
+   "group": "hood-ring-",
+   "line": 148,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -166.0,
+    82.0,
+    32.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -159.2,
+    82.0,
+    32.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": -230.5,
+   "probe": 3.6
+  },
+  {
+   "group": "hood-ring-",
+   "line": 149,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    25.0,
+    82.0,
+    -78.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    25.0,
+    82.0,
+    -71.2
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": -153.5,
+   "probe": 3.6
+  },
+  {
+   "group": "hood-ring-",
+   "line": 150,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -45.0,
+    82.0,
+    -78.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -45.0,
+    82.0,
+    -71.2
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": -153.5,
+   "probe": 3.6
+  },
+  {
+   "group": "hood-ring-",
+   "line": 151,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -120.0,
+    82.0,
+    -78.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    -1.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -120.0,
+    82.0,
+    -71.2
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/FacetHood-1",
+   "t": -153.5,
+   "probe": 3.6
+  },
+  {
+   "group": "bumper-front-ctr",
+   "line": 129,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    65.034,
+    25.0,
+    0.0
+   ],
+   "dir": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetFront-1",
+   "bore_mid": [
+    58.03775,
+    25.0,
+    0.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperFront-1",
+   "t": -15.034,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-back-ctr",
+   "line": 214,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "25mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -165.371,
+    30.0,
+    0.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetBack-1",
+   "bore_mid": [
+    -158.00915,
+    30.0,
+    0.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperBack-1",
+   "t": -15.871,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-back",
+   "line": 243,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -161.4,
+    24.771,
+    -65.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetBack-1",
+   "bore_mid": [
+    -155.95,
+    24.771,
+    -65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperBack-1",
+   "t": 0.0,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-back",
+   "line": 244,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -161.4,
+    47.729,
+    -65.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetBack-1",
+   "bore_mid": [
+    -155.95,
+    47.729,
+    -65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperBack-1",
+   "t": 0.0,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-back",
+   "line": 245,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -161.4,
+    69.771,
+    -65.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetBack-1",
+   "bore_mid": [
+    -155.95,
+    69.771,
+    -65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperBack-1",
+   "t": 0.0,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-back",
+   "line": 255,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -161.4,
+    70.0,
+    65.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetBack-1",
+   "bore_mid": [
+    -155.95,
+    70.0,
+    65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperBack-1",
+   "t": 0.0,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-back",
+   "line": 256,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -161.4,
+    47.5,
+    65.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetBack-1",
+   "bore_mid": [
+    -155.95,
+    47.5,
+    65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperBack-1",
+   "t": 0.0,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-back",
+   "line": 257,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -161.4,
+    25.0,
+    65.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetBack-1",
+   "bore_mid": [
+    -155.95,
+    25.0,
+    65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperBack-1",
+   "t": 0.0,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-front",
+   "line": 246,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    61.6995,
+    25.229,
+    -65.0
+   ],
+   "dir": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetFront-1",
+   "bore_mid": [
+    56.11665,
+    25.229,
+    -65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperFront-1",
+   "t": 3.712,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-front",
+   "line": 247,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    61.6995,
+    70.229,
+    -65.0
+   ],
+   "dir": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetFront-1",
+   "bore_mid": [
+    56.11665,
+    70.229,
+    -65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperFront-1",
+   "t": 3.712,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-front",
+   "line": 248,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    61.6995,
+    47.271,
+    -65.0
+   ],
+   "dir": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetFront-1",
+   "bore_mid": [
+    56.11665,
+    47.271,
+    -65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperFront-1",
+   "t": 3.712,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-front2",
+   "line": 255,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    61.7,
+    70.0,
+    65.0
+   ],
+   "dir": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetFront-1",
+   "bore_mid": [
+    56.11665,
+    70.0,
+    65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperFront-1",
+   "t": 223.1,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-front2",
+   "line": 256,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    61.7,
+    47.5,
+    65.0
+   ],
+   "dir": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetFront-1",
+   "bore_mid": [
+    56.11665,
+    47.5,
+    65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperFront-1",
+   "t": 223.1,
+   "probe": 2.4
+  },
+  {
+   "group": "bumper-front2",
+   "line": 257,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "20mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    61.7,
+    25.0,
+    65.0
+   ],
+   "dir": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetFront-1",
+   "bore_mid": [
+    56.11665,
+    25.0,
+    65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BumperFront-1",
+   "t": 223.1,
+   "probe": 2.4
+  },
+  {
+   "group": "oled",
+   "line": 143,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "4mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    48.8,
+    61.5,
+    -29.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/OLED-1",
+   "bore_mid": [
+    49.4,
+    61.5,
+    -29.0
+   ],
+   "bore_r": 1.15,
+   "seat_part": "Box-1/OLED-1",
+   "t": -1.2,
+   "probe": 1.5
+  },
+  {
+   "group": "oled",
+   "line": 144,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "4mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    48.8,
+    33.5,
+    -29.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/OLED-1",
+   "bore_mid": [
+    49.4,
+    33.5,
+    -29.0
+   ],
+   "bore_r": 1.15,
+   "seat_part": "Box-1/OLED-1",
+   "t": -1.2,
+   "probe": 1.5
+  },
+  {
+   "group": "oled",
+   "line": 145,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "4mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    48.8,
+    33.5,
+    29.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/OLED-1",
+   "bore_mid": [
+    49.4,
+    33.5,
+    29.0
+   ],
+   "bore_r": 1.15,
+   "seat_part": "Box-1/OLED-1",
+   "t": -1.2,
+   "probe": 1.5
+  },
+  {
+   "group": "oled",
+   "line": 146,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "4mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    48.8,
+    61.5,
+    29.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/OLED-1",
+   "bore_mid": [
+    49.4,
+    61.5,
+    29.0
+   ],
+   "bore_r": 1.15,
+   "seat_part": "Box-1/OLED-1",
+   "t": -1.2,
+   "probe": 1.5
+  },
+  {
+   "group": "odrive-standoff1",
+   "line": 120,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "12mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -28.0,
+    20.0,
+    66.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    -28.0,
+    17.5,
+    66.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "t": 5.0,
+   "probe": 3.6
+  },
+  {
+   "group": "odrive-screw",
+   "line": 120,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -28.0,
+    33.71,
+    66.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "bore_mid": [
+    -28.0,
+    32.85515,
+    66.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "t": 18.71,
+   "probe": 2.4
+  },
+  {
+   "group": "odrive-standoff1",
+   "line": 121,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "12mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -53.1,
+    20.0,
+    13.5
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    -53.1,
+    17.5,
+    13.5
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "t": 5.0,
+   "probe": 3.6
+  },
+  {
+   "group": "odrive-screw",
+   "line": 121,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -53.1,
+    33.71,
+    13.5
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "bore_mid": [
+    -53.1,
+    32.85515,
+    13.5
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "t": 18.71,
+   "probe": 2.4
+  },
+  {
+   "group": "odrive-standoff1",
+   "line": 122,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "12mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -71.5,
+    20.0,
+    66.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    -71.5,
+    17.5,
+    66.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "t": 5.0,
+   "probe": 3.6
+  },
+  {
+   "group": "odrive-screw",
+   "line": 122,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -71.5,
+    33.71,
+    66.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "bore_mid": [
+    -71.5,
+    32.85515,
+    66.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "t": 18.71,
+   "probe": 2.4
+  },
+  {
+   "group": "odrive-standoff1",
+   "line": 123,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "12mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -71.5,
+    20.0,
+    -69.5
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    -71.5,
+    17.5,
+    -69.5
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "t": 5.0,
+   "probe": 3.6
+  },
+  {
+   "group": "odrive-screw",
+   "line": 123,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -71.5,
+    33.71,
+    -69.5
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "bore_mid": [
+    -71.5,
+    32.85515,
+    -69.5
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "t": 18.71,
+   "probe": 2.4
+  },
+  {
+   "group": "odrive-standoff1",
+   "line": 124,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "12mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -28.0,
+    20.0,
+    -69.5
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    -28.0,
+    17.5,
+    -69.5
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "t": 5.0,
+   "probe": 3.6
+  },
+  {
+   "group": "odrive-screw",
+   "line": 124,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -28.0,
+    33.71,
+    -69.5
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "bore_mid": [
+    -28.0,
+    32.85515,
+    -69.5
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "t": 18.71,
+   "probe": 2.4
+  },
+  {
+   "group": "odrive-resistor-standoff1",
+   "line": 167,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "12mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -53.1,
+    20.0,
+    -25.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    -53.1,
+    17.5,
+    -25.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "t": 5.0,
+   "probe": 3.6
+  },
+  {
+   "group": "odrive-resistor-standoff2",
+   "line": 167,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "5mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -53.1,
+    33.71,
+    -25.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "bore_mid": [
+    -53.1,
+    32.85515,
+    -25.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "t": 18.71,
+   "probe": 3.6
+  },
+  {
+   "group": "odrive-resistor-screw",
+   "line": 167,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -53.1,
+    41.31,
+    -25.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/Resistor-1",
+   "bore_mid": [
+    -53.1,
+    40.0103,
+    -25.0
+   ],
+   "bore_r": 1.6,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Resistor-1",
+   "t": 26.31,
+   "probe": 2.4
+  },
+  {
+   "group": "odrive-resistor-standoff1",
+   "line": 168,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "12mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -29.5,
+    20.0,
+    13.5
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    -29.5,
+    17.5,
+    13.5
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "t": 5.0,
+   "probe": 3.6
+  },
+  {
+   "group": "odrive-resistor-standoff2",
+   "line": 168,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "5mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -29.5,
+    33.71,
+    13.5
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "bore_mid": [
+    -29.5,
+    32.85515,
+    13.5
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "t": 18.71,
+   "probe": 3.6
+  },
+  {
+   "group": "odrive-resistor-screw",
+   "line": 168,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -29.6256,
+    41.31,
+    13.5098
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/Resistor-1",
+   "bore_mid": [
+    -29.6256,
+    40.0103,
+    13.5098
+   ],
+   "bore_r": 1.6,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/Resistor-1",
+   "t": 26.31,
+   "probe": 2.4
+  },
+  {
+   "group": "imu-standoff1",
+   "line": 118,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "8mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -102.1833,
+    20.0,
+    45.4959
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    -102.1833,
+    17.5,
+    45.4959
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "t": 5.0,
+   "probe": 3.6
+  },
+  {
+   "group": "imu-screw",
+   "line": 118,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -102.1833,
+    29.126,
+    45.4959
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+   "bore_mid": [
+    -102.1833,
+    28.6264,
+    45.4959
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+   "t": 14.126,
+   "probe": 2.4
+  },
+  {
+   "group": "imu-standoff1",
+   "line": 119,
+   "model": "Common\\M3 standoff MF.SLDPRT",
+   "config": "8mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -81.9833,
+    20.0,
+    45.4959
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "bore_mid": [
+    -81.9833,
+    17.5,
+    45.4959
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "t": 5.0,
+   "probe": 3.6
+  },
+  {
+   "group": "imu-screw",
+   "line": 119,
+   "model": "Common\\M3 Roundhead.SLDPRT",
+   "config": "6mm",
+   "asm": "Box\\BottomPanelWithAvionics.SLDASM",
+   "seat": [
+    -81.9833,
+    29.126,
+    45.4959
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+   "bore_mid": [
+    -81.9833,
+    28.6264,
+    45.4959
+   ],
+   "bore_r": 1.65,
+   "seat_part": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+   "t": 14.126,
+   "probe": 2.4
+  }
+ ],
+ "stand_in": {
+  "Box-1/CornerBracket-1": [
+   1
+  ],
+  "Box-1/CornerBracket-2": [
+   1
+  ],
+  "Box-1/CornerBracket-13": [
+   2
+  ],
+  "Box-1/CornerBracket-27": [
+   1
+  ],
+  "Box-1/CornerBracket-3": [
+   1,
+   2
+  ],
+  "Box-1/CornerBracket-4": [
+   1,
+   2
+  ],
+  "Box-1/CornerBracket-14": [
+   1,
+   2
+  ],
+  "Box-1/CornerBracket-28": [
+   1
+  ],
+  "Box-1/BottomPanelWithAvionics-1/CornerBracket-2": [
+   1
+  ]
+ },
+ "left_out": {
+  "wheel hub -> motor can (4 per wheel, r17 on the hub face)": "the hub bosses pass through 7 mm holes in the can; nothing behind them is modelled to thread into (his call 2026-10-08: leave out, flag)",
+  "EncoderCarrier r1.6 hole over the tibia (line 165)": "the carrier is SOLID on the head side (2.6 mm wall) -- no screw can go in; a 6th carrier->tibia screw would need that wall opened"
+ }
+}

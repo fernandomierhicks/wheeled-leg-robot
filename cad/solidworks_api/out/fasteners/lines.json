@@ -1,0 +1,11296 @@
+[
+ {
+  "id": 0,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   7.7793,
+   -7.7771,
+   130.9
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     8.15
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 1,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   7.7771,
+   7.7793,
+   130.9
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     8.15
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 2,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -7.7793,
+   7.7771,
+   130.9
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     8.15
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 3,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -7.7771,
+   -7.7793,
+   130.9
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     8.15
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 4,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -0.0032,
+   22.5,
+   117.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 5,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -11.2472,
+   -19.4872,
+   118.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     3.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.35,
+    "t": [
+     10.5,
+     12.3
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.75,
+    "t": [
+     13.7,
+     14.0
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 6,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   0.0023,
+   -16.5,
+   116.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 0.8,
+    "t": [
+     0.0,
+     6.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.52,
+    "t": [
+     4.5,
+     6.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 7,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   11.5313,
+   11.8016,
+   116.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 0.8,
+    "t": [
+     0.0,
+     6.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.52,
+    "t": [
+     4.5,
+     6.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 8,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -11.5347,
+   11.7984,
+   116.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 0.8,
+    "t": [
+     0.0,
+     6.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.52,
+    "t": [
+     4.5,
+     6.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 9,
+  "a": [
+   0.965963,
+   -0.258682,
+   0.0
+  ],
+  "p": [
+   -25.598,
+   6.8551,
+   139.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.3,
+    "t": [
+     0.0,
+     0.25
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     1.0,
+     3.384
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 10,
+  "a": [
+   0.258956,
+   -0.965889,
+   0.0
+  ],
+  "p": [
+   6.7976,
+   -25.3546,
+   139.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.3,
+    "t": [
+     0.0,
+     0.25
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     -3.134,
+     -0.75
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 11,
+  "a": [
+   0.707006,
+   0.707207,
+   0.0
+  ],
+  "p": [
+   18.5589,
+   18.5642,
+   139.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.3,
+    "t": [
+     0.0,
+     0.25
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     -3.134,
+     -0.75
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 12,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   6.7483,
+   11.6923,
+   140.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.3,
+    "t": [
+     0.0,
+     3.45
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.75,
+    "t": [
+     4.9,
+     5.1
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 13,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   6.7517,
+   -11.6904,
+   140.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.3,
+    "t": [
+     0.0,
+     3.45
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.75,
+    "t": [
+     4.9,
+     5.1
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 14,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -13.5,
+   -0.0019,
+   140.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.3,
+    "t": [
+     0.0,
+     3.45
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.75,
+    "t": [
+     4.9,
+     5.1
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 15,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   12.2,
+   0.0017,
+   136.4
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.0,
+    "t": [
+     1.0,
+     1.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 16,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -6.1015,
+   10.5646,
+   136.4
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.0,
+    "t": [
+     1.0,
+     1.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 17,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -6.0985,
+   -10.5664,
+   136.4
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.0,
+    "t": [
+     1.0,
+     1.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 18,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -16.7962,
+   16.7914,
+   143.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     5.384
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.3,
+    "t": [
+     -1.45,
+     0.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.3,
+    "t": [
+     -3.0,
+     -2.45
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 19,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   6.1437,
+   22.9416,
+   143.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     5.384
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.35,
+    "t": [
+     -3.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 20,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   22.9399,
+   6.1502,
+   143.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     5.384
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.3,
+    "t": [
+     -1.45,
+     0.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.3,
+    "t": [
+     -3.0,
+     -2.45
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 21,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   16.7962,
+   -16.7914,
+   143.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     5.384
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.35,
+    "t": [
+     -3.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 22,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -6.1437,
+   -22.9416,
+   143.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     5.384
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.3,
+    "t": [
+     -1.45,
+     0.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.3,
+    "t": [
+     -3.0,
+     -2.45
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 23,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -22.9399,
+   -6.1502,
+   143.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     5.384
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.35,
+    "t": [
+     -3.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 24,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -22.5,
+   -0.0032,
+   107.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.35,
+    "t": [
+     0.0,
+     1.8
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.75,
+    "t": [
+     3.2,
+     3.5
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 25,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   22.5,
+   0.0032,
+   107.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.35,
+    "t": [
+     0.0,
+     1.8
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.75,
+    "t": [
+     3.2,
+     3.5
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 26,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   11.2528,
+   -19.484,
+   107.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.35,
+    "t": [
+     0.0,
+     1.8
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 2.75,
+    "t": [
+     3.2,
+     3.5
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 27,
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "p": [
+   15.8743,
+   -8.2494,
+   111.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.6
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 28,
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "p": [
+   16.8743,
+   6.5756,
+   111.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.6
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 29,
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "p": [
+   15.0493,
+   -0.2494,
+   111.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.6
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 30,
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "p": [
+   2.1493,
+   10.9256,
+   111.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.6
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 31,
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "p": [
+   -2.8507,
+   10.9256,
+   111.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.6
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 32,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   0.0,
+   13.0,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     10.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 33,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   46.5,
+   15.0,
+   -7.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     13.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 34,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   46.5,
+   15.0,
+   7.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     13.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 35,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   47.0,
+   15.0,
+   -20.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 36,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   47.0,
+   15.0,
+   20.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 37,
+  "a": [
+   -0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -147.0,
+   47.5,
+   -16.3607
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/ESP32-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/ESP32-1",
+    "r": 1.5,
+    "t": [
+     0.0,
+     1.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 38,
+  "a": [
+   -0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -100.5,
+   47.5,
+   -16.3607
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/ESP32-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/ESP32-1",
+    "r": 1.5,
+    "t": [
+     0.0,
+     1.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 39,
+  "a": [
+   -0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -100.5,
+   47.5,
+   -40.8607
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/ESP32-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/ESP32-1",
+    "r": 1.5,
+    "t": [
+     0.0,
+     1.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 40,
+  "a": [
+   -0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -147.0,
+   47.5,
+   -40.8607
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/ESP32-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/ESP32-1",
+    "r": 1.5,
+    "t": [
+     0.0,
+     1.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 41,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -120.0912,
+   20.0,
+   -46.1811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/DC_DC-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/DC_DC-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 42,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -119.73,
+   20.0,
+   -18.9741
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/DC_DC-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/DC_DC-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 43,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -121.9772,
+   20.0,
+   -18.9741
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/DC_DC-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/DC_DC-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 44,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -133.9756,
+   20.0,
+   -18.9741
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/DC_DC-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/DC_DC-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 45,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -133.9756,
+   20.0,
+   -46.1811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/DC_DC-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/DC_DC-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 46,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -136.3431,
+   20.0,
+   -46.1811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/DC_DC-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/DC_DC-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 47,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -122.5189,
+   20.0,
+   -46.1811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/DC_DC-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/DC_DC-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 48,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -136.3431,
+   20.0,
+   -18.9741
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/DC_DC-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/DC_DC-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 49,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -80.7754,
+   28.1264,
+   34.4156
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 0.9796,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 50,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -103.3465,
+   28.1264,
+   34.4156
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 0.9796,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 51,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -83.3154,
+   28.1264,
+   34.4156
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 0.9796,
+    "t": [
+     0.0,
+     1.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 52,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -93.3334,
+   28.1264,
+   34.3649
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 0.9537,
+    "t": [
+     0.0,
+     1.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 53,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -100.8065,
+   28.1264,
+   34.3496
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 1.0098,
+    "t": [
+     0.0,
+     1.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 54,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -90.7829,
+   28.1264,
+   34.3336
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 0.9892,
+    "t": [
+     0.0,
+     1.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 55,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -85.7753,
+   28.1264,
+   34.4035
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 0.9903,
+    "t": [
+     0.0,
+     1.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 56,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -95.7958,
+   28.1264,
+   34.3891
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 0.9784,
+    "t": [
+     0.0,
+     1.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 57,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -98.303,
+   28.1264,
+   34.3597
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 0.9737,
+    "t": [
+     0.0,
+     1.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 58,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -88.3466,
+   28.1264,
+   34.3912
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 0.9564,
+    "t": [
+     0.0,
+     1.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 59,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -29.5,
+   32.0,
+   56.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 60,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -37.5,
+   32.0,
+   63.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 61,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -48.0,
+   32.0,
+   63.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 62,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.5,
+   32.0,
+   42.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 63,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.5,
+   32.0,
+   33.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 64,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -53.1,
+   32.0,
+   56.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 65,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.5,
+   32.0,
+   23.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 66,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.5,
+   32.0,
+   1.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 67,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.5,
+   32.0,
+   -10.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 68,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -29.5,
+   32.0,
+   -25.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 69,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.5,
+   32.0,
+   -45.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 70,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.5,
+   32.0,
+   -36.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 71,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.5,
+   32.0,
+   -55.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 72,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -53.1,
+   32.0,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 73,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -29.5,
+   32.0,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 74,
+  "a": [
+   0.998594,
+   0.0,
+   -0.05301
+  ],
+  "p": [
+   -43.619,
+   47.4643,
+   -39.9236
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Resistor-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Resistor-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     0.882
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 75,
+  "a": [
+   0.998594,
+   0.0,
+   -0.05301
+  ],
+  "p": [
+   -39.9878,
+   47.4643,
+   28.4801
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Resistor-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Resistor-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     0.882
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 76,
+  "a": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "p": [
+   -27.2187,
+   40.0103,
+   -2.3533
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/XT30-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/XT30-1",
+    "r": 0.97,
+    "t": [
+     0.0,
+     5.9
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/XT30-1",
+    "r": 1.37,
+    "t": [
+     0.0,
+     6.3
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 77,
+  "a": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "p": [
+   -27.2187,
+   40.0103,
+   -7.3533
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/XT30-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/XT30-1",
+    "r": 0.97,
+    "t": [
+     0.0,
+     5.9
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/XT30-1",
+    "r": 1.37,
+    "t": [
+     0.0,
+     6.3
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 78,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -145.0,
+   70.0,
+   2.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-26/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-26/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 79,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -145.0,
+   25.0,
+   -2.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-27/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-27/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 80,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   50.0,
+   70.0,
+   0.0
+  ],
+  "parts": [
+   "Box-1/FacetFront-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.55
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 81,
+  "a": [
+   0.866025,
+   -0.5,
+   0.0
+  ],
+  "p": [
+   44.7737,
+   0.0359,
+   -13.7733
+  ],
+  "parts": [
+   "Box-1/LaserRange-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/LaserRange-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 82,
+  "a": [
+   0.866025,
+   -0.5,
+   0.0
+  ],
+  "p": [
+   44.7737,
+   0.0359,
+   2.2267
+  ],
+  "parts": [
+   "Box-1/LaserRange-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/LaserRange-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 83,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   46.6397,
+   11.0,
+   -13.7733
+  ],
+  "parts": [
+   "Box-1/LaserRange-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/LaserRange-2",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 84,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   46.6397,
+   11.0,
+   2.2267
+  ],
+  "parts": [
+   "Box-1/LaserRange-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/LaserRange-2",
+    "r": 1.0,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 85,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   53.7,
+   53.7633,
+   -18.0283
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 1.7861,
+    "t": [
+     0.0,
+     0.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 86,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   53.7,
+   53.7633,
+   17.0582
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 1.7861,
+    "t": [
+     0.0,
+     0.1
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 87,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   48.8,
+   38.0316,
+   -28.9493
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.2
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 88,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   48.8,
+   40.5316,
+   -28.9493
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.2
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 89,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   48.8,
+   43.0316,
+   -28.9493
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.2
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 90,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   48.8,
+   45.5316,
+   -28.9493
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.2
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 91,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   48.8,
+   48.0316,
+   -28.9493
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.2
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 92,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   48.8,
+   50.5316,
+   -28.9493
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.2
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 93,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   48.8,
+   53.0316,
+   -28.9493
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.2
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 94,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   48.8,
+   55.5316,
+   -28.9493
+  ],
+  "parts": [
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.2
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 95,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -151.7,
+   45.0,
+   36.5478
+  ],
+  "parts": [
+   "Box-1/Switch-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/Switch-1",
+    "r": 0.9,
+    "t": [
+     0.0,
+     1.348
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/Switch-1",
+    "r": 0.9,
+    "t": [
+     -19.052,
+     -16.904
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 96,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -133.6,
+   45.0,
+   52.5
+  ],
+  "parts": [
+   "Box-1/Switch-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/Switch-1",
+    "r": 1.0,
+    "t": [
+     0.0,
+     0.8
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/Switch-1",
+    "r": 1.0,
+    "t": [
+     7.1,
+     7.9
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/Switch-1",
+    "r": 1.0,
+    "t": [
+     14.2,
+     15.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 97,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   0.6385,
+   12.1833,
+   145.4
+  ],
+  "parts": [
+   "Femur-1/AK45-10 Rotor-1"
+  ],
+  "bores": [
+   {
+    "comp": "Femur-1/AK45-10 Rotor-1",
+    "r": 2.0,
+    "t": [
+     0.0,
+     5.4
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 98,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   10.2318,
+   -6.6446,
+   145.4
+  ],
+  "parts": [
+   "Femur-1/AK45-10 Rotor-1"
+  ],
+  "bores": [
+   {
+    "comp": "Femur-1/AK45-10 Rotor-1",
+    "r": 2.0,
+    "t": [
+     0.0,
+     5.4
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 99,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -10.8703,
+   -5.5387,
+   145.4
+  ],
+  "parts": [
+   "Femur-1/AK45-10 Rotor-1"
+  ],
+  "bores": [
+   {
+    "comp": "Femur-1/AK45-10 Rotor-1",
+    "r": 2.0,
+    "t": [
+     0.0,
+     5.4
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 100,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -71.7771,
+   -286.7071,
+   123.9887
+  ],
+  "parts": [
+   "Tibia-1/MP30 connector-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.25,
+    "t": [
+     0.0,
+     4.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.0,
+    "t": [
+     5.1,
+     11.6
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.25,
+    "t": [
+     11.0,
+     14.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.2,
+    "t": [
+     4.5,
+     11.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 101,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -75.2319,
+   -287.2674,
+   123.9887
+  ],
+  "parts": [
+   "Tibia-1/MP30 connector-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.25,
+    "t": [
+     0.0,
+     4.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.0,
+    "t": [
+     5.1,
+     11.6
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.25,
+    "t": [
+     11.0,
+     14.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.2,
+    "t": [
+     4.5,
+     11.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 102,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -78.6868,
+   -287.8277,
+   123.9887
+  ],
+  "parts": [
+   "Tibia-1/MP30 connector-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.25,
+    "t": [
+     0.0,
+     4.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.0,
+    "t": [
+     5.1,
+     11.6
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.25,
+    "t": [
+     11.0,
+     14.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/MP30 connector-1",
+    "r": 1.2,
+    "t": [
+     4.5,
+     11.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 103,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -78.7173,
+   -327.406,
+   197.1
+  ],
+  "parts": [
+   "Tibia-1/WheelMotorASM-1/Wheel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Wheel-1",
+    "r": 1.45,
+    "t": [
+     0.0,
+     3.8
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Rotor-1",
+    "r": 3.5,
+    "t": [
+     0.8,
+     1.8
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 104,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -55.6837,
+   -352.4152,
+   197.1
+  ],
+  "parts": [
+   "Tibia-1/WheelMotorASM-1/Wheel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Wheel-1",
+    "r": 1.45,
+    "t": [
+     0.0,
+     3.8
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Rotor-1",
+    "r": 3.5,
+    "t": [
+     0.8,
+     1.8
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 105,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -54.6959,
+   -328.3939,
+   197.1
+  ],
+  "parts": [
+   "Tibia-1/WheelMotorASM-1/Wheel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Wheel-1",
+    "r": 1.45,
+    "t": [
+     0.0,
+     3.8
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Rotor-1",
+    "r": 3.5,
+    "t": [
+     0.8,
+     1.8
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 106,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -79.7051,
+   -351.4274,
+   197.1
+  ],
+  "parts": [
+   "Tibia-1/WheelMotorASM-1/Wheel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Wheel-1",
+    "r": 1.45,
+    "t": [
+     0.0,
+     3.8
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Rotor-1",
+    "r": 3.5,
+    "t": [
+     0.8,
+     1.8
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 107,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   19.484,
+   11.2528,
+   117.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     6.366,
+     13.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.35,
+    "t": [
+     13.0,
+     20.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 2.75,
+    "t": [
+     20.5,
+     23.0
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 108,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   19.4872,
+   -11.2472,
+   117.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     6.366,
+     13.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.35,
+    "t": [
+     13.0,
+     20.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 2.75,
+    "t": [
+     20.5,
+     23.0
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 109,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   0.0032,
+   -22.5,
+   117.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     6.366,
+     13.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.35,
+    "t": [
+     13.0,
+     20.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 2.75,
+    "t": [
+     20.5,
+     23.0
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 110,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -19.484,
+   -11.2528,
+   117.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     6.366,
+     13.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.35,
+    "t": [
+     13.0,
+     20.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 2.75,
+    "t": [
+     20.5,
+     23.0
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 111,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -19.4872,
+   11.2472,
+   117.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+    "r": 1.025,
+    "t": [
+     6.366,
+     13.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.35,
+    "t": [
+     13.0,
+     20.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 2.75,
+    "t": [
+     20.5,
+     23.0
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 112,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -53.8621,
+   58.3311,
+   90.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+    "r": 1.1,
+    "t": [
+     0.0,
+     5.7
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1",
+    "r": 0.85,
+    "t": [
+     -3.5,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 113,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -48.045,
+   55.4308,
+   90.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+    "r": 1.1,
+    "t": [
+     0.0,
+     5.7
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1",
+    "r": 0.85,
+    "t": [
+     -3.5,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 114,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   27.4393,
+   20.0,
+   54.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "Box-1/BottomPanelWithAvionics-1/BatteryCap-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     20.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+    "r": 1.65,
+    "t": [
+     21.0,
+     40.8
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 115,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -4.5607,
+   20.0,
+   54.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "Box-1/BottomPanelWithAvionics-1/BatteryCap-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     20.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+    "r": 1.65,
+    "t": [
+     21.0,
+     40.8
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 116,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   12.0,
+   20.0,
+   -20.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     0.225
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     -5.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 117,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   12.0,
+   20.0,
+   20.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     0.225
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     -5.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 118,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -102.1833,
+   15.0,
+   45.4959
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 1.65,
+    "t": [
+     13.126,
+     14.126
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 119,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -81.9833,
+   15.0,
+   45.4959
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+    "r": 1.65,
+    "t": [
+     13.126,
+     14.126
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 120,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.0,
+   15.0,
+   66.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     17.0,
+     18.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 121,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -53.1,
+   15.0,
+   13.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     17.0,
+     18.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 122,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -71.5,
+   15.0,
+   66.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     17.0,
+     18.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 123,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -71.5,
+   15.0,
+   -69.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     17.0,
+     18.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 124,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -28.0,
+   15.0,
+   -69.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     17.0,
+     18.71
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 125,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -112.0,
+   15.0,
+   -20.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+    "r": 1.7,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 126,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -112.0,
+   15.0,
+   20.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+    "r": 1.7,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 127,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -147.0,
+   15.0,
+   20.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+    "r": 1.7,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 128,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -147.0,
+   15.0,
+   -20.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+    "r": 1.7,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 129,
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   50.0,
+   25.0,
+   0.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/FacetFront-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.45,
+    "t": [
+     0.0,
+     6.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     -1.55,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 3.25,
+    "t": [
+     -21.0,
+     -15.034
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 130,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -86.6686,
+   25.0,
+   70.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     75.169,
+     82.169
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 131,
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -6.7287,
+   25.0,
+   -70.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     75.169,
+     82.169
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 132,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -104.181,
+   58.071,
+   19.3811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2",
+    "r": 0.75,
+    "t": [
+     -5.08,
+     -4.08
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 133,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -104.181,
+   55.571,
+   19.3811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2",
+    "r": 0.75,
+    "t": [
+     -5.08,
+     -4.08
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 134,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -104.181,
+   53.071,
+   19.3811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2",
+    "r": 0.75,
+    "t": [
+     -5.08,
+     -4.08
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 135,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -104.181,
+   50.571,
+   19.3811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2",
+    "r": 0.75,
+    "t": [
+     -5.08,
+     -4.08
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 136,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -92.5922,
+   48.3,
+   19.3811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2",
+    "r": 1.4,
+    "t": [
+     -5.08,
+     -4.08
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 137,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -92.5922,
+   59.3,
+   19.3811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2",
+    "r": 1.4,
+    "t": [
+     -5.08,
+     -4.08
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 138,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -104.181,
+   48.071,
+   19.3811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2",
+    "r": 0.75,
+    "t": [
+     -5.08,
+     -4.08
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 139,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -104.181,
+   60.571,
+   19.3811
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-1",
+    "r": 0.75,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CAN-2",
+    "r": 0.75,
+    "t": [
+     -5.08,
+     -4.08
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 140,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -171.676,
+   -32.0,
+   -4.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/SupportWheel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/SupportWheel-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     8.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+    "r": 1.4,
+    "t": [
+     -12.0,
+     -1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+    "r": 1.7,
+    "t": [
+     9.0,
+     20.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 141,
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -81.0,
+   70.0,
+   70.0
+  ],
+  "parts": [
+   "Box-1/CornerBracket-21/CornerBracket-1",
+   "Box-1/CornerBracket-28/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-21/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-28/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -74.5,
+     -67.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 142,
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -6.5,
+   70.0,
+   -70.0
+  ],
+  "parts": [
+   "Box-1/CornerBracket-30/CornerBracket-1",
+   "Box-1/CornerBracket-31/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-30/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-31/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     74.5,
+     81.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 143,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   50.0,
+   61.5,
+   -29.0
+  ],
+  "parts": [
+   "Box-1/FacetFront-1",
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.1,
+    "t": [
+     0.0,
+     3.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 1.15,
+    "t": [
+     -1.2,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 144,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   50.0,
+   33.5,
+   -29.0
+  ],
+  "parts": [
+   "Box-1/FacetFront-1",
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.1,
+    "t": [
+     0.0,
+     3.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 1.15,
+    "t": [
+     -1.2,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 145,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   50.0,
+   33.5,
+   29.0
+  ],
+  "parts": [
+   "Box-1/FacetFront-1",
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.1,
+    "t": [
+     0.0,
+     3.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 1.15,
+    "t": [
+     -1.2,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 146,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   50.0,
+   61.5,
+   29.0
+  ],
+  "parts": [
+   "Box-1/FacetFront-1",
+   "Box-1/OLED-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.1,
+    "t": [
+     0.0,
+     3.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/OLED-1",
+    "r": 1.15,
+    "t": [
+     -1.2,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 147,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   64.5,
+   82.0,
+   -32.0
+  ],
+  "parts": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     -229.0,
+     -228.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -8.31,
+     -0.29
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -227.71,
+     -219.69
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 148,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   64.5,
+   82.0,
+   32.0
+  ],
+  "parts": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     -229.0,
+     -228.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -8.31,
+     -0.29
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -227.71,
+     -219.69
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 149,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   25.0,
+   82.0,
+   75.5
+  ],
+  "parts": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     -152.0,
+     -151.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -8.31,
+     -0.29
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -150.71,
+     -142.69
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 150,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -45.0,
+   82.0,
+   75.5
+  ],
+  "parts": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     -152.0,
+     -151.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -150.71,
+     -142.69
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -8.31,
+     -0.29
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 151,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -120.0,
+   82.0,
+   75.5
+  ],
+  "parts": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetHood-1",
+    "r": 1.7,
+    "t": [
+     -152.0,
+     -151.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -150.71,
+     -142.69
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.4,
+    "t": [
+     -8.31,
+     -0.29
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 152,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -0.7065,
+   -13.4815,
+   147.0
+  ],
+  "parts": [
+   "Femur-1/AK45-10 Rotor-1",
+   "Femur-1/Femur-1"
+  ],
+  "bores": [
+   {
+    "comp": "Femur-1/AK45-10 Rotor-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Femur-1/Femur-1",
+    "r": 1.4,
+    "t": [
+     -9.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 153,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   12.0286,
+   6.1289,
+   147.0
+  ],
+  "parts": [
+   "Femur-1/AK45-10 Rotor-1",
+   "Femur-1/Femur-1"
+  ],
+  "bores": [
+   {
+    "comp": "Femur-1/AK45-10 Rotor-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Femur-1/Femur-1",
+    "r": 1.4,
+    "t": [
+     -9.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 154,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -11.3221,
+   7.3526,
+   147.0
+  ],
+  "parts": [
+   "Femur-1/AK45-10 Rotor-1",
+   "Femur-1/Femur-1"
+  ],
+  "bores": [
+   {
+    "comp": "Femur-1/AK45-10 Rotor-1",
+    "r": 1.025,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Femur-1/Femur-1",
+    "r": 1.4,
+    "t": [
+     -9.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 155,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -60.3713,
+   -319.5547,
+   113.0
+  ],
+  "parts": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCableClamp-1",
+    "r": 1.65,
+    "t": [
+     0.0,
+     9.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.4,
+    "t": [
+     -5.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 156,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -80.1133,
+   -322.7566,
+   113.0
+  ],
+  "parts": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCableClamp-1",
+    "r": 1.65,
+    "t": [
+     0.0,
+     9.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.4,
+    "t": [
+     -5.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 157,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -68.8421,
+   -301.6803,
+   113.0
+  ],
+  "parts": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCableClamp-1",
+    "r": 1.65,
+    "t": [
+     0.0,
+     9.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.4,
+    "t": [
+     -5.0,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 158,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -77.726,
+   -303.1212,
+   113.0
+  ],
+  "parts": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCableClamp-1",
+    "r": 1.65,
+    "t": [
+     0.0,
+     9.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.4,
+    "t": [
+     -5.0,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 159,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -79.0068,
+   -295.2243,
+   113.0
+  ],
+  "parts": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCableClamp-1",
+    "r": 1.65,
+    "t": [
+     0.0,
+     9.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.4,
+    "t": [
+     -5.0,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 160,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -70.1229,
+   -293.7835,
+   113.0
+  ],
+  "parts": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCableClamp-1",
+    "r": 1.65,
+    "t": [
+     0.0,
+     9.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.4,
+    "t": [
+     -5.0,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 161,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -84.8878,
+   -300.2304,
+   113.5
+  ],
+  "parts": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     4.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     4.5,
+     9.567
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     9.558,
+     31.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 162,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -62.9611,
+   -296.6742,
+   113.5
+  ],
+  "parts": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     4.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     4.5,
+     9.567
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     9.558,
+     31.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 163,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -64.7991,
+   -354.7171,
+   113.5
+  ],
+  "parts": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     4.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     8.0,
+     25.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     4.5,
+     8.005
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 3.25,
+    "t": [
+     -4.326,
+     -0.5
+    ]
+   }
+  ],
+  "fasteners": []
+ },
+ {
+  "id": 164,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -52.394,
+   -337.5092,
+   113.5
+  ],
+  "parts": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     4.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     8.0,
+     25.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     4.5,
+     8.005
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 165,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -69.6019,
+   -325.1041,
+   113.0
+  ],
+  "parts": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     8.5,
+     23.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     5.0,
+     8.505
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 166,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -82.007,
+   -342.312,
+   113.5
+  ],
+  "parts": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     4.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     8.0,
+     25.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 1.4,
+    "t": [
+     4.5,
+     8.005
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 167,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -53.1,
+   15.0,
+   -25.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "Box-1/BottomPanelWithAvionics-1/Resistor-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     17.0,
+     18.71
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Resistor-1",
+    "r": 1.6,
+    "t": [
+     23.86,
+     26.16
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 168,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -29.5,
+   15.0,
+   13.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "Box-1/BottomPanelWithAvionics-1/Resistor-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+    "r": 1.7,
+    "t": [
+     17.0,
+     18.71
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/Resistor-1",
+    "r": 1.6,
+    "t": [
+     23.86,
+     26.16
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 169,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -61.5247,
+   -338.9901,
+   100.2
+  ],
+  "parts": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 0.85,
+    "t": [
+     0.0,
+     4.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Encoder-1",
+    "r": 1.075,
+    "t": [
+     5.0,
+     6.6
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Mount-1",
+    "r": 0.9,
+    "t": [
+     6.6,
+     16.6
+    ],
+    "vis": false
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 170,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -72.8763,
+   -340.8311,
+   100.2
+  ],
+  "parts": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/EncoderCarrier-1",
+    "r": 0.85,
+    "t": [
+     0.0,
+     4.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Encoder-1",
+    "r": 1.075,
+    "t": [
+     5.0,
+     6.6
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Mount-1",
+    "r": 0.9,
+    "t": [
+     6.6,
+     16.6
+    ],
+    "vis": false
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 171,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -145.0,
+   15.0,
+   70.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/CornerBracket-1/CornerBracket-1",
+   "Box-1/CornerBracket-13/CornerBracket-1",
+   "Box-1/CornerBracket-2/CornerBracket-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-1/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     52.5,
+     59.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-13/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     28.0,
+     35.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-2/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     7.5,
+     14.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.7,
+    "t": [
+     60.0,
+     61.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 172,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -145.0,
+   15.0,
+   -70.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/CornerBracket-10/CornerBracket-1",
+   "Box-1/CornerBracket-18/CornerBracket-1",
+   "Box-1/CornerBracket-9/CornerBracket-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-10/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     5.271,
+     12.271
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/CornerBracket-18/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     30.229,
+     37.229
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/CornerBracket-9/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     50.271,
+     57.271
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.7,
+    "t": [
+     60.0,
+     61.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 173,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   45.0,
+   15.0,
+   -70.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/CornerBracket-11/CornerBracket-1",
+   "Box-1/CornerBracket-12/CornerBracket-1",
+   "Box-1/CornerBracket-17/CornerBracket-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-11/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     7.729,
+     14.729
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/CornerBracket-12/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     52.729,
+     59.729
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/CornerBracket-17/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     27.771,
+     34.771
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.7,
+    "t": [
+     60.0,
+     61.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 174,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   45.0,
+   15.0,
+   70.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/CornerBracket-14/CornerBracket-1",
+   "Box-1/CornerBracket-3/CornerBracket-1",
+   "Box-1/CornerBracket-4/CornerBracket-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-14/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     30.0,
+     37.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-3/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     5.5,
+     12.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-4/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     50.5,
+     57.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.7,
+    "t": [
+     60.0,
+     61.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": []
+ },
+ {
+  "id": 175,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -36.42,
+   44.54,
+   116.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+    "r": 1.55,
+    "t": [
+     0.0,
+     1.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-1",
+    "config": "20mm",
+    "t": 10.0
+   }
+  ]
+ },
+ {
+  "id": 176,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -36.42,
+   30.54,
+   116.5
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+    "r": 1.55,
+    "t": [
+     0.0,
+     1.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-3",
+    "config": "20mm",
+    "t": 10.0
+   }
+  ]
+ },
+ {
+  "id": 177,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -84.1686,
+   15.0,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3 nut-1",
+    "config": "91828A211",
+    "t": 8.7
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 6.0
+   }
+  ]
+ },
+ {
+  "id": 178,
+  "a": [
+   0.0,
+   1.0,
+   -0.0
+  ],
+  "p": [
+   -9.2287,
+   20.5,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3 nut-1",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 179,
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "p": [
+   -9.2287,
+   30.0,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3 nut-2",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 180,
+  "a": [
+   0.0,
+   1.0,
+   -0.0
+  ],
+  "p": [
+   -84.3973,
+   20.5,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3 nut-1",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 181,
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "p": [
+   -84.3973,
+   30.0,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3 nut-2",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 182,
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -140.0,
+   24.7713,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-10/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-10/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": false
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-10/M3 nut-1",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-10/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 183,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   40.0,
+   25.2287,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-11/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-11/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": false
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-11/M3 nut-1",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-11/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 184,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   40.0,
+   70.2287,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-12/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-12/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": false
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-12/M3 nut-1",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-12/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 185,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   40.0,
+   47.2713,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-17/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-17/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": false
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-17/M3 nut-2",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-17/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 186,
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -140.0,
+   47.7287,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-18/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-18/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": false
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-18/M3 nut-2",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-18/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 187,
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "p": [
+   -9.0,
+   75.0,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-30/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-30/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-30/M3 nut-2",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-30/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 188,
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "p": [
+   -83.5,
+   75.0,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-31/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-31/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-31/M3 nut-2",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-31/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 189,
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -140.0,
+   69.7713,
+   -74.5
+  ],
+  "parts": [
+   "Box-1/CornerBracket-9/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-9/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": false
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-9/M3 nut-1",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-9/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 190,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -16.0381,
+   -8.1718,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-3",
+    "config": "8mm",
+    "t": 2.5
+   },
+   {
+    "comp": "FEMUR_INSIDE-1/M3 washer-3",
+    "config": "Default",
+    "t": -1.5
+   }
+  ]
+ },
+ {
+  "id": 191,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -15.0961,
+   9.8035,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-4",
+    "config": "8mm",
+    "t": 2.5
+   },
+   {
+    "comp": "FEMUR_INSIDE-1/M3 washer-4",
+    "config": "Default",
+    "t": -1.5
+   }
+  ]
+ },
+ {
+  "id": 192,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   0.942,
+   17.9754,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-5",
+    "config": "8mm",
+    "t": 2.5
+   },
+   {
+    "comp": "FEMUR_INSIDE-1/M3 washer-5",
+    "config": "Default",
+    "t": -1.5
+   }
+  ]
+ },
+ {
+  "id": 193,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   16.0381,
+   8.1719,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-6",
+    "config": "8mm",
+    "t": 2.5
+   },
+   {
+    "comp": "FEMUR_INSIDE-1/M3 washer-6",
+    "config": "Default",
+    "t": -1.5
+   }
+  ]
+ },
+ {
+  "id": 194,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   15.0961,
+   -9.8035,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-1",
+    "config": "8mm",
+    "t": 2.5
+   },
+   {
+    "comp": "FEMUR_INSIDE-1/M3 washer-1",
+    "config": "Default",
+    "t": -1.5
+   }
+  ]
+ },
+ {
+  "id": 195,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -0.942,
+   -17.9753,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-2",
+    "config": "8mm",
+    "t": 2.5
+   },
+   {
+    "comp": "FEMUR_INSIDE-1/M3 washer-2",
+    "config": "Default",
+    "t": -1.5
+   }
+  ]
+ },
+ {
+  "id": 196,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   7.0,
+   -0.0,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 2.8,
+    "t": [
+     7.0,
+     10.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-7",
+    "config": "16mm",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 197,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   0.0,
+   -7.0,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 2.8,
+    "t": [
+     7.0,
+     10.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-8",
+    "config": "16mm",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 198,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -7.0,
+   -0.0,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 2.8,
+    "t": [
+     7.0,
+     10.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-5",
+    "config": "16mm",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 199,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -0.0,
+   7.0,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     7.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 2.8,
+    "t": [
+     7.0,
+     10.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-6",
+    "config": "16mm",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 200,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -84.1686,
+   30.0,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.45
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3 nut-2",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 201,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -140.0,
+   70.0,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/CornerBracket-1/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.45
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-1/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-1/M3 nut-1",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-1/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 202,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -140.0,
+   47.5,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/CornerBracket-13/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.45
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-13/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-13/M3 nut-2",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-13/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 203,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -140.0,
+   25.0,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/CornerBracket-2/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.45
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-2/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-2/M3 nut-1",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-2/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 204,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -83.5,
+   65.0,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/CornerBracket-21/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.45
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-21/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-21/M3 nut-2",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-21/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 205,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -29.42,
+   37.54,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     20.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+    "r": 1.55,
+    "t": [
+     21.0,
+     22.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-2",
+    "config": "20mm",
+    "t": 12.5
+   }
+  ]
+ },
+ {
+  "id": 206,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -43.42,
+   37.54,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     20.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+    "r": 1.55,
+    "t": [
+     21.0,
+     22.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-4",
+    "config": "20mm",
+    "t": 12.5
+   }
+  ]
+ },
+ {
+  "id": 207,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -84.1686,
+   15.0,
+   65.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     5.5,
+     7.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3 nut-1",
+    "config": "91828A211",
+    "t": 8.7
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 6.0
+   }
+  ]
+ },
+ {
+  "id": 208,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -81.0,
+   15.0,
+   -57.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 0.85,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1",
+    "r": 1.0,
+    "t": [
+     20.0,
+     21.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/M2 standoff-3",
+    "config": "Default",
+    "t": 5.0
+   }
+  ]
+ },
+ {
+  "id": 209,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -81.0,
+   15.0,
+   29.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 0.85,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1",
+    "r": 1.0,
+    "t": [
+     20.0,
+     21.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/M2 standoff-4",
+    "config": "Default",
+    "t": 5.0
+   }
+  ]
+ },
+ {
+  "id": 210,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -147.0,
+   15.0,
+   29.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 0.85,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1",
+    "r": 1.0,
+    "t": [
+     20.0,
+     21.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/M2 standoff-2",
+    "config": "Default",
+    "t": 5.0
+   }
+  ]
+ },
+ {
+  "id": 211,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -147.0,
+   15.0,
+   -57.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 0.85,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1",
+    "r": 1.0,
+    "t": [
+     20.0,
+     21.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/M2 standoff-1",
+    "config": "Default",
+    "t": 5.0
+   }
+  ]
+ },
+ {
+  "id": 212,
+  "a": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "p": [
+   -83.5,
+   74.5,
+   65.0
+  ],
+  "parts": [
+   "Box-1/CornerBracket-21/CornerBracket-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-21/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.7,
+    "t": [
+     -2.0,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-21/M3 nut-1",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-21/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 213,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -149.5,
+   65.0,
+   -0.0
+  ],
+  "parts": [
+   "Box-1/CornerBracket-26/CornerBracket-1",
+   "Box-1/FacetBack-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-26/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     -2.05,
+     -0.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     -3.51,
+     -3.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 3.75,
+    "t": [
+     -14.5,
+     -3.51
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-26/M3 nut-2",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-26/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 214,
+  "a": [
+   1.0,
+   -0.0,
+   0.0
+  ],
+  "p": [
+   -149.5,
+   30.0,
+   0.0
+  ],
+  "parts": [
+   "Box-1/CornerBracket-27/CornerBracket-1",
+   "Box-1/FacetBack-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-27/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     -2.05,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 3.25,
+    "t": [
+     -20.5,
+     -15.871
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-27/M3 nut-2",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-27/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 215,
+  "a": [
+   0.0,
+   1.0,
+   -0.0
+  ],
+  "p": [
+   -83.5,
+   65.5,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/CornerBracket-31/CornerBracket-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/CornerBracket-31/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     2.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.7,
+    "t": [
+     9.5,
+     11.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-31/M3 nut-1",
+    "config": "91828A211",
+    "t": 3.2
+   },
+   {
+    "comp": "Box-1/CornerBracket-31/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 0.5
+   }
+  ]
+ },
+ {
+  "id": 216,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -34.1589,
+   18.6498,
+   117.5
+  ],
+  "parts": [
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/BearingWasher-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     2.0,
+     11.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-6",
+    "config": "6mm",
+    "t": 2.5
+   }
+  ]
+ },
+ {
+  "id": 217,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -51.6488,
+   26.1368,
+   117.5
+  ],
+  "parts": [
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/BearingWasher-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     1.5,
+     11.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-7",
+    "config": "6mm",
+    "t": 2.5
+   }
+  ]
+ },
+ {
+  "id": 218,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -53.9099,
+   45.0269,
+   117.5
+  ],
+  "parts": [
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/BearingWasher-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     1.5,
+     11.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-8",
+    "config": "6mm",
+    "t": 2.5
+   }
+  ]
+ },
+ {
+  "id": 219,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -38.6811,
+   56.4302,
+   117.5
+  ],
+  "parts": [
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/BearingWasher-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     2.0,
+     11.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-9",
+    "config": "6mm",
+    "t": 2.5
+   }
+  ]
+ },
+ {
+  "id": 220,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -21.1912,
+   48.9432,
+   117.5
+  ],
+  "parts": [
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/BearingWasher-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     2.0,
+     11.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-10",
+    "config": "6mm",
+    "t": 2.5
+   }
+  ]
+ },
+ {
+  "id": 221,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -18.9301,
+   30.0531,
+   117.5
+  ],
+  "parts": [
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/BearingWasher-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     1.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     2.0,
+     11.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-5",
+    "config": "6mm",
+    "t": 2.5
+   }
+  ]
+ },
+ {
+  "id": 222,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -96.7041,
+   -121.0747,
+   141.0
+  ],
+  "parts": [
+   "COUPLER-1/Coupler-1",
+   "COUPLER-1/SmallBearingWahser-2"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     35.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/SmallBearingWahser-2",
+    "r": 1.55,
+    "t": [
+     -1.5,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-1",
+    "config": "35mm",
+    "t": 15.5
+   }
+  ]
+ },
+ {
+  "id": 223,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -105.894,
+   -124.7552,
+   141.0
+  ],
+  "parts": [
+   "COUPLER-1/Coupler-1",
+   "COUPLER-1/SmallBearingWahser-2"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     35.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/SmallBearingWahser-2",
+    "r": 1.55,
+    "t": [
+     -1.5,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-2",
+    "config": "35mm",
+    "t": 15.5
+   }
+  ]
+ },
+ {
+  "id": 224,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -109.5744,
+   -115.5653,
+   141.0
+  ],
+  "parts": [
+   "COUPLER-1/Coupler-1",
+   "COUPLER-1/SmallBearingWahser-2"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     35.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/SmallBearingWahser-2",
+    "r": 1.55,
+    "t": [
+     -1.5,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-3",
+    "config": "35mm",
+    "t": 15.5
+   }
+  ]
+ },
+ {
+  "id": 225,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -100.3845,
+   -111.8848,
+   141.0
+  ],
+  "parts": [
+   "COUPLER-1/Coupler-1",
+   "COUPLER-1/SmallBearingWahser-2"
+  ],
+  "bores": [
+   {
+    "comp": "COUPLER-1/Coupler-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     35.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "COUPLER-1/SmallBearingWahser-2",
+    "r": 1.55,
+    "t": [
+     -1.5,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "COUPLER-1/M3 Roundhead-4",
+    "config": "35mm",
+    "t": 15.5
+   }
+  ]
+ },
+ {
+  "id": 226,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -96.2927,
+   -161.1303,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "Femur-1/Femur-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     32.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Femur-1/Femur-1",
+    "r": 1.4,
+    "t": [
+     33.5,
+     71.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 3.5,
+    "t": [
+     -2.5,
+     0.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-7",
+    "config": "50mm",
+    "t": 25.0
+   },
+   {
+    "comp": "Femur-1/M3 Roundhead-1",
+    "config": "20mm",
+    "t": 62.0
+   }
+  ]
+ },
+ {
+  "id": 227,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -108.0341,
+   -153.5054,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "Femur-1/Femur-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     32.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Femur-1/Femur-1",
+    "r": 1.4,
+    "t": [
+     33.5,
+     71.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 3.5,
+    "t": [
+     -2.5,
+     0.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-8",
+    "config": "50mm",
+    "t": 25.0
+   },
+   {
+    "comp": "Femur-1/M3 Roundhead-2",
+    "config": "20mm",
+    "t": 62.0
+   }
+  ]
+ },
+ {
+  "id": 228,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -98.3509,
+   -151.4472,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "Femur-1/Femur-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     32.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Femur-1/Femur-1",
+    "r": 1.6,
+    "t": [
+     33.5,
+     69.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 3.5,
+    "t": [
+     -2.5,
+     0.0
+    ]
+   },
+   {
+    "comp": "Femur-1/Femur-1",
+    "r": 3.5,
+    "t": [
+     69.0,
+     71.5
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-10",
+    "config": "18mm",
+    "t": 9.0
+   },
+   {
+    "comp": "Femur-1/M3 Roundhead-4",
+    "config": "50mm",
+    "t": 44.0
+   }
+  ]
+ },
+ {
+  "id": 229,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -105.9759,
+   -163.1886,
+   85.0
+  ],
+  "parts": [
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "Femur-1/Femur-1"
+  ],
+  "bores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     32.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Femur-1/Femur-1",
+    "r": 1.6,
+    "t": [
+     33.5,
+     69.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "FEMUR_INSIDE-1/Femur_inside-1",
+    "r": 3.5,
+    "t": [
+     -2.5,
+     0.0
+    ]
+   },
+   {
+    "comp": "Femur-1/Femur-1",
+    "r": 3.5,
+    "t": [
+     69.0,
+     71.5
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "FEMUR_INSIDE-1/M3 Roundhead-9",
+    "config": "18mm",
+    "t": 9.0
+   },
+   {
+    "comp": "Femur-1/M3 Roundhead-3",
+    "config": "50mm",
+    "t": 44.0
+   }
+  ]
+ },
+ {
+  "id": 230,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   4.9497,
+   -4.9497,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     10.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.6,
+    "t": [
+     10.0,
+     19.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-17",
+    "config": "25mm",
+    "t": 6.5
+   }
+  ]
+ },
+ {
+  "id": 231,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -4.9497,
+   -4.9497,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     10.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.6,
+    "t": [
+     10.0,
+     19.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-18",
+    "config": "25mm",
+    "t": 6.5
+   }
+  ]
+ },
+ {
+  "id": 232,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   4.9497,
+   4.9497,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     10.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.6,
+    "t": [
+     10.0,
+     19.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-16",
+    "config": "25mm",
+    "t": 6.5
+   }
+  ]
+ },
+ {
+  "id": 233,
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "p": [
+   -4.9497,
+   4.9497,
+   94.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     10.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.6,
+    "t": [
+     10.0,
+     19.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.4,
+    "t": [
+     -10.0,
+     0.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-19",
+    "config": "25mm",
+    "t": 6.5
+   }
+  ]
+ },
+ {
+  "id": 234,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -57.4513,
+   68.5011,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.65,
+    "t": [
+     19.0,
+     27.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1",
+    "r": 1.6,
+    "t": [
+     5.5,
+     18.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 3.25,
+    "t": [
+     27.0,
+     29.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-9",
+    "config": "30mm",
+    "t": 12.0
+   }
+  ]
+ },
+ {
+  "id": 235,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -61.4671,
+   60.4467,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.65,
+    "t": [
+     19.0,
+     27.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1",
+    "r": 1.6,
+    "t": [
+     5.5,
+     18.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 3.25,
+    "t": [
+     27.0,
+     29.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-20",
+    "config": "30mm",
+    "t": 12.0
+   }
+  ]
+ },
+ {
+  "id": 236,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -34.4188,
+   67.6329,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.4,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.65,
+    "t": [
+     19.0,
+     27.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1",
+    "r": 1.6,
+    "t": [
+     5.5,
+     18.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 3.25,
+    "t": [
+     27.0,
+     29.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-10",
+    "config": "30mm",
+    "t": 12.0
+   }
+  ]
+ },
+ {
+  "id": 237,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -9.0,
+   30.0,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     19.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.7,
+    "t": [
+     19.0,
+     27.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 3.25,
+    "t": [
+     27.0,
+     29.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-12",
+    "config": "35mm",
+    "t": 9.5
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3 nut-2",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 238,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   40.0,
+   47.5,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/CornerBracket-14/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     19.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.7,
+    "t": [
+     19.0,
+     27.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-14/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 3.25,
+    "t": [
+     27.0,
+     29.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-15",
+    "config": "35mm",
+    "t": 9.5
+   },
+   {
+    "comp": "Box-1/CornerBracket-14/M3 nut-2",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-14/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 239,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -9.0,
+   65.0,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/CornerBracket-28/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     19.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.7,
+    "t": [
+     19.0,
+     27.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-28/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 3.25,
+    "t": [
+     27.0,
+     29.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-11",
+    "config": "35mm",
+    "t": 9.5
+   },
+   {
+    "comp": "Box-1/CornerBracket-28/M3 nut-2",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-28/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 240,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   40.0,
+   25.0,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/CornerBracket-3/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     19.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.7,
+    "t": [
+     19.0,
+     27.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-3/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 3.25,
+    "t": [
+     27.0,
+     29.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-14",
+    "config": "35mm",
+    "t": 9.5
+   },
+   {
+    "comp": "Box-1/CornerBracket-3/M3 nut-1",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-3/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 241,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   40.0,
+   70.0,
+   75.0
+  ],
+  "parts": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/CornerBracket-4/CornerBracket-1"
+  ],
+  "bores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/RobotMount-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     19.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 1.7,
+    "t": [
+     19.0,
+     27.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-4/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -2.5,
+     -0.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/Side panel-1",
+    "r": 3.25,
+    "t": [
+     27.0,
+     29.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "BODY-1/SIDE PANEL-1/M3 Roundhead-13",
+    "config": "35mm",
+    "t": 9.5
+   },
+   {
+    "comp": "Box-1/CornerBracket-4/M3 nut-1",
+    "config": "91828A211",
+    "t": -3.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-4/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": -1.0
+   }
+  ]
+ },
+ {
+  "id": 242,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -9.0,
+   15.0,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/CornerBracket-30/CornerBracket-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-30/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     50.5,
+     52.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.7,
+    "t": [
+     60.0,
+     61.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3 nut-1",
+    "config": "91828A211",
+    "t": 8.7
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 6.0
+   },
+   {
+    "comp": "Box-1/CornerBracket-30/M3 nut-1",
+    "config": "91828A211",
+    "t": 53.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-30/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 51.0
+   }
+  ]
+ },
+ {
+  "id": 243,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -161.4,
+   24.771,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-10/CornerBracket-1",
+   "Box-1/FacetBack-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.65
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-10/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     11.9,
+     13.9
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     9.85,
+     11.4
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     2.5,
+     8.4
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 3.25,
+    "t": [
+     -4.341,
+     0.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-10/M3 nut-2",
+    "config": "91828A211",
+    "t": 15.1
+   },
+   {
+    "comp": "Box-1/CornerBracket-10/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 12.4
+   }
+  ]
+ },
+ {
+  "id": 244,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -161.4,
+   47.729,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-18/CornerBracket-1",
+   "Box-1/FacetBack-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.65
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-18/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     11.9,
+     13.9
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     9.85,
+     11.4
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     2.5,
+     8.4
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 3.25,
+    "t": [
+     -4.341,
+     0.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-18/M3 nut-1",
+    "config": "91828A211",
+    "t": 15.1
+   },
+   {
+    "comp": "Box-1/CornerBracket-18/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 12.4
+   }
+  ]
+ },
+ {
+  "id": 245,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -161.4,
+   69.771,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-9/CornerBracket-1",
+   "Box-1/FacetBack-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.65
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-9/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     11.9,
+     13.9
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     9.85,
+     11.4
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     2.5,
+     8.4
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 3.25,
+    "t": [
+     -4.341,
+     0.0
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-9/M3 nut-2",
+    "config": "91828A211",
+    "t": 15.1
+   },
+   {
+    "comp": "Box-1/CornerBracket-9/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 12.4
+   }
+  ]
+ },
+ {
+  "id": 246,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   57.9875,
+   25.229,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-11/CornerBracket-1",
+   "Box-1/FacetFront-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.712
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-11/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -10.487,
+     -8.487
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     -7.987,
+     -6.438
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     -4.987,
+     1.246
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 3.25,
+    "t": [
+     3.713,
+     8.087
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-11/M3 nut-2",
+    "config": "91828A211",
+    "t": -11.688
+   },
+   {
+    "comp": "Box-1/CornerBracket-11/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": -8.987
+   }
+  ]
+ },
+ {
+  "id": 247,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   57.9875,
+   70.229,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-12/CornerBracket-1",
+   "Box-1/FacetFront-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.712
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-12/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -10.487,
+     -8.487
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     -7.987,
+     -6.438
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     -4.987,
+     1.246
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 3.25,
+    "t": [
+     3.713,
+     8.087
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-12/M3 nut-2",
+    "config": "91828A211",
+    "t": -11.688
+   },
+   {
+    "comp": "Box-1/CornerBracket-12/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": -8.987
+   }
+  ]
+ },
+ {
+  "id": 248,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   57.9875,
+   47.271,
+   -65.0
+  ],
+  "parts": [
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-17/CornerBracket-1",
+   "Box-1/FacetFront-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.712
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-17/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     -10.487,
+     -8.487
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     -7.987,
+     -6.438
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     -4.987,
+     1.246
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 3.25,
+    "t": [
+     3.713,
+     8.087
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-17/M3 nut-1",
+    "config": "91828A211",
+    "t": -11.688
+   },
+   {
+    "comp": "Box-1/CornerBracket-17/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": -8.987
+   }
+  ]
+ },
+ {
+  "id": 249,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -55.0326,
+   -348.6824,
+   121.5
+  ],
+  "parts": [
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 2.15,
+    "t": [
+     0.0,
+     15.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 2.15,
+    "t": [
+     -1.5,
+     0.005
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Mount-1",
+    "r": 2.15,
+    "t": [
+     4.0,
+     15.0
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Stator-1",
+    "r": 2.0,
+    "t": [
+     15.0,
+     20.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 4.0,
+    "t": [
+     -3.5,
+     -1.5
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Tibia-1/M4 roundhead-1",
+    "config": "25mm",
+    "t": 11.0
+   }
+  ]
+ },
+ {
+  "id": 250,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -79.3683,
+   -331.1389,
+   121.5
+  ],
+  "parts": [
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 2.15,
+    "t": [
+     0.0,
+     15.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 2.15,
+    "t": [
+     -1.5,
+     0.005
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Mount-1",
+    "r": 2.15,
+    "t": [
+     4.0,
+     15.0
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Stator-1",
+    "r": 2.0,
+    "t": [
+     15.0,
+     20.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 4.0,
+    "t": [
+     -3.5,
+     -1.5
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Tibia-1/M4 roundhead-3",
+    "config": "25mm",
+    "t": 11.0
+   }
+  ]
+ },
+ {
+  "id": 251,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -75.9722,
+   -352.0785,
+   121.5
+  ],
+  "parts": [
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 2.15,
+    "t": [
+     0.0,
+     15.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 2.15,
+    "t": [
+     -1.5,
+     0.005
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Mount-1",
+    "r": 2.15,
+    "t": [
+     4.0,
+     15.0
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Stator-1",
+    "r": 2.0,
+    "t": [
+     15.0,
+     20.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 4.0,
+    "t": [
+     -3.5,
+     -1.5
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Tibia-1/M4 roundhead-4",
+    "config": "25mm",
+    "t": 11.0
+   }
+  ]
+ },
+ {
+  "id": 252,
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "p": [
+   -58.4287,
+   -327.7428,
+   121.5
+  ],
+  "parts": [
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "bores": [
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 2.15,
+    "t": [
+     0.0,
+     15.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 2.15,
+    "t": [
+     -1.5,
+     0.005
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Mount-1",
+    "r": 2.15,
+    "t": [
+     4.0,
+     15.0
+    ],
+    "vis": false
+   },
+   {
+    "comp": "Tibia-1/WheelMotorASM-1/Stator-1",
+    "r": 2.0,
+    "t": [
+     15.0,
+     20.0
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Tibia-1/Tibia-1",
+    "r": 4.0,
+    "t": [
+     -3.5,
+     -1.5
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Tibia-1/M4 roundhead-2",
+    "config": "25mm",
+    "t": 11.0
+   }
+  ]
+ },
+ {
+  "id": 253,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -9.0,
+   15.0,
+   65.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/CornerBracket-1",
+   "Box-1/CornerBracket-28/CornerBracket-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     5.5,
+     7.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-28/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     57.5,
+     59.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.7,
+    "t": [
+     60.0,
+     61.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3 nut-1",
+    "config": "91828A211",
+    "t": 8.7
+   },
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 6.0
+   },
+   {
+    "comp": "Box-1/CornerBracket-28/M3 nut-1",
+    "config": "91828A211",
+    "t": 56.3
+   },
+   {
+    "comp": "Box-1/CornerBracket-28/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 59.0
+   }
+  ]
+ },
+ {
+  "id": 254,
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "p": [
+   -140.0,
+   15.0,
+   0.0
+  ],
+  "parts": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/CornerBracket-26/CornerBracket-1",
+   "Box-1/CornerBracket-27/CornerBracket-1",
+   "Box-1/FacetRing-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+    "r": 1.6,
+    "t": [
+     0.0,
+     5.0
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-26/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     57.5,
+     59.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-27/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     5.5,
+     7.5
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetRing-1",
+    "r": 1.7,
+    "t": [
+     60.0,
+     61.5
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-26/M3 nut-1",
+    "config": "91828A211",
+    "t": 56.3
+   },
+   {
+    "comp": "Box-1/CornerBracket-26/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 59.0
+   },
+   {
+    "comp": "Box-1/CornerBracket-27/M3 nut-1",
+    "config": "91828A211",
+    "t": 8.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-27/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 6.0
+   }
+  ]
+ },
+ {
+  "id": 255,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -161.4,
+   70.0,
+   65.0
+  ],
+  "parts": [
+   "Box-1/BumperBack-1",
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-1/CornerBracket-1",
+   "Box-1/CornerBracket-4/CornerBracket-1",
+   "Box-1/FacetBack-1",
+   "Box-1/FacetFront-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.65
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 1.7,
+    "t": [
+     219.387,
+     223.1
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-1/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     11.9,
+     13.9
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-4/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     208.9,
+     210.9
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     9.85,
+     11.4
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     2.5,
+     8.4
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     211.4,
+     212.95
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     214.4,
+     220.633
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 3.25,
+    "t": [
+     -4.341,
+     0.0
+    ]
+   },
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 3.25,
+    "t": [
+     223.1,
+     227.475
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-1/M3 nut-2",
+    "config": "91828A211",
+    "t": 15.1
+   },
+   {
+    "comp": "Box-1/CornerBracket-1/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 12.4
+   },
+   {
+    "comp": "Box-1/CornerBracket-4/M3 nut-2",
+    "config": "91828A211",
+    "t": 207.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-4/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 210.4
+   }
+  ]
+ },
+ {
+  "id": 256,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -161.4,
+   47.5,
+   65.0
+  ],
+  "parts": [
+   "Box-1/BumperBack-1",
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-13/CornerBracket-1",
+   "Box-1/CornerBracket-14/CornerBracket-1",
+   "Box-1/FacetBack-1",
+   "Box-1/FacetFront-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.65
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 1.7,
+    "t": [
+     219.387,
+     223.1
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-13/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     11.9,
+     13.9
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-14/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     208.9,
+     210.9
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     9.85,
+     11.4
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     2.5,
+     8.4
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     211.4,
+     212.95
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     214.4,
+     220.633
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 3.25,
+    "t": [
+     -4.341,
+     0.0
+    ]
+   },
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 3.25,
+    "t": [
+     223.1,
+     227.475
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-13/M3 nut-1",
+    "config": "91828A211",
+    "t": 15.1
+   },
+   {
+    "comp": "Box-1/CornerBracket-13/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 12.4
+   },
+   {
+    "comp": "Box-1/CornerBracket-14/M3 nut-1",
+    "config": "91828A211",
+    "t": 207.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-14/M3x8 flathead-2",
+    "config": "92125A128",
+    "t": 210.4
+   }
+  ]
+ },
+ {
+  "id": 257,
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "p": [
+   -161.4,
+   25.0,
+   65.0
+  ],
+  "parts": [
+   "Box-1/BumperBack-1",
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-2/CornerBracket-1",
+   "Box-1/CornerBracket-3/CornerBracket-1",
+   "Box-1/FacetBack-1",
+   "Box-1/FacetFront-1"
+  ],
+  "bores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 1.7,
+    "t": [
+     0.0,
+     3.65
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 1.7,
+    "t": [
+     219.387,
+     223.1
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-2/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     11.9,
+     13.9
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/CornerBracket-3/CornerBracket-1",
+    "r": 1.6,
+    "t": [
+     208.9,
+     210.9
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     9.85,
+     11.4
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetBack-1",
+    "r": 1.7,
+    "t": [
+     2.5,
+     8.4
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     211.4,
+     212.95
+    ],
+    "vis": true
+   },
+   {
+    "comp": "Box-1/FacetFront-1",
+    "r": 1.7,
+    "t": [
+     214.4,
+     220.633
+    ],
+    "vis": true
+   }
+  ],
+  "cbores": [
+   {
+    "comp": "Box-1/BumperBack-1",
+    "r": 3.25,
+    "t": [
+     -4.341,
+     0.0
+    ]
+   },
+   {
+    "comp": "Box-1/BumperFront-1",
+    "r": 3.25,
+    "t": [
+     223.1,
+     227.475
+    ]
+   }
+  ],
+  "fasteners": [
+   {
+    "comp": "Box-1/CornerBracket-2/M3 nut-2",
+    "config": "91828A211",
+    "t": 15.1
+   },
+   {
+    "comp": "Box-1/CornerBracket-2/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 12.4
+   },
+   {
+    "comp": "Box-1/CornerBracket-3/M3 nut-2",
+    "config": "91828A211",
+    "t": 207.7
+   },
+   {
+    "comp": "Box-1/CornerBracket-3/M3x8 flathead-1",
+    "config": "92125A128",
+    "t": 210.4
+   }
+  ]
+ }
+]

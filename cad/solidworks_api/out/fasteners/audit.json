@@ -1,0 +1,6538 @@
+[
+ {
+  "name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-1",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   19.484,
+   11.253,
+   96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-2",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   19.487,
+   -11.247,
+   96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-3",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   0.003,
+   -22.5,
+   96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-4",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   -19.484,
+   -11.253,
+   96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M2.5 Roundhead-5",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   -19.487,
+   11.247,
+   96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "COUPLER-1/Coupler-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -36.42,
+   44.54,
+   116.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.11,
+  "by_head": [
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "30mm",
+  "hf": [
+   -34.419,
+   67.633,
+   102.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 30.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.0,
+  "free": 3.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-11",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -9.0,
+   65.0,
+   102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+   "Box-1/CornerBracket-28/CornerBracket-1",
+   "Box-1/CornerBracket-28/M3 nut-1",
+   "Box-1/CornerBracket-28/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-12",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -9.0,
+   30.0,
+   102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3 nut-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3 nut-2",
+   "COUPLER-1/Coupler-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-13",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   40.0,
+   70.0,
+   102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/CornerBracket-4/CornerBracket-1",
+   "Box-1/CornerBracket-4/M3 nut-1",
+   "Box-1/CornerBracket-4/M3 nut-2",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-14",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   40.0,
+   25.0,
+   102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/CornerBracket-3/CornerBracket-1",
+   "Box-1/CornerBracket-3/M3 nut-1",
+   "Box-1/CornerBracket-3/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-15",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   40.0,
+   47.5,
+   102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/CornerBracket-14/CornerBracket-1",
+   "Box-1/CornerBracket-14/M3 nut-1",
+   "Box-1/CornerBracket-14/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-16",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   4.95,
+   4.95,
+   75.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-17",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   4.95,
+   -4.95,
+   75.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-18",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -4.95,
+   -4.95,
+   75.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-19",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -4.95,
+   4.95,
+   75.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -29.42,
+   37.54,
+   116.5
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.11,
+  "by_head": [
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-20",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "30mm",
+  "hf": [
+   -61.467,
+   60.447,
+   102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 30.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.0,
+  "free": 3.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -36.42,
+   30.54,
+   116.5
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.22,
+  "by_head": [
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -43.42,
+   37.54,
+   116.5
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.11,
+  "by_head": [
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   -7.0,
+   0.0,
+   87.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   0.0,
+   7.0,
+   87.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   7.0,
+   0.0,
+   87.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   0.0,
+   -7.0,
+   87.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "30mm",
+  "hf": [
+   -57.451,
+   68.501,
+   102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 30.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.0,
+  "free": 3.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/SwicthMount-1/M2 Roundhead-1",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -53.862,
+   58.331,
+   84.3
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "BODY-1/SIDE PANEL-1/SwicthMount-1/M2 Roundhead-2",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -48.045,
+   55.431,
+   84.3
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/LimitSwitch-2",
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3x8 flathead-1",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -84.169,
+   30.0,
+   80.115
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3 nut-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3x8 flathead-2",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -84.169,
+   14.885,
+   65.0
+  ],
+  "a": [
+   0.0,
+   -1.0,
+   -0.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 2.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3 nut-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-1/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3x8 flathead-2",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -9.0,
+   14.885,
+   65.0
+  ],
+  "a": [
+   0.0,
+   -1.0,
+   -0.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 2.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3 nut-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-2/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3x8 flathead-1",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -9.0,
+   14.885,
+   -65.0
+  ],
+  "a": [
+   0.0,
+   -1.0,
+   -0.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 2.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/Battery-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3 nut-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3x8 flathead-1",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -84.169,
+   14.885,
+   -65.0
+  ],
+  "a": [
+   0.0,
+   -1.0,
+   -0.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 2.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3 nut-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3x8 flathead-2",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -84.169,
+   30.0,
+   -80.115
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3 nut-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-4/M3 nut-2",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1",
+   "Box-1/BottomPanelWithAvionics-1/M2 standoff-3",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Flathead-1",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   12.0,
+   22.0,
+   -20.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 1.0,
+  "by_head": [
+   "Box-1/BottomPanelWithAvionics-1/Battery-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "Box-1/BottomPanelWithAvionics-1/Battery-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Flathead-2",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   12.0,
+   22.0,
+   20.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 1.0,
+  "by_head": [
+   "Box-1/BottomPanelWithAvionics-1/Battery-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "Box-1/BottomPanelWithAvionics-1/Battery-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -112.0,
+   5.0,
+   -20.0
+  ],
+  "a": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -71.5,
+   33.71,
+   66.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 4.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-11",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -71.5,
+   33.71,
+   -69.5
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 4.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-12",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -28.0,
+   33.71,
+   -69.5
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 4.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-13",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -53.1,
+   41.31,
+   -25.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-7",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "Box-1/BottomPanelWithAvionics-1/Resistor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-14",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -29.626,
+   41.31,
+   13.51
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/M3 standoff MF-9",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "Box-1/BottomPanelWithAvionics-1/Resistor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-15",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -102.183,
+   29.126,
+   45.496
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 5.0,
+  "free": 5.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1",
+   "Box-1/BottomPanelWithAvionics-1/Receiver-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-16",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -81.983,
+   29.126,
+   45.496
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 5.0,
+  "free": 5.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/IMU BNO085-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -112.0,
+   5.0,
+   20.0
+  ],
+  "a": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -147.0,
+   5.0,
+   20.0
+  ],
+  "a": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "Box-1/FacetBack-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -147.0,
+   5.0,
+   -20.0
+  ],
+  "a": [
+   0.0,
+   -1.0,
+   0.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "Box-1/FacetBack-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "30mm",
+  "hf": [
+   -171.676,
+   -32.0,
+   16.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 30.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/SupportWheel-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "30mm",
+  "hf": [
+   27.439,
+   61.8,
+   54.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 30.0,
+  "buried": 0.11,
+  "by_head": [
+   "Box-1/BottomPanelWithAvionics-1/BatteryCap-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "30mm",
+  "hf": [
+   -4.561,
+   61.8,
+   54.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 30.0,
+  "buried": 0.11,
+  "by_head": [
+   "Box-1/BottomPanelWithAvionics-1/BatteryCap-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/Battery holder-1",
+   "Box-1/BottomPanelWithAvionics-1/BatteryCap-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -28.0,
+   33.71,
+   66.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 4.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/BottomPanelWithAvionics-1/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -53.1,
+   33.71,
+   13.5
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 4.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Odrive-1",
+   "Box-1/BottomPanelWithAvionics-1/Resistor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/CornerBracket-1/M3x8 flathead-2",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -140.0,
+   70.0,
+   80.115
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/CornerBracket-1/CornerBracket-1",
+   "Box-1/CornerBracket-1/M3 nut-1",
+   "Box-1/CornerBracket-1/M3 nut-2",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/CornerBracket-10/M3x8 flathead-1",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -140.0,
+   25.0,
+   -80.115
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/M2 standoff-1",
+   "Box-1/CornerBracket-10/CornerBracket-1",
+   "Box-1/CornerBracket-10/M3 nut-1",
+   "Box-1/CornerBracket-10/M3 nut-2",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/CornerBracket-13/M3x8 flathead-1",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -140.0,
+   47.5,
+   80.115
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/BottomPanelWithAvionics-1/Receiver-1",
+   "Box-1/CornerBracket-13/CornerBracket-1",
+   "Box-1/CornerBracket-13/M3 nut-1",
+   "Box-1/CornerBracket-13/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/CornerBracket-18/M3x8 flathead-2",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -140.0,
+   47.5,
+   -80.115
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-18/CornerBracket-1",
+   "Box-1/CornerBracket-18/M3 nut-1",
+   "Box-1/CornerBracket-18/M3 nut-2",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/CornerBracket-2/M3x8 flathead-2",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -140.0,
+   25.0,
+   80.115
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Receiver-1",
+   "Box-1/CornerBracket-2/CornerBracket-1",
+   "Box-1/CornerBracket-2/M3 nut-1",
+   "Box-1/CornerBracket-2/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/CornerBracket-21/M3x8 flathead-1",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -83.5,
+   65.0,
+   80.115
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/CornerBracket-21/CornerBracket-1",
+   "Box-1/CornerBracket-21/M3 nut-1",
+   "Box-1/CornerBracket-21/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/CornerBracket-27/M3x8 flathead-2",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -140.0,
+   14.885,
+   0.0
+  ],
+  "a": [
+   0.0,
+   -1.0,
+   -0.0
+  ],
+  "Ls": 12.315,
+  "buried": 1.0,
+  "by_head": [
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 2.5,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1",
+   "Box-1/BottomPanelWithAvionics-1/TailStrut-1",
+   "Box-1/CornerBracket-27/CornerBracket-1",
+   "Box-1/CornerBracket-27/M3 nut-1",
+   "Box-1/CornerBracket-27/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/CornerBracket-31/M3x8 flathead-2",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -83.5,
+   65.0,
+   -80.115
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-31/CornerBracket-1",
+   "Box-1/CornerBracket-31/M3 nut-1",
+   "Box-1/CornerBracket-31/M3 nut-2",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/CornerBracket-9/M3x8 flathead-1",
+  "file": "M3x8 flathead.SLDPRT",
+  "config": "92125A128",
+  "hf": [
+   -140.0,
+   70.0,
+   -80.115
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 12.315,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.5,
+  "free": 3.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-9/CornerBracket-1",
+   "Box-1/CornerBracket-9/M3 nut-1",
+   "Box-1/CornerBracket-9/M3 nut-2",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-3",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M2 Roundhead-1",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "4mm",
+  "hf": [
+   48.8,
+   61.5,
+   -29.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 4.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperFront-1",
+   "Box-1/FacetFront-1",
+   "Box-1/OLED-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M2 Roundhead-2",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "4mm",
+  "hf": [
+   48.8,
+   33.5,
+   -29.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 4.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BumperFront-1",
+   "Box-1/FacetFront-1",
+   "Box-1/OLED-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M2 Roundhead-3",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "4mm",
+  "hf": [
+   48.8,
+   33.5,
+   29.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 4.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BumperFront-1",
+   "Box-1/FacetFront-1",
+   "Box-1/OLED-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M2 Roundhead-4",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "4mm",
+  "hf": [
+   48.8,
+   61.5,
+   29.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 4.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperFront-1",
+   "Box-1/FacetFront-1",
+   "Box-1/OLED-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-1",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   67.0,
+   82.0,
+   -32.0
+  ],
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-10",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -120.0,
+   82.0,
+   -78.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-11",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -145.0,
+   78.0,
+   70.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 1.0,
+  "free": 2.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/CornerBracket-1/CornerBracket-1",
+   "Box-1/CornerBracket-1/M3 nut-1",
+   "Box-1/CornerBracket-1/M3 nut-2",
+   "Box-1/FacetBack-1",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-12",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -83.5,
+   78.0,
+   65.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-21/CornerBracket-1",
+   "Box-1/CornerBracket-21/M3 nut-1",
+   "Box-1/CornerBracket-21/M3 nut-2",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-13",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -140.0,
+   78.0,
+   0.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-26/CornerBracket-1",
+   "Box-1/CornerBracket-26/M3 nut-1",
+   "Box-1/CornerBracket-26/M3 nut-2",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-14",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -9.0,
+   78.0,
+   65.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-28/CornerBracket-1",
+   "Box-1/CornerBracket-28/M3 nut-1",
+   "Box-1/CornerBracket-28/M3 nut-2",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-15",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   45.0,
+   78.0,
+   70.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 1.0,
+  "free": 2.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "Box-1/CornerBracket-4/CornerBracket-1",
+   "Box-1/CornerBracket-4/M3 nut-1",
+   "Box-1/CornerBracket-4/M3 nut-2",
+   "Box-1/FacetFront-1",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-16",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -145.0,
+   78.0,
+   -70.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 1.0,
+  "free": 2.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-9/CornerBracket-1",
+   "Box-1/CornerBracket-9/M3 nut-1",
+   "Box-1/CornerBracket-9/M3 nut-2",
+   "Box-1/FacetBack-1",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-3",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-17",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -83.5,
+   78.0,
+   -65.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-31/CornerBracket-1",
+   "Box-1/CornerBracket-31/M3 nut-1",
+   "Box-1/CornerBracket-31/M3 nut-2",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-18",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -9.0,
+   78.0,
+   -65.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-30/CornerBracket-1",
+   "Box-1/CornerBracket-30/M3 nut-1",
+   "Box-1/CornerBracket-30/M3 nut-2",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-19",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   45.0,
+   78.0,
+   -70.0
+  ],
+  "a": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 1.0,
+  "free": 2.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-12/CornerBracket-1",
+   "Box-1/CornerBracket-12/M3 nut-1",
+   "Box-1/CornerBracket-12/M3 nut-2",
+   "Box-1/FacetFront-1",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-4",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-2",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   67.0,
+   82.0,
+   32.0
+  ],
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-20",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -153.01,
+   65.0,
+   0.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 2.25,
+  "free": 3.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-26/CornerBracket-1",
+   "Box-1/CornerBracket-26/M3 nut-1",
+   "Box-1/CornerBracket-26/M3 nut-2",
+   "Box-1/FacetBack-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-3",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   25.0,
+   82.0,
+   78.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-4",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -45.0,
+   82.0,
+   78.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/SwicthMount-1/Switch_Mount-1",
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-5",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -120.0,
+   82.0,
+   78.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-6",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -166.0,
+   82.0,
+   -32.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-7",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -166.0,
+   82.0,
+   32.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-8",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   25.0,
+   82.0,
+   -78.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Flathead-9",
+  "file": "M3 Flathead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -45.0,
+   82.0,
+   -78.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 1.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/FacetHood-1",
+   "Box-1/FacetRing-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/MirrorSwitch_Mount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   65.034,
+   25.0,
+   0.0
+  ],
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BumperFront-1",
+   "Box-1/FacetFront-1",
+   "Box-1/OLED-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   61.7,
+   70.229,
+   -65.0
+  ],
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-12/CornerBracket-1",
+   "Box-1/CornerBracket-12/M3 nut-1",
+   "Box-1/CornerBracket-12/M3 nut-2",
+   "Box-1/FacetFront-1",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-4"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-11",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   61.7,
+   47.271,
+   -65.0
+  ],
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-17/CornerBracket-1",
+   "Box-1/CornerBracket-17/M3 nut-1",
+   "Box-1/CornerBracket-17/M3 nut-2",
+   "Box-1/FacetFront-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-12",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   61.7,
+   70.0,
+   65.0
+  ],
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-4/CornerBracket-1",
+   "Box-1/CornerBracket-4/M3 nut-1",
+   "Box-1/CornerBracket-4/M3 nut-2",
+   "Box-1/FacetFront-1",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-13",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   61.7,
+   47.5,
+   65.0
+  ],
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-14/CornerBracket-1",
+   "Box-1/CornerBracket-14/M3 nut-1",
+   "Box-1/CornerBracket-14/M3 nut-2",
+   "Box-1/FacetFront-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-14",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   61.7,
+   25.0,
+   65.0
+  ],
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-3/CornerBracket-1",
+   "Box-1/CornerBracket-3/M3 nut-1",
+   "Box-1/CornerBracket-3/M3 nut-2",
+   "Box-1/FacetFront-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -165.371,
+   30.0,
+   0.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 4.75,
+  "free": 5.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CustomBoard-1/CustomBoard-1",
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-27/CornerBracket-1",
+   "Box-1/CornerBracket-27/M3 nut-1",
+   "Box-1/CornerBracket-27/M3 nut-2",
+   "Box-1/FacetBack-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -161.4,
+   24.771,
+   -65.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.75,
+  "free": 4.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-10/CornerBracket-1",
+   "Box-1/CornerBracket-10/M3 nut-1",
+   "Box-1/CornerBracket-10/M3 nut-2",
+   "Box-1/FacetBack-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -161.4,
+   47.729,
+   -65.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.75,
+  "free": 4.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-18/CornerBracket-1",
+   "Box-1/CornerBracket-18/M3 nut-1",
+   "Box-1/CornerBracket-18/M3 nut-2",
+   "Box-1/FacetBack-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -161.4,
+   69.771,
+   -65.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.75,
+  "free": 4.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-9/CornerBracket-1",
+   "Box-1/CornerBracket-9/M3 nut-1",
+   "Box-1/CornerBracket-9/M3 nut-2",
+   "Box-1/FacetBack-1",
+   "Box-1/M3 nut-3"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -161.4,
+   70.0,
+   65.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.75,
+  "free": 4.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-1/CornerBracket-1",
+   "Box-1/CornerBracket-1/M3 nut-1",
+   "Box-1/CornerBracket-1/M3 nut-2",
+   "Box-1/FacetBack-1",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -161.4,
+   47.5,
+   65.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.75,
+  "free": 4.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/Receiver-1",
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-13/CornerBracket-1",
+   "Box-1/CornerBracket-13/M3 nut-1",
+   "Box-1/CornerBracket-13/M3 nut-2",
+   "Box-1/FacetBack-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -161.4,
+   25.0,
+   65.0
+  ],
+  "a": [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.75,
+  "free": 4.75,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/Receiver-1",
+   "Box-1/BumperBack-1",
+   "Box-1/CornerBracket-2/CornerBracket-1",
+   "Box-1/CornerBracket-2/M3 nut-1",
+   "Box-1/CornerBracket-2/M3 nut-2",
+   "Box-1/FacetBack-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Box-1/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   61.7,
+   25.229,
+   -65.0
+  ],
+  "a": [
+   1.0,
+   0.0,
+   0.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.5,
+  "free": 4.5,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BumperFront-1",
+   "Box-1/CornerBracket-11/CornerBracket-1",
+   "Box-1/CornerBracket-11/M3 nut-1",
+   "Box-1/CornerBracket-11/M3 nut-2",
+   "Box-1/FacetFront-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -138.743,
+   -97.822,
+   143.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "COUPLER-1/Coupler-1",
+   "COUPLER-1/SmallBearingWahser-2",
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "Femur-1/Femur-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -18.606,
+   44.218,
+   118.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -148.596,
+   -98.779,
+   143.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "COUPLER-1/Coupler-1",
+   "COUPLER-1/SmallBearingWahser-2",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -149.554,
+   -88.926,
+   143.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "COUPLER-1/Coupler-1",
+   "COUPLER-1/SmallBearingWahser-2",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -139.7,
+   -87.969,
+   143.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "COUPLER-1/Coupler-1",
+   "COUPLER-1/SmallBearingWahser-2",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -21.729,
+   25.451,
+   118.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -39.544,
+   18.773,
+   118.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -54.234,
+   30.862,
+   118.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -51.111,
+   49.629,
+   118.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "BODY-1/SIDE PANEL-1/SmallBearingWahser-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "COUPLER-1/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -33.296,
+   56.307,
+   118.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "COUPLER-1/BearingWasher-1",
+   "COUPLER-1/Coupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   12.579,
+   -12.875,
+   83.5
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "FEMUR_INSIDE-1/M3 washer-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "18mm",
+  "hf": [
+   -129.166,
+   -126.195,
+   85.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 18.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -4.861,
+   -17.331,
+   83.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "FEMUR_INSIDE-1/M3 washer-2"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -17.44,
+   -4.456,
+   83.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "FEMUR_INSIDE-1/M3 washer-3"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -12.579,
+   12.875,
+   83.5
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "FEMUR_INSIDE-1/M3 washer-4"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   4.861,
+   17.331,
+   83.5
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "FEMUR_INSIDE-1/M3 washer-5"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   17.44,
+   4.456,
+   83.5
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/InsideFemurShaft-1",
+   "BODY-1/SIDE PANEL-1/RobotMount-1",
+   "BODY-1/SIDE PANEL-1/Side panel-1",
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "FEMUR_INSIDE-1/M3 washer-6"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "50mm",
+  "hf": [
+   -129.281,
+   -136.094,
+   85.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 50.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "Femur-1/Femur-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "50mm",
+  "hf": [
+   -139.065,
+   -126.08,
+   85.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 50.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "COUPLER-1/Coupler-1",
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "Femur-1/Femur-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "FEMUR_INSIDE-1/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "18mm",
+  "hf": [
+   -139.18,
+   -135.979,
+   85.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 18.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "FEMUR_INSIDE-1/Femur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Femur-1/M2.5 Roundhead-1",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   -3.646,
+   -12.998,
+   157.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "Femur-1/AK45-10 Rotor-1",
+   "Femur-1/Femur-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Femur-1/M2.5 Roundhead-2",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   13.08,
+   3.342,
+   157.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "Femur-1/AK45-10 Rotor-1",
+   "Femur-1/Femur-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Femur-1/M2.5 Roundhead-3",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   -9.434,
+   9.656,
+   157.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "BODY-1/SIDE PANEL-1/AK45-10 Stator-1",
+   "Femur-1/AK45-10 Rotor-1",
+   "Femur-1/Femur-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Femur-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -129.281,
+   -136.094,
+   157.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Femur-1/Femur-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Femur-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -139.065,
+   -126.08,
+   157.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "COUPLER-1/Coupler-1",
+   "Femur-1/Femur-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Femur-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "50mm",
+  "hf": [
+   -139.18,
+   -135.979,
+   154.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 50.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "Femur-1/Femur-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Femur-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "50mm",
+  "hf": [
+   -129.166,
+   -126.195,
+   154.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 50.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "FEMUR_INSIDE-1/Femur_inside-1",
+   "Femur-1/Femur-1",
+   "Tibia-1/Tibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftFemur-1/M2.5 Roundhead-4",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   -3.646,
+   -12.998,
+   -157.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/AK45-10 Rotor-1",
+   "LeftFemur-1/MirrorFemur-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftFemur-1/M2.5 Roundhead-5",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   13.08,
+   3.342,
+   -157.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/AK45-10 Rotor-1",
+   "LeftFemur-1/MirrorFemur-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftFemur-1/M2.5 Roundhead-6",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   -9.434,
+   9.656,
+   -157.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/AK45-10 Rotor-1",
+   "LeftFemur-1/MirrorFemur-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftFemur-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -129.281,
+   -136.094,
+   -157.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/MirrorFemur-1",
+   "LeftTibia-1/MirrorTibia-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftFemur-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -139.065,
+   -126.08,
+   -157.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/MirrorFemur-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftFemur-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "50mm",
+  "hf": [
+   -139.18,
+   -135.979,
+   -154.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 50.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/MirrorFemur-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftFemur-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "50mm",
+  "hf": [
+   -129.166,
+   -126.195,
+   -154.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 50.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/MirrorFemur-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M2 Roundhead-1",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -52.592,
+   -298.421,
+   -106.8
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.67,
+  "by_head": [
+   "LeftTibia-1/WheelMotorASM-1/Mount-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1",
+   "LeftTibia-1/WheelMotorASM-1/Magnet-2",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M2 Roundhead-2",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -63.209,
+   -302.84,
+   -106.8
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.67,
+  "by_head": [
+   "LeftTibia-1/WheelMotorASM-1/Mount-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1",
+   "LeftTibia-1/WheelMotorASM-1/Magnet-2",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -84.291,
+   -266.121,
+   -113.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -79.728,
+   -259.89,
+   -103.1
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MP30 connector-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-11",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -71.419,
+   -256.432,
+   -103.1
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MP30 connector-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -63.783,
+   -257.587,
+   -113.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -52.138,
+   -314.479,
+   -113.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -44.052,
+   -294.867,
+   -113.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -71.749,
+   -306.393,
+   -113.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -55.968,
+   -279.247,
+   -103.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -74.433,
+   -286.931,
+   -103.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -68.346,
+   -263.818,
+   -103.1
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -76.655,
+   -267.276,
+   -103.1
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Encoder-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M4 roundhead-1",
+  "file": "M4 roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -44.033,
+   -306.348,
+   -120.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 3.2,
+  "by_solid": [
+   "LeftTibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "near": [
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1",
+   "LeftTibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M4 roundhead-2",
+  "file": "M4 roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -52.183,
+   -286.763,
+   -120.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 3.2,
+  "by_solid": [
+   "LeftTibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1",
+   "LeftTibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M4 roundhead-3",
+  "file": "M4 roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -71.768,
+   -294.913,
+   -120.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 3.2,
+  "by_solid": [
+   "LeftTibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "near": [
+   "LeftTibia-1/EncoderCableClamp-1",
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1",
+   "LeftTibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "LeftTibia-1/M4 roundhead-4",
+  "file": "M4 roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -63.618,
+   -314.498,
+   -120.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 3.2,
+  "by_solid": [
+   "LeftTibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "near": [
+   "LeftTibia-1/EncoderCarrier-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "LeftTibia-1/WheelMotorASM-1/Mount-1",
+   "LeftTibia-1/WheelMotorASM-1/Rotor-1",
+   "LeftTibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-1",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   19.484,
+   11.253,
+   -96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-2",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   19.487,
+   -11.247,
+   -96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-3",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   0.003,
+   -22.5,
+   -96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-4",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   -19.484,
+   -11.253,
+   -96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M2.5 Roundhead-5",
+  "file": "M2.5 Roundhead.SLDPRT",
+  "config": "12mm",
+  "hf": [
+   -19.487,
+   11.247,
+   -96.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 12.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -36.42,
+   44.54,
+   -116.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.22,
+  "by_head": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/MirrorSwitch_Mount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "30mm",
+  "hf": [
+   -34.419,
+   67.633,
+   -102.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 30.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.0,
+  "free": 3.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/MirrorSwitch_Mount-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-11",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -9.0,
+   65.0,
+   -102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-30/CornerBracket-1",
+   "Box-1/CornerBracket-30/M3 nut-1",
+   "Box-1/CornerBracket-30/M3 nut-2",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-12",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -9.0,
+   30.0,
+   -102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/Battery-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/CornerBracket-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3 nut-1",
+   "Box-1/BottomPanelWithAvionics-1/CornerBracket-3/M3 nut-2",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-13",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   40.0,
+   70.0,
+   -102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-12/CornerBracket-1",
+   "Box-1/CornerBracket-12/M3 nut-1",
+   "Box-1/CornerBracket-12/M3 nut-2",
+   "Box-1/FacetRing-1",
+   "Box-1/M3 nut-4",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-14",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   40.0,
+   25.0,
+   -102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "Box-1/CornerBracket-11/CornerBracket-1",
+   "Box-1/CornerBracket-11/M3 nut-1",
+   "Box-1/CornerBracket-11/M3 nut-2",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-15",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   40.0,
+   47.5,
+   -102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.25,
+  "free": 3.25,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Box-1/CornerBracket-17/CornerBracket-1",
+   "Box-1/CornerBracket-17/M3 nut-1",
+   "Box-1/CornerBracket-17/M3 nut-2",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-16",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   4.95,
+   4.95,
+   -75.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-17",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   4.95,
+   -4.95,
+   -75.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-18",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -4.95,
+   -4.95,
+   -75.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-19",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -4.95,
+   4.95,
+   -75.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -29.42,
+   37.54,
+   -116.5
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.11,
+  "by_head": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-20",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "30mm",
+  "hf": [
+   -61.467,
+   60.447,
+   -102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 30.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.0,
+  "free": 3.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/LimitSwitch-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/MirrorSwitch_Mount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -36.42,
+   30.54,
+   -116.5
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.11,
+  "by_head": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "20mm",
+  "hf": [
+   -43.42,
+   37.54,
+   -116.5
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 20.0,
+  "buried": 0.11,
+  "by_head": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   -7.0,
+   0.0,
+   -87.0
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   0.0,
+   7.0,
+   -87.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   7.0,
+   0.0,
+   -87.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "16mm",
+  "hf": [
+   0.0,
+   -7.0,
+   -87.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 16.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "30mm",
+  "hf": [
+   -57.451,
+   68.501,
+   -102.0
+  ],
+  "a": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 30.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 3.0,
+  "free": 3.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/LimitSwitch-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/MirrorSwitch_Mount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/M2 Roundhead-1",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -53.862,
+   58.331,
+   -84.3
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/LimitSwitch-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/MirrorSwitch_Mount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/M2 Roundhead-2",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -48.045,
+   55.431,
+   -84.3
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/LimitSwitch-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1/MirrorSwitch_Mount-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -138.743,
+   -97.822,
+   -143.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/MirrorFemur-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1",
+   "MirrorCOUPLER-2/SmallBearingWahser-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -18.606,
+   44.218,
+   -118.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -148.596,
+   -98.779,
+   -143.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/MirrorTibia-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1",
+   "MirrorCOUPLER-2/SmallBearingWahser-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -149.554,
+   -88.926,
+   -143.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/MirrorTibia-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1",
+   "MirrorCOUPLER-2/SmallBearingWahser-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "35mm",
+  "hf": [
+   -139.7,
+   -87.969,
+   -143.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 35.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftTibia-1/MirrorTibia-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1",
+   "MirrorCOUPLER-2/SmallBearingWahser-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -21.729,
+   25.451,
+   -118.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/AK45-10 Stator-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -39.544,
+   18.773,
+   -118.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -54.234,
+   30.862,
+   -118.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -51.111,
+   49.629,
+   -118.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/SmallBearingWahser-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorCOUPLER-2/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -33.296,
+   56.307,
+   -118.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorCOUPLER-2/BearingWasher-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   12.579,
+   -12.875,
+   -83.5
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/M3 washer-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "18mm",
+  "hf": [
+   -129.166,
+   -126.195,
+   -85.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 18.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -4.861,
+   -17.331,
+   -83.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/M3 washer-2",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -17.44,
+   -4.456,
+   -83.5
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/M3 washer-3",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   -12.579,
+   12.875,
+   -83.5
+  ],
+  "a": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/M3 washer-4",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   4.861,
+   17.331,
+   -83.5
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Box-1/BottomPanelWithAvionics-1/Battery-1",
+   "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/M3 washer-5",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "8mm",
+  "hf": [
+   17.44,
+   4.456,
+   -83.5
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   1.0
+  ],
+  "Ls": 8.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.75,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "MirrorBODY-2/MirrorSIDE PANEL-1/InsideFemurShaft-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorRobotMount-1",
+   "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSide panel-1",
+   "MirrorFEMUR_INSIDE-2/M3 washer-6",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "50mm",
+  "hf": [
+   -129.281,
+   -136.094,
+   -85.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 50.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/MirrorFemur-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "50mm",
+  "hf": [
+   -139.065,
+   -126.08,
+   -85.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 50.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "LeftFemur-1/MirrorFemur-1",
+   "LeftTibia-1/MirrorTibia-1",
+   "MirrorCOUPLER-2/MirrorCoupler-1",
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "MirrorFEMUR_INSIDE-2/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "18mm",
+  "hf": [
+   -139.18,
+   -135.979,
+   -85.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 18.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "MirrorFEMUR_INSIDE-2/MirrorFemur_inside-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M2 Roundhead-1",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -52.592,
+   -298.421,
+   106.8
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.67,
+  "by_head": [
+   "Tibia-1/WheelMotorASM-1/Mount-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "Tibia-1/WheelMotorASM-1/Magnet-2",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M2 Roundhead-2",
+  "file": "M2 Roundhead.SLDPRT",
+  "config": "6mm",
+  "hf": [
+   -63.209,
+   -302.84,
+   106.8
+  ],
+  "a": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "Ls": 6.0,
+  "buried": 0.67,
+  "by_head": [
+   "Tibia-1/WheelMotorASM-1/Mount-1"
+  ],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "Tibia-1/WheelMotorASM-1/Magnet-2",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-1",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -84.291,
+   -266.121,
+   113.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-10",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -79.728,
+   -259.89,
+   103.1
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/MP30 connector-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-11",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -71.419,
+   -256.432,
+   103.1
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/MP30 connector-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-2",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -63.783,
+   -257.587,
+   113.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-3",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -52.138,
+   -314.479,
+   113.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-4",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -44.052,
+   -294.867,
+   113.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-5",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "10mm",
+  "hf": [
+   -71.749,
+   -306.393,
+   113.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 10.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-6",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -55.968,
+   -279.247,
+   103.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-7",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -74.433,
+   -286.931,
+   103.0
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-8",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -68.346,
+   -263.818,
+   103.1
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M3 Roundhead-9",
+  "file": "M3 Roundhead.SLDPRT",
+  "config": "14mm",
+  "hf": [
+   -76.655,
+   -267.276,
+   103.1
+  ],
+  "a": [
+   -0.0,
+   -0.0,
+   -1.0
+  ],
+  "Ls": 14.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 0.0,
+  "by_solid": [],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Encoder-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M4 roundhead-1",
+  "file": "M4 roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -44.033,
+   -306.348,
+   120.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 3.2,
+  "by_solid": [
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "near": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1",
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M4 roundhead-2",
+  "file": "M4 roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -52.183,
+   -286.763,
+   120.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 3.2,
+  "by_solid": [
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1",
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M4 roundhead-3",
+  "file": "M4 roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -71.768,
+   -294.913,
+   120.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 3.2,
+  "by_solid": [
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "near": [
+   "Tibia-1/EncoderCableClamp-1",
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1",
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "doubled": []
+ },
+ {
+  "name": "Tibia-1/M4 roundhead-4",
+  "file": "M4 roundhead.SLDPRT",
+  "config": "25mm",
+  "hf": [
+   -63.618,
+   -314.498,
+   120.0
+  ],
+  "a": [
+   -0.0,
+   0.0,
+   -1.0
+  ],
+  "Ls": 25.0,
+  "buried": 0.0,
+  "by_head": [],
+  "seated": 1.0,
+  "sticks_out": 0.0,
+  "free": 0.0,
+  "in_solid": 3.2,
+  "by_solid": [
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "near": [
+   "Tibia-1/EncoderCarrier-1",
+   "Tibia-1/Tibia-1",
+   "Tibia-1/WheelMotorASM-1/Mount-1",
+   "Tibia-1/WheelMotorASM-1/Rotor-1",
+   "Tibia-1/WheelMotorASM-1/Stator-1"
+  ],
+  "doubled": []
+ }
+]

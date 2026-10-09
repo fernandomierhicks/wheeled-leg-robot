@@ -1,0 +1,339 @@
+{
+ "add": [
+  {
+   "group": "stator-sidepanel-left",
+   "line": 107,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\MirrorSIDE PANEL.SLDASM",
+   "seat": [
+    19.484,
+    11.2528,
+    -96.5
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "MirrorSide panel-1",
+   "bore_mid": [
+    19.484,
+    11.2528,
+    -100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "MirrorSide panel-1",
+   "t": 20.5,
+   "probe": 2.0,
+   "inst": "MirrorBODY-2/MirrorSIDE PANEL-1",
+   "how": "mirrored (opposite hand)",
+   "thread": {
+    "leaf": "AK45-10 Stator-1",
+    "r": 1.025,
+    "mid": [
+     19.484,
+     11.2528,
+     -107.317
+    ]
+   }
+  },
+  {
+   "group": "stator-sidepanel-left",
+   "line": 108,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\MirrorSIDE PANEL.SLDASM",
+   "seat": [
+    19.4872,
+    -11.2472,
+    -96.5
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "MirrorSide panel-1",
+   "bore_mid": [
+    19.4872,
+    -11.2472,
+    -100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "MirrorSide panel-1",
+   "t": 20.5,
+   "probe": 2.0,
+   "inst": "MirrorBODY-2/MirrorSIDE PANEL-1",
+   "how": "mirrored (opposite hand)",
+   "thread": {
+    "leaf": "AK45-10 Stator-1",
+    "r": 1.025,
+    "mid": [
+     19.4872,
+     -11.2472,
+     -107.317
+    ]
+   }
+  },
+  {
+   "group": "stator-sidepanel-left",
+   "line": 109,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\MirrorSIDE PANEL.SLDASM",
+   "seat": [
+    0.0032,
+    -22.5,
+    -96.5
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "MirrorSide panel-1",
+   "bore_mid": [
+    0.0032,
+    -22.5,
+    -100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "MirrorSide panel-1",
+   "t": 20.5,
+   "probe": 2.0,
+   "inst": "MirrorBODY-2/MirrorSIDE PANEL-1",
+   "how": "mirrored (opposite hand)",
+   "thread": {
+    "leaf": "AK45-10 Stator-1",
+    "r": 1.025,
+    "mid": [
+     0.0032,
+     -22.5,
+     -107.317
+    ]
+   }
+  },
+  {
+   "group": "stator-sidepanel-left",
+   "line": 110,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\MirrorSIDE PANEL.SLDASM",
+   "seat": [
+    -19.484,
+    -11.2528,
+    -96.5
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "MirrorSide panel-1",
+   "bore_mid": [
+    -19.484,
+    -11.2528,
+    -100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "MirrorSide panel-1",
+   "t": 20.5,
+   "probe": 2.0,
+   "inst": "MirrorBODY-2/MirrorSIDE PANEL-1",
+   "how": "mirrored (opposite hand)",
+   "thread": {
+    "leaf": "AK45-10 Stator-1",
+    "r": 1.025,
+    "mid": [
+     -19.484,
+     -11.2528,
+     -107.317
+    ]
+   }
+  },
+  {
+   "group": "stator-sidepanel-left",
+   "line": 111,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "12mm",
+   "asm": "Body\\MirrorSIDE PANEL.SLDASM",
+   "seat": [
+    -19.4872,
+    11.2472,
+    -96.5
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "bore": "MirrorSide panel-1",
+   "bore_mid": [
+    -19.4872,
+    11.2472,
+    -100.25
+   ],
+   "bore_r": 1.35,
+   "seat_part": "MirrorSide panel-1",
+   "t": 20.5,
+   "probe": 2.0,
+   "inst": "MirrorBODY-2/MirrorSIDE PANEL-1",
+   "how": "mirrored (opposite hand)",
+   "thread": {
+    "leaf": "AK45-10 Stator-1",
+    "r": 1.025,
+    "mid": [
+     -19.4872,
+     11.2472,
+     -107.317
+    ]
+   }
+  },
+  {
+   "group": "femur-rotor-left",
+   "line": 152,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "16mm",
+   "asm": "Links\\MirrorFemur.SLDASM",
+   "seat": [
+    -0.7065,
+    -13.4815,
+    -147.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    1.0
+   ],
+   "bore": "Femur-1",
+   "bore_mid": [
+    -0.7065,
+    -13.4815,
+    -152.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Femur-1",
+   "t": -10.0,
+   "probe": 2.0,
+   "inst": "MirrorFemur-4",
+   "how": "rigid copy (instance)"
+  },
+  {
+   "group": "femur-rotor-left",
+   "line": 153,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "16mm",
+   "asm": "Links\\MirrorFemur.SLDASM",
+   "seat": [
+    12.0286,
+    6.1289,
+    -147.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    1.0
+   ],
+   "bore": "Femur-1",
+   "bore_mid": [
+    12.0286,
+    6.1289,
+    -152.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Femur-1",
+   "t": -10.0,
+   "probe": 2.0,
+   "inst": "MirrorFemur-4",
+   "how": "rigid copy (instance)"
+  },
+  {
+   "group": "femur-rotor-left",
+   "line": 154,
+   "model": "Common\\M2.5 Roundhead.SLDPRT",
+   "config": "16mm",
+   "asm": "Links\\MirrorFemur.SLDASM",
+   "seat": [
+    -11.3221,
+    7.3527,
+    -147.0
+   ],
+   "dir": [
+    -0.0,
+    -0.0,
+    1.0
+   ],
+   "bore": "Femur-1",
+   "bore_mid": [
+    -11.3221,
+    7.3527,
+    -152.0
+   ],
+   "bore_r": 1.4,
+   "seat_part": "Femur-1",
+   "t": -10.0,
+   "probe": 2.0,
+   "inst": "MirrorFemur-4",
+   "how": "rigid copy (instance)"
+  },
+  {
+   "group": "limit-switch-left",
+   "line": 112,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "8mm",
+   "asm": "Body\\LimitSwitch\\MirrorSwicthMount.SLDASM",
+   "seat": [
+    -53.8621,
+    58.3311,
+    -87.25
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "LimitSwitch-1",
+   "bore_mid": [
+    -53.8621,
+    58.3311,
+    -84.9
+   ],
+   "bore_r": 1.1,
+   "seat_part": "LimitSwitch-1",
+   "t": 5.2,
+   "probe": 1.3,
+   "inst": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1",
+   "how": "rigid copy (instance)"
+  },
+  {
+   "group": "limit-switch-left",
+   "line": 113,
+   "model": "Common\\M2 Roundhead.SLDPRT",
+   "config": "8mm",
+   "asm": "Body\\LimitSwitch\\MirrorSwicthMount.SLDASM",
+   "seat": [
+    -48.045,
+    55.4308,
+    -87.25
+   ],
+   "dir": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "bore": "LimitSwitch-1",
+   "bore_mid": [
+    -48.045,
+    55.4308,
+    -84.9
+   ],
+   "bore_r": 1.1,
+   "seat_part": "LimitSwitch-1",
+   "t": 5.2,
+   "probe": 1.3,
+   "inst": "MirrorBODY-2/MirrorSIDE PANEL-1/MirrorSwicthMount-1",
+   "how": "rigid copy (instance)"
+  }
+ ]
+}

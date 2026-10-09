@@ -1,0 +1,294 @@
+{
+ "add": [
+  {
+   "group": "ring",
+   "line": 901,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "14mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -145.0,
+    78.0,
+    70.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -145.0,
+    75.75,
+    70.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetRing-1",
+   "t": 2.25,
+   "probe": 3.6,
+   "bracket": "CornerBracket-1",
+   "kind": "corner"
+  },
+  {
+   "group": "ring",
+   "line": 902,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -83.5,
+    78.0,
+    65.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -83.5,
+    75.75,
+    65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetRing-1",
+   "t": 2.25,
+   "probe": 3.6,
+   "bracket": "CornerBracket-21",
+   "kind": "side"
+  },
+  {
+   "group": "ring",
+   "line": 903,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -140.0,
+    78.0,
+    0.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -140.0,
+    75.75,
+    0.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetRing-1",
+   "t": 2.25,
+   "probe": 3.6,
+   "bracket": "CornerBracket-26",
+   "kind": "side"
+  },
+  {
+   "group": "ring",
+   "line": 904,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -9.0,
+    78.0,
+    65.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -9.0,
+    75.75,
+    65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetRing-1",
+   "t": 2.25,
+   "probe": 3.6,
+   "bracket": "CornerBracket-28",
+   "kind": "side"
+  },
+  {
+   "group": "ring",
+   "line": 905,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "14mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    45.0,
+    78.0,
+    70.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    45.0,
+    75.75,
+    70.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetRing-1",
+   "t": 2.25,
+   "probe": 3.6,
+   "bracket": "CornerBracket-4",
+   "kind": "corner"
+  },
+  {
+   "group": "ring",
+   "line": 906,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "14mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -145.0,
+    78.0,
+    -70.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -145.0,
+    75.75,
+    -70.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetRing-1",
+   "t": 2.25,
+   "probe": 3.6,
+   "bracket": "CornerBracket-9",
+   "kind": "corner"
+  },
+  {
+   "group": "ring",
+   "line": 907,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -83.5,
+    78.0,
+    -65.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -83.5,
+    75.75,
+    -65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetRing-1",
+   "t": 2.25,
+   "probe": 3.6,
+   "bracket": "CornerBracket-31",
+   "kind": "side"
+  },
+  {
+   "group": "ring",
+   "line": 908,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -9.0,
+    78.0,
+    -65.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    -9.0,
+    75.75,
+    -65.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetRing-1",
+   "t": 2.25,
+   "probe": 3.6,
+   "bracket": "CornerBracket-30",
+   "kind": "side"
+  },
+  {
+   "group": "ring",
+   "line": 909,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "14mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    45.0,
+    78.0,
+    -70.0
+   ],
+   "dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "bore": "Box-1/FacetRing-1",
+   "bore_mid": [
+    45.0,
+    75.75,
+    -70.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetRing-1",
+   "t": 2.25,
+   "probe": 3.6,
+   "bracket": "CornerBracket-12",
+   "kind": "corner"
+  },
+  {
+   "group": "facetback",
+   "line": 911,
+   "model": "Common\\M3 Flathead.SLDPRT",
+   "config": "10mm",
+   "asm": "Box\\Box.SLDASM",
+   "seat": [
+    -153.01,
+    65.0,
+    -0.0
+   ],
+   "dir": [
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   "bore": "Box-1/FacetBack-1",
+   "bore_mid": [
+    -150.775,
+    65.0,
+    -0.0
+   ],
+   "bore_r": 1.7,
+   "seat_part": "Box-1/FacetBack-1",
+   "t": 2.235,
+   "probe": 3.6,
+   "bracket": "CornerBracket-26",
+   "kind": "side"
+  }
+ ]
+}
