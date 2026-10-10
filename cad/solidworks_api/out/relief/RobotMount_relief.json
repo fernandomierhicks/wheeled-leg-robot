@@ -1,0 +1,86 @@
+{
+ "part": "RobotMount",
+ "ops": [
+  {
+   "name": "stepbar",
+   "op": "press",
+   "area": 566.67,
+   "d": 1.0,
+   "t": 1.0,
+   "colour": "graphite",
+   "removed": 581.857,
+   "floor": 0.0
+  }
+ ],
+ "checks": [
+  {
+   "name": "stepbar",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -11.36 mm2"
+  }
+ ],
+ "changed": [
+  {
+   "index": 8,
+   "name": "white_4",
+   "kind": "white",
+   "volume": 57.5451,
+   "final": 56.4821,
+   "pieces": [
+    56.4821
+   ],
+   "gone": false,
+   "tool": "RobotMount_tool8.step"
+  },
+  {
+   "index": 9,
+   "name": "white_3",
+   "kind": "white",
+   "volume": 57.5451,
+   "final": 56.4821,
+   "pieces": [
+    56.4821
+   ],
+   "gone": false,
+   "tool": "RobotMount_tool9.step"
+  },
+  {
+   "index": 10,
+   "name": "white_5",
+   "kind": "white",
+   "volume": 57.5451,
+   "final": 56.4821,
+   "pieces": [
+    56.4821
+   ],
+   "gone": false,
+   "tool": "RobotMount_tool10.step"
+  },
+  {
+   "index": 13,
+   "name": "PT_trench1",
+   "kind": "white",
+   "volume": 92366.6534,
+   "final": 92356.8569,
+   "pieces": [
+    92356.8569
+   ],
+   "gone": false,
+   "tool": "RobotMount_tool13.step"
+  },
+  {
+   "index": 14,
+   "name": "PT_trench2",
+   "kind": "graphite",
+   "volume": 3974.3569,
+   "final": 3405.1806,
+   "pieces": [
+    3405.1806
+   ],
+   "gone": false,
+   "tool": "RobotMount_tool14.step"
+  }
+ ],
+ "new": [],
+ "ok": true
+}

@@ -24,6 +24,135 @@ git). This file is the cheatsheet: read it before touching SolidWorks from code.
 > `chain()` itself (22, 23); a new one must too. Don't end a session -- or start
 > a long sweep -- with unsaved assemblies.
 
+## ▶ Relief: colour shapes pressed, grooves on the link sides -- 2026-10-09 (`28_relief.py`)
+
+His brief (4 marked screenshots): "whenever there is a shape of different colour in a part, when
+possible make it a recess or a shallow extrusion -- we are 3D printed, complexity is free" (his
+examples: the RobotMount step-bar, the FacetBack brow trace, the FacetHood tier-1 brow); "the
+widest periphery of the FacetHood is white space with no features -- add aggressive dark grey and
+blue features"; "more accents on the sides of the links".  His calls: **PRESSED by default**
+(removals only, so nothing new can collide; raised only where nothing passes); scope = the box
+parts, the RobotMount field, the encoder parts + wheel hub (NOT the recipe graphite of every
+GLACIER link); **recessed grooves with coloured floors** on the link sides; offline renders
+first (he approved them as rendered).
+
+**How a part changes (`28_relief.py`, everything at the END of the tree, like 24's pipes):**
+`press(face, region, d, colour, t)` -- the region sinks d, on a floor t thick in `colour`; every
+body loses what the recess covers, every body of another colour also the floor slab, which
+comes back as one new body.  `raise_(face, region, h, colour)` -- a new body h proud.  In
+SolidWorks: per changed body its cutter (Imported `RL_toolN_k`) Combine-subtracted (`RL_cutN`,
+the pieces re-coloured: a Combine drops the colour), a swallowed body deleted (`RL_goneN`), the
+new bodies (`RL_<op>_<n>`, coloured).  **No face a mate uses is touched** -- FacetBack /
+FacetFront (brackets, switch) and the TailStrut (`TS_*`) keep their mates; 0 mate errors in
+every chain.  Checked against the offline result: body count exact, each body within 0.15 mm3
+or 250 ppm by volume, and **`probe`**: the as-built part exported from SolidWorks, 40 points
+per op half-way down every recess (must be in no body) and 0.3 into every floor (must be
+solid).  Volumes alone could not tell a missed cut from kernel noise: Parasolid vs OCC on the
+big cut bodies came out +0.097 / +3.5 / +9.6 mm3 (clamp / FacetFront / Coupler, every other
+body 0.0000), while 3300 points sampled round and through the Coupler's 11 grooves, edges
+included, agree everywhere.
+
+| part | what | depth |
+|---|---|---|
+| RobotMount (image 1) | the field's graphite step-bar + the recipe bar it carries on from; the white slashes in its head stay as standing ribs; stops 2 mm short of the trench slot | 1.0 into its own (through-plate) graphite |
+| FacetBack (image 2) | blue brow trace -> channel on a blue floor; dark linings of the I/O bay + control pod stepped down; graphite vent slashes pressed on the back face AND the left cheek they wrap onto; NEW: 3 dark raked slots right of the centre screw | 0.9 / 1.0 |
+| FacetFront | dark lining of the screen well stepped (its thin sliver stays flush); the two blue cheek traces -> channels | 1.0 / 0.9 |
+| TailStrut | blue chevrons (pad flanks), blue window lining (both keel flanks), tail facet line -> channels.  NOT the dark crystal panels: most of their facet, and the keel behind is thinner than floor + 1 mm | 0.9 |
+| EncoderCarrier / CableClamp | every inlay >= 0.9 mm wide (magnet ring, centre dot, arm pads; the clamp's frame band, chevrons, pad) | 0.4 on a 0.6 floor |
+| Wheel hub | the flush inlays >= 0.9 mm wide **RAISED** 0.6 (white chevron brackets + pads, blue traces): the hub face is a 0.8 mm floor that carries the wheel on its 4 screws -- nothing pressed into it; nothing in the robot is outboard of it | +0.6 |
+| Femur, Femur_inside, Coupler, Tibia (image 4) | grooves on the long side faces (`SIDES`): repeating units -- a graphite plate with a 45-deg raked end, a raked blue hatch comb, a blue dogleg channel with a diamond pad; on the tall sides (Tibia, femur flange) a long blue lane beside them | 0.8 on a 0.8 floor |
+
+**Rules the generator keeps (printed when it drops something, never silent):** a shape narrower
+than 0.9 mm anywhere stays flush (a 0.4 nozzle cannot print its recess -- the encoder ticks and
+bus, the wheel's fine traces, the clamp's bus); a shape touching a face's outer edge is not
+pressed unless meant to (`inside=-1` for the linings and vents); solid >= 1.0 mm behind every
+floor; a press over an EXISTING inlay grows 0.05 into the body round it and its floor shrinks
+0.05 inside it (no tool face on the inlay's own walls -- a floor slab on the RobotMount's
+through-plate graphite walls wiped the whole white plate in OCC); every cutter runs 3 mm out
+into air.  Link sides: 1.2 mm from every edge, pocket and other colour; exposed (nothing of the
+part within 25 mm in front of it); clear of the DESIGNED contacts (`out/contact_keepout.json`
++ 2 mm: the limit switch and the hard stop on Femur_inside / Coupler).
+
+**The FacetHood is not done by 28** -- its source is `hood_variants.variant_B(relief=True)` ("B";
+"B0" = the hood as it was), into SolidWorks by the documented reimport -- now
+**`21 reimport FacetHood --remate-seats`**: since the fasteners (10-08) the hood's 10 countersunk
+screws hold it by coincident SEAT mates (`FS_hood-ring±_L147..151_seat`: screw head plane on the
+skirt face), which a reimport breaks; the option records each one's plane (`IMate2.MateEntity`
+-> `EntityParams`, Box frame), deletes them, reimports, and re-makes each on the new face in that
+plane and the screw's face found by geometry, through 25's `Asm.mate` (kept only if nothing
+moves).  2026-10-09: 190 bodies = the STEP (worst 0.0097 mm3), 10 of 10 re-made, 0 mate errors;
+then `16 --chain`, `24 export / preview / build FacetHood` (the 3 hoses: 0.00 mm2 off free
+ground on the new hood, 196 bodies = predicted).  What the relief is:
+* every flush colour shape pressed (`PRESS_D` 0.6 on `FLOOR_T` 0.8, `press()` backs the wall in
+  the empty cavity so it stays 2.5): rim rivets, the plates' traces and pads (no backing: the
+  plate is solid), the field circuit + combs, the side-slope panels (now a white frame round
+  each), their ticks sunk further, the visor brow (visor + combs sunk into it), the exhaust
+  bands (slots sunk into them), tier 1's front brow;
+* tier 1 (image 3): dark floors in its side / back pockets, blue raked combs between them, dark
+  raked vents + a graphite plate with dark slots on the front facet, a graphite plate with dark
+  vents on each front corner facet (backing never below `Y_T1_MIN` 86.2: the ring wall);
+* the skirt (y 78..86): between the hood screws (`SKIRT_KEEP` 5) on every facet, a graphite
+  plate with raked ends pressed 0.6, a row of dark raked slots 0.4 further into its middle, a
+  blue comb at its forward end.  **No backing on the skirt** -- the ring wall is 0.3 behind it --
+  so 1.0 deep at most (1.5 of the 2.5 wall left);
+* `checks()`: below y 99.5 only the skirt's outer skin (away from the screws) and tier 1 may
+  differ (`relief_zone()`): 0.0000 mm3 elsewhere -- ring fit, countersinks, ledge, strip
+  channel unchanged; envelope unchanged (y <= 117.2, |z| <= 78); 0 loose solids; outside
+  overhang 530 mm2 (was 189): the 0.6 mm ceilings of the skirt recesses, skirt-down in print.
+
+**Commands:** `28 export` (read-only: multi-body STEP + colours + placement of each part as it
+is in SolidWorks -> `out/relief/src/`), `28 faces <Part>` (its planes by area per colour),
+`28 uvmap <Part> nx ny nz d [ux uy uz]` (a face-on render with a mm grid, to design on),
+`28 preview` (offline: every op, checks, cutters + new bodies + `<Part>_after.step`, board
+`out/relief/<Part>_relief.png`), `28 robot [hip] [--views=..]` (whole robot before | after from
+his four camera angles, `out/relief/robot_relief_<n>.png`), `28 build <Part>` (into SolidWorks,
+`probe`, `16 --chain`), `28 verify <Part>` (read-only: export as built + `probe`),
+`28 export --all` + `28 print --all` (EVERY printed part's Bambu 3MF from SolidWorks as it is
+now -- the relief parts refused until built; box parts / wheel / encoder parts in their print
+orientation, links and washers in the part frame, bumpers one TPU filament).
+
+**Order matters -- after any of these, re-run what comes after it:** `08/09 --restyle` of a link
+-> `24 build <Part>` (pipes) -> `28 export / preview / build <Part>` -> `25 mirror-colours`.
+`box_facet_print.py` / `tail_strut.py` + reimport of a box part -> `24` -> `28` the same.
+The RL_ features sit after the GL_ and PP_ ones; a restyle deletes GL_ only, and its volume
+proof will then fail on the RL_ bodies -- delete the RL_ features first (`28 build` re-adds).
+
+**Built 2026-10-09 (all saved through `16 --chain`, 0 mate errors in every chain):** RobotMount
+18 bodies, FacetFront 4, FacetBack 13, TailStrut 20, EncoderCarrier 24, EncoderCableClamp 19,
+Wheel 31, Femur 41, Femur_inside 41, Coupler 47, Tibia 69 -- each = the prediction, `probe`
+all right (`28 verify` for the first four, built before the probe existed); `25 mirror-colours`:
+MirrorFemur 41 / MirrorTibia 69 / MirrorCoupler 47 / MirrorFemur_inside 41 / MirrorRobotMount 18
+bodies matched and coloured, chain-saved.  Then (his call) a guarded save-all (`16`, plain) and
+**every print file regenerated from SolidWorks** (`28 export --all`, `28 print --all`: the 11
+relief parts + Side panel, FacetHood, FacetRing, both bumpers, the 3 washers; same names and
+orientations as before -- 19 3MFs in `out/print/`).  Backups of every file the build changed +
+the old 3MFs: `_originals/pre_relief_2026-10-09/`.
+
+**Gotchas paid for:**
+* **Never drop "debris" by size alone.**  The first build deleted every body under 0.5 mm3 (as
+  GL_DropDebris does) and took real colour bodies with it: the encoder's 0.48 mm3 code-wheel
+  ticks, a wheel dot, two clamp chevron pieces.  Now only bodies the prediction does not have,
+  and only true slivers (< 0.02 mm3); the three parts were rebuilt.
+* **`stepcolor.write` drops bodies under 1 mm3** (`MIN_BODY_MM3`, meant for boolean debris): three
+  EncoderCarrier floors (0.49-0.89 mm3) never reached SolidWorks and left 0.4 mm voids.  28 sets
+  it to 0 for its outputs, and `build` refuses unless the new-body STEP holds exactly the
+  predicted count.
+* **Check imported bodies against the PREDICTION, not against themselves.**  The wheel's raised
+  chevrons were cut by the flush inlay touching them AT the face (a coincident-face boolean:
+  one came out at half volume, one bigger than its prism), and each kernel then read the STEP
+  differently -- the build passed because it compared SolidWorks with what it had just
+  imported.  `raise_` now cuts only by what stands above the face (a probe 0.02 up), and every
+  new body is compared with its predicted volume.
+* SolidWorks' STEP export of a broken body reads differently in OCC (the same wheel bodies: 12.3
+  vs 13.6 mm3) -- `print` falls back to the imported RL_ bodies if a body cannot be matched.
+* A body imported from STEP can carry its colour on its FACES only (`colour_from` "face" / "part"
+  in the export): a Combine's new faces then show the part's default appearance -- every cut
+  piece is given a body colour from the export.
+* An OCC boolean probe whose face lies ON a body face returns nothing (the checks read "0 %
+  solid" behind a 2 mm sleeve): probes sit 0.05 inside the region and off the face.
+* Fusing 18-46 touching colour bodies into one is what OCC fails at (Null shape): volumes
+  are summed body by body.
+
 ## ▶ Mirror fix: the left leg, the brackets, the ring screws -- 2026-10-08 (`27_mirror_fix.py`)
 
 His brief (4 marked screenshots): fix every wrong fastener; align all the corner brackets; the
@@ -319,8 +448,9 @@ its traces -> corrugated hoses (his marks).
 * **To change the hood:** edit `variant_B()` in `hood_variants.py`, check with
   `hood_variants.py <dir> B --sheets`, then `box_facet_print.py <scratch dir>`, copy ONLY
   `FacetHood.step` into `Box/Facet/` (the other parts' 3MFs carry pipes -- never re-run it
-  with `--3mf`), `21 reimport FacetHood`, `16 --chain Box/Facet/FacetHood.SLDPRT`,
-  `24 export`, `preview`, `build`, `print FacetHood`.
+  with `--3mf`), `21 reimport FacetHood --remate-seats` (the screw seat mates, since 10-08),
+  `16 --chain Box/Facet/FacetHood.SLDPRT`, `24 export`, `preview`, `build`, `print FacetHood`
+  (or `28 export FacetHood` + `28 print FacetHood`).
 
 ## ▶ Corrugated pipes, 2026-10-07 -- blue ribbed hoses half-buried in the parts
 
@@ -796,7 +926,7 @@ C:/Users/ferna/cadenv/Scripts/python.exe cad/solidworks_api/01_hello.py
 | `19_box_check.py` | the body box: constraint status + mate errors in Box and every sub-assembly, live in-context references, Box-1 in ROBOT, the 10 side-panel holes both sides | works -- see "The body box" |
 | `20_box_concepts.py import <dir>` / `assemble` / `render` | the box concepts (from `cad/aesthetics/parts/box_concepts.py`) as parts, each on the real robot in its own concept assembly; renders. Never edits or saves ROBOT or Box | works |
 | `21_box_facet.py import / install / fixup / save-box / distance / save-robot / check` | the D FACET print box into Box.SLDASM: STEP -> SLDPRT, old box suppressed, PLANE1 re-pointed, old mates re-made on the new parts, Distance1 75, guarded saves. Opens Box ALONE for the edits (GPU out-of-memory crash otherwise) | works -- see "The print box" |
-| `21_box_facet.py reimport <Part>` / `colour <Part>` | a changed STEP into the existing, OPEN Facet part in place (lock-mated parts only; nothing closed or saved), bodies checked against the STEP by volume and coloured from it (3D Interconnect drops STEP colour) | works -- see "Hood B" |
+| `21_box_facet.py reimport <Part> [--remate-seats]` / `colour <Part>` | a changed STEP into the existing, OPEN Facet part in place (lock-mated parts only -- or with `--remate-seats`, fastener seat mates recorded, deleted and re-made by geometry; nothing closed or saved), bodies checked against the STEP by volume and coloured from it (3D Interconnect drops STEP colour) | works -- see "Hood B", "Relief" |
 | `22_style_wheel.py preview / [--restyle] / verify / render` | the wheel rim's outboard hub face: raised octagon chip + crown inside the screw circle, flush circuit inlays, dark wheel; checks volumes, mates, then OCC verify vs the source STEP; STEP + print-oriented Bambu 3MF | works -- see "The wheel hub" |
 | `23_tail_strut.py import / install / check / save / render` | the tail strut (from `cad/aesthetics/parts/tail_strut.py`) replaces the v3 BackWheelSupport in BottomPanelWithAvionics: insert, record + suppress + re-make the old mates by geometry, checks, guarded save | works -- see "The tail strut" |
 | `24_pipes.py export / sweep / map / routes [--trench] / preview / robot / build / print` | corrugated half-pipes and trench pipes on the printed parts: offline route finding against the swept keep-out, previews, then Imported PP_ bodies (and PT_ trench cuts) in the v5 parts, checked body by body, `16 --chain`; Bambu 3MFs | works -- see "Corrugated pipes" |
@@ -804,6 +934,7 @@ C:/Users/ferna/cadenv/Scripts/python.exe cad/solidworks_api/01_hello.py
 | `25_fasteners.py scan --all` / `audit` | the whole robot, left side too (`scan_all.json`); every screw checked offline: head buried / not seated, tip in air, axis through solid, doubled (`out/fasteners/audit.json`) | works -- see "Mirror fix" |
 | `27_mirror_fix.py brackets / ring / leftleg / switch` (`features --dry`) | the left side as the exact mirror: box brackets (mirror features dissolved, exact mirrors, locked), the FacetRing's 9 screws + nuts, the left femur + tibia as ordinary assemblies (`LeftFemur`, `LeftTibia`) mated for the motion, the limit switches | works -- see "Mirror fix" |
 | `26_style_encoder.py preview / build [--restyle]` | EncoderCarrier + EncoderCableClamp: flush colour inlays on their inboard faces (palette A), STEP + 3MF | works -- see "Fasteners, the whole robot" |
+| `28_relief.py export / faces / uvmap / preview / robot / build / print` | colour shapes pressed into the parts (or raised: the wheel hub), grooves with coloured floors on the link sides; offline design + checks, then RL_ features at the end of each part's tree (no mate face touched), `16 --chain`; 3MFs | works -- see "Relief" |
 | `17_contact_keepout.py` | the contacts the robot is DESIGNED to make (pairs of the OFF baseline whose volume changes with the hip, touching a styled part) -> their interference bodies with styling OFF, in each part's frame -> `out/contact_keepout.json`; `08` keeps every removal and addition off them | works -- limit switch + retract hard stop on Femur_inside (127 mm2), the hard stop on the Coupler (22 mm2) |
 
 Interpreter: **`C:/Users/ferna/cadenv/Scripts/python.exe`** (has pywin32).
@@ -836,6 +967,7 @@ phases. Never save `ROBOT.SLDASM` while the `AI_HipDrive` helper mate exists
 | washers (BearingWasher, SmallBearingWahser, InsideFemurShaft) | `faces()` in `15_style_washers.py` | `15 preview` (2D, 1 s, no SolidWorks), `15 --restyle`, `15 render` |
 | encoder carrier / cable clamp look | `design()` in `26_style_encoder.py` | `26 preview A`, `26 build --restyle` (saves via chain, writes the 3MFs) |
 | a fastener (add / change length) | `GROUPS` / `STACKS` in `25_fasteners.py` (lines from `25 lines`, seats from `25 profile`) | `25 plan`, `25 build --dry`, `25 build <asm>`, `16 --chain <asm>`, `25 bom` |
+| pressed colour / link-side grooves (any part but the hood) | the part's `d_<part>()` in `28_relief.py` (`SIDES` + `_side_pattern` for the links) | `28 export <Part>` (if the part changed in SolidWorks), `28 preview <Part>`, look at `out/relief/<Part>_relief.png`, `28 build <Part>`, `25 mirror-colours` for a part with a left twin, `28 print <Part>` |
 | any styled part with a left twin (Femur, Tibia, Coupler, Femur_inside, Side panel, RobotMount) | -- | after its restyle: `25 mirror-colours`, `16 --chain` the Mirror* parts (the derived mirrors keep the bodies, not their colours) |
 | anything added to / moved in the right Femur.SLDASM or Tibia.SLDASM | the left twins are NOT mirror-feature outputs any more (`LeftFemur.SLDASM`, `LeftTibia.SLDASM`, "Mirror fix") | mirror the change into LeftFemur / LeftTibia by hand or with 27's `_local_mirror` (S . P . D, D the part's own symmetry); never edit FemurMirror / TibiaMirror from the API |
 | a design rule (seat sizes, margins) | `08_style_part.seat()` / `mech()` | `--restyle` every affected part |

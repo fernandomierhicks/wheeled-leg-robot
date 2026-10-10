@@ -1,0 +1,51 @@
+{
+ "part": "BumperBack",
+ "file": "Box\\Facet\\BumperBack.SLDPRT",
+ "dirty": true,
+ "relief_features": [],
+ "bodies": [
+  {
+   "name": "BumperBack.step<1>",
+   "volume": 31595.387,
+   "rgb": [
+    0.4314,
+    0.451,
+    0.4784
+   ],
+   "colour_from": "part",
+   "box": [
+    -170.0,
+    15.0,
+    -74.0,
+    -153.0,
+    74.5,
+    74.0
+   ]
+  }
+ ],
+ "instances": [
+  {
+   "name": "Box-1/BumperBack-1",
+   "placement": [
+    [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     1.0,
+     0.0
+    ]
+   ]
+  }
+ ]
+}

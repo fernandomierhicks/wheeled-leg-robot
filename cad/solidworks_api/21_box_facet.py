@@ -143,23 +143,93 @@ def do_import(sw):
         sw.CloseDoc(d.GetTitle())
 
 
-def do_reimport(sw, name):
+def seat_mates(box, name):
+    """The fastener SEAT mates on <name>-1 (25_fasteners' FS_*_seat: a screw head's plane
+    coincident with the part's face) -> [(mate name, alignment, part plane (n, d) in Box mm,
+    screw component name, the screw's mate face)].  The screw face stays valid through a
+    reimport of the part; the part's face does not, so its PLANE is what is kept."""
+    out = []
+    for s in M.mates_of(box):
+        if s.GetTypeName2() != "MateCoincident" or not any(cn.split("/")[0] == name + "-1"
+                                                          for cn in M.mate_components(s)):
+            continue
+        m = wrap(s.GetSpecificFeature2(), sld.IMate2)
+        ents = [wrap(m.MateEntity(i), sld.IMateEntity2) for i in range(m.GetMateEntityCount())]
+        mine = [e for e in ents if e.ReferenceComponent.Name2.split("/")[0] == name + "-1"]
+        other = [e for e in ents if e.ReferenceComponent.Name2.split("/")[0] != name + "-1"]
+        if len(mine) != 1 or len(other) != 1 or mine[0].ReferenceType2 != 2 or other[0].ReferenceType2 != 2:
+            raise SystemExit(f"REFUSING: {s.Name} is not a plane-on-plane seat mate")
+        p = np.array(mine[0].EntityParams[:6])
+        n = p[3:6] / np.linalg.norm(p[3:6])
+        out.append((s.Name, m.Alignment, n, float(n @ (p[:3] * 1000.0)), other[0].ReferenceComponent.Name2,
+                    wrap(other[0].Reference, sld.IFace2)))
+    return out
+
+
+def remate_seats(sw, name, seats):
+    """Re-make each recorded seat mate on the reimported part: the part's planar face lying in
+    the recorded plane (the largest, if the plane holds several) coincident with the screw's
+    face, as before -- through 25_fasteners' Asm.mate (kept only if nothing moves and it has
+    no error, else rolled back)."""
+    import importlib
+    F25 = importlib.import_module("25_fasteners")
+    A = F25.Asm(sw, r"Box\Box.SLDASM", np.hstack([np.eye(3), np.zeros((3, 1))]))
+    part = A.comp(name + "-1")
+    faces = [f for f in F25._faces_of(part, swlib.placement(part)) if f[0] == "plane"]
+    done = 0
+    for mname, align, n, d, scomp, sface in seats:
+        cand = [f for f in faces if f[2] @ n > 0.9999 and abs(f[3] - d) < 0.01]
+        if not cand:
+            print(f"  ! {mname}: no face of {name}-1 in the plane n {np.round(n, 3)} d {d:.3f} -- NOT re-made")
+            continue
+        face = max(cand, key=lambda f: f[5])[1]
+        screw = A.comp(scomp)
+        # the screw's face found again by geometry (in the same plane, either sense): the
+        # reference kept from the deleted mate is not trusted to have survived it
+        sf = [f for f in F25._faces_of(screw, swlib.placement(screw)) if f[0] == "plane"
+              and abs(f[2] @ n) > 0.9999 and abs(f[3] - (d if f[2] @ n > 0 else -d)) < 0.01]
+        if sf:
+            sface = max(sf, key=lambda f: f[5])[1]
+        ok, why = A.mate(mname, "coincident", face, sface, {scomp: screw, name + "-1": part})
+        print(f"  {mname}: {'re-made' if ok else 'FAILED ' + why}")
+        done += ok
+    print(f"  seat mates re-made: {done} of {len(seats)}")
+    return done == len(seats)
+
+
+def do_reimport(sw, name, remate=False):
     """A Facet part's new geometry IN PLACE from its STEP (v5/Box/Facet/<name>.step), in the
     open part document -- for when `import` would need the file deleted, i.e. everything
     closed (2026-10-07: 72 documents open, dirty).  The file, the component and its mates
     stay; refused unless every mate on the component is a Lock (a lock has no face
-    references, so new faces cannot break it -- the hood's two are).  Deletes the old
-    import feature and any PP_/PT_ pipe features (`24 build` re-adds them), inserts the
+    references, so new faces cannot break it -- the hood's two are) -- or, with --remate-seats,
+    a fastener seat mate (2026-10-09: the hood's 10 countersunk screws, FS_hood-ring*_seat):
+    those are recorded, deleted, and re-made on the new faces after the import.  Deletes the
+    old import feature and any PP_/PT_ pipe features (`24 build` re-adds them), inserts the
     STEP (IPartDoc.InsertImportedFeature, 3D Interconnect), then checks the bodies
     against the STEP's solids by volume.  Saves nothing: run `16 --chain` after."""
     import swstyle as S
     from build123d import import_step
     prt, step = os.path.join(FACET, name + ".SLDPRT"), os.path.join(FACET, name + ".step")
     box = find_doc(sw, BOXP)
+    seats = []
     if box is not None:
+        seats = seat_mates(box, name) if remate else []
+        seat_names = {x[0] for x in seats}
         for s in M.mates_of(box):
-            if any(cn.split("/")[0] == name + "-1" for cn in M.mate_components(s)) and s.GetTypeName2() != "MateLock":
-                raise SystemExit(f"REFUSING: {s.Name} ({s.GetTypeName2()}) references {name}-1's faces")
+            if any(cn.split("/")[0] == name + "-1" for cn in M.mate_components(s)) and s.GetTypeName2() != "MateLock" \
+                    and s.Name not in seat_names:
+                raise SystemExit(f"REFUSING: {s.Name} ({s.GetTypeName2()}) references {name}-1's faces"
+                                 f"{'' if remate else ' (a fastener seat? --remate-seats)'}")
+        if seats:
+            sw.ActivateDoc3(box.GetTitle(), False, 0, 0)
+            box.ClearSelection2(True)
+            for k, s in enumerate([s for s in M.mates_of(box) if s.Name in seat_names]):
+                s.Select2(k > 0, 0)
+            box.Extension.DeleteSelection2(0)
+            box.ClearSelection2(True)
+            box.EditRebuild3()
+            print(f"  recorded and deleted {len(seats)} seat mates: {sorted(seat_names)}")
     doc = find_doc(sw, prt)
     if doc is None:
         sw.OpenDoc6(prt, c.swDocPART, c.swOpenDocOptions_Silent, "", 0, 0)
@@ -194,6 +264,8 @@ def do_reimport(sw, name):
     if box is not None:
         sw.ActivateDoc3(box.GetTitle(), False, 0, 0)
         box.EditRebuild3()
+        if seats and not remate_seats(sw, name, seats):
+            raise SystemExit(f"{name}: not every seat mate was re-made -- nothing saved; look before saving")
         report(box)
 
 
@@ -576,8 +648,11 @@ def do_check(sw):
 
 if __name__ == "__main__":
     sw, _ = swlib.connect()
-    if sys.argv[1] in ("reimport", "colour"):
-        {"reimport": do_reimport, "colour": do_colour}[sys.argv[1]](sw, sys.argv[2])
+    if sys.argv[1] == "reimport":          # reimport <Part> [--remate-seats]
+        do_reimport(sw, sys.argv[2], remate="--remate-seats" in sys.argv)
+        raise SystemExit
+    if sys.argv[1] == "colour":
+        do_colour(sw, sys.argv[2])
         raise SystemExit
     {"import": do_import, "distance": do_distance, "install": install, "fixup": fixup, "check": do_check,
      "save-box": save_box, "save-robot": save_robot}[sys.argv[1]](sw)

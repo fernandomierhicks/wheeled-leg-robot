@@ -1,0 +1,140 @@
+{
+ "part": "FacetFront",
+ "ops": [
+  {
+   "name": "front_dark1",
+   "op": "press",
+   "area": 100.51,
+   "d": 1.0,
+   "t": 0.8,
+   "colour": "dark",
+   "removed": 107.064,
+   "floor": 0.0
+  },
+  {
+   "name": "front_dark1",
+   "op": "press",
+   "area": 100.44,
+   "d": 1.0,
+   "t": 0.8,
+   "colour": "dark",
+   "removed": 103.183,
+   "floor": 0.0
+  },
+  {
+   "name": "cheekR_blue1",
+   "op": "press",
+   "area": 21.99,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 37.397,
+   "floor": 15.965
+  },
+  {
+   "name": "cheekL_blue1",
+   "op": "press",
+   "area": 21.99,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 37.44,
+   "floor": 15.965
+  }
+ ],
+ "checks": [
+  {
+   "name": "front_dark1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "front_dark1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "cheekR_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "cheekL_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  }
+ ],
+ "changed": [
+  {
+   "index": 0,
+   "name": "FacetFront.step<1>[1]",
+   "kind": "white",
+   "volume": 57355.9038,
+   "final": 57279.9973,
+   "pieces": [
+    57279.9973
+   ],
+   "gone": false,
+   "tool": "FacetFront_tool0.step"
+  },
+  {
+   "index": 1,
+   "name": "FacetFront.step<1>[2]",
+   "kind": "dark",
+   "volume": 5750.4346,
+   "final": 5548.7361,
+   "pieces": [
+    5548.7361
+   ],
+   "gone": false,
+   "tool": "FacetFront_tool1.step"
+  },
+  {
+   "index": 2,
+   "name": "FacetFront.step<1>[4]",
+   "kind": "blue",
+   "volume": 3.7756,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "FacetFront_tool2.step"
+  },
+  {
+   "index": 3,
+   "name": "FacetFront.step<1>[3]",
+   "kind": "blue",
+   "volume": 3.7756,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "FacetFront_tool3.step"
+  }
+ ],
+ "new": [
+  {
+   "name": "cheekR_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    15.9654
+   ]
+  },
+  {
+   "name": "cheekL_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    15.9654
+   ]
+  }
+ ],
+ "ok": true
+}

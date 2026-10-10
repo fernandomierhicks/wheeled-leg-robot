@@ -1,0 +1,321 @@
+{
+ "part": "Coupler",
+ "ops": [
+  {
+   "name": "side0_0_b0",
+   "op": "press",
+   "area": 5.0,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 8.188,
+   "floor": 4.0
+  },
+  {
+   "name": "side0_0_b1",
+   "op": "press",
+   "area": 5.0,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 8.006,
+   "floor": 4.0
+  },
+  {
+   "name": "side0_0_b2",
+   "op": "press",
+   "area": 5.0,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 8.006,
+   "floor": 4.0
+  },
+  {
+   "name": "side0_1_b0",
+   "op": "press",
+   "area": 5.0,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 8.006,
+   "floor": 4.0
+  },
+  {
+   "name": "side0_1_b1",
+   "op": "press",
+   "area": 2.83,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 4.543,
+   "floor": 2.264
+  },
+  {
+   "name": "side0_1_b2",
+   "op": "press",
+   "area": 2.8,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 4.501,
+   "floor": 2.244
+  },
+  {
+   "name": "side0_1_g0",
+   "op": "press",
+   "area": 70.25,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 112.415,
+   "floor": 56.202
+  },
+  {
+   "name": "side0_2_b0",
+   "op": "press",
+   "area": 2.8,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 4.5,
+   "floor": 2.244
+  },
+  {
+   "name": "side0_2_b1",
+   "op": "press",
+   "area": 2.8,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 4.5,
+   "floor": 2.244
+  },
+  {
+   "name": "side0_2_b2",
+   "op": "press",
+   "area": 2.8,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 4.5,
+   "floor": 2.244
+  },
+  {
+   "name": "side0_2_b3",
+   "op": "press",
+   "area": 23.28,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 37.181,
+   "floor": 18.549
+  }
+ ],
+ "checks": [
+  {
+   "name": "side0_0_b0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side0_0_b1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side0_0_b2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side0_1_b0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side0_1_b1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.01 mm2"
+  },
+  {
+   "name": "side0_1_b2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side0_1_g0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.06 mm2"
+  },
+  {
+   "name": "side0_2_b0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "side0_2_b1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "side0_2_b2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side0_2_b3",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  }
+ ],
+ "changed": [
+  {
+   "index": 4,
+   "name": "white",
+   "kind": "white",
+   "volume": 68432.9965,
+   "final": 68219.3178,
+   "pieces": [
+    68219.3178
+   ],
+   "gone": false,
+   "tool": "Coupler_tool4.step"
+  }
+ ],
+ "new": [
+  {
+   "name": "side0_0_b0",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.0
+   ]
+  },
+  {
+   "name": "side0_0_b1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.0
+   ]
+  },
+  {
+   "name": "side0_0_b2",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.0
+   ]
+  },
+  {
+   "name": "side0_1_b0",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.0
+   ]
+  },
+  {
+   "name": "side0_1_b1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.2641
+   ]
+  },
+  {
+   "name": "side0_1_b2",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.244
+   ]
+  },
+  {
+   "name": "side0_1_g0",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    56.2019
+   ]
+  },
+  {
+   "name": "side0_2_b0",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.244
+   ]
+  },
+  {
+   "name": "side0_2_b1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.244
+   ]
+  },
+  {
+   "name": "side0_2_b2",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.244
+   ]
+  },
+  {
+   "name": "side0_2_b3",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    18.5493
+   ]
+  }
+ ],
+ "ok": true
+}

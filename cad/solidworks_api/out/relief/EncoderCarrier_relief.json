@@ -1,0 +1,204 @@
+{
+ "part": "EncoderCarrier",
+ "ops": [
+  {
+   "name": "p0_blue1",
+   "op": "press",
+   "area": 2.5,
+   "d": 0.4,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 2.025,
+   "floor": 0.891
+  },
+  {
+   "name": "p0_white5",
+   "op": "press",
+   "area": 9.87,
+   "d": 0.4,
+   "t": 0.6,
+   "colour": "white",
+   "removed": 7.698,
+   "floor": 3.583
+  },
+  {
+   "name": "p1_white1",
+   "op": "press",
+   "area": 1.45,
+   "d": 0.4,
+   "t": 0.6,
+   "colour": "white",
+   "removed": 1.154,
+   "floor": 0.49
+  },
+  {
+   "name": "p1_white2",
+   "op": "press",
+   "area": 1.45,
+   "d": 0.4,
+   "t": 0.6,
+   "colour": "white",
+   "removed": 1.158,
+   "floor": 0.492
+  }
+ ],
+ "checks": [
+  {
+   "name": "p0_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "p0_white5",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "p1_white1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.14 mm2"
+  },
+  {
+   "name": "p1_white2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.10 mm2"
+  }
+ ],
+ "changed": [
+  {
+   "index": 3,
+   "name": "white",
+   "kind": "white",
+   "volume": 5.9199,
+   "final": 1.9733,
+   "pieces": [
+    1.9733
+   ],
+   "gone": false,
+   "tool": "EncoderCarrier_tool3.step"
+  },
+  {
+   "index": 11,
+   "name": "blue_5",
+   "kind": "blue",
+   "volume": 1.5001,
+   "final": 0.5,
+   "pieces": [
+    0.5
+   ],
+   "gone": false,
+   "tool": "EncoderCarrier_tool11.step"
+  },
+  {
+   "index": 13,
+   "name": "blue_1",
+   "kind": "blue",
+   "volume": 4.2202,
+   "final": 4.2089,
+   "pieces": [
+    4.2089
+   ],
+   "gone": false,
+   "tool": "EncoderCarrier_tool13.step"
+  },
+  {
+   "index": 14,
+   "name": "blue_2",
+   "kind": "blue",
+   "volume": 4.2196,
+   "final": 4.2085,
+   "pieces": [
+    4.2085
+   ],
+   "gone": false,
+   "tool": "EncoderCarrier_tool14.step"
+  },
+  {
+   "index": 15,
+   "name": "white_3",
+   "kind": "white",
+   "volume": 0.8679,
+   "final": 0.2893,
+   "pieces": [
+    0.2893
+   ],
+   "gone": false,
+   "tool": "EncoderCarrier_tool15.step"
+  },
+  {
+   "index": 16,
+   "name": "white_2",
+   "kind": "white",
+   "volume": 0.8706,
+   "final": 0.2902,
+   "pieces": [
+    0.2902
+   ],
+   "gone": false,
+   "tool": "EncoderCarrier_tool16.step"
+  },
+  {
+   "index": 17,
+   "name": "graphite_1",
+   "kind": "graphite",
+   "volume": 9731.1833,
+   "final": 9725.1068,
+   "pieces": [
+    9725.1068
+   ],
+   "gone": false,
+   "tool": "EncoderCarrier_tool17.step"
+  }
+ ],
+ "new": [
+  {
+   "name": "p0_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    0.891
+   ]
+  },
+  {
+   "name": "p0_white5",
+   "kind": "white",
+   "rgb": [
+    0.9294,
+    0.9373,
+    0.949
+   ],
+   "pieces": [
+    3.5832
+   ]
+  },
+  {
+   "name": "p1_white1",
+   "kind": "white",
+   "rgb": [
+    0.9294,
+    0.9373,
+    0.949
+   ],
+   "pieces": [
+    0.4904
+   ]
+  },
+  {
+   "name": "p1_white2",
+   "kind": "white",
+   "rgb": [
+    0.9294,
+    0.9373,
+    0.949
+   ],
+   "pieces": [
+    0.4922
+   ]
+  }
+ ],
+ "ok": true
+}

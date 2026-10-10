@@ -1,0 +1,286 @@
+{
+ "part": "FacetBack",
+ "ops": [
+  {
+   "name": "back_blue1",
+   "op": "press",
+   "area": 77.92,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 132.958,
+   "floor": 57.797
+  },
+  {
+   "name": "back_graphite1",
+   "op": "press",
+   "area": 62.33,
+   "d": 1.0,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 64.716,
+   "floor": 0.0
+  },
+  {
+   "name": "back_dark1",
+   "op": "press",
+   "area": 134.5,
+   "d": 1.0,
+   "t": 0.8,
+   "colour": "dark",
+   "removed": 138.047,
+   "floor": 0.0
+  },
+  {
+   "name": "back_dark2",
+   "op": "press",
+   "area": 263.2,
+   "d": 1.0,
+   "t": 0.8,
+   "colour": "dark",
+   "removed": 269.686,
+   "floor": 0.0
+  },
+  {
+   "name": "cheek_graphite1",
+   "op": "press",
+   "area": 68.6,
+   "d": 1.0,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 148.887,
+   "floor": 38.25
+  },
+  {
+   "name": "cheek_graphite2",
+   "op": "press",
+   "area": 2.69,
+   "d": 1.0,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 2.232,
+   "floor": 0.0
+  },
+  {
+   "name": "cheek_graphite3",
+   "op": "press",
+   "area": 15.46,
+   "d": 1.0,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 28.157,
+   "floor": 11.137
+  },
+  {
+   "name": "back_slots",
+   "op": "press",
+   "area": 21.12,
+   "d": 1.0,
+   "t": 0.8,
+   "colour": "dark",
+   "removed": 34.733,
+   "floor": 15.476
+  }
+ ],
+ "checks": [
+  {
+   "name": "back_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "back_graphite1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "back_dark1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "back_dark2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.04 mm2"
+  },
+  {
+   "name": "cheek_graphite1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "cheek_graphite2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "cheek_graphite3",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  1.18 mm2"
+  },
+  {
+   "name": "back_slots",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  }
+ ],
+ "changed": [
+  {
+   "index": 0,
+   "name": "FacetBack.step<1>[1]",
+   "kind": "white",
+   "volume": 64447.1212,
+   "final": 64255.8093,
+   "pieces": [
+    64255.8093
+   ],
+   "gone": false,
+   "tool": "FacetBack_tool0.step"
+  },
+  {
+   "index": 1,
+   "name": "FacetBack.step<1>[2]",
+   "kind": "dark",
+   "volume": 3072.3214,
+   "final": 2937.6355,
+   "pieces": [
+    2937.6355
+   ],
+   "gone": false,
+   "tool": "FacetBack_tool1.step"
+  },
+  {
+   "index": 2,
+   "name": "FacetBack.step<1>[3]",
+   "kind": "dark",
+   "volume": 2894.8104,
+   "final": 2631.6502,
+   "pieces": [
+    2631.6502
+   ],
+   "gone": false,
+   "tool": "FacetBack_tool2.step"
+  },
+  {
+   "index": 3,
+   "name": "FacetBack.step<1>[4]",
+   "kind": "graphite",
+   "volume": 3.2593,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "FacetBack_tool3.step"
+  },
+  {
+   "index": 4,
+   "name": "FacetBack.step<1>[5]",
+   "kind": "graphite",
+   "volume": 131.5926,
+   "final": 66.7389,
+   "pieces": [
+    66.7389
+   ],
+   "gone": false,
+   "tool": "FacetBack_tool4.step"
+  },
+  {
+   "index": 5,
+   "name": "FacetBack.step<1>[6]",
+   "kind": "graphite",
+   "volume": 76.9491,
+   "final": 16.6206,
+   "pieces": [
+    16.6206
+   ],
+   "gone": false,
+   "tool": "FacetBack_tool5.step"
+  },
+  {
+   "index": 6,
+   "name": "FacetBack.step<1>[7]",
+   "kind": "blue",
+   "volume": 62.3357,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "FacetBack_tool6.step"
+  },
+  {
+   "index": 7,
+   "name": "PP_cheek",
+   "kind": "blue",
+   "volume": 235.7276,
+   "final": 208.2649,
+   "pieces": [
+    208.2649
+   ],
+   "gone": false,
+   "tool": "FacetBack_tool7.step"
+  },
+  {
+   "index": 8,
+   "name": "PP_cheek_collar1",
+   "kind": "dark",
+   "volume": 43.7948,
+   "final": 31.683,
+   "pieces": [
+    31.683
+   ],
+   "gone": false,
+   "tool": "FacetBack_tool8.step"
+  }
+ ],
+ "new": [
+  {
+   "name": "back_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1137,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    57.797
+   ]
+  },
+  {
+   "name": "cheek_graphite1",
+   "kind": "graphite",
+   "rgb": [
+    0.4941,
+    0.5294,
+    0.5804
+   ],
+   "pieces": [
+    38.2504
+   ]
+  },
+  {
+   "name": "cheek_graphite3",
+   "kind": "graphite",
+   "rgb": [
+    0.4941,
+    0.5294,
+    0.5804
+   ],
+   "pieces": [
+    11.1366
+   ]
+  },
+  {
+   "name": "back_slots",
+   "kind": "dark",
+   "rgb": [
+    0.1686,
+    0.1843,
+    0.2118
+   ],
+   "pieces": [
+    4.224,
+    5.6203,
+    5.632
+   ]
+  }
+ ],
+ "ok": true
+}

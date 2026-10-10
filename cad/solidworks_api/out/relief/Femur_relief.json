@@ -1,0 +1,480 @@
+{
+ "part": "Femur",
+ "ops": [
+  {
+   "name": "side0_1_b0",
+   "op": "press",
+   "area": 3.3,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 5.288,
+   "floor": 2.644
+  },
+  {
+   "name": "side0_1_b1",
+   "op": "press",
+   "area": 3.3,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 5.288,
+   "floor": 2.644
+  },
+  {
+   "name": "side0_1_b2",
+   "op": "press",
+   "area": 3.3,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 5.288,
+   "floor": 2.644
+  },
+  {
+   "name": "side0_1_b3",
+   "op": "press",
+   "area": 8.78,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 14.049,
+   "floor": 7.024
+  },
+  {
+   "name": "side0_1_b4",
+   "op": "press",
+   "area": 11.46,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 18.341,
+   "floor": 9.171
+  },
+  {
+   "name": "side0_1_g0",
+   "op": "press",
+   "area": 91.5,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 146.4,
+   "floor": 73.2
+  },
+  {
+   "name": "side1_0_b0",
+   "op": "press",
+   "area": 6.0,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 9.6,
+   "floor": 4.8
+  },
+  {
+   "name": "side1_0_b1",
+   "op": "press",
+   "area": 6.0,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 9.6,
+   "floor": 4.8
+  },
+  {
+   "name": "side1_0_b2",
+   "op": "press",
+   "area": 6.0,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 9.6,
+   "floor": 4.8
+  },
+  {
+   "name": "side1_1_b0",
+   "op": "press",
+   "area": 10.71,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 17.131,
+   "floor": 8.565
+  },
+  {
+   "name": "side1_2_g0",
+   "op": "press",
+   "area": 86.77,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 138.835,
+   "floor": 69.418
+  },
+  {
+   "name": "side1_3_b0",
+   "op": "press",
+   "area": 18.56,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 28.658,
+   "floor": 13.813
+  },
+  {
+   "name": "side2_0_b0",
+   "op": "press",
+   "area": 22.02,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 35.225,
+   "floor": 17.613
+  },
+  {
+   "name": "side2_0_b1",
+   "op": "press",
+   "area": 22.95,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 36.736,
+   "floor": 18.368
+  },
+  {
+   "name": "side2_0_g0",
+   "op": "press",
+   "area": 74.55,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 119.285,
+   "floor": 59.642
+  },
+  {
+   "name": "side3_0_b0",
+   "op": "press",
+   "area": 18.63,
+   "d": 0.8,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 29.815,
+   "floor": 14.907
+  }
+ ],
+ "checks": [
+  {
+   "name": "side0_1_b0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "side0_1_b1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "side0_1_b2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "side0_1_b3",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "side0_1_b4",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side0_1_g0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side1_0_b0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side1_0_b1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side1_0_b2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side1_1_b0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "side1_2_g0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.01 mm2"
+  },
+  {
+   "name": "side1_3_b0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "side2_0_b0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.19 mm2"
+  },
+  {
+   "name": "side2_0_b1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.19 mm2"
+  },
+  {
+   "name": "side2_0_g0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.03 mm2"
+  },
+  {
+   "name": "side3_0_b0",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  }
+ ],
+ "changed": [
+  {
+   "index": 0,
+   "name": "blue_3",
+   "kind": "blue",
+   "volume": 407.6028,
+   "final": 398.01,
+   "pieces": [
+    398.01
+   ],
+   "gone": false,
+   "tool": "Femur_tool0.step"
+  },
+  {
+   "index": 3,
+   "name": "blue_1",
+   "kind": "blue",
+   "volume": 365.7507,
+   "final": 357.9995,
+   "pieces": [
+    357.9995
+   ],
+   "gone": false,
+   "tool": "Femur_tool3.step"
+  },
+  {
+   "index": 4,
+   "name": "white",
+   "kind": "white",
+   "volume": 73159.7792,
+   "final": 72548.0241,
+   "pieces": [
+    72548.0241
+   ],
+   "gone": false,
+   "tool": "Femur_tool4.step"
+  }
+ ],
+ "new": [
+  {
+   "name": "side0_1_b0",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.644
+   ]
+  },
+  {
+   "name": "side0_1_b1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.644
+   ]
+  },
+  {
+   "name": "side0_1_b2",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.644
+   ]
+  },
+  {
+   "name": "side0_1_b3",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    7.0245
+   ]
+  },
+  {
+   "name": "side0_1_b4",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    9.1705
+   ]
+  },
+  {
+   "name": "side0_1_g0",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    73.2
+   ]
+  },
+  {
+   "name": "side1_0_b0",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.8
+   ]
+  },
+  {
+   "name": "side1_0_b1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.8
+   ]
+  },
+  {
+   "name": "side1_0_b2",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.8
+   ]
+  },
+  {
+   "name": "side1_1_b0",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    8.5654
+   ]
+  },
+  {
+   "name": "side1_2_g0",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    69.4176
+   ]
+  },
+  {
+   "name": "side1_3_b0",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    13.8131
+   ]
+  },
+  {
+   "name": "side2_0_b0",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    17.6127
+   ]
+  },
+  {
+   "name": "side2_0_b1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    18.3681
+   ]
+  },
+  {
+   "name": "side2_0_g0",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    59.6424
+   ]
+  },
+  {
+   "name": "side3_0_b0",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    14.9073
+   ]
+  }
+ ],
+ "ok": true
+}

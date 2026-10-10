@@ -1,0 +1,267 @@
+{
+ "part": "EncoderCableClamp",
+ "ops": [
+  {
+   "name": "p0_graphite2",
+   "op": "press",
+   "area": 121.17,
+   "d": 0.4,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 96.95,
+   "floor": 43.418
+  },
+  {
+   "name": "p0_graphite3",
+   "op": "press",
+   "area": 12.28,
+   "d": 0.4,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 9.818,
+   "floor": 4.444
+  },
+  {
+   "name": "p0_graphite4",
+   "op": "press",
+   "area": 14.32,
+   "d": 0.4,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 11.445,
+   "floor": 5.202
+  },
+  {
+   "name": "p0_graphite5",
+   "op": "press",
+   "area": 14.32,
+   "d": 0.4,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 11.446,
+   "floor": 5.202
+  },
+  {
+   "name": "p0_graphite6",
+   "op": "press",
+   "area": 3.41,
+   "d": 0.4,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 2.733,
+   "floor": 1.235
+  }
+ ],
+ "checks": [
+  {
+   "name": "p0_graphite2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  5.96 mm2"
+  },
+  {
+   "name": "p0_graphite3",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.01 mm2"
+  },
+  {
+   "name": "p0_graphite4",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "p0_graphite5",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "p0_graphite6",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  }
+ ],
+ "changed": [
+  {
+   "index": 1,
+   "name": "graphite_4",
+   "kind": "graphite",
+   "volume": 7.3687,
+   "final": 2.4562,
+   "pieces": [
+    2.4562
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool1.step"
+  },
+  {
+   "index": 2,
+   "name": "graphite_1",
+   "kind": "graphite",
+   "volume": 72.7008,
+   "final": 24.2336,
+   "pieces": [
+    24.2336
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool2.step"
+  },
+  {
+   "index": 5,
+   "name": "graphite_5",
+   "kind": "graphite",
+   "volume": 2.0451,
+   "final": 0.6817,
+   "pieces": [
+    0.6817
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool5.step"
+  },
+  {
+   "index": 6,
+   "name": "graphite_2",
+   "kind": "graphite",
+   "volume": 8.5906,
+   "final": 2.8635,
+   "pieces": [
+    2.8635
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool6.step"
+  },
+  {
+   "index": 7,
+   "name": "graphite_3",
+   "kind": "graphite",
+   "volume": 8.5906,
+   "final": 2.8635,
+   "pieces": [
+    2.8635
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool7.step"
+  },
+  {
+   "index": 9,
+   "name": "white",
+   "kind": "white",
+   "volume": 5960.8822,
+   "final": 5895.2363,
+   "pieces": [
+    5895.2363
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool9.step"
+  },
+  {
+   "index": 10,
+   "name": "blue_2",
+   "kind": "blue",
+   "volume": 4.7011,
+   "final": 4.5192,
+   "pieces": [
+    4.5192
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool10.step"
+  },
+  {
+   "index": 11,
+   "name": "blue_4",
+   "kind": "blue",
+   "volume": 3.9064,
+   "final": 3.6763,
+   "pieces": [
+    3.6763
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool11.step"
+  },
+  {
+   "index": 12,
+   "name": "blue_3",
+   "kind": "blue",
+   "volume": 4.7011,
+   "final": 4.6541,
+   "pieces": [
+    4.6541
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool12.step"
+  },
+  {
+   "index": 13,
+   "name": "blue_1",
+   "kind": "blue",
+   "volume": 4.7011,
+   "final": 4.5164,
+   "pieces": [
+    4.5164
+   ],
+   "gone": false,
+   "tool": "EncoderCableClamp_tool13.step"
+  }
+ ],
+ "new": [
+  {
+   "name": "p0_graphite2",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    43.4179
+   ]
+  },
+  {
+   "name": "p0_graphite3",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    4.4444
+   ]
+  },
+  {
+   "name": "p0_graphite4",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    5.2024
+   ]
+  },
+  {
+   "name": "p0_graphite5",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    5.2024
+   ]
+  },
+  {
+   "name": "p0_graphite6",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    1.2355
+   ]
+  }
+ ],
+ "ok": true
+}

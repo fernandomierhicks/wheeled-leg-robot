@@ -267,6 +267,18 @@ def _bb_near(a, b, tol=0.01):
                 b.min.Y > a.max.Y + tol or a.min.Z > b.max.Z + tol or b.min.Z > a.max.Z + tol)
 
 
+def relief_zone():
+    """Where the relief may change the hood below Y_MECH: the skirt's outer 1.7 mm away from
+    the screws (SKIRT_KEEP - 0.4), and tier 1 between its base and 0.2 under the ledge
+    (its backing goes into the empty cavity under it, never below Y_T1_MIN)."""
+    skin = B.prism_xz(B.H0, B.Y_RING_T - 1.0, B.Y_SKIRT + 0.01) - B.prism_xz(B.soff(B.H0, -1.7), 0, BIG)
+    for x, z, n in B.HOOD_SCREWS:
+        p = B.skirt_point(x, z, n)
+        skin = skin - B.bore(p + 2.0 * np.asarray(n, float), -np.asarray(n, float), SKIRT_KEEP - 0.4, 6.0)
+    t1 = B.prism_xz(B.soff(B.H0, 0.5), Y_T1_MIN, B.Y_LEDGE - 0.2)
+    return skin + t1
+
+
 def checks(name, h, bodies, solid, ref_low):
     """Nothing floats (every colour solid touches another); nothing below Y_MECH
     differs from today's hood (skirt, ring fit, screws, tier 1, strip channel + lip);
@@ -279,7 +291,13 @@ def checks(name, h, bodies, solid, ref_low):
             c = s.center()
             loose.append(f"{n} {s.volume:.2f} mm3 at ({c.X:.0f}, {c.Y:.0f}, {c.Z:.0f})")
     low = solid & K.slab_y(-BIG, Y_MECH)
-    diff = B.solids_volume(low - ref_low) + B.solids_volume(ref_low - low)
+    d_shape = (low - ref_low) + (ref_low - low)
+    diff = B.solids_volume(d_shape)
+    if diff > 1e-3:
+        # the relief (2026-10-09) changes the skirt's outer skin and tier 1 ON PURPOSE; what
+        # must not change is everything else down there: the skirt's inner 0.8 mm (the ring
+        # fit), the screw countersinks, the ledge the strip sits on, the strip channel
+        diff = B.solids_volume(d_shape - relief_zone())
     def base(o2):
         return sum(f.area for f in o2.faces() if abs(f.center().Y - B.Y_CHAN) < 1e-6)
     lip = base(h.o2) - base(Hood().o2)              # tier 2's base outline = the strip's lip
@@ -495,20 +513,122 @@ def roof_region(h, inset=0.0):
     return B.soff(r, -inset) if inset else r
 
 
-def tier1_today(h):
-    """Tier 1 exactly as today's hood_details: the chamfered pockets each side and
-    at the back, the blue brow on the front."""
+Y_T1_MIN = B.Y_SKIRT + 0.2       # no tier-1 backing reaches below this (the ring wall tops out at 85.5)
+
+
+def tier1_today(h, relief=False):
+    """Tier 1 as today's hood_details: the chamfered pockets each side and at the back,
+    the blue brow on the front.  relief (2026-10-09, his image 3 -- "the widest periphery
+    is white space with no features; aggressive dark grey and blue"): the pockets get dark
+    floors, blue hatch combs between them, the brow is pressed, the front facet and its
+    two corner facets get dark raked vents and graphite pressed plates."""
     ym1 = (B.Y_SKIRT + B.Y_LEDGE) / 2
     for zs, u0s in ((1, (-112, -94, -78, 10, 30)), (-1, (-108, -86, -60, -30, 14, 32))):
         f = h.t1((0, 0.5, zs), (-50, ym1, zs * 74), (1, 0, 0))
         sg_ = np.sign(f[1][0])
-        h.cut(B.union([K.carve(f, K.chamfer_rect(sg_ * u0 - 6.2, sg_ * u0 + 6.2, -2.6, 2.6, 1.6), 1.6) for u0 in u0s]))
+        rects = [K.chamfer_rect(sg_ * u0 - 6.2, sg_ * u0 + 6.2, -2.6, 2.6, 1.6) for u0 in u0s]
+        h.cut(B.union([K.carve(f, r, 1.6) for r in rects]))
+        if relief:
+            h.dark.append(B.union([K.carve(sunk(f, 1.6), r, FLOOR_T, lift=0.3) for r in rects]))
+            us = sorted(u0s)
+            for a, b in zip(us, us[1:]):
+                if b - a < 16 or (zs < 0 and a <= -128 <= b):
+                    continue
+                m = (a + b) / 2
+                for k in (-1, 0, 1):
+                    h.press(f, K.slash(sg_ * (m + 2.0 * k), 0.0, 0.9, 4.6, 1.6 * sg_), PRESS_D, "blue",
+                            floor_t=FLOOR_T, y_min=Y_T1_MIN)
     f = h.t1((-1, 0.5, 0), (-166, ym1, 0), (0, 0, 1))
     for r in (K.chamfer_rect(-42, -30, -2.6, 2.6, 1.4), K.chamfer_rect(-10, 14, -3.2, 3.2, 1.6),
               K.chamfer_rect(26, 36, -2.2, 2.2, 1.2)):
         h.cut(K.carve(f, r, 1.5))
+        if relief:
+            h.dark.append(K.carve(sunk(f, 1.5), r, FLOOR_T, lift=0.3))
     f = h.t1((1, 0.5, 0), (67, ym1, 0), (0, 0, -1))
-    h.blue.append(K.carve(f, K.polyline_band([(-50, -1.0), (-18, -1.0), (-14, 1.2), (50, 1.2)], 1.4), 1.0))
+    brow = K.polyline_band([(-50, -1.0), (-18, -1.0), (-14, 1.2), (50, 1.2)], 1.4)
+    if not relief:
+        h.blue.append(K.carve(f, brow, 1.0))
+        return
+    h.press(f, brow, 0.8, "blue", floor_t=FLOOR_T, y_min=Y_T1_MIN)
+    # front facet: dark raked vents over the brow's left run, a graphite plate under its right run
+    for uc in (-44.0, -40.6, -37.2):
+        h.press(f, K.slash(uc, 2.6, 1.4, 3.4, 1.6), 0.8, "dark", floor_t=FLOOR_T, y_min=Y_T1_MIN)
+    plate = [(14, -1.4), (40, -1.4), (43, -4.4), (17, -4.4)]
+    h.press(f, plate, PRESS_D, "gfx", floor_t=FLOOR_T, y_min=Y_T1_MIN)
+    for uc in (24.0, 27.0, 30.0):
+        h.press(sunk(f, PRESS_D), K.slash(uc, -2.9, 1.0, 2.2, 1.2), 0.5, "dark", floor_t=FLOOR_T, y_min=Y_T1_MIN)
+    # the front corner facets: a graphite plate with a dark vent row, raked back
+    for zs in (1, -1):
+        fc = h.t1((0.8, 0.5, 0.45 * zs), (63, ym1, 56 * zs), (0, 0, -zs))
+        h.press(fc, [(-7.0, -3.0), (5.0, -3.0), (7.0, 2.6), (-5.0, 2.6)], PRESS_D, "gfx", floor_t=FLOOR_T, y_min=Y_T1_MIN)
+        for uc in (-3.0, 0.0, 3.0):
+            h.press(sunk(fc, PRESS_D), K.slash(uc, -0.2, 1.0, 3.6, 1.6), 0.5, "dark", floor_t=FLOOR_T, y_min=Y_T1_MIN)
+
+
+SKIRT_KEEP = 5.0     # mm round a hood screw (countersink r 3.2 + 1.8) nothing is pressed
+SKIRT_D = 0.6        # the skirt has the ring wall 0.3 behind it: no backing, so shallow
+
+
+def skirt_features(h):
+    """The skirt (y 78..86, a 2.5 wall with the ring wall 0.3 behind it -- nothing can be
+    backed, so everything is 0.6-1.0 deep), his image 3: on every facet between the hood
+    screws, a graphite armour plate pressed 0.6 with raked ends, a row of dark raked slots
+    sunk 0.4 further into its middle, and a blue hatch comb at its forward end."""
+    pts_ = B.pts(B.H0)
+    cen = np.array(B.H0.centroid.coords[0])
+    screws = [B.skirt_point(x, z, n) for x, z, n in B.HOOD_SCREWS]
+    for i in range(len(pts_)):
+        a, b = np.array(pts_[i]), np.array(pts_[(i + 1) % len(pts_)])
+        L = float(np.linalg.norm(b - a))
+        if L < 16.0:
+            continue
+        t = (b - a) / L
+        nrm = np.array([t[1], -t[0]])
+        mid = (a + b) / 2
+        if nrm @ (mid - cen) < 0:
+            nrm = -nrm
+        n3 = np.array([nrm[0], 0.0, nrm[1]])
+        o = np.array([mid[0], B.Y_HOOD_SCREW, mid[1]])
+        f = K.face_frame(o, n3, np.cross([0, 1.0, 0], n3))
+        if f[2][1] < 0:                                    # v up
+            f = (f[0], -f[1], -f[2], f[3])
+        uax = f[1]
+        su = [float((s - o) @ uax) for s in screws if abs((s - o) @ n3) < 0.5 and abs((s - o) @ uax) < L / 2]
+        cuts = sorted([(-L / 2 - 1.0, -L / 2 + 3.0), (L / 2 - 3.0, L / 2 + 1.0)] +
+                      [(s_ - SKIRT_KEEP, s_ + SKIRT_KEEP) for s_ in su])
+        spans, at = [], -L / 2
+        for c0, c1 in cuts:
+            if c0 > at:
+                spans.append((at, c0))
+            at = max(at, c1)
+        fwd = 1.0 if uax[0] > 0.3 else (-1.0 if uax[0] < -0.3 else 0.0)   # +u towards the nose?
+        for s0, s1 in spans:
+            if s1 - s0 < 14.0:
+                continue
+            rake = 5.2 * (-fwd if fwd else 1.0)            # tops lean back (front/back facets: one way)
+            comb_at = s1 if fwd >= 0 else s0               # the comb at the forward end
+            if s1 - s0 >= 24.0:
+                for k in range(3):
+                    uc = comb_at - (1.4 + 2.2 * k) * (1 if fwd >= 0 else -1)
+                    pol = K.slash(uc, 0.0, 1.0, 5.2, rake * 0.6)
+                    h.cut(K.carve(f, pol, SKIRT_D))
+                    h.blue.append(K.carve(sunk(f, SKIRT_D), pol, FLOOR_T, lift=0.3))
+                if fwd >= 0:
+                    s1 = s1 - 8.0
+                else:
+                    s0 = s0 + 8.0
+            p0, p1 = s0 + 1.0 + abs(rake) / 2, s1 - 1.0 - abs(rake) / 2
+            plate = K.slash((p0 + p1) / 2, 0.0, p1 - p0, 5.2, rake)
+            h.cut(K.carve(f, plate, SKIRT_D))
+            h.gfx.append(K.carve(sunk(f, SKIRT_D), plate, FLOOR_T, lift=0.3))
+            Lp = p1 - p0
+            if Lp >= 16.0:
+                nsl = max(2, int(Lp * 0.45 / 3.0))
+                for k in range(nsl):
+                    uc = (p0 + p1) / 2 + (k - (nsl - 1) / 2) * 3.0
+                    sl = K.slash(uc, 0.0, 1.3, 3.6, rake * 0.7)
+                    h.cut(K.carve(sunk(f, SKIRT_D), sl, 0.4))
+                    h.dark.append(K.carve(sunk(f, SKIRT_D + 0.4), sl, 0.6, lift=0.3))
 
 
 def face_poly(h, frame):
@@ -533,10 +653,22 @@ VENT_D, VENT_V0 = 3.0, 3.6       # vents: through the 2.5 wall + 0.5; start 3.6 
                                  # slot's inner corner stays above y 100.5 (the strip channel's wall)
 
 
-def side_slopes(h, vents=(-74.0, 9), ticks=(-38.0, -34.0, -30.0, -26.0), top_margin=1.5, avoid=None, y_top=None):
+PRESS_D = 0.6      # relief (2026-10-09, his brief: "a shape of a different colour -> a recess"):
+FLOOR_T = 0.8      # a colour shape sinks PRESS_D on a floor FLOOR_T thick, backed so the wall stays WALL
+
+
+def sunk(frame, d):
+    """The same face frame moved d into the part (the floor of a press there)."""
+    o, u, v, n = frame
+    return (o - d * n, u, v, n)
+
+
+def side_slopes(h, vents=(-74.0, 9), ticks=(-38.0, -34.0, -30.0, -26.0), top_margin=1.5, avoid=None, y_top=None,
+                relief=False):
     """Shared: every side facet of tier 2 graphite edge to edge, raked vents through
     (positions in ROBOT x, sized to each facet's real height, skipped inside `avoid`,
-    a plan region), blue hatch ticks."""
+    a plan region), blue hatch ticks.  relief: the graphite panel (1 mm in from the facet
+    edges) is pressed, leaving a white frame round it; the ticks sink further into it."""
     xs = [vents[0] + 7.0 * k for k in range(vents[1])]
     for pt, nn, tag in h.p2:
         n = K.unit(nn)
@@ -550,7 +682,10 @@ def side_slopes(h, vents=(-74.0, 9), ticks=(-38.0, -34.0, -30.0, -26.0), top_mar
         o, u, v, _ = f
         u0, v0, u1, v1 = F.bounds
         for pts_ in clip_uv(B.pts(F), F, 1.0):
-            h.gfx.append(K.carve(f, pts_, 1.2))
+            if relief:
+                h.press(f, pts_, PRESS_D, "gfx", floor_t=FLOOR_T, y_min=Y_T2_MIN)
+            else:
+                h.gfx.append(K.carve(f, pts_, 1.2))
         vt = v1 - top_margin if y_top is None else min(v1 - top_margin, (y_top - o[1]) / v[1])
         L = vt - v0 - VENT_V0
         vc = v0 + VENT_V0 + L / 2
@@ -566,7 +701,10 @@ def side_slopes(h, vents=(-74.0, 9), ticks=(-38.0, -34.0, -30.0, -26.0), top_mar
         if n[2] > 0:
             for x in ticks:
                 for pts_ in clip_uv(K.slash((x - o[0]) / u[0], vc, 1.2, L, -0.3 * L * sg_), F, 0.8):
-                    h.blue.append(K.carve(f, pts_, 1.0))
+                    if relief:
+                        h.press(sunk(f, PRESS_D), pts_, 0.5, "blue", floor_t=FLOOR_T, y_min=Y_T2_MIN)
+                    else:
+                        h.blue.append(K.carve(f, pts_, 1.0))
 
 
 def nose_fangs(h, half=26.0, n=8, brow=5.0, fang=6.5, y_top=None):
@@ -593,40 +731,52 @@ def nose_fangs(h, half=26.0, n=8, brow=5.0, fang=6.5, y_top=None):
                 h.blue.append(K.carve(f, pts_, 1.0))
 
 
-def nose_visor(h, half=27.0, band=11.0, slot=19.0):
+def nose_visor(h, half=27.0, band=11.0, slot=19.0, relief=False):
     """Hood B's nose (his call, 2026-10-08: "remove the sawtooth, put some other thing"):
     a graphite brow band across the top of the nose face, chamfered ends, straight lower
     edge; a long dark hexagonal visor pressed into it; a blue hatch comb at each end.
-    Flush only -- nothing raised on a 47-deg face, so no new overhang."""
+    Nothing raised on a 47-deg face, so no new overhang.  relief: the brow is pressed too,
+    and the visor and the combs sink further into it."""
     f = h.t2((1, 0.93, 0), (59, (B.Y_CHAN + Y_TOP) / 2, 0), (0, 0, -1))
     F = face_poly(h, f)
     v1 = F.bounds[3]
     top, bot, c = v1 + 2.0, v1 - band, 3.0                   # top clipped to the face, 1 mm in
     for pts_ in clip_uv([(-half, top), (half, top), (half, bot + c), (half - c, bot), (-half + c, bot),
                          (-half, bot + c)], F, 1.0):
-        h.gfx.append(K.carve(f, pts_, 1.2))
+        if relief:
+            h.press(f, pts_, PRESS_D, "gfx", floor_t=FLOOR_T, y_min=Y_T2_MIN)
+        else:
+            h.gfx.append(K.carve(f, pts_, 1.2))
+    fi = sunk(f, PRESS_D) if relief else f
     vc, hh = (v1 - 1.0 + bot) / 2, 1.9
-    h.press(f, [(-slot, vc), (-slot + 3, vc + hh), (slot - 3, vc + hh), (slot, vc), (slot - 3, vc - hh),
-                (-slot + 3, vc - hh)], 1.4, "dark", y_min=Y_T2_MIN)
+    h.press(fi, [(-slot, vc), (-slot + 3, vc + hh), (slot - 3, vc + hh), (slot, vc), (slot - 3, vc - hh),
+                 (-slot + 3, vc - hh)], 1.0 if relief else 1.4, "dark", y_min=Y_T2_MIN)
     for sg_ in (1, -1):
         for u in (slot + 2.5, slot + 4.5, slot + 6.5):
             for pts_ in clip_uv(K.slash(sg_ * u, vc, 1.0, 2 * hh + 1.6, 0.0), F, 1.0):
-                h.blue.append(K.carve(f, pts_, 1.0))
+                if relief:
+                    h.press(fi, pts_, 0.5, "blue", floor_t=FLOOR_T, y_min=Y_T2_MIN)
+                else:
+                    h.blue.append(K.carve(f, pts_, 1.0))
 
 
-def tail_exhaust(h):
+def tail_exhaust(h, relief=False):
     """Shared: the two back facets of tier 2 -- a graphite band with dark pressed
-    exhaust slots."""
+    exhaust slots.  relief: the band is pressed too, the slots sink further into it."""
     ym = (B.Y_CHAN + Y_TOP) / 2
     for d, t in (((-1, 0.93, 0.0), (-158, ym, 14)), ((-0.95, 0.93, -0.3), (-156, ym, -15))):
         f = h.t2(d, t, (0, 0, 1))
         F = face_poly(h, f)
         v0, v1 = F.bounds[1], F.bounds[3]
         for pts_ in clip_uv([(-12, v0), (12, v0), (12, v1 - 2), (9, v1 + 1), (-9, v1 + 1), (-12, v1 - 2)], F, 1.0):
-            h.gfx.append(K.carve(f, pts_, 1.2))
+            if relief:
+                h.press(f, pts_, PRESS_D, "gfx", floor_t=FLOOR_T, y_min=Y_T2_MIN)
+            else:
+                h.gfx.append(K.carve(f, pts_, 1.2))
         a, b = v0 + 4.0, v1 - 2.2                  # low end high enough that the backing clears y 100
         for uc in (-7.5, -2.5, 2.5, 7.5):
-            h.press(f, K.chamfer_rect(uc - 1.6, uc + 1.6, a, b, 0.8), 1.4, "dark", y_min=Y_T2_MIN)
+            h.press(sunk(f, PRESS_D) if relief else f, K.chamfer_rect(uc - 1.6, uc + 1.6, a, b, 0.8),
+                    1.0 if relief else 1.4, "dark", y_min=Y_T2_MIN)
 
 
 def variant_A():
@@ -739,13 +889,17 @@ def variant_C():
     return h
 
 
-def variant_B():
+def variant_B(relief=True):
     """PLATES -- the links' own vocabulary on a flat deck: a white rim frame with
     45-degree jogs round a big pressed graphite field, an asymmetric armour stack
     (graphite chamfered base routed round the circuit, two white plates split by a
     diagonal gap), raked white gill
     slats each side, circuit traces with hatch combs and pads on the field, dark
-    windows, bites out of the deck edge."""
+    windows, bites out of the deck edge.  relief (2026-10-09, his call): every flush
+    colour shape pressed (rivets, the plates' traces and pads, the field circuit, the
+    side-slope panels and ticks, the visor brow, the exhaust bands, tier 1's brow), and
+    new dark / blue / graphite features on the skirt and tier 1.  relief=False = "B0",
+    the hood as it was."""
     h = Hood()
     D = deck_outline(h)
     FD = 1.6
@@ -775,8 +929,12 @@ def variant_B():
         q = rim.interpolate(k * 13.0)
         sq = P(K.chamfer_rect(q.x - 1.2, q.x + 1.2, q.y - 1.2, q.y + 1.2, 0.4))
         if not sq.intersects(keep) and B.soff(D, -0.8).contains(sq):
-            riv.append(K.carve(deck(), xz(B.pts(sq)), 0.8))
-    h.gfx.append(B.union(riv))
+            if relief:
+                h.press(deck(), xz(B.pts(sq)), 0.5, "gfx", floor_t=FLOOR_T)
+            else:
+                riv.append(K.carve(deck(), xz(B.pts(sq)), 0.8))
+    if riv:
+        h.gfx.append(B.union(riv))
     # armour stack, deliberately NOT an arrow (his note, 2026-10-07: "too regular, like
     # an arrow -- more irregular or asymmetric"): the graphite base is routed round the
     # field's circuit, each side on its own schedule -- tip off the centre line, two jogs
@@ -806,7 +964,12 @@ def variant_B():
         g = P(poly_xz).intersection(top_ok)
         for q in getattr(g, "geoms", [g]):
             if q.area > 0.5:
-                (h.gfx_over if colour == "gfx" else getattr(h, colour)).append(K.carve(a_top, xz(B.pts(q)), depth))
+                lst = h.gfx_over if colour == "gfx" else getattr(h, colour)
+                if relief:          # the white plate is solid 2.2 here: no backing needed
+                    h.cut(K.carve(a_top, xz(B.pts(q)), PRESS_D))
+                    lst.append(K.carve(sunk(a_top, PRESS_D), xz(B.pts(q)), FLOOR_T, lift=0.3))
+                else:
+                    lst.append(K.carve(a_top, xz(B.pts(q)), depth))
 
     def dark_well(poly_xz):                                             # 1.4 into the white, dark floor
         g = P(poly_xz).intersection(top_ok)
@@ -837,10 +1000,17 @@ def variant_B():
     tr = [[(-104, 33), (-118, 33), (-124, 26), (-134, 26)],
           [(14, -33), (-2, -33), (-8, -29.5), (-18, -29.5)]]
     for t in tr:
-        h.blue.append(K.carve(floor, K.polyline_band(xz(t), 1.6), 1.0, lift=0.3))
+        if relief:
+            h.press(floor, K.polyline_band(xz(t), 1.6), PRESS_D, "blue", floor_t=FLOOR_T)
+        else:
+            h.blue.append(K.carve(floor, K.polyline_band(xz(t), 1.6), 1.0, lift=0.3))
     for x0, z0, s in ((-112, 33, 1), (10, -33, -1)):
-        h.blue.append(B.union([K.carve(floor, K.polyline_band(xz([(x0 - 3.2 * i, z0 - 3.5), (x0 - 3.2 * i, z0 + 3.5)]), 1.1), 1.0, lift=0.3)
-                               for i in range(4)]))
+        combs = [K.polyline_band(xz([(x0 - 3.2 * i, z0 - 3.5), (x0 - 3.2 * i, z0 + 3.5)]), 1.1) for i in range(4)]
+        if relief:
+            for cb in combs:
+                h.press(floor, cb, PRESS_D, "blue", floor_t=FLOOR_T)
+        else:
+            h.blue.append(B.union([K.carve(floor, cb, 1.0, lift=0.3) for cb in combs]))
     for x, z in ((-134, 26), (-18, -29.5), (14, -33)):
         h.raise_(floor, xz(K.chamfer_rect(x - 2.4, x + 2.4, z - 2.4, z + 2.4, 0.9)), 0.8, "white")
     # dark windows in the front corners of the field
@@ -851,10 +1021,12 @@ def variant_B():
     # on a face at the field floor
     for pd in B_PIPES:
         h.pipes.append((pd, yF))
-    side_slopes(h, avoid=sg.MultiPolygon(bites).buffer(0))
-    nose_visor(h)
-    tail_exhaust(h)
-    tier1_today(h)
+    side_slopes(h, avoid=sg.MultiPolygon(bites).buffer(0), relief=relief)
+    nose_visor(h, relief=relief)
+    tail_exhaust(h, relief=relief)
+    tier1_today(h, relief=relief)
+    if relief:
+        skirt_features(h)
     return h
 
 
@@ -866,7 +1038,7 @@ B_PIPES = [   # face: B's field floor, y = Y_TOP - 1.6
 ]
 
 
-VARIANTS = {"A": variant_A, "B": variant_B, "C": variant_C}
+VARIANTS = {"A": variant_A, "B": variant_B, "B0": lambda: variant_B(relief=False), "C": variant_C}
 
 
 if __name__ == "__main__":

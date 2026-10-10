@@ -1,0 +1,211 @@
+{
+ "part": "Wheel",
+ "ops": [
+  {
+   "name": "r0_blue1",
+   "op": "raise",
+   "area": 10.72,
+   "h": 0.6,
+   "colour": "blue",
+   "added": 6.433
+  },
+  {
+   "name": "r0_blue2",
+   "op": "raise",
+   "area": 8.54,
+   "h": 0.6,
+   "colour": "blue",
+   "added": 5.125
+  },
+  {
+   "name": "r0_blue3",
+   "op": "raise",
+   "area": 8.54,
+   "h": 0.6,
+   "colour": "blue",
+   "added": 5.125
+  },
+  {
+   "name": "r0_blue7",
+   "op": "raise",
+   "area": 2.34,
+   "h": 0.6,
+   "colour": "blue",
+   "added": 1.406
+  },
+  {
+   "name": "r0_white1",
+   "op": "raise",
+   "area": 22.58,
+   "h": 0.6,
+   "colour": "white",
+   "added": 13.545
+  },
+  {
+   "name": "r0_white3",
+   "op": "raise",
+   "area": 22.58,
+   "h": 0.6,
+   "colour": "white",
+   "added": 13.545
+  },
+  {
+   "name": "r0_white6",
+   "op": "raise",
+   "area": 22.58,
+   "h": 0.6,
+   "colour": "white",
+   "added": 13.545
+  },
+  {
+   "name": "r0_white8",
+   "op": "raise",
+   "area": 22.58,
+   "h": 0.6,
+   "colour": "white",
+   "added": 13.545
+  }
+ ],
+ "checks": [
+  {
+   "name": "r0_blue1",
+   "ok": true,
+   "text": "raised"
+  },
+  {
+   "name": "r0_blue2",
+   "ok": true,
+   "text": "raised"
+  },
+  {
+   "name": "r0_blue3",
+   "ok": true,
+   "text": "raised"
+  },
+  {
+   "name": "r0_blue7",
+   "ok": true,
+   "text": "raised"
+  },
+  {
+   "name": "r0_white1",
+   "ok": true,
+   "text": "raised"
+  },
+  {
+   "name": "r0_white3",
+   "ok": true,
+   "text": "raised"
+  },
+  {
+   "name": "r0_white6",
+   "ok": true,
+   "text": "raised"
+  },
+  {
+   "name": "r0_white8",
+   "ok": true,
+   "text": "raised"
+  }
+ ],
+ "changed": [],
+ "new": [
+  {
+   "name": "r0_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    6.4332
+   ]
+  },
+  {
+   "name": "r0_blue2",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    5.1245
+   ]
+  },
+  {
+   "name": "r0_blue3",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    5.1245
+   ]
+  },
+  {
+   "name": "r0_blue7",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    1.4062
+   ]
+  },
+  {
+   "name": "r0_white1",
+   "kind": "white",
+   "rgb": [
+    0.9294,
+    0.9373,
+    0.949
+   ],
+   "pieces": [
+    13.5454
+   ]
+  },
+  {
+   "name": "r0_white3",
+   "kind": "white",
+   "rgb": [
+    0.9294,
+    0.9373,
+    0.949
+   ],
+   "pieces": [
+    13.5454
+   ]
+  },
+  {
+   "name": "r0_white6",
+   "kind": "white",
+   "rgb": [
+    0.9294,
+    0.9373,
+    0.949
+   ],
+   "pieces": [
+    13.5454
+   ]
+  },
+  {
+   "name": "r0_white8",
+   "kind": "white",
+   "rgb": [
+    0.9294,
+    0.9373,
+    0.949
+   ],
+   "pieces": [
+    13.5454
+   ]
+  }
+ ],
+ "ok": true
+}
