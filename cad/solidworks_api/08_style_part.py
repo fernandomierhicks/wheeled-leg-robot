@@ -109,6 +109,9 @@ def mech_keepout(src):
     return unary_union([seat(o) for o in ops]), ops
 
 
+FRAME_T = 0.6          # mm: every accent is 0.6 mm (3 layers) thick, the part's inside stays white
+
+
 def main(part, dry=False, fresh=False, restyle=False):
     mod_name, spec_name, rel = PARTS[part]
     R = importlib.import_module(mod_name)
@@ -189,7 +192,9 @@ def main(part, dry=False, fresh=False, restyle=False):
     if fl is not None:
         ops_list.append(("boss", "GL_Flange", mech(fl[2], "flange", removal=False), z(fl[0], fl[1])))
     up = SIGN > 0           # recipe +Z ("up", away from the show face plate) in real terms
-    for key, h, off, draft in (("frame", sp["frame_h"], 1.0, 12), ("rail", sp["rail_h"], 0.8, 10),
+    # frame_draft (spec): the Coupler's 12-degree drafted frame leaves a body that fails SolidWorks'
+    # body check (face normals: the +Z face is not drawn) -- 0 there
+    for key, h, off, draft in (("frame", sp["frame_h"], 1.0, float(sp.get("frame_draft", 12))), ("rail", sp["rail_h"], 0.8, 10),
                                ("pads", sp["pad_h"], 0.8, 16)):
         proud = (ZS - CH - off) + (h + off) - ZS     # how far it stands off the plate
         if proud < 0.3:
@@ -229,16 +234,49 @@ def main(part, dry=False, fresh=False, restyle=False):
             # Top Plane sketch coordinates are (X, -Z): measured, see swstyle.sketch
             prof = unary_union([ShPoly([(x, -SIGN * zm) for x, zm in p]) for p in prs])
             ops_list.append(("side", f"GL_Side{side}", b, (prof, min(zr), max(zr))))
+    # extras.py's growth beyond the recipe's outline (RobotMount's lobe): added AFTER the side pockets so they
+    # never reach it, with its own through window, before the colour split so its accents inlay into it
+    lb = P.get("lobe")
+    if lb is not None:
+        ops_list.append(("boss", "GL_Lobe", mech(lb[0], "lobe", removal=False), z(ZB, ZS)))
+        if not lb[1].is_empty:
+            ops_list.append(("cut", "GL_LobeCut", mech(lb[1], "lobe window"), z(ZB - 10, ZTOP + 12)))
     eng = unary_union([g for g in (P["strip"], P["blocks"]) if not g.is_empty])
-    if not eng.is_empty:
-        ops_list.append(("cut", "GL_AccentEngrave", mech(eng, "accent engraving"), z(ZS - 1.2, ZTOP + 10)))
-    if not P["back_eng"].is_empty and bed > 0.05:
+    eng_d = float(sp.get("engrave_d", 1.2))      # 0 = the accents are flush colour inlays, nothing engraved
+    if not eng.is_empty and eng_d > 0:
+        ops_list.append(("cut", "GL_AccentEngrave", mech(eng, "accent engraving"), z(ZS - eng_d, ZTOP + 10)))
+    if not P["back_eng"].is_empty and bed > 0.05 and sp.get("colour_back", True):   # colour_back false: the back is plain
         zg = P["ZGROOVE"]
         ops_list.append(("cut", "GL_BackCircuit", mech(P["back_eng"], "back circuit grooves"), z(zg - 10, zg + bed)))
+    # back_recess_d (spec, Femur_inside): the +Z face's accent lines / plates sink this deep, on a 0.6 mm colour floor
+    # (extras: back_rec_blue / back_rec_grey); the back grooves get a coloured floor too (groove_blue / groove_grey)
+    rec_d, rec_cols = float(sp.get("back_recess_d", 0)), []
+    if rec_d > 0 and P.get("back_rec_blue") is not None:
+        zg_ = P["ZGROOVE"]
+        rb, rg = mech(P["back_rec_blue"], "back recess blue"), mech(P["back_rec_grey"], "back recess graphite")
+        ops_list.append(("cut", "GL_BackRecess", unary_union([rb, rg]), z(zg_ - 10, zg_ + rec_d)))
+        rec_cols = [("blue_rec", BLUE, rb, rec_d), ("graphite_rec", GRAPHITE, rg, rec_d),
+                    ("blue_grv", BLUE, mech(P["groove_blue"], "groove blue"), bed),
+                    ("graphite_grv", GRAPHITE, mech(P["groove_grey"], "groove graphite"), bed)]
     acc = unary_union([g for g in (P["ring"], P["strip"], P["blocks"]) if not g.is_empty])
     zbk = P["ZBACK"]
-    colours = [("blue", BLUE, acc, [z(P["ZSHOW"] - bd, ZTOP + 12), z(ZB - 12, zbk + bd)]),
-               ("graphite", GRAPHITE, P["grey"], [z(P["ZSHOW"] - gd, ZTOP + 12), z(ZB - 12, zbk + gd)])]
+    # a spec with an explicit accent_d measures it from the real face ZS: ZSHOW can sit up to 0.4 mm
+    # above it (the Coupler's, 5.39 vs 5.0), which would make a 0.6 accent 0.2 thick
+    zsh = min(P["ZSHOW"], ZS) if sp.get("accent_d") is not None else P["ZSHOW"]
+    if sp.get("accent_d") is not None and P.get("ZGROOVE") is not None:
+        zbk = P["ZGROOVE"]        # likewise the back: ZBACK is band-quantised (5.125 vs the true 5.0)
+    colours = [("blue", BLUE, acc, [z(zsh - bd, ZTOP + 12), z(ZB - 12, zbk + bd)]),
+               ("graphite", GRAPHITE, P["grey"], [z(zsh - gd, ZTOP + 12), z(ZB - 12, zbk + gd)])]
+    if not sp.get("colour_back", True):       # spec: the face opposite the show face carries no colour at all
+        colours = [(nm, rgb, g, slabs[:1]) for nm, rgb, g, slabs in colours]
+    # accents laid on the raised frame's top (extras.py): coloured only the top `FRAME_T` of the frame
+    for nm, rgb, key in (("blue_f", BLUE, "frame_blue"), ("graphite_f", GRAPHITE, "frame_grey")):
+        if P.get(key) is not None and not P[key].is_empty:
+            colours.append((nm, rgb, mech(P[key], key, removal=False), [z(ftop - FRAME_T, ZTOP + 12)]))
+
+    for nm, rgb, g, dd in rec_cols:
+        if g is not None and not g.is_empty:
+            colours.append((nm, rgb, g, [z(P["ZGROOVE"] + dd, P["ZGROOVE"] + dd + 0.6)]))
 
     for kind, name, g, args in ops_list:
         shown = args if kind != "side" else f"profiles {args[0].area:.0f} mm2, z {args[1]:.2f}..{args[2]:.2f}"

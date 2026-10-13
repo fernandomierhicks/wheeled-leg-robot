@@ -23,6 +23,7 @@ from keepout import openings, silhouette
 from shputil import prism, raised, frustum, geoms, union
 from feat import trap_xz, side_solid, wall_shell, trap_plan, band_along
 import accents as ACC
+CUT_PULL_BEARING, CUT_PULL_WHEEL = 7.0, 5.0     # mm, see `cutouts` in plan()
 import spec as spec_mod
 import asmkeepout
 
@@ -603,6 +604,21 @@ def plan(sp):
         top = lo + 6.0 + max(6.0, kd * 0.75)
         cuts.append(trap_plan(a, b, lo + 5.0, top, 6.0, 1.0))
     cutouts = clip(unary_union(cuts), 4.5) if cuts else ShPoly()
+    # his marks (2026-10-10): the edge of each cutout nearest y = 0 (the slot side) is pulled back, S mm:
+    # the bearing-end cutout gives a 5 mm hose corridor beside the slots, the wheel-end one room for a thick accent
+    if not cutouts.is_empty:
+        _cs, _fr = [], []
+        for _g in geoms(cutouts):
+            _S = CUT_PULL_BEARING if _g.centroid.x < 130 else CUT_PULL_WHEEL
+            _n = _g.intersection(affinity.translate(_g, 0, -_S))
+            if _g.centroid.x >= 130:
+                _fr.append(_g.difference(_n))      # the band given back at the wheel end: a thick grey accent goes here
+            _g = _n
+            _cs += [q for q in geoms(_g) if q.area > 20]
+        cutouts = unary_union(_cs) if _cs else ShPoly()
+        cut_freed = unary_union(_fr) if _fr else ShPoly()
+    else:
+        cut_freed = ShPoly()
 
     # blind recesses inside the keel frame
     wins = []
@@ -698,7 +714,7 @@ def plan(sp):
 
     return dict(spec=sp, grown=grown, layers=layers, flange=flange, OUT=OUT, KEEP=KEEP, kb=kb, knee=knee, wheel=wheel,
                 grey=grey, ZBACK=ZBACK, ZSHOW=ZSHOW,
-                frame=frame, rail=rail, pads=pads, pock=pock, wins=wins, cutouts=cutouts,
+                frame=frame, rail=rail, pads=pads, pock=pock, wins=wins, cutouts=cutouts, cut_freed=cut_freed,
                 lo_pr=lo_pr, hi_pr=hi_pr, lo_rk=lo_rk, hi_rk=hi_rk, ring=ring, strip=strip, blocks=blocks,
                 collars=_collars(sp, grown, kb, knee, channel),
                 ZT=ZT, ZB=ZB, ZTOP=ZT + max(sp["frame_h"], sp["rail_h"], sp["pad_h"]) + 1.0)

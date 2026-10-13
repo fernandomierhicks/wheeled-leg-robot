@@ -16,6 +16,7 @@
   left [--report]    the left leg live (mirror instances unsuppressed, left brackets shown)
   plan-left          the left twins of the fasteners the mirror features did not carry over
   mirror-colours     the left opposite-hand parts take their source bodies' colours
+                     (`mirror-colours "Side panel"`: only that part's mirror -- 7x faster)
   fix-left-body [--dry]   MirrorSIDE PANEL's drifted shaft / RobotMount / screw back to the mirror, locked
   mirror-fasteners   (DO NOT RUN: ModifyDefinition on BodyMirror deleted MirrorBODY-2 -- kept as a record)
   bom                SolidWorks, read-only: every fastener in ROBOT -> out/fasteners/BOM.md
@@ -1325,13 +1326,18 @@ def trench_colours(sw, dry=False):
     d.EditRebuild3()
 
 
-def mirror_colours(dry=False):
+def mirror_colours(dry=False, only=None):
+    """only: source part names (e.g. ["Side panel"]) -- just their mirrors (and the RobotMount
+    trench colours only if RobotMount is named); None = every mirror part."""
     import swlib
     import swstyle as S
     from swlib import c, wrap, sld
     sw, _ = swlib.connect()
     swlib.open_v5(sw)
-    trench_colours(sw, dry)
+    sel = {m: sr for m, sr in MIRROR_PARTS.items()
+           if not only or os.path.splitext(os.path.basename(sr))[0] in only}
+    if not only or "RobotMount" in only:
+        trench_colours(sw, dry)
 
     def doc(rel):
         return wrap(sw.OpenDoc6(os.path.join(swlib.V5, rel), c.swDocPART, c.swOpenDocOptions_Silent, "", 0, 0)[0],
@@ -1344,7 +1350,7 @@ def mirror_colours(dry=False):
         return m[3] * 1e9, np.array([m[4] * 1e6])
 
     done = []
-    for mrel, srel in MIRROR_PARTS.items():
+    for mrel, srel in sel.items():
         src, mir = doc(srel), doc(mrel)
         sb = [(b, *sig(b)) for b in S.bodies(src)]
         mb = [(b, *sig(b)) for b in S.bodies(mir)]
@@ -1846,8 +1852,8 @@ if __name__ == "__main__":
         build(rest or None, "--dry" in args, "plan_left.json" if "--left" in args else "plan.json")
     elif cmd == "plan-left":
         plan_left()
-    elif cmd == "mirror-colours":     # mirror-colours [--dry]
-        mirror_colours("--dry" in args)
+    elif cmd == "mirror-colours":     # mirror-colours [--dry] [<source part name> ...]
+        mirror_colours("--dry" in args, [a for a in args[1:] if not a.startswith("--")] or None)
     elif cmd == "fix-left-body":      # fix-left-body [--dry]
         fix_left_body("--dry" in args)
     elif cmd == "scan":           # scan [--fresh] [--all]

@@ -5,13 +5,13 @@
   {
    "name": "trench",
    "face": "out",
-   "visible_mm": 45.7,
-   "min_bend": 10.4,
+   "visible_mm": 37.3,
+   "min_bend": 24.7,
    "ends": [
     "clamp",
     "clamp"
    ],
-   "hose_mm3": 449.9,
+   "hose_mm3": 353.9,
    "collars_mm3": [
     39.8,
     39.8
@@ -33,17 +33,12 @@
    },
    "ok": true,
    "kind": "trench",
-   "cutter_mm3": 1320.682,
+   "cutter_mm3": 1077.6,
    "removed": [
     {
-     "body": 11,
-     "volume": 92706.4678,
-     "removed": 340.1129
-    },
-    {
      "body": 13,
-     "volume": 4214.8785,
-     "removed": 240.5261
+     "volume": 105264.156,
+     "removed": 474.0058
     }
    ],
    "void_under_mm3": 0,

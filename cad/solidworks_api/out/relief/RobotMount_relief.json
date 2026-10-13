@@ -2,85 +2,704 @@
  "part": "RobotMount",
  "ops": [
   {
-   "name": "stepbar",
+   "name": "rm_graphite1",
    "op": "press",
-   "area": 566.67,
+   "area": 227.11,
    "d": 1.0,
-   "t": 1.0,
+   "t": 0.6,
    "colour": "graphite",
-   "removed": 581.857,
-   "floor": 0.0
+   "removed": 364.709,
+   "floor": 134.172
+  },
+  {
+   "name": "rm_graphite2",
+   "op": "press",
+   "area": 44.81,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 71.333,
+   "floor": 25.356
+  },
+  {
+   "name": "rm_graphite3",
+   "op": "press",
+   "area": 803.99,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 1293.186,
+   "floor": 472.094
+  },
+  {
+   "name": "rm_graphite4",
+   "op": "press",
+   "area": 3.22,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 5.141,
+   "floor": 1.676
+  },
+  {
+   "name": "rm_graphite5",
+   "op": "press",
+   "area": 9.37,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 15.772,
+   "floor": 5.154
+  },
+  {
+   "name": "rm_graphite6",
+   "op": "press",
+   "area": 5.81,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 9.539,
+   "floor": 3.091
+  },
+  {
+   "name": "rm_graphite7",
+   "op": "press",
+   "area": 10.02,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 16.297,
+   "floor": 5.591
+  },
+  {
+   "name": "rm_graphite8",
+   "op": "press",
+   "area": 39.73,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 64.514,
+   "floor": 22.252
+  },
+  {
+   "name": "rm_blue1",
+   "op": "press",
+   "area": 48.68,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 78.944,
+   "floor": 27.638
+  },
+  {
+   "name": "rm_blue2",
+   "op": "press",
+   "area": 274.06,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 442.169,
+   "floor": 158.447
+  },
+  {
+   "name": "rm_blue3",
+   "op": "press",
+   "area": 3.83,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 6.271,
+   "floor": 2.082
+  },
+  {
+   "name": "rm_blue4",
+   "op": "press",
+   "area": 20.22,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 32.996,
+   "floor": 11.046
+  },
+  {
+   "name": "rm_blue5",
+   "op": "press",
+   "area": 92.22,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 149.25,
+   "floor": 52.733
+  },
+  {
+   "name": "rm_blue7",
+   "op": "press",
+   "area": 3.32,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 5.478,
+   "floor": 1.742
+  },
+  {
+   "name": "rm_blue8",
+   "op": "press",
+   "area": 6.09,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 9.989,
+   "floor": 3.255
+  },
+  {
+   "name": "rm_blue9",
+   "op": "press",
+   "area": 4.59,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 7.551,
+   "floor": 2.433
+  },
+  {
+   "name": "rm_blue10",
+   "op": "press",
+   "area": 5.82,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 9.558,
+   "floor": 3.107
+  },
+  {
+   "name": "rm_blue11",
+   "op": "press",
+   "area": 9.52,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 15.585,
+   "floor": 5.125
+  },
+  {
+   "name": "rm_topleft",
+   "op": "press",
+   "area": 86.31,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 139.775,
+   "floor": 48.521
   }
  ],
  "checks": [
   {
-   "name": "stepbar",
+   "name": "rm_graphite1",
    "ok": true,
-   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -11.36 mm2"
+   "text": "wall behind  99.8% solid, on the face 100.0%, narrower than 0.9:  0.04 mm2"
+  },
+  {
+   "name": "rm_graphite2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  6.30 mm2"
+  },
+  {
+   "name": "rm_graphite3",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.04 mm2"
+  },
+  {
+   "name": "rm_graphite4",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.02 mm2"
+  },
+  {
+   "name": "rm_graphite5",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_graphite6",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.04 mm2"
+  },
+  {
+   "name": "rm_graphite7",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_graphite8",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.07 mm2"
+  },
+  {
+   "name": "rm_blue2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.05 mm2"
+  },
+  {
+   "name": "rm_blue3",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_blue4",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_blue5",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "rm_blue7",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_blue8",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_blue9",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_blue10",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_blue11",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "rm_topleft",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  3.91 mm2"
   }
  ],
  "changed": [
   {
-   "index": 8,
-   "name": "white_4",
-   "kind": "white",
-   "volume": 57.5451,
-   "final": 56.4821,
-   "pieces": [
-    56.4821
-   ],
-   "gone": false,
-   "tool": "RobotMount_tool8.step"
+   "index": 0,
+   "name": "blue_12",
+   "kind": "blue",
+   "volume": 1.9936,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool0.step"
   },
   {
-   "index": 9,
-   "name": "white_3",
-   "kind": "white",
-   "volume": 57.5451,
-   "final": 56.4821,
-   "pieces": [
-    56.4821
-   ],
-   "gone": false,
-   "tool": "RobotMount_tool9.step"
+   "index": 1,
+   "name": "blue_13",
+   "kind": "blue",
+   "volume": 2.2956,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool1.step"
   },
   {
-   "index": 10,
-   "name": "white_5",
-   "kind": "white",
-   "volume": 57.5451,
-   "final": 56.4821,
+   "index": 2,
+   "name": "blue_3",
+   "kind": "blue",
+   "volume": 12.1309,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool2.step"
+  },
+  {
+   "index": 3,
+   "name": "blue_6",
+   "kind": "blue",
+   "volume": 5.7118,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool3.step"
+  },
+  {
+   "index": 4,
+   "name": "blue_10",
+   "kind": "blue",
+   "volume": 3.6511,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool4.step"
+  },
+  {
+   "index": 5,
+   "name": "blue_2",
+   "kind": "blue",
+   "volume": 2.7549,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool5.step"
+  },
+  {
+   "index": 6,
+   "name": "blue_4",
+   "kind": "blue",
+   "volume": 55.3307,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool6.step"
+  },
+  {
+   "index": 7,
+   "name": "blue_8",
+   "kind": "blue",
+   "volume": 214.0536,
+   "final": 20.102,
    "pieces": [
-    56.4821
+    20.102
    ],
    "gone": false,
-   "tool": "RobotMount_tool10.step"
+   "tool": "RobotMount_tool7.step"
+  },
+  {
+   "index": 11,
+   "name": "blue_7",
+   "kind": "blue",
+   "volume": 51.9194,
+   "final": 0.1416,
+   "pieces": [
+    0.1416
+   ],
+   "gone": false,
+   "tool": "RobotMount_tool11.step"
+  },
+  {
+   "index": 12,
+   "name": "blue_11",
+   "kind": "blue",
+   "volume": 3.4907,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool12.step"
   },
   {
    "index": 13,
-   "name": "PT_trench1",
-   "kind": "white",
-   "volume": 92366.6534,
-   "final": 92356.8569,
-   "pieces": [
-    92356.8569
-   ],
-   "gone": false,
+   "name": "graphite_3",
+   "kind": "graphite",
+   "volume": 6.0149,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
    "tool": "RobotMount_tool13.step"
   },
   {
    "index": 14,
-   "name": "PT_trench2",
+   "name": "graphite_1",
    "kind": "graphite",
-   "volume": 3974.3569,
-   "final": 3405.1806,
+   "volume": 3.4834,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool14.step"
+  },
+  {
+   "index": 15,
+   "name": "graphite_4",
+   "kind": "graphite",
+   "volume": 518.5728,
+   "final": 29.33,
    "pieces": [
-    3405.1806
+    29.33
    ],
    "gone": false,
-   "tool": "RobotMount_tool14.step"
+   "tool": "RobotMount_tool15.step"
+  },
+  {
+   "index": 16,
+   "name": "graphite_6",
+   "kind": "graphite",
+   "volume": 1.9293,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool16.step"
+  },
+  {
+   "index": 17,
+   "name": "graphite_2",
+   "kind": "graphite",
+   "volume": 840.5348,
+   "final": 676.624,
+   "pieces": [
+    676.624
+   ],
+   "gone": false,
+   "tool": "RobotMount_tool17.step"
+  },
+  {
+   "index": 18,
+   "name": "graphite_5",
+   "kind": "graphite",
+   "volume": 23.8405,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "RobotMount_tool18.step"
+  },
+  {
+   "index": 19,
+   "name": "PT_trench1",
+   "kind": "white",
+   "volume": 104790.3857,
+   "final": 103073.6017,
+   "pieces": [
+    103073.6017
+   ],
+   "gone": false,
+   "tool": "RobotMount_tool19.step"
   }
  ],
- "new": [],
+ "new": [
+  {
+   "name": "rm_graphite1",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    134.1718
+   ]
+  },
+  {
+   "name": "rm_graphite2",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    25.3561
+   ]
+  },
+  {
+   "name": "rm_graphite3",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    472.0941
+   ]
+  },
+  {
+   "name": "rm_graphite4",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    1.6759
+   ]
+  },
+  {
+   "name": "rm_graphite5",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    5.1537
+   ]
+  },
+  {
+   "name": "rm_graphite6",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    3.091
+   ]
+  },
+  {
+   "name": "rm_graphite7",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    5.5909
+   ]
+  },
+  {
+   "name": "rm_graphite8",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    22.2516
+   ]
+  },
+  {
+   "name": "rm_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    27.6379
+   ]
+  },
+  {
+   "name": "rm_blue2",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    158.4468
+   ]
+  },
+  {
+   "name": "rm_blue3",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.0824
+   ]
+  },
+  {
+   "name": "rm_blue4",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    11.046
+   ]
+  },
+  {
+   "name": "rm_blue5",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    52.7326
+   ]
+  },
+  {
+   "name": "rm_blue7",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    1.7417
+   ]
+  },
+  {
+   "name": "rm_blue8",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    3.2553
+   ]
+  },
+  {
+   "name": "rm_blue9",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.4331
+   ]
+  },
+  {
+   "name": "rm_blue10",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    3.1071
+   ]
+  },
+  {
+   "name": "rm_blue11",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    5.1245
+   ]
+  },
+  {
+   "name": "rm_topleft",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    48.5211
+   ]
+  }
+ ],
  "ok": true
 }

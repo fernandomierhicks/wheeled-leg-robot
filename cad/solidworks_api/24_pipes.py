@@ -38,6 +38,7 @@ SRC = os.path.join(OUT, "src")
 PARTS = {"Femur": r"Links\Femur.SLDPRT",
          "Coupler": r"Links\Coupler.SLDPRT",
          "Tibia": r"Links\Tibia.SLDPRT",
+         "Femur_inside": r"Links\Femur_inside.SLDPRT",
          "Side panel": r"Body\Side panel.SLDPRT",
          "RobotMount": r"Body\OldRobotBodyMount\RobotMount.SLDPRT",
          "FacetFront": r"Box\Facet\FacetFront.SLDPRT",
@@ -177,7 +178,9 @@ PITCH = 1.7        # rib spacing along the centre line
 RC, LC, CH = 3.1, 3.0, 0.4               # clamp collar: radius, length, edge chamfer
 DIVE_R, DIVE_A, DIVE_L = 9.0, 40.0, 7.0  # dive end: bend radius (>= MIN_BEND), angle into the part, run-out
 MIN_BEND = 8.0     # centre-line bend radius: the ribs on the inside of a bend stay apart
+SLOTS_OK = {"Coupler"}   # parts whose slots are zip-tie slots: a pipe may cross them
 EDGE = 1.0         # the footprint stays this far inside the flat ground
+EDGE_PART = {"Tibia": 0.0}   # his call 2026-10-10: the Tibia hose may touch the slots (zero clearance, never over them)
 SEAT = 3.5 + 0.6   # a fastener opening's head/washer seat + the additions clearance (08's rule)
 SEAT_MAX = 120.0   # mm2: an opening smaller than this is a fastener hole and gets the seat
 CLR = 1.0          # clearance to anything that sweeps past: sideways, and above the collar crest
@@ -200,7 +203,8 @@ GRAPHITE = (0.25, 0.27, 0.30)    # swstyle.GROUPS graphite
 # (None = not known; then the face is assumed to print facing up, like the raised styling).
 FACES = {   # links: "out" = the show face; "floorN" = a pocket floor N mm below it (a hose in a trench)
     "Femur": {"out": ((0, 0, -1), 5.0), "floor3": ((0, 0, -1), 1.5), "floor7": ((0, 0, -1), -1.86)},
-    "Coupler": {"out": ((0, 0, -1), 5.0), "floor3": ((0, 0, -1), 1.89), "floor6": ((0, 0, -1), -1.5)},
+    "Coupler": {"out": ((0, 0, -1), 5.0), "back": ((0, 0, 1), 5.0), "floor3": ((0, 0, -1), 1.89), "floor6": ((0, 0, -1), -1.5)},
+    "Femur_inside": {"back": ((0, 0, 1), 5.0)},   # the +Z (tube) face, towards the Side panel
     "Tibia": {"out": ((0, 0, 1), 13.5), "floor7": ((0, 0, 1), 6.07), "floor8": ((0, 0, 1), 5.0)},
     "Side panel": {"out": ((0, 0, 1), 10.0)},
     "RobotMount": {"out": ((0, 0, 1), 5.0)},
@@ -253,13 +257,26 @@ PIPES = {   # first set: the proposer's candidates (`routes`), ends chosen per p
         dict(name="tier", face="tier1", bend="spline", ends=('dive', 'collar'),
              pts=[(-150.75, -54.35), (-147.20, -57.86), (-143.53, -61.05), (-139.50, -63.41), (-135.13, -64.92), (-130.61, -66.07), (-126.13, -67.35), (-125.13, -67.35)]),
     ],
+    "Coupler": [   # his green mark (2026-10-10): the SHOW face (the side away from the tall tube), between the slot rows, toward the bearing end
+        dict(name="spine", face="out", bend="spline", ends=("collar", "dive"),
+             pts=[(36.6, -20.71), (32.26, -17.35), (24.85, -14.18), (18.45, -9.28), (11.29, -5.67)]),   # = extras.COUPLER_HOSE in the face frame
+    ],
+    "Femur_inside": [   # his green mark (2026-10-11): the +Z (tube) face near the knee end, along the old blue trace
+        dict(name="spine", face="back", bend="spline", ends=("collar", "dive"),
+             pts=[(-31.59, -9.53), (-37.86, -12.99), (-42.45, -19.59), (-49.33, -23.45), (-56.74, -25.89)]),   # = extras.FI_HOSE in the face frame
+    ],
+    "Tibia": [   # his red mark (2026-10-10): beside the bearing-end cutout's slot side, zero clearance to the slots (EDGE_PART), never over them.  Proposer candidate #0
+        dict(name="spine", face="out", bend="spline", ends=("collar", "dive"),
+             pts=[(63.76, -86.29), (62.94, -90.95), (62.01, -95.57), (60.81, -100.07), (59.26, -104.43), (58.11, -105.95)]),
+    ],
     "TailStrut": [
         dict(name="keel", face="under", bend="spline", ends=('dive', 'collar'),
              pts=[(-148.49, 11.65), (-144.87, 8.34), (-141.52, 4.82), (-138.97, 0.89), (-136.93, -3.27), (-134.34, -7.19), (-131.02, -10.82), (-130.24, -11.35)]),
     ],
-    "RobotMount": [   # TRENCH (his pick): the inner femur plate passes 1.9 mm over this field
+    "RobotMount": [   # his green mark (2026-10-12): the left field, under the graphite step-bar.  TRENCH again: the inner
+        # femur plate passes 1.9 mm over ALL of this field (not just x > 85).  = extras.ROBOTMOUNT_HOSE (u = x, v = y)
         dict(name="trench", face="out", kind="trench", bend="spline", ends=("clamp", "clamp"),
-             pts=[(90.04, 27.24), (94.52, 25.99), (98.90, 24.50), (103.30, 23.04), (107.85, 22.20), (112.35, 22.66), (116.41, 24.80), (119.74, 28.16), (121.97, 32.22), (122.99, 36.80), (123.34, 40.66)]),
+             pts=[(19.5, 30.0), (26.0, 28.4), (33.0, 26.0), (41.0, 24.6), (49.0, 24.4), (56.0, 24.0)]),
     ],
 }
 
@@ -436,20 +453,28 @@ def ground(face):
     lab, nl = ndimage.label(~flat)
     border = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])))
     seats = ras.blank()
+    slots = ras.blank()                 # non-round holes (the Coupler's zip-tie slots), see SLOTS_OK
     n_open = 0
     for i in range(1, nl + 1):
         if i in border:
             continue
         m = lab == i
         a = m.sum() * PX * PX
+        if face.part.name in SLOTS_OK and 25.0 < a < 100.0:   # the Coupler's zip-tie slot dishes (32 mm2 on the show face; screws are 6-10) read as round
+            slots |= m                                  # fastener holes (they are not): no seat, a pipe may cross them
+            continue
         if (floor & m).sum() < 0.95 * m.sum() and a < SEAT_MAX:   # a hole through, not a pocket
             ys, xs = np.nonzero(m)
             long_side = max(np.ptp(ys), np.ptp(xs)) * PX
             if long_side < 1.4 * 2 * np.sqrt(a / np.pi):           # ROUND: a fastener, gets the seat
                 seats |= m                                          # (the Coupler's slots do not)
                 n_open += 1
-    allowed = (ndimage.binary_erosion(flat, _disk(EDGE)) & ~ndimage.binary_dilation(seats, _disk(SEAT))
+                continue
+        slots |= m                                                  # slots, pockets, dishes (SLOTS_OK parts may cross them)
+    allowed = (ndimage.binary_erosion(flat, _disk(EDGE_PART.get(face.part.name, EDGE))) & ~ndimage.binary_dilation(seats, _disk(SEAT))
                & ~ndimage.binary_dilation(blue, _disk(1.5)))
+    if face.part.name in SLOTS_OK:       # a hose may run over a zip-tie slot (his call, 2026-10-10)
+        allowed = allowed | (ndimage.binary_dilation(slots, _disk(EDGE)) & ~ndimage.binary_dilation(blue, _disk(1.5)))
     return ras, flat, allowed, n_open
 
 

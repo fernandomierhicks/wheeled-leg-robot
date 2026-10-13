@@ -50,6 +50,7 @@ from swlib import c, wrap, sld
 
 ORIGINALS = os.path.join(swlib.V5, "_originals")
 COLOURS = {"graphite": S.GROUPS["graphite"], "blue": S.GROUPS["blue"], "white": S.GROUPS["white"]}
+RAISED = ("BearingWasher", "SmallBearingWahser")   # accents proud of the face; InsideFemurShaft stays flush
 W = 1.0        # mm, trace width (two 0.4 mm lines and a bit)
 HEAD = 2.85    # mm, M3 button head radius (ISO 7380)
 CLEAR = 0.5    # mm, kept free round a head footprint
@@ -98,10 +99,11 @@ class Face:
     """One face's pattern.  `cut` overshoots the free face by 0.5 mm so it never
     ends on it; `inlay` is exactly the material removed."""
 
-    def __init__(self, name, cut, inlay, holes, r_in, r_out, blue, white, top=(), bore=0.0):
+    def __init__(self, name, cut, inlay, holes, r_in, r_out, blue, white, top=(), bore=0.0, lift=None):
         """White pads sit on top of blue traces; `top` is blue drawn over white
         (a bus across a white panel)."""
         self.name, self.cut, self.inlay = name, cut, inlay
+        self.lift = lift          # (y0, y1): accents RAISED on the face, nothing cut
         self.holes, self.bore = holes, bore           # holes: [(x, y, r_hole, r_keep)]
         allowed = Point(0, 0).buffer(r_out, quad_segs=64)
         if r_in > 0:
@@ -133,7 +135,7 @@ def faces():
     bus = [LineString([P(r0, 300), P(23.0, 300)]).offset_curve(o).buffer(W / 2, cap_style=2)
            for r0, o in ((16.9, 0.0), (18.2, 1.9), (18.2, -1.9))]
     bearing = Face(
-        "free", (-2.5, -1.4), (-2.0, -1.4), bw_holes, 13.9, 21.1, bore=13.0,
+        "free", (-2.5, -1.4), (-2.0, -1.4), bw_holes, 13.9, 21.1, bore=13.0, lift=(-2.6, -2.0),
         blue=[trace([(14.7, -52), (14.7, -40), (14.7, -28), (14.7, -16), (15.0, -8),
                      (17.4, 0), (20.0, 0)]),
               trace([(14.7, 98), (14.7, 110), (15.2, 116), (17.2, 121), (19.6, 121)]),
@@ -149,7 +151,7 @@ def faces():
     # SmallBearingWahser: the free channels are the diagonals between the four
     # heads and the centre.  -Y face (seen at F, inside the BearingWasher):
     small_f = Face(
-        "F_side", (-0.5, 0.6), (0.0, 0.6), sw_holes, 0.0, 10.6,
+        "F_side", (-0.5, 0.6), (0.0, 0.6), sw_holes, 0.0, 10.6, lift=(-0.6, 0.0),
         blue=[chip(1.8),
               trace([(2.2, 45), (9.2, 45)]), trace([(2.2, 135), (7.0, 135)]),
               trace([(2.2, 315), (9.4, 315)]), ticks(315, (5.4, 6.6))],
@@ -157,7 +159,7 @@ def faces():
                pad(6.0, 225, 0.55), pad(8.6, 225, 0.55)])
     # +Y face (seen at E, capping the coupler-tibia pin): a diamond chip
     small_e = Face(
-        "E_side", (1.4, 2.5), (1.4, 2.0), sw_holes, 0.0, 10.6,
+        "E_side", (1.4, 2.5), (1.4, 2.0), sw_holes, 0.0, 10.6, lift=(2.0, 2.6),
         blue=[chip(1.75, rot=45),
               trace([(1.6, 45), (9.0, 45)]),
               trace([(1.6, 225), (5.6, 225), (7.6, 235)]),
@@ -259,6 +261,7 @@ def style(sw, part, rel, v_src, fs, restyle):
     if len(bs) != 1 or abs(v0 - v_src) > 0.1:
         raise SystemExit(f"  expected the original: 1 body of {v_src} mm3, got {len(bs)} / {v0:.1f}")
     box0 = box(model)
+    v_add = sum(getattr(f, col).area * (f.lift[1] - f.lift[0]) for f in fs if f.lift for col in ("blue", "white"))
     made = {"blue": [], "white": []}
     for f in fs:
         for col in ("blue", "white"):
@@ -267,8 +270,11 @@ def style(sw, part, rel, v_src, fs, restyle):
                 continue
             body = max(S.bodies(model), key=S.volume)     # the original: by far the largest
             sk = S.sketch(model, g, name=f"GL_{f.name}_{col}", plane="Top Plane")
-            S.cut(model, sk, *f.cut, name=f"GL_{f.name}_{col}_cut", scope=[body])
-            new = S.tool(model, sk, *f.inlay, name=f"GL_{f.name}_{col}_inlay")
+            if f.lift:
+                new = S.tool(model, sk, *f.lift, name=f"GL_{f.name}_{col}_raised")
+            else:
+                S.cut(model, sk, *f.cut, name=f"GL_{f.name}_{col}_cut", scope=[body])
+                new = S.tool(model, sk, *f.inlay, name=f"GL_{f.name}_{col}_inlay")
             for b in new:
                 S.colour(b, COLOURS[col])
             made[col] += new
@@ -290,7 +296,7 @@ def style(sw, part, rel, v_src, fs, restyle):
     n = len(S.bodies(model))
     print(f"  original {v0:8.2f} mm3 -> " + " + ".join(f"{k} {v:.2f}" for k, v in sorted(by.items())) +
           f" = {tot:8.2f} ({tot - v0:+.4f}), {n} bodies, box moved {d_box:.4f} mm")
-    if abs(tot - v0) > 1e-3 or n != 1 + len(made["blue"]) + len(made["white"]) or d_box > 0.01:
+    if abs(tot - v0 - v_add) > 0.05 * max(v_add, 1) or n != 1 + len(made["blue"]) + len(made["white"])             or (d_box > 0.01 and not v_add):
         raise SystemExit("  the colour split changed the part -- NOT saved")
     ok, err, warn = model.Extension.SaveAs3(path, c.swSaveAsCurrentVersion,
                                             c.swSaveAsOptions_Silent, None, None, 0, 0)
@@ -361,9 +367,11 @@ def main(args):
         render(sw, parts)
         return
     for part, (rel, v_src, fs) in parts.items():
+        if part not in RAISED:
+            continue
         print(f"\n=== {part}")
         style(sw, part, rel, v_src, fs, "--restyle" in args)
-    check_and_export(sw, parts)
+    check_and_export(sw, {k: v for k, v in parts.items() if k in RAISED})
 
 
 if __name__ == "__main__":

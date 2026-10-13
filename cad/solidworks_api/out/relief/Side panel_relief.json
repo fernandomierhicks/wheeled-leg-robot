@@ -1,0 +1,348 @@
+{
+ "part": "Side panel",
+ "ops": [
+  {
+   "name": "top_chan1",
+   "op": "press",
+   "area": 23.73,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 33.22,
+   "floor": 18.983
+  },
+  {
+   "name": "top_slash1",
+   "op": "press",
+   "area": 6.24,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 8.734,
+   "floor": 4.991
+  },
+  {
+   "name": "top_slash2",
+   "op": "press",
+   "area": 5.82,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 8.149,
+   "floor": 4.656
+  },
+  {
+   "name": "top_slash3",
+   "op": "press",
+   "area": 8.65,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 12.107,
+   "floor": 6.918
+  },
+  {
+   "name": "top_slash4",
+   "op": "press",
+   "area": 8.86,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 12.402,
+   "floor": 7.087
+  },
+  {
+   "name": "top_plate1",
+   "op": "press",
+   "area": 15.57,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 21.368,
+   "floor": 12.458
+  },
+  {
+   "name": "left_lane1",
+   "op": "press",
+   "area": 31.97,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 44.782,
+   "floor": 25.589
+  },
+  {
+   "name": "left_slot1",
+   "op": "press",
+   "area": 3.05,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 4.272,
+   "floor": 2.441
+  },
+  {
+   "name": "left_slot2",
+   "op": "press",
+   "area": 3.06,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "graphite",
+   "removed": 4.288,
+   "floor": 2.45
+  },
+  {
+   "name": "left_tick1",
+   "op": "press",
+   "area": 5.41,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 7.574,
+   "floor": 4.328
+  },
+  {
+   "name": "left_tick2",
+   "op": "press",
+   "area": 3.63,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 5.079,
+   "floor": 2.903
+  },
+  {
+   "name": "left_tick3",
+   "op": "press",
+   "area": 5.6,
+   "d": 0.6,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 7.84,
+   "floor": 4.48
+  }
+ ],
+ "checks": [
+  {
+   "name": "top_chan1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "top_slash1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "top_slash2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "top_slash3",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "top_slash4",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "top_plate1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "left_lane1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  3.19 mm2"
+  },
+  {
+   "name": "left_slot1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.01 mm2"
+  },
+  {
+   "name": "left_slot2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.02 mm2"
+  },
+  {
+   "name": "left_tick1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.01 mm2"
+  },
+  {
+   "name": "left_tick2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.03 mm2"
+  },
+  {
+   "name": "left_tick3",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  }
+ ],
+ "changed": [
+  {
+   "index": 6,
+   "name": "white",
+   "kind": "white",
+   "volume": 79365.7521,
+   "final": 79196.5333,
+   "pieces": [
+    79196.5333
+   ],
+   "gone": false,
+   "tool": "Side panel_tool6.step"
+  }
+ ],
+ "new": [
+  {
+   "name": "top_chan1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    18.4055
+   ]
+  },
+  {
+   "name": "top_slash1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.991
+   ]
+  },
+  {
+   "name": "top_slash2",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.6564
+   ]
+  },
+  {
+   "name": "top_slash3",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    6.9184
+   ]
+  },
+  {
+   "name": "top_slash4",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    7.0869
+   ]
+  },
+  {
+   "name": "top_plate1",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    12.4578
+   ]
+  },
+  {
+   "name": "left_lane1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    25.5895
+   ]
+  },
+  {
+   "name": "left_slot1",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    2.4411
+   ]
+  },
+  {
+   "name": "left_slot2",
+   "kind": "graphite",
+   "rgb": [
+    0.2471,
+    0.2667,
+    0.298
+   ],
+   "pieces": [
+    2.4503
+   ]
+  },
+  {
+   "name": "left_tick1",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.3277
+   ]
+  },
+  {
+   "name": "left_tick2",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    2.9026
+   ]
+  },
+  {
+   "name": "left_tick3",
+   "kind": "blue",
+   "rgb": [
+    0.1294,
+    0.4471,
+    0.949
+   ],
+   "pieces": [
+    4.48
+   ]
+  }
+ ],
+ "ok": true
+}

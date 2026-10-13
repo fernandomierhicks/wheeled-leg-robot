@@ -1,7 +1,7 @@
 """Step 16: check the styled state, then save every v5 document.
 
     C:/Users/ferna/cadenv/Scripts/python.exe cad/solidworks_api/16_check_and_save.py [--dry]
-    C:/Users/ferna/cadenv/Scripts/python.exe cad/solidworks_api/16_check_and_save.py --chain <v5-relative part> ... [--dry]
+    C:/Users/ferna/cadenv/Scripts/python.exe cad/solidworks_api/16_check_and_save.py --chain <v5-relative part> ... [--dry] [--quick]
 
 --chain (his rule, 2026-10-06: an edited part never leaves its assemblies
 fragile): saves the named parts AND every open v5 assembly that contains them
@@ -46,10 +46,13 @@ def v5_docs(sw):
     return out
 
 
-def styled_ok(sw, docs):
-    """[] if every styled part is loaded and styled in memory (gotcha 37)."""
+def styled_ok(sw, docs, only=None):
+    """[] if every styled part is loaded and styled in memory (gotcha 37).
+    only: a set of normcased paths -- check just those (chain --quick)."""
     bad = []
     for rel in STYLED + STYLED_LATER:
+        if only is not None and os.path.normcase(os.path.join(swlib.V5, rel)) not in only:
+            continue
         d = docs.get(os.path.normcase(os.path.join(swlib.V5, rel)))
         if d is None:
             bad.append(f"{rel}: not loaded")
@@ -76,10 +79,12 @@ def _save(d):
     return ok
 
 
-def chain(sw, parts, dry=False):
+def chain(sw, parts, dry=False, quick=False):
     """Save `parts` (v5-relative or absolute paths) and every open v5 assembly
     containing any of them, bottom-up, ROBOT last.  Refuses (saves nothing) on
-    an unstyled styled part, or a mate error in any of those assemblies."""
+    an unstyled styled part, or a mate error in any of those assemblies.
+    quick (while iterating): only the assemblies that DIRECTLY contain a part, no ROBOT, styled
+    check on the named parts only -- ROBOT stays dirty, so finish with a full chain."""
     model = swlib.open_v5(sw)
     docs = {os.path.normcase(d.GetPathName()): d for d in v5_docs(sw)}
     want = [os.path.normcase(p if os.path.isabs(p) else os.path.join(swlib.V5, p)) for p in parts]
@@ -91,7 +96,7 @@ def chain(sw, parts, dry=False):
     for k, d in docs.items():
         if d.GetType() == c.swDocASSEMBLY:
             paths = {os.path.normcase(wrap(x, sld.IComponent2).GetPathName() or "")
-                     for x in wrap(d, sld.IAssemblyDoc).GetComponents(False) or []}
+                     for x in wrap(d, sld.IAssemblyDoc).GetComponents(bool(quick)) or []}   # quick: top level
             if paths & set(want):
                 holds[k] = paths
     # sub-assemblies first: an assembly goes after every assembly it contains
@@ -104,7 +109,12 @@ def chain(sw, parts, dry=False):
         for k in sorted(ready, key=lambda k: k == os.path.normcase(swlib.ASM)):
             order.append(k)
             del left[k]
-    bad = styled_ok(sw, docs)
+    if quick:
+        holds = {k: v for k, v in holds.items() if k != os.path.normcase(swlib.ASM)}
+        order = [k for k in order if k in holds]
+        bad = styled_ok(sw, docs, only=set(want))
+    else:
+        bad = styled_ok(sw, docs)
     if os.path.normcase(swlib.ASM) in holds:
         sw.ActivateDoc3(model.GetTitle(), False, 0, 0)
         if swlib.HipDriver.remove(model):
@@ -115,7 +125,8 @@ def chain(sw, parts, dry=False):
         errs += [(docs[k].GetTitle(),) + e for e in mate_errors(docs[k])]
     if bad or errs:
         raise SystemExit("REFUSING TO SAVE:" + "".join("\n  " + str(x) for x in bad + errs))
-    print(f"  chain: {len(want)} part(s) + {len(order)} assemblies, 0 mate errors")
+    print(f"  chain{' (QUICK -- ROBOT not saved, finish with a full chain)' if quick else ''}: "
+          f"{len(want)} part(s) + {len(order)} assemblies, 0 mate errors")
     for k in want + order:
         if dry:
             print(f"    would save {os.path.relpath(docs[k].GetPathName(), swlib.V5)}")
@@ -169,6 +180,6 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     if "--chain" in args:
         sw, _ = swlib.connect()
-        chain(sw, [a for a in args if a not in ("--chain", "--dry")], "--dry" in args)
+        chain(sw, [a for a in args if a not in ("--chain", "--dry", "--quick")], "--dry" in args, "--quick" in args)
     else:
         main("--dry" in args)

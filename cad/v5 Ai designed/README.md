@@ -24,6 +24,119 @@ git). This file is the cheatsheet: read it before touching SolidWorks from code.
 > `chain()` itself (22, 23); a new one must too. Don't end a session -- or start
 > a long sweep -- with unsaved assemblies.
 
+## ▶ Faster iteration -- 2026-10-09 (`31_part.py`, `16 --quick`, `25 mirror-colours <Part>`)
+
+His complaint: every tweak took 10-20 min.  Measured on the Side panel (SolidWorks session,
+72 docs open): `28 build` 210 s, whiten 2 s, `25 mirror-colours` for the one part 20 s (all 7
+mirror parts: several times that), chain save **full 265 s vs `--quick` 66 s**.  The old
+sequence (build -> recolour script -> mirror-colours (all) -> chain, each its own process with a
+full chain inside) was ~15 min; the new one is ~5 min while iterating.
+
+* **`31_part.py <Part> [--quick]`** -- build + part hook + mirror colours (that part's mirror
+  only) + ONE chain of the part and its mirror, in one SolidWorks session, each stage timed.
+  Needs `28 export` + `28 preview` first.  `HOOKS` holds part-specific recolours (Side panel ->
+  `30_sidepanel.whiten`: the bodies he called invisible, both faces, are recoloured white, geometry
+  untouched).  New parts: add a hook there if they need one.
+* **`16_check_and_save.py --chain <part> ... --quick`** (`chain(sw, parts, quick=True)`): saves
+  the parts and only the assemblies that DIRECTLY hold them (no ROBOT, no grand-parents), styled
+  check on the named parts only.  ROBOT and the middle assemblies stay dirty, so **the rule at
+  the top still holds: finish every part, and every session, with a plain (full) chain** --
+  `31_part.py <Part>` without `--quick`, or `16 --chain <part>`.
+* **`25_fasteners.py mirror-colours "<source part name>" ...`**: only those parts' mirrors (the
+  RobotMount trench colours only if RobotMount is named); no names = all, as before.
+* Where the time goes (so the next speed-up aims right): the build's RL_ boolean features + the
+  probe export dominate; a full chain is ~4.5 min because ROBOT is rebuilt, mate-checked and
+  saved with every parent.  Untried: disabling graphics / the feature tree during scripts.
+* `29_skin.py <Part>`: offline 3MF with colour only 0.8 mm deep (a test; Bambu filled holes in
+  its output -- the export is NOT trusted, he exports from SolidWorks).  Normal 3MFs untouched.
+
+## ▶ STANDING RULES for every colour / accent edit (his, 2026-10-10 -- applies to ALL parts)
+
+* **An accent (blue, graphite -- anything not the white body) is 0.6 mm thick: 3 layers of 0.2.**
+  Never thicker.  The grey/blue filament is weaker than the white, so **the inside of every
+  part stays white**: structure is white, accents are skin.  This holds for flush colour
+  inlays, pressed recess floors, raised accents and pipes' graphite collars alike.
+* **How it is set, per tool:** `28_relief.py` `press(..., t=)` floor = 0.6 (`SIDE_T`; the
+  groove depth `d` is empty space, not colour); wheel hub / washer accents are raised 0.6;
+  `15_style_washers.py` inlays 0.6; `08_style_part.py` colour slabs are `grey_d` / `accent_d`
+  in the part's spec (set both 0.6, measured from the real face `ZS`, not `ZSHOW`), accents on
+  the raised frame are 0.6 from the frame top (`FRAME_T`, extras `frame_grey` / `frame_blue`),
+  and `engrave_d: 0` makes the recipe accents flush colour inlays (no engraving: an engraved
+  recess shallower than its colour slab would leave the colour in mid-air).
+* **Tibia, 2026-10-10:** also at 0.6 now -- `09_style_tibia.py` colour pass rewritten to flush 0.6 mm inlays
+  on a white body (blue accent + graphite collars on the show face, graphite back trace, graphite pocket /
+  window floors; no engraving), then `28 build`, `25 mirror-colours`, chain saved (0 mate errors).  GL_Cutouts'
+  edge nearest the Top Plane moved 2 mm away (`tibia.py`, `top - 2.0`).  Restyle needs the RL_ features
+  deleted first (`28._delete_rl`).  Tibia hose (`24 PIPES`) NOT yet added: the proposer finds no 5 mm flat run.
+* **Status of the parts:** only the **Coupler** has been rebuilt to this rule (2026-10-10).
+  Femur, Femur_inside, Tibia, Side panel, RobotMount, the box parts and the wheel were
+  styled earlier with 0.8-3.5 mm colour slabs / 0.8 floors: **when any of them is edited
+  again, bring it to 0.6 at the same time** (spec `grey_d` / `accent_d` / `engrave_d`, the
+  28 floor `t`), do not copy their old depths.
+* **Coupler, same day:** no accent within r 38 of the E bearing (blue ring, graphite blocks,
+  trace ends removed: `extras.coupler`); graphite + blue bars across the raised frame; the
+  two flange side faces (+Y 25.06, -Y 23.63) added to `SIDES` so they get the link-side grooves.
+* **Coupler face-normal bug (2026-10-10):** the 12-degree drafted `GL_Frame` made the white body
+  fail SolidWorks' body check (`IBody2.Check2` = 2; the +Z face was not drawn, "empty from the
+  top").  The committed pre-today Coupler had it too.  Fix: spec `frame_draft: 0` (08 reads it).
+  **Check2 each part's largest body after any restyle** (0 = fine; the other links are 0).
+* **Coupler hose (2026-10-10):** one corrugated hose `spine` on the SHOW face (away from the tall
+  tube), 30 mm, between the slot rows toward the bearing end (`24_pipes.PIPES["Coupler"]`, built as
+  `PP_spine*`).  His calls: the Coupler's slots are zip-tie slots, so a pipe may cross them
+  (`SLOTS_OK` in 24); the blue trace was trimmed back off the hose corridor (`extras.COUPLER_HOSE`;
+  keep it in step with the PIPES points).  A hose is a 2.5 mm proud half-cylinder, an exception to the
+  0.6 mm accent rule.  Rebuild order after a Coupler restyle: `28 export/preview/build`, `24 export/
+  preview/build`, `25 mirror-colours Coupler`, `16 --chain Links/MirrorCoupler.SLDPRT`.
+  Also: accent polygons must not carry zero-area slivers (`extras._clean`); the flange edge is
+  stepped, so `SIDES` takes a per-face `(margin, min_h)` and lists each step.
+
+## ▶ Femur hip-end traces, 2026-10-10 (`33_femur_traces.py`)
+
+His call: raised grey/blue trace accents on the Femur's show face (z -5, the hose face), at the
+end with the 3 motor mounting holes; 3 mm keepout from those holes only (the middle of the
+circular face is free).  Three blue spokes (45-degree dogleg, diamond pad, raked comb ticks)
+between the holes + three graphite raked plates, all 0.6 mm raised, inside the r 19.4 disc about
+A (1.2 mm off its edge, 0.8 from the existing graphite plate, 1.5 off the centre pilot hole).
+Added as Imported features **`RA_trace_*`** (new bodies, nothing cut, no mate face touched; not
+`RL_`, which `28 build Femur` deletes -- delete RA_* before it and re-run 33 after, like `MF_`).
+Preview: `out/relief/Femur_traces.png`.  MirrorFemur follows via `25 mirror-colours Femur`.
+
+## ▶ Side panel, 2026-10-09 -- accents + invisible colour removed (`28` design `d_sidepanel`, `30`)
+
+His call: colours not visible once assembled go white; accents only 2 layers deep (0.8 mm).
+Inner face (z 10): the blue bore lining, the combs / S trace and the two lower graphite plates
+-> white (`30_sidepanel.GREEN`; the middle graphite bar and the blue hose kept); the whole back
+face (z 0) -> white; two white areas got pressed accents (0.6 recess on a 0.8 colour floor): the
+strip above the bore and the strip down the left edge (`d_sidepanel` in 28, 12 ops, probe all
+right).  `Side panel` moved from `PRINT_ONLY` to `PARTS` in 28.  Left mirror recoloured + saved.
+
+## ▶ Femur hip (AK45) end filled -- 2026-10-09 (`32_femur_motorfill.py`)
+
+His call: the femur disc that bolts to the AK45 rotor had cuts round its circumference from
+both faces that nearly met in the middle (a ~1 mm web); "OK to add material, never remove".
+Two voids, filled flush with white: 646 mm3 from the rotor (+z) face and 509 mm3 from the -z face
+(disc r 19.4 about A = (-93.79, 0) in the Femur frame, z -5..5; relief grooves and hole rings
+left alone).  Checked offline against the rotor (starts at z 5.0: touching only), stator, wheel
+motor and the M2.5 heads (below z -5): 0 mm3 overlap -- the fill sits inside the disc's own
+swept cylinder.  In SolidWorks: Imported features **`MF_motorfill_1/2`** (not `RL_`: `28 build
+Femur` deletes RL_ and checks the body count -- delete MF_ first, re-run 32 after), separate
+white bodies, nothing merged, so no mate face changed; MirrorFemur follows (43 bodies);
+chain 0 mate errors.  Merge into the white body later if wanted (Combine add -- watch mates).
+
+## ▶ RobotMount redo -- 2026-10-12 (`extras.py`, spec `robotmount.json`, `08`, `24`)
+
+His 4 asks: (1) colour on the hose face is a **0.6 mm** inlay, not through the plate (spec `accent_d`/`grey_d` 0.6,
+`engrave_d` 0); (2) the **back face carries nothing** (spec `colour_back: false` -> `08` skips the back colour slab and
+`GL_BackCircuit`); (3) the hose moved to the left field under the graphite step-bar (`extras.ROBOTMOUNT_HOSE` =
+`PIPES["RobotMount"]`) -- still a **trench**: the Femur_inside plate sweeps 1.9 mm over ALL of the left field, a proud hose
+fails the preview; (4) a non-structural **lobe** under the field's bottom edge (`extras.LOBE`, x 33..82, y 0..-13, plate
+z 0..5, through window `LOBE_CUT`, own graphite/blue accents), added by `08` as `GL_Lobe` / `GL_LobeCut` after the side pockets.
+The old RobotMount pressed step-bar (`28`) is retired: `d_robotmount` returns nothing (0.6 mm inlays are too thin to press into).
+Rebuild order: delete `RL_`/`PP_`/`PT_` features (`28._delete_rl`, `24._delete_pp`) -> `08 RobotMount --restyle` ->
+`24 export/preview/build RobotMount` -> colour the bare `PT_trench1` white -> `25 mirror-colours RobotMount` ->
+`16 --chain` RobotMount + MirrorRobotMount -> `24 print RobotMount`. Static interference at hip 0: nothing new
+(ODrive / Battery x RobotMount are the old 301 mm3 pairs, y >= 6.5, nowhere near the lobe).
+
 ## ▶ Relief: colour shapes pressed, grooves on the link sides -- 2026-10-09 (`28_relief.py`)
 
 His brief (4 marked screenshots): "whenever there is a shape of different colour in a part, when

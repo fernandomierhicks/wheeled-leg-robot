@@ -56,11 +56,11 @@ PARTS = {"RobotMount": r"Body\OldRobotBodyMount\RobotMount.SLDPRT",
          "Femur": r"Links\Femur.SLDPRT",
          "Femur_inside": r"Links\Femur_inside.SLDPRT",
          "Coupler": r"Links\Coupler.SLDPRT",
-         "Tibia": r"Links\Tibia.SLDPRT"}
+         "Tibia": r"Links\Tibia.SLDPRT",
+         "Side panel": r"Body\Side panel.SLDPRT"}
 # every other printed part: `export` + `print` only (no relief), so ALL the 3MFs can be
 # regenerated from SolidWorks the same way (his call 2026-10-09: "regenerate all print files")
-PRINT_ONLY = {"Side panel": r"Body\Side panel.SLDPRT",
-              "FacetHood": r"Box\Facet\FacetHood.SLDPRT",
+PRINT_ONLY = {"FacetHood": r"Box\Facet\FacetHood.SLDPRT",
               "FacetRing": r"Box\Facet\FacetRing.SLDPRT",
               "BumperFront": r"Box\Facet\BumperFront.SLDPRT",
               "BumperBack": r"Box\Facet\BumperBack.SLDPRT",
@@ -464,19 +464,26 @@ def _proj(shape, frame, dev=0.05):
     return unary_union([Polygon(uv[t]).buffer(1e-3) for t in T if Polygon(uv[t]).area > 1e-6])
 
 
+RM_DEPTH, RM_FLOOR = 1.0, 0.6      # his call 2026-10-12: the show face's colour is cut 1 mm deep (2 mm was too deep), a 0.6 mm colour floor under it
+
+
 def d_robotmount(P):
-    """His image 1: the graphite step-bar of the left field (extras.py) and the recipe bar it
-    carries on from, pressed 1.0 -- the white vent slashes in its head stay at the face as
-    standing ribs.  Stops 2 mm short of the trench pipe's slot.  The plate is graphite
-    through there, so no new floor body: the recess just lowers the graphite."""
+    """His call (2026-10-12): every colour shape on the show face -- the left field, the lobe, the rest of the
+    face -- is an extruded cut RM_DEPTH deep (they were 0.6 mm flush inlays, 08's accent_d), each on a RM_FLOOR
+    floor of its own colour.  Stays flush: a shape under MIN_W wide, one touching the face edge, and anything
+    within 1 mm of the trench slot (the hose's slot and its graphite clamps)."""
     from build123d import import_step
-    from shapely.ops import unary_union
     F = Frame(P, (0, 0, 1), 5.0, u=(1, 0, 0), name="show face")
-    g = F.footprint(kinds=["graphite"])
     slot = _proj(import_step(os.path.join(HERE, "out", "pipes", "RobotMount_trench.step")), F)
-    field = unary_union([p for p in getattr(g, "geoms", [g]) if p.bounds[0] < 100 and p.bounds[1] > 0])
-    region = field.difference(slot.buffer(2.0, join_style=2))
-    return [press(F, region, 1.0, "graphite", t=1.0, grow=GROW, name="stepbar")], []
+    ops, skipped = press_inlays(F, ["graphite", "blue"], RM_DEPTH, RM_FLOOR, "rm", keep=slot.buffer(1.0))
+    # the top-left blue trace (his call): its end runs up to the screw seat's counterbore, which the generic
+    # "touches the face edge" rule mistakes for the plate edge -- it is pressed all the same
+    g = F.footprint(kinds=["blue"])
+    for p in getattr(g, "geoms", [g]):
+        if p.geom_type == "Polygon" and p.area > 50 and p.bounds[0] > 14 and p.bounds[2] < 48 and p.bounds[1] > 47:
+            ops.append(press(F, p, RM_DEPTH, "blue", t=RM_FLOOR, grow=GROW, name="rm_topleft"))
+            skipped = [x for x in skipped if not (x[0] == "blue" and abs(x[1] - p.area) < 0.5)]
+    return ops, skipped
 
 
 def _slash(uc, vc, w, h, skew):
@@ -577,9 +584,10 @@ def d_wheel(P):
 
 
 # ---- the link sides: grooves with coloured floors ----------------------------------
-SIDE_D, SIDE_T = 0.8, 0.8      # groove depth, coloured floor
+SIDE_D, SIDE_T = 0.8, 0.6      # groove depth, coloured floor (accents are 0.6 mm = 3 layers thick)
 SIDE_MARGIN = 1.2              # from the side's edges, its pockets and every other colour
 LINE_W = 1.2                   # the blue channel
+THICK_W = 3.0                  # the thick graphite side trace (Tibia)
 
 
 def _contact_keep(part):
@@ -593,7 +601,7 @@ def _contact_keep(part):
     return unary_union(gs).buffer(2.0) if gs else None
 
 
-def _side_pattern(R, k):
+def _side_pattern(R, k, min_h=2.6, thick=False):
     """One side run (a shapely region, u along the link, v across its thickness) ->
     {colour: geometry}.  Along the run, repeating units in the GLACIER vocabulary: a
     graphite plate with one 45-degree raked end, a raked blue hatch comb, a blue channel
@@ -604,7 +612,7 @@ def _side_pattern(R, k):
     u0, v0, u1, v1 = R.bounds
     L, H = u1 - u0, v1 - v0
     out = {}
-    if H < 2.6 or L < 12:
+    if H < min_h or L < 12:
         return out
     vc = (v0 + v1) / 2
     lane = H >= 12.0
@@ -649,6 +657,14 @@ def _side_pattern(R, k):
         i += 1
     if lane:
         blue.append(LineString([(u0 + 2.0, vc_l), (u1 - 2.0, vc_l)]).buffer(LINE_W / 2, cap_style=2))
+        v_lo = vc_l + LINE_W / 2 + 1.5            # `thick`: a wide graphite trace in the free band above the lane
+        if thick and v1 - v_lo >= 3.0 and L >= 30:
+            w = min(THICK_W, v1 - v_lo - 1.2)
+            vt, dv = (v_lo + v1) / 2, min(1.2, (v1 - v_lo - w) / 2)
+            a, b = u0 + 3.0, u1 - 3.0
+            ud = a + (b - a) * (0.35 if k % 2 else 0.6)
+            path = [(a, vt - dv), (ud, vt - dv), (ud + 2 * dv, vt + dv), (b, vt + dv)]
+            gfx.append(LineString(path).buffer(w / 2, cap_style=2, join_style=2, mitre_limit=2.0))
     if blue:
         out["blue"] = unary_union(blue).intersection(R)
     if gfx:
@@ -657,7 +673,7 @@ def _side_pattern(R, k):
     return out
 
 
-def side_grooves(P, planes, seed=0):
+def side_grooves(P, planes, seed=0, thick=False):
     """Grooves on the given side planes: each white run of the side (its white faces minus
     SIDE_MARGIN round edges, pockets and other colours), exposed (nothing of the part in
     front of it), clear of the designed contacts, gets _side_pattern.  A shape whose floor
@@ -666,17 +682,18 @@ def side_grooves(P, planes, seed=0):
     from shapely.ops import unary_union
     keep = _contact_keep(P.name)
     ops, skipped = [], []
-    for pi, (n, dd, nm) in enumerate(planes):
+    for pi, (n, dd, nm, *opt) in enumerate(planes):
+        margin, min_h = opt[0] if opt else (SIDE_MARGIN, 2.6)     # a narrow flange face gets a smaller margin
         F = Frame(P, n, dd, u=(1, 0, 0), name=nm)
         white = F.footprint(kinds=["white"])
         other = F.footprint(kinds=[k for k in KINDS if k != "white"])
-        ground = white.buffer(-SIDE_MARGIN, join_style=2)
+        ground = white.buffer(-margin, join_style=2)
         if not other.is_empty:
-            ground = ground.difference(other.buffer(SIDE_MARGIN, join_style=2))
+            ground = ground.difference(other.buffer(margin, join_style=2))
         runs = sorted([g for g in getattr(ground, "geoms", [ground]) if isinstance(g, Polygon) and g.area > 30],
                       key=lambda g: g.bounds[0])
         for ri, R in enumerate(runs):
-            pat = _side_pattern(R, seed + pi * 7 + ri)
+            pat = _side_pattern(R, seed + pi * 7 + ri, min_h, thick)
             for colour, g in pat.items():
                 for si, p in enumerate(getattr(g, "geoms", [g])):
                     if not isinstance(p, Polygon) or p.area < 1.5:
@@ -712,19 +729,167 @@ SIDES = {
     "Femur": [((0.013, 1, 0), 18.2, "+Y side"), ((0.013, -1, 0), 18.2, "-Y side"),
               ((0, 1, 0), 22.6, "+Y flange side"), ((0, -1, 0), 23.53, "-Y flange side")],
     "Femur_inside": [((0.028, 1, 0), 19.62, "+Y side"), ((0.028, -1, 0), 19.63, "-Y side")],
-    "Coupler": [((-0.03, 1, 0), 19.51, "+Y side"), ((-0.03, -1, 0), 19.51, "-Y side")],
+    "Coupler": [((-0.03, 1, 0), 19.51, "+Y side"), ((-0.03, -1, 0), 19.51, "-Y side"),
+                ((-0.03, 1, 0), 25.06, "+Y flange side", (0.6, 1.8)),
+                ((-0.001, -1, 0), 23.63, "-Y flange side", (0.6, 1.8)),
+                ((-0.03, -1, 0), 19.12, "-Y flange face", (0.6, 1.8)),
+                ((-0.001, -1, 0), 23.95, "-Y flange step 23.95", (0.6, 1.8)),
+                ((-0.001, -1, 0), 20.51, "-Y flange step 20.51", (0.6, 1.8)),
+                ((-0.001, -1, 0), 18.25, "-Y flange step 18.25", (0.6, 1.8))],
     "Tibia": [((-0.026, 1, 0), 16.02, "+Y side"), ((0.034, -0.999, 0), 27.59, "-Y side"),
               ((0.034, -0.999, 0), 34.64, "-Y side, wheel end")],
 }
 
 
 def d_link(part):
-    return lambda P: side_grooves(P, SIDES[part], seed={"Femur": 0, "Femur_inside": 3, "Coupler": 5, "Tibia": 2}[part])
+    return lambda P: side_grooves(P, SIDES[part], seed={"Femur": 0, "Femur_inside": 3, "Coupler": 5, "Tibia": 2}[part],
+                                  thick=part == "Tibia")
 
 
-DESIGN = {"RobotMount": d_robotmount, "FacetBack": d_facetback, "FacetFront": d_facetfront,
+def d_sidepanel(P):
+    """His call 2026-10-09: accents (blue + graphite, pressed 0.6 on a 0.8 colour floor) in the
+    two white areas he marked red on the inner face (z 10): the strip above the bearing bore
+    and the strip down the left edge.  Nothing within 2 mm of a hole, the face edge or a
+    colour shape.  (The colour on the bore, combs, S trace and the two lower plates is whitened
+    in SolidWorks by 30_sidepanel.py, not here.)"""
+    from shapely.affinity import rotate
+    from shapely.geometry import LineString, box
+    from shapely.ops import unary_union
+    F = Frame(P, (0, 0, 1), 10.0, u=(1, 0, 0), name="inner face")
+    free = F.footprint().buffer(-2.0, join_style=2)
+    top = box(-47.0, 52.5, -17.0, 60.0)
+    left = box(-63.0, 22.0, -49.5, 52.0)
+    ops = []
+
+    def put(region, zone, colour, name):
+        g = region.intersection(zone).intersection(free)
+        for j, p in enumerate(getattr(g, "geoms", [g])):
+            if p.geom_type == "Polygon" and p.area > 2.0 and                     p.buffer(-MIN_W / 2, join_style=2).buffer(MIN_W / 2, join_style=2).area > 0.8 * p.area:
+                ops.append(press(F, p, 0.6, colour, t=0.8, name=f"{name}{j + 1}"))
+
+    # top strip: a blue dogleg channel along the bottom, a graphite plate with raked ends above
+    # it, four blue raked slashes at its right end
+    put(LineString([(-47, 54.8), (-40, 54.8), (-37.5, 57.0), (-33, 57.0)]).buffer(0.8, cap_style=2, join_style=2),
+        top, "blue", "top_chan")
+    put(unary_union([_slash(-26.5 + 2.6 * k, 56.2, 1.5, 6.0, 2.6) for k in range(4)]), top, "blue", "top_slash")
+    from shapely.geometry import Polygon
+    put(Polygon([(-34.5, 55.6), (-20.5, 55.6), (-19.0, 58.9), (-32.0, 58.9)]).difference(
+        unary_union([_slash(-26.5 + 2.6 * k, 56.2, 2.3, 6.4, 2.6) for k in range(4)])),
+        top, "graphite", "top_plate")
+    # left strip: a blue lane with a jog, raked graphite slots beside it
+    put(LineString([(-53.5, 50.5), (-53.5, 40.0), (-56.5, 37.0), (-56.5, 26.0)]).buffer(0.8, cap_style=2, join_style=2),
+        left, "blue", "left_lane")
+    put(unary_union([_slash(-59.7, 46.0 - 6.2 * k, 1.6, 4.4, 1.6) for k in range(4)]), left, "graphite", "left_slot")
+    put(unary_union([_slash(-51.0, 46.0 - 6.2 * k, 1.4, 4.0, -1.4) for k in range(3)]), left, "blue", "left_tick")
+    return ops, []
+
+
+TIB_D, TIB_T = 2.0, 0.6        # his call 2026-10-11: Tibia face accents 2 mm deep, 0.6 mm of colour
+TIB_LANES = [(v, c) for k, v in enumerate(np.arange(23.0, -25.0, -2.6))
+             for c in [("blue", "graphite")[k % 2]] for _ in range(4)]    # 4 route tries per lane
+TIB_W = {"blue": 2.6, "graphite": 3.4}
+TIB_U_MAX = 195.0              # the encoder carrier and wheel-end screws sit beyond this on the inboard face
+
+
+def _wander_traces(ground, u0=36.0, u1=TIB_U_MAX if False else 195.0, seed=4):
+    """Thick routed tracks that wander: straight runs joined by 45-degree doglegs (the hose face's and
+    the Femur's vocabulary), mitre joins, ends chamfered at 45 degrees; a comb of three ticks at the
+    start of some.  One route per lane (v), each kept only where its full width fits the free ground
+    and 2 mm clear of the tracks already placed.  -> [(colour, polygon, name)]"""
+    from shapely.geometry import LineString, Point, Polygon
+    from shapely.ops import substring, unary_union
+    rng = np.random.default_rng(seed)
+    placed, out = [], []
+    for li, (v, colour) in enumerate(TIB_LANES):
+        w = TIB_W[colour]
+        pts, x, y = [(u0 + rng.uniform(0, 10), v)], 0, v
+        x = pts[0][0]
+        while x < u1 - 20:
+            x += rng.uniform(22, 40)
+            dy = float(rng.choice([-1, 1])) * rng.uniform(2.5, 4.5)
+            if abs(y + dy - v) > 5.0:
+                dy = -dy
+            pts += [(x, y), (x + abs(dy), y + dy)]
+            x, y = x + abs(dy), y + dy
+        pts.append((u1, y))
+        L = LineString(pts)
+        free = ground.difference(unary_union(placed).buffer(2.0, join_style=2)) if placed else ground
+        core = free.buffer(-w / 2, join_style=2)
+        ok = [core.contains(Point(L.interpolate(s).coords[0])) for s in np.arange(0, L.length, 0.5)]
+        i = 0
+        while i < len(ok):
+            if not ok[i]:
+                i += 1
+                continue
+            j = i
+            while j < len(ok) and ok[j]:
+                j += 1
+            s0, s1 = i * 0.5, j * 0.5
+            i = j
+            if s1 - s0 < 12.0:
+                continue
+            seg = substring(L, s0, s1)
+            tr = seg.buffer(w / 2, cap_style=2, join_style=2, mitre_limit=2.0)
+            h, c = w / 2, w / 2 * 0.9
+            for e, e2 in ((seg.coords[0], seg.coords[1]), (seg.coords[-1], seg.coords[-2])):
+                d = np.array(e2) - np.array(e)
+                d = d / np.hypot(*d)                      # unit vector pointing back along the track
+                nrm = np.array([-d[1], d[0]])
+                for sgn in (1, -1):
+                    a = np.array(e) + sgn * h * nrm
+                    tr = tr.difference(Polygon([tuple(a + 1e-3 * (a - e)), tuple(a + d * c), tuple(np.array(e) + sgn * (h - c) * nrm)]))
+            if tr.is_empty or tr.geom_type != "Polygon" or tr.area < 20:
+                continue
+            placed.append(tr)
+            out.append((colour, tr, f"l{li}_{colour[0]}{len(out)}"))
+            if colour == "blue" and s1 - s0 > 30 and len(out) % 3 == 0:     # a comb of ticks ahead of the track
+                p0 = np.array(seg.coords[0]); d = np.array(seg.coords[1]) - p0; d /= np.hypot(*d)
+                for k in range(3):
+                    cpt = p0 - d * (4.0 + 2.6 * k)
+                    tk = LineString([tuple(cpt - np.array([-d[1], d[0]]) * 3 - d * 1.6), tuple(cpt + np.array([-d[1], d[0]]) * 3 + d * 1.6)]).buffer(0.55, cap_style=2)
+                    if ground.difference(unary_union(placed).buffer(1.5)).buffer(-0.1).contains(tk):
+                        placed.append(tk)
+                        out.append(("blue", tk, f"l{li}_tick{len(out)}"))
+    return out
+
+
+def d_tibia(P):
+    """The side grooves, then (1) the hose face's (+Z 13.5) flush blue / graphite accents sunk 2 mm
+    on a 0.6 floor, and (2) NEW blue / graphite accents on the plain back face (-Z 13.5), same depth."""
+    from shapely.geometry import Polygon, box
+    from shapely.ops import unary_union
+    ops, skipped = d_link("Tibia")(P)
+    for dd in (13.5, 12.9):                          # the hose face and the frame-top plane
+        Fh = Frame(P, (0, 0, 1), dd, u=(1, 0, 0), name=f"hose face {dd}")
+        hose = [_proj(b["solid"], Fh) for b in P.bodies if b["name"].startswith("PP_")]
+        hk = unary_union(hose).buffer(0.5) if hose else None      # the hose + its collars stay whole
+        o, s = press_inlays(Fh, ["blue", "graphite"], TIB_D, TIB_T, f"hf{dd:g}", keep=hk)
+        ops += o
+        skipped += s
+    Fb = Frame(P, (0, 0, -1), 13.5, u=(1, 0, 0), name="back")
+    white = Fb.footprint(kinds=["white"])
+    other = Fb.footprint(kinds=[k for k in KINDS if k != "white"])
+    ground = white.buffer(-1.5, join_style=2)
+    if not other.is_empty:
+        ground = ground.difference(other.buffer(1.5, join_style=2))
+    ground = ground.intersection(box(-1e3, -1e3, TIB_U_MAX, 1e3))
+    n = 0
+    for colour, p, nm in _wander_traces(ground):
+        back = Fb.prism(p.buffer(-0.05, join_style=2), -TIB_D - TIB_T - MIN_WALL, -TIB_D - TIB_T - 0.02)
+        got = sum(_vol(_solid_or_none(b["solid"] & back, 0.0)) for b in P.bodies if _near(b["solid"], back))
+        if got < 0.98 * _vol(back):
+            skipped.append((colour, round(p.area, 1), f"{nm}: thin wall behind"))
+            continue
+        ops.append(press(Fb, p, TIB_D, colour, t=TIB_T, name=f"back_{nm}"))
+        n += 1
+    print(f"  back face: {n} accents")
+    return ops, skipped
+
+
+DESIGN = {"RobotMount": d_robotmount, "Side panel": d_sidepanel, "FacetBack": d_facetback, "FacetFront": d_facetfront,
           "TailStrut": d_tailstrut, "EncoderCarrier": d_encoder_carrier, "EncoderCableClamp": d_encoder_clamp,
           "Wheel": d_wheel, **{p: d_link(p) for p in SIDES}}
+DESIGN["Tibia"] = d_tibia
 
 
 # ============================================================ preview (offline)

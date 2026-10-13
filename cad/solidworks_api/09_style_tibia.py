@@ -12,15 +12,10 @@ own replay of parts/tibia.py build():
             (lo_rk/hi_rk), which is what makes the openings diagonal.  The
             trapezoids overlap their neighbours' profiles, so they cannot be
             grouped per side.
-  colour    NOT inlays.  White is the CAP above a split plane SZ with
-            interlocking trapezoid fingers through the side, plus a white
-            skin on the back with the graphite trace cut out of it; blue is
-            the accent groove inside that; graphite is everything else.
-
-SZ = -8.4375 is what tibia.py's white_share bisection lands on for the 70 %
-target: recomputed with the recipe's own colour rule against the OCC styled
-body it gives 68.8 % white -- the exported OCC white body to the cubic
-millimetre (148036.7 / 215116.9).
+  colour    flush 0.6 mm inlays on a white body (README standing rule: accents are
+            skin, the inside is white): blue accent + graphite collars on the show
+            face, graphite back trace, graphite pocket / window floors.  Pass is the
+            same as 08_style_part's.
 
 Same mechanical keep-out as the Femur: no removal and no raised or added
 feature on a fastener head / washer seat or a bearing retaining washer.
@@ -46,8 +41,7 @@ from shapely.validation import make_valid      # NOT buffer(0): HANDOFF Phase 1
 
 ST = importlib.import_module("08_style_part")
 REL = r"Links\Tibia.SLDPRT"
-SZ = -8.4375                      # see module docstring
-SKIN = 3.5                        # tibia.py back_skin default
+ACC_D = 0.6                       # every accent is 0.6 mm (README standing rule)
 
 
 def trap_xz(x0, x1, z0, z1, skew=5.0, taper_end=True):
@@ -123,24 +117,13 @@ def main(dry=False, fresh=False, restyle=False):
             if b.area > 1.0:
                 zs = [q[1] for q in pr]
                 sides.append((f"GL_Side{side}{i}", b, xz(pr), min(zs), max(zs)))
-    eng = unary_union([g for g in (P["strip"], P["blocks"]) if not g.is_empty])
-    ops_list.append(("cut", "GL_AccentEngrave", mech(eng, "accent engraving"), (ZT - 1.2, ZTOP + 10)))
 
     acc = unary_union([g for g in (P["ring"], P["strip"], P["blocks"]) if not g.is_empty])
-    inset = unary_union([P["pock"].buffer(0.25), P["wins"].buffer(0.25)])
     zbk = P["ZBACK"]
-    region = unary_union([shbox(-1e3, SZ, 1e3, 1e3)] +
-                         [ShPoly(trap_xz(a, b, SZ - 4.5, SZ, skew=6)) for a, b in [(58, 102), (138, 182)]])
-    region = region.difference(unary_union([ShPoly(trap_xz(a, b, SZ, SZ + 14.5, skew=6, taper_end=False))
-                                            for a, b in [(104, 136), (184, 208)]]))
-    region_sk = ShPoly([(x, -z) for x, z in region.exterior.coords]) if region.geom_type == "Polygon" else \
-        unary_union([ShPoly([(x, -z) for x, z in p.exterior.coords]) for p in region.geoms])
 
-    for kind, name, g, args in ops_list:
-        print(f"  {kind:6s} {name:18s} {g.area:7.1f} mm2  {args}")
     print(f"  side   {len(sides)} profiles, each in its own plan trapezoid")
-    print(f"  colour cap above SZ {SZ} with fingers; back skin z {zbk - 1:.2f}..{zbk + SKIN:.2f} minus the "
-          f"trace ({P['grey'].area:.0f} mm2); accent {acc.area:.0f} mm2; inset {inset.area:.0f}; collars {P['collars'].area:.0f}")
+    print(f"  colour inlays {ACC_D} mm: accent {acc.area:.0f} mm2, back trace {P['grey'].area:.0f}, "
+          f"collars {P['collars'].area:.0f}, pocket floors {P['pock'].area:.0f}, window floors {P['wins'].area:.0f}")
     if dry:
         return
 
@@ -187,7 +170,7 @@ def main(dry=False, fresh=False, restyle=False):
         if nb != 1:
             raise SystemExit(f"{name} left {nb} bodies")
 
-    for kind, name, g, args in ops_list[:-1]:          # all but the engraving
+    for kind, name, g, args in ops_list:
         v0 = S.total_volume(model)
         if ST._with_retries(model, kind, name, g, args) is not None:
             report(name, v0)
@@ -205,143 +188,83 @@ def main(dry=False, fresh=False, restyle=False):
             S.delete_bodies(model, S.new_since(model, before))
             print(f"    {name}: profile misses its band -> skipped")
         report(name, v0)
-    kind, name, g, args = ops_list[-1]
-    v0 = S.total_volume(model)
-    if ST._with_retries(model, kind, name, g, args) is not None:
-        report(name, v0)
     styled = S.total_volume(model)
     body = S.bodies(model)[0]
 
-    # ---- colour ---------------------------------------------------------------
-    def scoped(sk, targets, **kw):
-        """A feature-scoped cut.  If SolidWorks refuses it for the group -- it
-        does when ANY one selected body misses the cut -- retry body by body,
-        so a genuine "no overlap" on one body cannot silently cancel the cut on
-        the others (the Tibia's insets kept 6433 mm3 of accent that way)."""
-        if not targets:
-            return False
-        try:
-            S.cut(model, sk, scope=targets, **kw)
-            return True
-        except S.FeatureFailed:
-            if len(targets) == 1:
-                return False
-        names = [t.Name for t in targets]
-        hit = False
-        for i, nm in enumerate(names):
-            b = S.by_name(model, nm)
-            if b is None:
-                continue
-            k = dict(kw)
-            if "name" in k:
-                k["name"] = f"{k['name']}_{i}"
+    # ---- colour: his 0.6 mm rule (README standing rules) -----------------------
+    # The body stays white; every accent is a flush 0.6 mm inlay (3 layers), so the
+    # inside is white.  Same pass as 08_style_part: copy white, cut each slab out of
+    # it, Combine the difference = the inlay (accent first, so it wins where they cross).
+    ZS = ZT                                   # the real show-face plate (ZSHOW == ZT here)
+    ZP = ZT - sp["pocket_d"]                  # pocket floor
+    ZW = ftop - sp["win_d"]                   # window floor
+    D = ACC_D
+    cut_g = {name: g for kind, name, g, args in ops_list}      # what was really cut (after the seat keep-out)
+    colours = [("blue", ST.BLUE, acc, [(ZS - D, ZTOP + 12)]),
+               ("graphite", ST.GRAPHITE, P["grey"], [(ZB - 12, zbk + D)]),
+               ("graphite_c", ST.GRAPHITE, P["collars"], [(ZS - D, ZTOP + 12)]),
+               # his mark: a thick grey accent on the frame top where the wheel-end cutout gave a band back
+               ("graphite_t", ST.GRAPHITE, P["cut_freed"].buffer(-0.8, join_style=2).intersection(cut_g["GL_Frame"]),
+                [(ftop - D, ZTOP + 12)]),
+               ("graphite_p", ST.GRAPHITE, cut_g["GL_Pockets"], [(ZP - D, ZP)]),
+               ("graphite_w", ST.GRAPHITE, cut_g["GL_Windows"], [(ZW - D, ZW)])]
+    made = {}
+    for nm, rgb, g, slabs in colours:
+        if g is None or g.is_empty:
+            continue
+        sk = S.sketch(model, g, name=f"GL_{nm}_Sk")
+        done = ST._all(made)
+        white = ST._largest_except(model, done)
+        w1 = S.copy_body(model, white, name=f"GL_{nm}_Copy")
+        cut_any = False
+        for i, (lo, hi) in enumerate(slabs):
+            white = ST._largest_except(model, done | {w1.Name})
             try:
-                S.cut(model, sk, scope=[b], **k)
-                hit = True
+                S.cut(model, sk, lo, hi, scope=[white], name=f"GL_{nm}_Out{i}")
+                cut_any = True
             except S.FeatureFailed:
-                pass
-        return hit
-
-    # THE ORIGINAL BODY BECOMES WHITE.  Mates in Tibia.SLDASM reference faces
-    # of the original body (bearing bores and seats, the stator face, the M4
-    # seat); a split that turned the original into the graphite remainder and
-    # the cap into COPIES broke 9 of them (swSketchErrorExtRefFail, 51).  So:
-    #   white    = original - band - trace-in-skin - (accent | insets | collars)
-    #   blue     = copy     - band - trace-in-skin - (everything but accent)
-    #   graphite = copy     - cap region - skin                          [band]
-    #            + copy     - above the skin - (all but the trace)       [skin x trace]
-    #            + copy     - band - trace-in-skin - (all but insets) - accent
-    # (a white finger dipping into the skin under the trace goes graphite: the
-    # one deviation from tibia.py, a few mm3, and it keeps the split exact)
-    # where wz = cap region (above SZ, with fingers) + back skin minus trace.
-    # NORMAL cuts only (gotcha 28), no Combine, every body from the same source
-    # body, so the four lineages partition it exactly -- checked by volume below.
-    # These lineages are cut with DIFFERENT sketches, each shrunk 5 um, so two
-    # lineages can each own a ~10 um film along a shared colour boundary (387
-    # mm3 = 0.18 % on the Tibia).  Exact (unshrunk) sketches were tried: the
-    # "everything but accent" complement is then refused outright and blue
-    # swallowed the whole cap.  Films a twentieth of a layer thick are below
-    # anything the printer resolves, so the partition check allows 0.5 % here.
-    big = shbox(-1e3, -1e3, 1e3, 1e3)
-    band_xz = shbox(-1e3, zbk + SKIN, 1e3, 1e3).difference(region)          # recipe (x, z)
-    flip = lambda g: unary_union([ShPoly([(x, -z) for x, z in q.exterior.coords],
-                                         [[(x, -z) for x, z in r.coords] for r in q.interiors])
-                                  for q in S.polys(g, 0)])
-    ic = unary_union([inset, P["collars"]])
-    sk_band = S.sketch(model, flip(band_xz), name="GL_C_BandSk", plane="Top Plane")
-    sk_top = S.sketch(model, region_sk, name="GL_C_CapSk", plane="Top Plane")
-    sk_grey = S.sketch(model, P["grey"], name="GL_C_TraceSk")
-    sk_notgrey = S.sketch(model, big.difference(P["grey"]), name="GL_C_NotTraceSk")
-    sk_holes = S.sketch(model, unary_union([acc, ic]), name="GL_C_HolesSk")
-    sk_notacc = S.sketch(model, big.difference(acc), name="GL_C_NotAccentSk")
-    sk_notic = S.sketch(model, big.difference(ic), name="GL_C_NotInsetSk")
-    sk_acc = S.sketch(model, acc, name="GL_C_AccentSk")
-    sk_big = S.sketch(model, big, name="GL_C_BigSk")
-
-    copies = {}
-    for tag in ("Blue", "GraphA1", "GraphA2", "GraphB"):
-        b0 = S.names(model)
-        S.copy_body(model, S.by_name(model, body.Name), name=f"GL_C_{tag}_Copy")
-        copies[tag] = {S.new_since(model, b0)[0].Name}
-    lineage = {"White": {body.Name}, **copies}
-
-    def run(tag, steps):
-        """Apply `steps` (sketch, z0, z1) as scoped normal cuts to one lineage,
-        tracking its bodies as everything not owned by another lineage."""
-        for i, (sk, z0, z1) in enumerate(steps):
-            others = set().union(*[v for k, v in lineage.items() if k != tag])
-            mine = [b for b in S.bodies(model) if b.Name not in others]
-            if scoped(sk, mine, z0=z0, z1=z1, name=f"GL_C_{tag}_{i}") is False:
-                print(f"    colour {tag} step {i}: no overlap")
-            others = set().union(*[v for k, v in lineage.items() if k != tag])
-            lineage[tag] = {b.Name for b in S.bodies(model) if b.Name not in others}
-
-    skin = (-1e3, zbk + SKIN)
-    run("White", [(sk_band, None, None), (sk_grey, *skin), (sk_holes, None, None)])
-    run("Blue", [(sk_band, None, None), (sk_grey, *skin), (sk_notacc, None, None)])
-    # body - wz, in two lineages: a blind cut of "everything but the trace" was
-    # refused outright, so the trace part of the skin is its own copy
-    run("GraphA1", [(sk_top, None, None), (sk_big, *skin)])              # band, fingers' gaps
-    run("GraphB", [(sk_band, None, None), (sk_grey, *skin), (sk_notic, None, None), (sk_acc, None, None)])
-    # skin x trace, BY REMAINDER: a cut with "everything but the trace" is
-    # refused outright (that sketch has an island nested in a hole), so
-    #   skin x trace = skin - (skin - trace), trace being a plain cut
-    run("GraphA2", [(sk_big, zbk + SKIN, 1e3)])                            # the skin slab
-    slab = sorted(lineage["GraphA2"], key=lambda n: -S.volume(S.by_name(model, n)))
-    owned = set().union(*lineage.values())
-    for n in slab:
-        S.copy_body(model, S.by_name(model, n), name="GL_C_GraphA2_Rest")
-    rest = [b for b in S.bodies(model) if b.Name not in owned]
-    scoped(sk_grey, rest, name="GL_C_GraphA2_NoTrace")
-    rest = [b for b in S.bodies(model) if b.Name not in owned]
-    before = S.names(model)
-    S.combine(model, "cut", S.by_name(model, slab[0]), rest)
-    S.last_feature(model).Name = "GL_C_GraphA2"
-    lineage["GraphA2"] = (set(slab[1:]) | {b.Name for b in S.new_since(model, before)}) - {
-        b.Name for b in rest}
-    blue_names = lineage["Blue"]
-    graphite = lineage["GraphA1"] | lineage["GraphA2"] | lineage["GraphB"]
-    for k, v in lineage.items():
-        print(f"    {k:7s} {len(v):3d} piece(s) {sum(S.volume(S.by_name(model, n)) for n in v):10.1f} mm3")
+                print(f"    colour {nm}: slab {i} misses the part, skipped")
+        if not cut_any:
+            S.delete_bodies(model, [w1])
+            continue
+        rest = [b for b in S.bodies(model) if b.Name != w1.Name and b.Name not in done]
+        keep = [S.copy_body(model, b, name=f"GL_{nm}_Keep{i}") for i, b in enumerate(rest)]
+        before = S.names(model)
+        try:
+            S.combine(model, "cut", S.by_name(model, w1.Name), keep)
+            S.last_feature(model).Name = f"GL_{nm}"
+            made[nm] = [b.Name for b in S.new_since(model, before)]
+        except S.FeatureFailed:
+            print(f"    colour {nm}: Combine subtract refused -> intersecting slab by slab")
+            S.delete_bodies(model, [S.by_name(model, b.Name) for b in keep if S.by_name(model, b.Name)])
+            got = []
+            for i, (lo, hi) in enumerate(slabs):
+                for j, piece in enumerate(S.tool(model, sk, lo, hi, name=f"GL_{nm}_Slab{i}")):
+                    wc = S.copy_body(model, S.by_name(model, w1.Name), name=f"GL_{nm}_W{i}_{j}")
+                    b0 = S.names(model)
+                    try:
+                        S.combine(model, "common", wc, [piece])
+                        got += [b.Name for b in S.new_since(model, b0)]
+                    except S.FeatureFailed:
+                        S.delete_bodies(model, [b for b in (S.by_name(model, wc.Name),
+                                                            S.by_name(model, piece.Name)) if b])
+            S.delete_bodies(model, [S.by_name(model, w1.Name)])
+            made[nm] = [n for n in got if S.by_name(model, n) is not None]
+        print(f"    colour {nm:10s} -> {len(made[nm])} body(ies), "
+              f"{sum(S.volume(b) for b in S.bodies(model) if b.Name in made[nm]):8.1f} mm3")
 
     dropped = ST.drop_debris(model)
-    gnames = graphite
-    for i, b in enumerate(S.bodies(model)):
-        # UNIQUE temporary names: giving every blue body the same name collides,
-        # and SolidWorks keeps only one of them under it
-        b.Name = ("blue" if b.Name in blue_names else "graphite" if b.Name in gnames
-                  else "white") + f"_tmp{i}"
-    n = ST.recolour(model)
+    whites = sorted([b for b in S.bodies(model) if b.Name not in ST._all(made)], key=lambda b: -S.volume(b))
+    for i, w in enumerate(whites, 1):
+        S.colour(w, ST.WHITE, "white" if i == 1 else f"white_{i}")
+    for nm, rgb, _, _ in colours:
+        live = [b for b in S.bodies(model) if b.Name in made.get(nm, [])]
+        for i, b in enumerate(live, 1):
+            S.colour(b, rgb, f"{nm}_{i}")
     tot = S.total_volume(model)
-    print(f"\n  source {v_src:10.1f} mm3 -> styled {styled:10.1f} mm3 ({styled - v_src:+.1f}); colour split {tot:10.1f} "
-          f"(+{dropped:.2f} debris) {n}")
-    for nm in ("white", "blue", "graphite"):
-        v = sum(S.volume(b) for b in S.bodies(model) if b.Name.split("_")[0] == nm)
-        print(f"    {nm:9s} {v:10.1f} mm3 ({100 * v / tot:.1f} %)")
-    film = tot + dropped - styled
-    print(f"  colour bodies vs styled part: {film:+.1f} mm3 ({100 * film / styled:+.3f} %) -- "
-          f"overlap films along colour boundaries, allowed up to 0.5 %")
-    if abs(film) > 0.005 * styled:
+    print(f"\n  source {v_src:10.1f} mm3 -> styled {styled:10.1f} mm3 ({styled - v_src:+.1f}); "
+          f"after colour split {tot:10.1f} (+{dropped:.2f} debris, must equal styled)")
+    if abs(tot + dropped - styled) > max(2.0, 1e-4 * styled):
         raise SystemExit("the colour bodies do not add up to the styled part")
     model.ShowNamedView2("*Isometric", c.swIsometricView)
     model.ViewZoomtofit2()

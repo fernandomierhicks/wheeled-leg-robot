@@ -1,0 +1,34 @@
+{
+ "part": "Femur_inside",
+ "R": 2.5,
+ "pipes": [
+  {
+   "name": "spine",
+   "face": "back",
+   "visible_mm": 31.2,
+   "min_bend": 8.2,
+   "ends": [
+    "collar",
+    "dive"
+   ],
+   "hose_mm3": 212.0,
+   "collars_mm3": [
+    43.8
+   ],
+   "out_of_free_mm2": 0.0,
+   "under_face_mm3": 0.0,
+   "overhang": null,
+   "checks": {
+    "one hose body": true,
+    "one body per collar": true,
+    "bend radius >= 8.0": true,
+    "visible 20..50 mm": true,
+    "footprint on free ground (< 0.5 mm2 out)": true,
+    "nothing under the face (< 0.5 mm3)": true,
+    "printable overhang": true,
+    "volume sane (< half tube)": true
+   },
+   "ok": true
+  }
+ ]
+}
