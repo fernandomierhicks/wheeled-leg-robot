@@ -2,47 +2,33 @@
  "part": "TailStrut",
  "ops": [
   {
+   "name": "band",
+   "op": "replace",
+   "removed": 9212.886,
+   "added": 9536.083
+  },
+  {
    "name": "p0_blue1",
    "op": "press",
-   "area": 108.3,
+   "area": 46.66,
    "d": 0.9,
    "t": 0.8,
    "colour": "blue",
-   "removed": 184.262,
-   "floor": 83.779
+   "removed": 78.294,
+   "floor": 34.514
   },
   {
    "name": "p1_blue1",
    "op": "press",
-   "area": 108.3,
+   "area": 46.66,
    "d": 0.9,
    "t": 0.8,
    "colour": "blue",
-   "removed": 184.262,
-   "floor": 83.779
+   "removed": 78.294,
+   "floor": 34.514
   },
   {
    "name": "p2_blue1",
-   "op": "press",
-   "area": 46.66,
-   "d": 0.9,
-   "t": 0.8,
-   "colour": "blue",
-   "removed": 78.294,
-   "floor": 34.514
-  },
-  {
-   "name": "p3_blue1",
-   "op": "press",
-   "area": 46.66,
-   "d": 0.9,
-   "t": 0.8,
-   "colour": "blue",
-   "removed": 78.294,
-   "floor": 34.514
-  },
-  {
-   "name": "p4_blue1",
    "op": "press",
    "area": 42.91,
    "d": 0.9,
@@ -50,13 +36,124 @@
    "colour": "blue",
    "removed": 61.367,
    "floor": 19.858
+  },
+  {
+   "name": "m0_blue1",
+   "op": "press",
+   "area": 41.96,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 71.328,
+   "floor": 33.566
+  },
+  {
+   "name": "m0_blue2",
+   "op": "press",
+   "area": 20.32,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 34.549,
+   "floor": 16.258
+  },
+  {
+   "name": "m0_blue3",
+   "op": "press",
+   "area": 25.5,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 43.351,
+   "floor": 20.4
+  },
+  {
+   "name": "m0_blue4",
+   "op": "press",
+   "area": 31.26,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 53.149,
+   "floor": 25.011
+  },
+  {
+   "name": "m0_blue5",
+   "op": "press",
+   "area": 28.7,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 48.797,
+   "floor": 22.963
+  },
+  {
+   "name": "m1_blue1",
+   "op": "press",
+   "area": 41.96,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 71.328,
+   "floor": 33.566
+  },
+  {
+   "name": "m1_blue2",
+   "op": "press",
+   "area": 20.32,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 34.549,
+   "floor": 16.258
+  },
+  {
+   "name": "m1_blue3",
+   "op": "press",
+   "area": 25.5,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 43.351,
+   "floor": 20.4
+  },
+  {
+   "name": "m1_blue4",
+   "op": "press",
+   "area": 31.26,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 53.149,
+   "floor": 25.011
+  },
+  {
+   "name": "m1_blue5",
+   "op": "press",
+   "area": 28.7,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 48.797,
+   "floor": 22.963
+  },
+  {
+   "name": "seam",
+   "op": "swap",
+   "removed": 137.058,
+   "added": 137.058
   }
  ],
  "checks": [
   {
+   "name": "band",
+   "ok": true,
+   "text": "14 new bodies, 9536.08 mm3, overlapping the rest 0.000 mm3"
+  },
+  {
    "name": "p0_blue1",
    "ok": true,
-   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
   },
   {
    "name": "p1_blue1",
@@ -66,17 +163,62 @@
   {
    "name": "p2_blue1",
    "ok": true,
+   "text": "wall behind  99.9% solid, on the face 100.0%, narrower than 0.9: -0.06 mm2"
+  },
+  {
+   "name": "m0_blue1",
+   "ok": true,
    "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
   },
   {
-   "name": "p3_blue1",
+   "name": "m0_blue2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "m0_blue3",
    "ok": true,
    "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
   },
   {
-   "name": "p4_blue1",
+   "name": "m0_blue4",
    "ok": true,
-   "text": "wall behind  99.9% solid, on the face 100.0%, narrower than 0.9: -0.06 mm2"
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "m0_blue5",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "m1_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "m1_blue2",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "m1_blue3",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "m1_blue4",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "m1_blue5",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "seam",
+   "ok": true,
+   "text": "4 new bodies, 137.06 mm3, overlapping the rest 0.000 mm3"
   }
  ],
  "changed": [
@@ -85,12 +227,68 @@
    "name": "TailStrut.step<1>[1]",
    "kind": "white",
    "volume": 60730.3191,
-   "final": 60430.8652,
+   "final": 54304.6465,
    "pieces": [
-    60430.8652
+    54304.6465
    ],
    "gone": false,
    "tool": "TailStrut_tool0.step"
+  },
+  {
+   "index": 1,
+   "name": "TailStrut.step<1>[2]",
+   "kind": "dark",
+   "volume": 1667.1566,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "TailStrut_tool1.step"
+  },
+  {
+   "index": 2,
+   "name": "TailStrut.step<1>[3]",
+   "kind": "white",
+   "volume": 333.6667,
+   "final": 325.9219,
+   "pieces": [
+    325.9219
+   ],
+   "gone": false,
+   "tool": "TailStrut_tool2.step"
+  },
+  {
+   "index": 3,
+   "name": "TailStrut.step<1>[4]",
+   "kind": "dark",
+   "volume": 1667.1566,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "TailStrut_tool3.step"
+  },
+  {
+   "index": 4,
+   "name": "TailStrut.step<1>[5]",
+   "kind": "white",
+   "volume": 902.4507,
+   "final": 894.7059,
+   "pieces": [
+    894.7059
+   ],
+   "gone": false,
+   "tool": "TailStrut_tool4.step"
+  },
+  {
+   "index": 5,
+   "name": "TailStrut.step<1>[6]",
+   "kind": "white",
+   "volume": 333.6667,
+   "final": 325.9219,
+   "pieces": [
+    325.9219
+   ],
+   "gone": false,
+   "tool": "TailStrut_tool5.step"
   },
   {
    "index": 8,
@@ -153,65 +351,383 @@
  ],
  "new": [
   {
-   "name": "p0_blue1",
+   "name": "band1",
+   "kind": "dark",
+   "rgb": [
+    0.1686,
+    0.1843,
+    0.2118
+   ],
+   "pieces": [
+    4607.6319
+   ]
+  },
+  {
+   "name": "band2",
+   "kind": "dark",
+   "rgb": [
+    0.1686,
+    0.1843,
+    0.2118
+   ],
+   "pieces": [
+    4607.6319
+   ]
+  },
+  {
+   "name": "band3",
    "kind": "blue",
    "rgb": [
-    0.1137,
+    0.1176,
     0.4824,
     1.0
    ],
    "pieces": [
-    83.7788
+    64.98
+   ]
+  },
+  {
+   "name": "band4",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    51.0
+   ]
+  },
+  {
+   "name": "band5",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    12.6438
+   ]
+  },
+  {
+   "name": "band6",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    9.8977
+   ]
+  },
+  {
+   "name": "band7",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    51.0
+   ]
+  },
+  {
+   "name": "band8",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    14.592
+   ]
+  },
+  {
+   "name": "band9",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    14.592
+   ]
+  },
+  {
+   "name": "band10",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    7.296
+   ]
+  },
+  {
+   "name": "band11",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    7.296
+   ]
+  },
+  {
+   "name": "band12",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    64.98
+   ]
+  },
+  {
+   "name": "band13",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    9.8977
+   ]
+  },
+  {
+   "name": "band14",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    12.6438
+   ]
+  },
+  {
+   "name": "p0_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    34.514
    ]
   },
   {
    "name": "p1_blue1",
    "kind": "blue",
    "rgb": [
-    0.1137,
+    0.1176,
     0.4824,
     1.0
    ],
    "pieces": [
-    83.7788
+    34.514
    ]
   },
   {
    "name": "p2_blue1",
    "kind": "blue",
    "rgb": [
-    0.1137,
-    0.4824,
-    1.0
-   ],
-   "pieces": [
-    34.514
-   ]
-  },
-  {
-   "name": "p3_blue1",
-   "kind": "blue",
-   "rgb": [
-    0.1137,
-    0.4824,
-    1.0
-   ],
-   "pieces": [
-    34.514
-   ]
-  },
-  {
-   "name": "p4_blue1",
-   "kind": "blue",
-   "rgb": [
-    0.1137,
+    0.1176,
     0.4824,
     1.0
    ],
    "pieces": [
     19.8576
    ]
+  },
+  {
+   "name": "m0_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    33.5662
+   ]
+  },
+  {
+   "name": "m0_blue2",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    16.2582
+   ]
+  },
+  {
+   "name": "m0_blue3",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    20.4004
+   ]
+  },
+  {
+   "name": "m0_blue4",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    25.0115
+   ]
+  },
+  {
+   "name": "m0_blue5",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    22.9632
+   ]
+  },
+  {
+   "name": "m1_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    33.5662
+   ]
+  },
+  {
+   "name": "m1_blue2",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    16.2582
+   ]
+  },
+  {
+   "name": "m1_blue3",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    20.4004
+   ]
+  },
+  {
+   "name": "m1_blue4",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    25.0115
+   ]
+  },
+  {
+   "name": "m1_blue5",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    22.9632
+   ]
+  },
+  {
+   "name": "seam1",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    3.4782,
+    3.4782,
+    7.3163,
+    25.0374,
+    33.994,
+    40.5194
+   ]
+  },
+  {
+   "name": "seam2",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    7.7448
+   ]
+  },
+  {
+   "name": "seam3",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    7.7448
+   ]
+  },
+  {
+   "name": "seam4",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    7.7448
+   ]
   }
  ],
+ "recolour": [],
  "ok": true
 }

@@ -18,17 +18,28 @@ KEPT OUT OF:
   * below y = -35 (the v3 fork bottom; the caster's tyre reaches -39.5)
   * behind the tip-over line, caster back (-179.18, -32) -> bumper heel (-170, 15)
   * above y = 15 (the floor) and outside |z| 40 (the side walls are at 75, the legs beyond)
-PRINT: pad down (top face on the bed); every face that looks up in the robot is
-at least 45 deg off horizontal, so no supports (the window's floor is a V).
+PRINT (his call 2026-10-12): the Front plane (XY) on the bed -- a layer is a z slice,
+so the keel's bending runs along the layers, and every colour costs a filament change
+in each layer it appears in.  Hence colour boundaries at z = const (below) and the two
+long pad flanks + the fangs' outer faces FLAT at z = +-32: the part sits on one of them.
+Supports: under the keel flank (16 mm above the bed) and the upper fang.
 
 Parts of the shape:
-  PAD     10 mm plate, chevron nose forward, chamfered heel, drafted sides
+  PAD     10 mm plate, chevron nose forward, chamfered heel; nose / heel drafted,
+          the long flanks flat
   KEEL    the blade from the pad to the fork: swept back edge and front edge,
           both ridged (two facets meeting on the centre line -- a crystal keel),
           a V window through it, all planar
   FORK    plain block round the axle, the caster's slot (faceted arch)
-  COLOUR  graphite body; white chevron armour inlaid on the two back facets,
-          a blue line on the ridge; white flags on the pad's flanks
+  COLOUR  white body (facets and teeth too: they read by shading); |z| >= BAND_Z
+          graphite through -- the pad's outer band and the fangs, whole layers of one
+          colour; blue: on the flat flanks the chevron + trapezoids cut TOP_PRESS deep on
+          blue floors; on the keel flanks the window lining + trapezoids; the ridge line;
+          and a seam -- the skin where the surface crosses |z| <= SEAM_H (the ridge
+          line's layers).  Accents INLAY = 0.6 deep (3 layers), as on every part; every
+          blue face is parallel to the bed, so the floors share a few layers.
+          (2026-10-06..12 the facets / teeth were graphite and a hose ran on the
+          under facet: ~230 of 340 layers multi-colour; now 39.)
 """
 import os
 import sys
@@ -62,7 +73,8 @@ PAD_HALF_W = 32.0
 PAD_PLAN_HALF = [(-92.0, 0.0), (-100.0, PAD_HALF_W), (-150.0, PAD_HALF_W), (-153.0, 26.0), (-156.0, 0.0)]
 PAD_NOSE = ((-100.0, Y_SEAT), (-92.0, 11.0))      # underside chamfers (side view): nose ...
 PAD_HEEL = ((-151.0, Y_SEAT), (-156.0, 10.0))     # ... and heel (clear of the head seats at -108.7 / -150.3)
-PAD_DRAFT = 2.0                               # pad sides inset this much at its underside
+PAD_DRAFT = 2.0                               # nose / heel sides inset this much at the pad underside
+FLANK_DRAFT = 0.0                             # the long flanks (|z| = 32): flat, a face to print on
 Y_KT = Y_SEAT + 0.5                           # keel top (0.5 into the pad)
 KEEL_SIDE = [(-106.0, Y_KT), (-151.0, Y_KT), (-178.0, -28.0), (-176.0, Y_LOW), (-163.0, Y_LOW)]
 KEEL_Z_TOP, KEEL_Z_LOW = 16.0, 16.0           # half-width at the pad / at the fork: the v3 fork's
@@ -78,16 +90,35 @@ WINDOW = [(-126.0, 0.0), (-147.0, 0.0), (-141.0, -12.5)]   # V window (x, y), th
 LINER = 1.4                                   # blue lining round the window, on both flanks
 SLOT = [(-183.0, Y_LOW - 1), (-183.0, -24.0), (-178.5, -20.5), (-165.0, -20.5), (-160.5, -25.0),
         (-160.5, Y_LOW - 1)]                  # caster slot (x, y), |z| < FORK_IN
-# fangs: a raked fin under each outer edge of the pad, |z| 25..30 (clear of the
+# fangs: a raked fin under each outer edge of the pad, |z| 25..32 (clear of the
 # screw keys at |z| <= 23.3), pointing down and back
 FANG = [(-102.0, Y_KT), (-150.0, Y_KT), (-160.0, -12.0)]
-FANG_Z = (25.0, 30.0)                         # |z| at the pad ...
-FANG_SPLAY = 4.0                              # ... and this much further out at the tip (a jaw from behind)
+FANG_Z = (25.0, PAD_HALF_W)                   # |z| at the pad; the outer face stays flat at 32 (flush
+FANG_SPLAY = 4.0                              # with the flank), the inner one splays out this much at the tip
 # teeth along the front (under) edge, raked forward: at edge length s from the fork
 TEETH_S, TOOTH_L, TOOTH_H, TOOTH_Z = (27.0, 37.0, 47.0), 7.0, 4.5, (9.0, 4.0)
-INLAY = 0.8                                   # colour inlay depth
-FACET_INSET = 1.0                             # facet colour panels stay this far inside their facet
+INLAY = 0.6                                   # colour inlay depth (3 layers, his rule 2026-10-10)
 RIDGE_W = 1.4                                 # blue line on the back ridge, full width
+BAND_Z = 25.0                                 # |z| >= this: graphite through (pad band + fangs)
+SEAM_H = 0.6                                  # the seam: |z| <= this (inside the ridge line's +-0.7)
+# blue trapezoids on the two bed-parallel faces (his ask 2026-10-12), both sides, (x, y) mm:
+#   TOP  = the flat flanks z = +-32 (graphite): cut TOP_PRESS deep on an INLAY blue floor -- the chevron too;
+#   MID  = the keel flanks z = +-16 (white): flush INLAY here; 28 presses them like the window lining.
+# Each is clipped to its face less ACC_MARGIN (edges, other colours, the axle head), and kept >= ACC_MIN_W.
+TOP_PRESS = 2.0
+ACC_MARGIN, ACC_MIN_W = 1.2, 0.9
+FANG_ACC_MIN_Y = -8.8                         # fang thickness 7 - 0.229 (5.5 - y) >= press + floor + 1 + margin
+CHEVRON = [(-108.0, 11.6), (-136.0, 11.6), (-140.0, 9.7), (-136.0, 7.8), (-108.0, 7.8), (-111.0, 9.7)]
+TOP_SHAPES = [
+    [(-102.4, 11.6), (-105.6, 11.6), (-106.4, 7.8), (-103.2, 7.8)],              # bracket ahead of the chevron
+    [(-139.0, 11.6), (-147.8, 11.6), (-147.0, 7.8), (-139.0, 7.8), (-143.0, 9.7)],   # block behind it, a V echo
+    [(-109.0, 6.6), (-134.0, 6.6), (-129.0, 1.6), (-120.0, 1.6)],                 # keel plate under it
+]
+FANG_BARS = [(1.2, 3.2, -1.0, 18.0), (4.4, 6.6, -4.0, 14.0)]    # off the fang's lower edge: (w0, w1, s0, s1)
+MID_UPPER = ((-143.6, -7.08), (-173.15, -21.98))                # the keel flank's upper (back facet) edge
+MID_LANE = (1.5, 27.0, 1.2, 3.0)                                # under it: (s0, s1, w0, w1)
+MID_SLASHES = (8.0, 13.5, 19.0)                                 # raked slashes across the strip, at s
+MID_PLATE = (23.0, 32.0, 4.4, 9.0)                              # a plate above the axle
 
 
 def unit(v):
@@ -156,8 +187,14 @@ def prism_z(prof_xy, z0, z1):
     return Pos(0, 0, z0) * extrude(f, amount=z1 - z0)
 
 
+def is_flank(a, b):
+    """The plan edge a -> b is one of the two long flanks (|z| = PAD_HALF_W at both ends)."""
+    return abs(a[1]) > PAD_HALF_W - 0.1 and abs(b[1]) > PAD_HALF_W - 0.1
+
+
 def pad():
-    """Full plan at the top face, every side PAD_DRAFT inset at the underside.
+    """Full plan at the top face, the nose / heel sides PAD_DRAFT inset at the underside,
+    the long flanks FLANK_DRAFT (flat).
     (K.frustum_walls is built narrow-end-up; this one is narrow-end-down.)"""
     P = K.ccw(mirror_half(PAD_PLAN_HALF))
     h = Y_TOP - Y_SEAT
@@ -165,7 +202,8 @@ def pad():
     for i in range(len(P)):
         a, b = P[i], P[(i + 1) % len(P)]
         m = unit([b[1] - a[1], -(b[0] - a[0])])          # outward in the (x, z) plan
-        walls.append(((a[0], Y_TOP, a[1]), (h * m[0], -PAD_DRAFT, h * m[1]), "pad"))
+        dr = FLANK_DRAFT if is_flank(a, b) else PAD_DRAFT
+        walls.append(((a[0], Y_TOP, a[1]), (h * m[0], -dr, h * m[1]), "pad"))
     for (xa, ya), (xb, yb) in (PAD_NOSE, PAD_HEEL):
         n = unit([yb - ya, -(xb - xa)])
         if n[0] * (xa + 128) < 0:                         # point it away from the pad's middle
@@ -198,10 +236,138 @@ def fangs():
     for sz in (1, -1):
         z0, z1 = FANG_Z
         dy = Y_KT - FANG[2][1]                            # pad to tip
-        k = FANG_SPLAY / dy                               # dz per mm down
-        pl = side_planes(FANG) + [((0, Y_KT, sz * z1), (0, k, sz), "o"), ((0, Y_KT, sz * z0), (0, -k, -sz), "i")]
+        k = FANG_SPLAY / dy                               # dz per mm down (the inner face)
+        pl = side_planes(FANG) + [((0, Y_KT, sz * z1), (0, 0, sz), "o"), ((0, Y_KT, sz * z0), (0, -k, -sz), "i")]
         out.append(K.polyhedron(pl))
     return out
+
+
+def band_tool():
+    """|z| >= BAND_Z, both sides, well past the part."""
+    return [Pos(-135.0, -10.0, sz * (BAND_Z + 10.0)) * Box(140.0, 100.0, 20.0) for sz in (1, -1)]
+
+
+def band_shape():
+    """The pad's outer band + the fangs, |z| >= BAND_Z, the V window through them (as through
+    everything): the part's every body out there (the keel and teeth stay inside)."""
+    return (K.union([pad()] + fangs()) & K.union(band_tool())) - prism_z(WINDOW, -40, 40)
+
+
+def band_bodies():
+    """(graphite, blue): the band with every TOP accent cut TOP_PRESS deep, and their INLAY
+    blue floors."""
+    from shapely.ops import unary_union
+    band = band_shape()
+    reg = unary_union(top_accents(band))
+    rec, fl = [], []
+    for sz in (1, -1):
+        zf = sz * PAD_HALF_W
+        rec.append(prism_poly(reg, *sorted((zf - sz * TOP_PRESS, zf + sz * 3))))
+        fl.append(prism_poly(reg, *sorted((zf - sz * TOP_PRESS, zf - sz * (TOP_PRESS + INLAY)))))
+    floors = band & K.union(fl)
+    return band - K.union(rec) - K.union(fl), floors
+
+
+def _trap(p0, d, n, s0, s1, w0, w1, rake0, rake1):
+    """A trapezoid in a line frame (origin p0, unit d along, unit n across): s0..s1 along at w0,
+    each end moving rake * (w - w0) along d as w grows (45 deg = 1)."""
+    from shapely.geometry import Polygon
+    p0, d, n = (np.asarray(v, float) for v in (p0, d, n))
+    P = lambda s, w: tuple(p0 + s * d + w * n)
+    return Polygon([P(s0, w0), P(s1, w0), P(s1 + rake1 * (w1 - w0), w1), P(s0 + rake0 * (w1 - w0), w1)])
+
+
+def _fit(shapes, use):
+    """Each shape clipped to `use`, opened by ACC_MIN_W (nothing narrower), crumbs dropped."""
+    from shapely.geometry import Polygon
+    out = []
+    for s in shapes:
+        g = Polygon(s).intersection(use) if not hasattr(s, "geom_type") else s.intersection(use)
+        g = g.buffer(-ACC_MIN_W / 2, join_style=2).buffer(ACC_MIN_W / 2, join_style=2)
+        out += [p.simplify(0.01) for p in getattr(g, "geoms", [g]) if isinstance(p, Polygon) and p.area >= 4.0]
+    return out
+
+
+def top_accents(band):
+    """(x, y) regions on the flat flanks z = +-32 (the same on both: the part is symmetric):
+    the chevron + TOP_SHAPES + FANG_BARS, inside the face less ACC_MARGIN, the bars kept off the
+    fang's thin tip (FANG_ACC_MIN_Y)."""
+    from shapely.geometry import Polygon
+    face = section_xy([band], PAD_HALF_W - 0.01)
+    chev = Polygon(CHEVRON)
+    use = face.buffer(-ACC_MARGIN, join_style=2).difference(chev.buffer(ACC_MARGIN, join_style=1))
+    use = use.intersection(Polygon([(-200, FANG_ACC_MIN_Y), (-80, FANG_ACC_MIN_Y), (-80, 30), (-200, 30)]))
+    h0, h1 = np.array(FANG[0]), np.array(FANG[2])                # the fang's lower edge
+    dh = unit(h1 - h0)
+    nh = np.array([dh[1], -dh[0]])
+    nh = nh if nh[1] > 0 else -nh                                # up, into the fang
+    hw = h0 + (-143.61 - h0[0]) / dh[0] * dh                     # where the window's back edge leaves it
+    bars = [_trap(hw, dh, nh, s0, s1, w0, w1, -1.0, -1.0) for w0, w1, s0, s1 in FANG_BARS]
+    return [chev] + _fit(TOP_SHAPES + bars, use)
+
+
+def mid_accents(body):
+    """(x, y) regions on the keel flanks z = +-16: a lane under the upper edge, slashes raked
+    toward the fork, a plate above the axle -- inside the face less ACC_MARGIN, clear of the
+    window lining and of the axle screw head (r 3.5 + margin)."""
+    from shapely.geometry import Polygon, Point
+    face = section_xy([body], KEEL_Z_TOP - 0.01).difference(section_xy([body], KEEL_Z_TOP + 0.01).buffer(0.01))
+    lining = Polygon(WINDOW).buffer(LINER, join_style=2)
+    use = face.buffer(-ACC_MARGIN, join_style=2).difference(lining.buffer(ACC_MARGIN, join_style=2))
+    use = use.difference(Point(AXLE).buffer(3.5 + ACC_MARGIN))
+    u0, u1 = (np.array(p) for p in MID_UPPER)
+    du = unit(u1 - u0)
+    n = np.array([du[1], -du[0]])
+    n = n if n[1] < 0 else -n                                    # into the strip
+    shapes = [_trap(u0, du, n, *MID_LANE, 1.0, -1.0)]
+    lean = unit(n + 0.8 * du)
+    for k, s in enumerate(MID_SLASHES):
+        a, b = u0 + s * du + 4.4 * n, u0 + (s + 2.4 + 0.3 * k) * du + 4.4 * n
+        shapes.append(Polygon([tuple(a), tuple(b), tuple(b + 30 * lean), tuple(a + 30 * lean)]))
+    shapes.append(_trap(u0, du, n, *MID_PLATE, 0.6, -0.6))
+    return _fit(shapes, use)
+
+
+def prism_poly(poly, z0, z1):
+    """A shapely (Multi)Polygon, holes and all, as a prism z0..z1."""
+    out = None
+    for p in getattr(poly, "geoms", [poly]):
+        if p.is_empty or p.area < 0.01:
+            continue
+        s = prism_z(list(p.exterior.coords)[:-1], z0, z1)
+        for h in p.interiors:
+            s = s - prism_z(list(h.coords)[:-1], z0 - 1, z1 + 1)
+        out = s if out is None else out + s
+    return out
+
+
+def section_xy(solids, z):
+    """The section of the solids at height z, as one shapely region (union of the
+    section faces' triangles -- no 3D fuse: OCC fails fusing many touching bodies)."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    from render3d import tessellate
+    cut = Pos(-135.0, -10.0, z) * Box(140.0, 100.0, 0.002)
+    tris = []
+    for s in solids:
+        piece = s & cut
+        if piece is None or not piece.solids():
+            continue
+        V, T, _ = tessellate(piece, 0.02)
+        tris += [Polygon(V[t][:, :2]) for t in T if abs(V[t][:, 2] - (z + 0.001)).max() < 1e-4]
+    return unary_union([t.buffer(1e-4) for t in tris if t.area > 1e-9]).buffer(-1e-4)
+
+
+def seam_tool(sec):
+    """The seam's cutter, from the part's section at |z| = SEAM_H: the slab |z| <= SEAM_H
+    less the section shrunk by INLAY (the core) and less everything within INLAY of the
+    top face (it sits on the floor, mated: stays white).  What a body loses to it is its
+    skin in the slab."""
+    slab = Pos(-135.0, -10.0, 0.0) * Box(140.0, 100.0, 2 * SEAM_H)
+    core = prism_poly(sec.buffer(-INLAY, join_style=2), -SEAM_H - 1, SEAM_H + 1)
+    # 0.2 past the core's own top (y 14.4): on it exactly, the two pinch an edge at the nose
+    top = Pos(-135.0, Y_TOP - INLAY - 0.2 + 25.0, 0.0) * Box(140.0, 50.0, 2 * SEAM_H + 2)
+    return slab - core - top
 
 
 def teeth():
@@ -228,17 +394,10 @@ def teeth():
     return out
 
 
-def colour_tools():
-    """graphite: the four crystal facets (inlaid panels); blue: the back ridge,
-    the window lining on both flanks, a chevron on each pad flank."""
-    from shapely.geometry import Polygon as SP
-    dark = []
-    for (q1, q2, q3), n in facets():
-        u = unit(q3 - q1)
-        v = np.cross(n, u)                   # K.carve's own local y (z_dir x x_dir)
-        tri = SP([(0.0, 0.0), ((q2 - q1) @ u, (q2 - q1) @ v), ((q3 - q1) @ u, (q3 - q1) @ v)])
-        tri = tri.buffer(-FACET_INSET, join_style=2)
-        dark.append(K.carve((q1, u, v, n), list(tri.exterior.coords)[:-1], INLAY))
+def colour_tools(body):
+    """blue, inlaid INLAY: the back ridge, the window lining and the MID accents on both keel
+    flanks.  (The band is graphite by z alone, its TOP accents pressed: band_bodies.)"""
+    from shapely.ops import unary_union
     blue = []
     (x0, y0), _ = BACK
     yb = BACK_END + 3.0                                         # stop above the fork
@@ -250,40 +409,35 @@ def colour_tools():
     blue.append(prism_z(band, -RIDGE_W / 2, RIDGE_W / 2))
     from shapely.geometry import Polygon as SPg
     ring = SPg(WINDOW).buffer(LINER, join_style=2)
+    mid = mid_accents(body)
     for sz in (1, -1):                                          # flank z = +-16 is planar
         z0 = sz * KEEL_Z_TOP
         blue.append(prism_z(list(ring.exterior.coords)[:-1], min(z0 - sz * INLAY, z0 + sz * 2),
                             max(z0 - sz * INLAY, z0 + sz * 2)))
-    # a blue chevron on each pad flank (|z| = 32 at the top, drafted), pointing back
-    P = K.ccw(mirror_half(PAD_PLAN_HALF))
-    for i in range(len(P)):
-        a, b = P[i], P[(i + 1) % len(P)]
-        if abs(a[1]) < PAD_HALF_W - 0.1 or abs(b[1]) < PAD_HALF_W - 0.1:
-            continue
-        m = unit([b[1] - a[1], -(b[0] - a[0])])
-        h = Y_TOP - Y_SEAT
-        n = unit([h * m[0], -PAD_DRAFT, h * m[1]])
-        o = np.array([max(a[0], b[0]), Y_TOP, a[1]])            # front-top corner of the flank
-        fr = K.face_frame(o, n, np.array([-1.0, 0.0, 0.0]))
-        vv = np.cross(fr[3], fr[1])
-        sgn = 1.0 if vv[1] < 0 else -1.0                        # +v runs DOWN the flank
-        chev = [(8.0, 3.4), (36.0, 3.4), (40.0, 5.3), (36.0, 7.2), (8.0, 7.2), (11.0, 5.3)]
-        blue.append(K.carve(fr, [(x_, sgn * y_) for x_, y_ in chev], INLAY))
-    return dark, blue
+        blue.append(prism_poly(unary_union(mid), *sorted((z0 - sz * INLAY, z0 + sz * 2))))
+    return blue
+
+
+def body_shape():
+    """The whole part, one solid, before colour."""
+    body = K.union([pad(), keel()] + fangs() + teeth())
+    for c in fork_cuts() + holes() + [prism_z(WINDOW, -40, 40)]:
+        body = body - c
+    return body
 
 
 def build():
-    fs, ts = fangs(), teeth()
-    body = K.union([pad(), keel()] + fs + ts)
-    for c in fork_cuts() + holes() + [prism_z(WINDOW, -40, 40)]:
-        body = body - c
-    dark, blue = colour_tools()
-    Dt = K.union(dark + fs + ts)          # fangs and teeth are graphite through and through
-    Bt = K.union(blue)
-    Bl = body & Bt
-    G = (body & Dt) - Bt
-    W = body - Dt - Bt
-    return {"TailStrut": [("white", W, WHITE), ("graphite", G, DARK), ("blue", Bl, BLUE)]}, body
+    body = body_shape()
+    Bt = K.union(colour_tools(body))
+    G, Ba = band_bodies()                 # the band + fangs: graphite through, by z alone; TOP accents
+    rest = body - K.union(band_tool())
+    Bl = rest & Bt
+    W = rest - Bt
+    sk = W & seam_tool(section_xy([body], SEAM_H - 0.01).intersection(section_xy([body], -SEAM_H + 0.01)))
+    W = W - sk
+    # the seam its own body: fused with the ridge line it meets them along an edge (non-manifold)
+    return {"TailStrut": [("white", W, WHITE), ("graphite", G, DARK), ("blue", Bl, BLUE), ("accents", Ba, BLUE),
+                          ("seam", sk, BLUE)]}, body
 
 
 # ------------------------------------------------------------------ checks
@@ -303,6 +457,14 @@ def checks(body):
         if y0 - 10 <= v.Y <= y1:
             worst = max(worst, xl - v.X)
     rows.append(("behind the tip-over line (mm)", worst, "<= 0", worst <= 1e-6))
+    worst = 1.0                                   # 1 mm of solid behind every TOP floor (the fang thins out)
+    for p in top_accents(band_shape()):
+        for sz in (1, -1):
+            zf = sz * (PAD_HALF_W - TOP_PRESS - INLAY)
+            probe = prism_poly(p.buffer(-0.05, join_style=2), *sorted((zf - sz * 0.02, zf - sz * 1.0)))
+            ov = body & probe
+            worst = min(worst, (0.0 if ov is None else ov.volume) / probe.volume)
+    rows.append(("solid 1 mm behind the top floors", worst, ">= 0.98", worst >= 0.98))
     caster = Pos(AXLE[0], AXLE[1], 0) * Cylinder(CASTER_R + 0.5, 9.0)
     ov = body & caster
     v = 0.0 if ov is None else ov.volume
@@ -373,7 +535,7 @@ if __name__ == "__main__":
     stepcolor.write([(n, b, rgb) for n, b, rgb in parts["TailStrut"] if b is not None and b.solids()],
                     os.path.join(out, "TailStrut.step"), part="TailStrut")
     preview(parts, os.path.join(out, "preview_tail_strut.png"))
-    if "--3mf" in sys.argv:                       # print orientation: pad down (robot -y is up)
+    if "--3mf" in sys.argv:                       # print orientation: the Front plane on the bed (+z up)
         import box_facet_print as BF
-        BF.PRINT_UP = {"TailStrut": (0.0, -1.0, 0.0)}
+        BF.PRINT_UP = {"TailStrut": (0.0, 0.0, 1.0)}
         BF.write_print_3mf(parts, sys.argv[sys.argv.index("--3mf") + 1])

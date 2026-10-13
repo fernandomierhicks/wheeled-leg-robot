@@ -1,0 +1,217 @@
+{
+ "part": "TailStrut",
+ "ops": [
+  {
+   "name": "p0_blue1",
+   "op": "press",
+   "area": 108.3,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 184.262,
+   "floor": 83.779
+  },
+  {
+   "name": "p1_blue1",
+   "op": "press",
+   "area": 108.3,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 184.262,
+   "floor": 83.779
+  },
+  {
+   "name": "p2_blue1",
+   "op": "press",
+   "area": 46.66,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 78.294,
+   "floor": 34.514
+  },
+  {
+   "name": "p3_blue1",
+   "op": "press",
+   "area": 46.66,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 78.294,
+   "floor": 34.514
+  },
+  {
+   "name": "p4_blue1",
+   "op": "press",
+   "area": 42.91,
+   "d": 0.9,
+   "t": 0.8,
+   "colour": "blue",
+   "removed": 61.367,
+   "floor": 19.858
+  }
+ ],
+ "checks": [
+  {
+   "name": "p0_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "p1_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "p2_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+  },
+  {
+   "name": "p3_blue1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "p4_blue1",
+   "ok": true,
+   "text": "wall behind  99.9% solid, on the face 100.0%, narrower than 0.9: -0.06 mm2"
+  }
+ ],
+ "changed": [
+  {
+   "index": 0,
+   "name": "TailStrut.step<1>[1]",
+   "kind": "white",
+   "volume": 60730.3191,
+   "final": 60430.8652,
+   "pieces": [
+    60430.8652
+   ],
+   "gone": false,
+   "tool": "TailStrut_tool0.step"
+  },
+  {
+   "index": 8,
+   "name": "TailStrut.step<1>[9]",
+   "kind": "blue",
+   "volume": 38.6424,
+   "final": 1.1432,
+   "pieces": [
+    0.3565,
+    0.7867
+   ],
+   "gone": false,
+   "tool": "TailStrut_tool8.step"
+  },
+  {
+   "index": 9,
+   "name": "TailStrut.step<1>[10]",
+   "kind": "blue",
+   "volume": 53.4451,
+   "final": 14.6959,
+   "pieces": [
+    14.6959
+   ],
+   "gone": false,
+   "tool": "TailStrut_tool9.step"
+  },
+  {
+   "index": 10,
+   "name": "TailStrut.step<1>[11]",
+   "kind": "blue",
+   "volume": 38.6424,
+   "final": 1.145,
+   "pieces": [
+    0.3565,
+    0.7885
+   ],
+   "gone": false,
+   "tool": "TailStrut_tool10.step"
+  },
+  {
+   "index": 11,
+   "name": "TailStrut.step<1>[12]",
+   "kind": "blue",
+   "volume": 86.64,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "TailStrut_tool11.step"
+  },
+  {
+   "index": 12,
+   "name": "TailStrut.step<1>[13]",
+   "kind": "blue",
+   "volume": 86.64,
+   "final": 0.0,
+   "pieces": [],
+   "gone": true,
+   "tool": "TailStrut_tool12.step"
+  }
+ ],
+ "new": [
+  {
+   "name": "p0_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1137,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    83.7788
+   ]
+  },
+  {
+   "name": "p1_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1137,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    83.7788
+   ]
+  },
+  {
+   "name": "p2_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1137,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    34.514
+   ]
+  },
+  {
+   "name": "p3_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1137,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    34.514
+   ]
+  },
+  {
+   "name": "p4_blue1",
+   "kind": "blue",
+   "rgb": [
+    0.1137,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    19.8576
+   ]
+  }
+ ],
+ "ok": true
+}

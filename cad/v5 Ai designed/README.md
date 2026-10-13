@@ -123,6 +123,69 @@ Femur` deletes RL_ and checks the body count -- delete MF_ first, re-run 32 afte
 white bodies, nothing merged, so no mate face changed; MirrorFemur follows (43 bodies);
 chain 0 mate errors.  Merge into the white body later if wanted (Combine add -- watch mates).
 
+## ▶ TailStrut for printing on the Front plane -- 2026-10-12 (`28` `d_tailstrut`, `tail_strut.py`)
+
+His brief: the strut prints with the **Front plane (part XY) on the bed** -- a layer is a z slice, and a colour
+costs a filament change in every layer it is in, so colour features should lie parallel to that plane.  His notes:
+the blue chevrons on the pad flanks (top / bottom in print) are fine; the hose and the graphite facets / teeth in
+the middle are waste; the thin blue lines in the middle (ridge, window lining) are fine; the grey fins are fine
+if the white beside them goes grey too.  Offline board of 3 variants, layers counted:
+`cad/solidworks_api/out/renders/tailstrut_print_colours.png`.  **He picked B, with both flanks flattened** (the
+part had no face to stand on: 2 mm drafted flanks, fangs splayed 4 mm).
+
+* **What changed** -- all of it `RL_` features at the end of the tree, NO reimport, so the 4 `TS_*` mates and the
+  fastener mates hold: the 5 graphite facet-panel / teeth bodies recoloured white (a body colour, no feature);
+  everything at `|z| >= 25` replaced (`replace` op) by one graphite body per side -- the pad's outer band + the
+  fang, with the long pad flank and the fang's outer face FLAT at z = +-32 -- and the blue chevron as a flush
+  0.6 inlay in it; the window lining + tail facet line pressed as before (0.9 on 0.8); a blue **seam**, the
+  0.6 skin where the surface crosses |z| <= 0.6 (the ridge line's layers; the top face, mated to the floor,
+  left white).  Hose `keel` deleted (PP_ features gone, `24 PIPES` entry removed).
+* **Numbers** (Front plane on the bed, 0.2 layers, colours counted per layer, ideal filament order), as built:
+  230 -> 32 multi-colour layers, ~377 -> 36 filament changes (the offline prediction said 30 / 34).  Part 66.4 ->
+  68.6 cm3 (the flank draft filled, the fangs out to the flat face), graphite 11.4 cm3, 50 x 86 x 64 mm on the bed.
+* **Built 2026-10-12:** `28 build TailStrut` -- 11 bodies cut (4 gone), 11 new, 27 bodies = 27 predicted (worst
+  0.000 of tolerance), probe all right; chain 0 mate errors, saved TailStrut, BottomPanelWithAvionics, Box, ROBOT;
+  `28 export` + `28 print` -> `out/print/TailStrut_bambu.3mf` (27 bodies: filament 1 x6 / 2 x2 / 3 x19).
+* **A deliberate exception to the 0.6 rule:** the band is graphite THROUGH (a skin would leave two colours in
+  those layers).  It is outboard of the screws (the head keys end at |z| 23.3); the fangs were solid graphite
+  already.
+* **Print** (`28 print TailStrut`, `PRINT_UP` (0, 0, 1)): on the -z flank.  Needs supports under the keel flank
+  (16 mm above the bed) and under the upper fang's inner face; the caster slot's roof is a bridge.
+* **New in 28, generic:** `recolour(names, colour)`, `swap(tool, colour, kinds)` (a 3D region of bodies of
+  those colours -> `colour`, one new body per source body), `replace(tool, new)`; `build` recolours before it
+  cuts (by body NAME: equal volumes exist); the board adds whole-part before / after views; `probe` skips
+  these ops (the body count + per-body volumes prove them).  The recolour is a body appearance, not a feature:
+  deleting the RL_ features does NOT turn the facets graphite again.
+* **Source of truth updated:** `tail_strut.py` draws this design (flat flanks, band, seam, INLAY 0.6, Front-plane
+  3MF) and holds `band_bodies()`, `seam_tool()`, `section_xy()`, which 28 calls -- its STEP is not re-imported.
+* Gotcha: the seam cutter's top cut-off lying exactly on the shrunk core's top (y 14.4) pinched a non-manifold
+  edge at the nose; it now overlaps by 0.2.
+* Backups (part, 3MF, previous 28 export): `_originals/pre_printcolours_2026-10-12/`.
+* **Round 2, same day -- more blue trapezoids** (his ask; offline board `out/renders/tailstrut_trapezoids.png`,
+  face maps `tailstrut_trapezoids_map.png`, he approved as rendered):
+  * flat flanks z = +-32 (top / bottom in print): `TOP_SHAPES` (a bracket ahead of the chevron, a block behind
+    it whose front is a V echoing the chevron's tip, a keel plate under it) + `FANG_BARS` (two bars along the
+    fang's lower edge) + the chevron, all **cut 2.0 deep on a 0.6 blue floor** (`TOP_PRESS`, his "shallow
+    extruded cuts of 2 mm"; the chevron too, so every floor shares layers |z| 29.4..30).  On the bed side they
+    print as 2 mm openings bridged by the floor.  Kept off the fang's thin tip (`FANG_ACC_MIN_Y`: 1 mm solid
+    behind each floor -- `tail_strut.py` checks it);
+  * keel flanks z = +-16 (the big white faces in the middle): `mid_accents()` -- a lane under the upper edge,
+    three slashes raked toward the fork, a plate above the axle (clear of the axle screw head) -- **pressed 0.9
+    on 0.8**, exactly the window lining's press, so in its layers (no new filament changes);
+  * every accent 1.2 mm from edges / other colours, >= 0.9 wide, clipped to its face (`_fit`).
+  * **Round 1 bug fixed here:** `band_bodies()` did not cut the V window through the fangs (the original part
+    had it), so round 1's fangs were solid across the window; `band_shape()` cuts it now.
+  * **28 gotcha paid for (all parts):** a mirror pair of EQUAL-volume bodies (the two window linings, 38.642
+    mm3) -- `Part()` paired STEP solids with export entries by volume alone, so their names could swap, and
+    `build` (by volume too) cut each lining with the other one's cutter.  The first round-2 build stopped on
+    `probe` (p0_blue1: recess not cut) and 46 vs 47 bodies, nothing saved.  Now `Part()` breaks a volume tie
+    by the body's box centre and `build` finds each body by NAME.  The earlier builds passed by body order.
+  * **Built:** 11 bodies cut (4 gone), 31 new, 47 bodies = 47 predicted (worst 0.000 of tolerance), probe 13 ops
+    all right; chain 0 mate errors, saved TailStrut, BottomPanelWithAvionics, Box, ROBOT; the window open through
+    both fangs again (checked on the export); `28 export` + `print` -> `TailStrut_bambu.3mf`, 47 bodies (filament
+    1 x6 / 2 x2 / 3 x39).  As built: 32 multi-colour layers, ~38 filament changes (round 1: 32 / 36).  Part
+    66.3 cm3, graphite 9.2.  Backups of round 1: `_originals/pre_trapezoids_2026-10-12/`.
+
 ## ▶ RobotMount redo -- 2026-10-12 (`extras.py`, spec `robotmount.json`, `08`, `24`)
 
 His 4 asks: (1) colour on the hose face is a **0.6 mm** inlay, not through the plate (spec `accent_d`/`grey_d` 0.6,
@@ -170,7 +233,7 @@ included, agree everywhere.
 | RobotMount (image 1) | the field's graphite step-bar + the recipe bar it carries on from; the white slashes in its head stay as standing ribs; stops 2 mm short of the trench slot | 1.0 into its own (through-plate) graphite |
 | FacetBack (image 2) | blue brow trace -> channel on a blue floor; dark linings of the I/O bay + control pod stepped down; graphite vent slashes pressed on the back face AND the left cheek they wrap onto; NEW: 3 dark raked slots right of the centre screw | 0.9 / 1.0 |
 | FacetFront | dark lining of the screen well stepped (its thin sliver stays flush); the two blue cheek traces -> channels | 1.0 / 0.9 |
-| TailStrut | blue chevrons (pad flanks), blue window lining (both keel flanks), tail facet line -> channels.  NOT the dark crystal panels: most of their facet, and the keel behind is thinner than floor + 1 mm | 0.9 |
+| TailStrut | blue chevrons (pad flanks), blue window lining (both keel flanks), tail facet line -> channels.  NOT the dark crystal panels: most of their facet, and the keel behind is thinner than floor + 1 mm.  **Superseded 2026-10-12** ("TailStrut for printing on the Front plane"): lining + tail line still pressed, chevrons now flush in the graphite band | 0.9 |
 | EncoderCarrier / CableClamp | every inlay >= 0.9 mm wide (magnet ring, centre dot, arm pads; the clamp's frame band, chevrons, pad) | 0.4 on a 0.6 floor |
 | Wheel hub | the flush inlays >= 0.9 mm wide **RAISED** 0.6 (white chevron brackets + pads, blue traces): the hub face is a 0.8 mm floor that carries the wheel on its 4 screws -- nothing pressed into it; nothing in the robot is outboard of it | +0.6 |
 | Femur, Femur_inside, Coupler, Tibia (image 4) | grooves on the long side faces (`SIDES`): repeating units -- a graphite plate with a 45-deg raked end, a raked blue hatch comb, a blue dogleg channel with a diamond pad; on the tall sides (Tibia, femur flange) a long blue lane beside them | 0.8 on a 0.8 floor |
@@ -583,7 +646,7 @@ All of it is `cad/solidworks_api/24_pipes.py`; the design (routes, ends) is the
 | Side panel | `arc` 35 mm, collars both ends | clear of the coupler's swing |
 | FacetBack | `cheek` 35 mm, left cheek beside the I/O bay | vertical |
 | FacetHood | hood B (2026-10-08): `hook` 43 mm collar -> dive and `sweep` 46 mm dive -> collar on the pressed `field`, `tier` 30 mm on tier 1 | `wave` / `corner` (the first hood's deck) removed with that top |
-| TailStrut | `keel` 30 mm on the down-facing keel facet | |
+| TailStrut | ~~`keel` 30 mm on the down-facing keel facet~~ removed 2026-10-12 (multicolour print, his call) | |
 | RobotMount | `trench` 46 mm, TRENCH: a slot round the bearing boss, flush graphite clamps | the inner femur plate passes 1.9 mm over this field |
 | skipped | Coupler (the tibia sweeps half its face, staggered slots fill the rest), Tibia (no 5 mm-wide flat run: pockets and rims), FacetFront (bumper posts over the cheeks, screen well), FacetRing (7.5-10 mm visible band), Femur_inside (inside the box), wheel, TPU bumpers | his call |
 
@@ -701,6 +764,8 @@ shape + colours".
   the tip-over line (caster back -> bumper heel, 0.4 mm clear), |z| > 40.
 * **Print:** pad down, no supports by construction (every face that looks up
   in the robot is >= ~40 deg off horizontal; the window's floor is a V).
+  **Superseded 2026-10-12:** Front plane on the bed, flat flanks, new colours --
+  see "TailStrut for printing on the Front plane".
   `out/print/TailStrut_bambu.3mf`, 86 x 68 x 50 mm, filament 1 white /
   2 graphite / 3 blue.
 * **Checked:** `install` re-made all 4 mates (`TS_*`: strut concentric-lock +
@@ -1073,7 +1138,7 @@ phases. Never save `ROBOT.SLDASM` while the `AI_HipDrive` helper mate exists
 | Femur / Coupler / Side panel / RobotMount look | the recipe `cad/aesthetics/parts/<part>.py` + `specs/<part>.json` (the LOCKED GLACIER look; `side_panel.py` and `robotmount.py` are GENERATED from `femur.py` by `cad/aesthetics/tools/mkpart.py` -- edit the generator, not them) | `08 <Part> --dry` (lists every op and what seats / keep-outs took from it), then `08 <Part> --restyle` (RobotMount ~4 min) |
 | local additions where the recipe leaves ground bare | `extras.py` (`EXTRA[part](P, M)`, part-local mm, show-face coordinates) | same as above -- `08` applies them |
 | Tibia look | `cad/aesthetics/parts/tibia.py` | `09 --dry`, `09 --restyle` |
-| tail strut (Box/TailStrut) | `cad/aesthetics/parts/tail_strut.py` (its checks + old-vs-new preview run on every build) | `tail_strut.py "cad/v5 Ai designed/Box/TailStrut" --3mf cad/solidworks_api/out/print`, delete TailStrut.SLDPRT, `23 import`. NOT automated past that: a re-imported part gets new face IDs, so check the 4 `TS_*` mates (`23 check`) and re-make any in error by hand (`install` only transfers mates from the active v3 part, which is now suppressed) |
+| tail strut (Box/TailStrut) | colours, or the shape at \|z\| >= 25: `tail_strut.py` (band / chevrons / seam) + `d_tailstrut` in `28_relief.py`. The keel / pad / fork shape: `tail_strut.py` alone (its checks + old-vs-new preview run on every build) | **colours / band (2026-10-12 on):** delete the part's RL_ features, `28 export / preview / build / export / print TailStrut` -- the SolidWorks part keeps its 10-06 import, the new design is RL_ features on top (mates untouched).  **Shape:** `tail_strut.py "cad/v5 Ai designed/Box/TailStrut" --3mf cad/solidworks_api/out/print`, delete TailStrut.SLDPRT, `23 import`, then the 28 run above. NOT automated past the import: a re-imported part gets new face IDs, so check the 4 `TS_*` mates (`23 check`) and the 5 fastener mates (`25`) and re-make any in error by hand |
 | wheel hub (Wheel.SLDPRT outboard face) | `design()` in `22_style_wheel.py` | `22 preview` (2D, no SolidWorks; spokes from `out/styled/wheel_ctx.json`), `22 --restyle`, `22 verify`, `22 render` |
 | FacetHood top (hood B) | `variant_B()` in `cad/aesthetics/parts/hood_variants.py` (its pipes: `B_PIPES` there AND `PIPES["FacetHood"]` in 24) | `hood_variants.py <dir> B --sheets` (checks + 4 views), `box_facet_print.py <scratch>`, copy only `FacetHood.step` to `Box/Facet/`, `21 reimport FacetHood`, `16 --chain`, `24 export / preview / build / print FacetHood` |
 | corrugated pipes (any part) | `PIPES` in `24_pipes.py` (waypoints on a named face; `24 routes` proposes them) | `24 preview <Part>`, look at `out/pipes/<Part>_pipes.png`, `24 build <Part>`, `24 print <Part>`; a proud pipe on a moving part or a trench: `06_sweep.py`, copy `out/sweep_1deg.csv` to a named file, `sweep_diff.py <last> <new>` |

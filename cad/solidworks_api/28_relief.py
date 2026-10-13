@@ -150,6 +150,14 @@ class Part:
             return np.array([(bx[0] + bx[3]) / 2, (bx[1] + bx[4]) / 2, (bx[2] + bx[5]) / 2])
         for s in solids:              # colour by volume: STEP body order is not promised
             b = min(left, key=lambda b: abs(b["volume"] - s.volume))
+            same = [x for x in left if abs(x["volume"] - s.volume) <= 1e-3 * max(1.0, x["volume"]) + 0.05]
+            if len(same) > 1:
+                # equal volumes (a mirror pair: the TailStrut's two window linings) are told apart by
+                # WHERE they are -- by volume alone their names swapped, and `build` (which finds a
+                # body by its name) cut each lining with the other one's cutter (2026-10-12)
+                sb = s.bounding_box()
+                c = np.array([(sb.min.X + sb.max.X) / 2, (sb.min.Y + sb.max.Y) / 2, (sb.min.Z + sb.max.Z) / 2])
+                b = min(same, key=lambda x: np.linalg.norm(ctr(x["box"]) - c))
             if abs(b["volume"] - s.volume) > 1e-3 * max(1.0, b["volume"]) + 0.05:
                 # SolidWorks' STEP of a small curved body can read up to ~1 mm3 off in OCC (the
                 # wheel's raised inlays, 2026-10-09): match it by where it is, then by volume
@@ -315,6 +323,24 @@ def raise_(frame, region, h, colour, name="raise"):
     return {"op": "raise", "frame": frame, "region": region, "h": h, "colour": colour, "name": name}
 
 
+def recolour(names, colour, name="recolour"):
+    """Original bodies (by export name) change colour -- no geometry."""
+    return {"op": "recolour", "names": list(names), "colour": colour, "name": name}
+
+
+def swap(tool, colour, kinds, name="swap"):
+    """What a 3D tool covers of every body of the given colour kinds becomes `colour`: the
+    body loses it, its piece comes back as a new body (one per body -- fusing touching colour
+    bodies is what OCC fails at)."""
+    return {"op": "swap", "tool": tool, "colour": colour, "kinds": tuple(kinds), "name": name}
+
+
+def replace(tool, new, name="replace"):
+    """Everything inside a 3D tool goes (a body wholly inside it is deleted) and `new`
+    [(solid, colour)] comes in as new bodies: the shape may change inside the tool."""
+    return {"op": "replace", "tool": tool, "new": list(new), "name": name}
+
+
 def press_inlays(frame, kinds, d, t, name, keep=None, min_w=MIN_W, inside=0.2):
     """Press every flush inlay of the given colour kinds on this plane: one press per
     connected shape, each on a floor of its own colour.  A shape narrower than min_w
@@ -364,7 +390,49 @@ def apply(P, ops):
     cuts = {i: [] for i in range(len(P.bodies))}
     log = []
     for op in ops:
-        F = op["frame"]
+        F = op.get("frame")
+        if op["op"] == "recolour":
+            n = 0
+            for s in state:
+                if s["orig"] is not None and s["name"] in op["names"]:
+                    s["kind"], s["rgb"] = op["colour"], P.rgb(op["colour"])
+                    n += 1
+            if n != len(op["names"]):
+                raise SystemExit(f"{P.name} {op['name']}: {n} of {len(op['names'])} bodies found")
+            log.append(dict(name=op["name"], op="recolour", colour=op["colour"], bodies=n))
+            continue
+        if op["op"] in ("swap", "replace"):
+            T = op["tool"]
+            removed, pieces = 0.0, []
+            for s in state:
+                if s["solid"] is None or not _near(s["solid"], T):
+                    continue
+                if op["op"] == "swap" and s["kind"] not in op["kinds"]:
+                    continue
+                piece = _solid_or_none(s["solid"] & T)
+                if piece is None:
+                    continue
+                before = _vol(s["solid"])
+                new = _solid_or_none(s["solid"].cut(T))
+                dv = before - _vol(new)
+                if abs(dv - _vol(piece)) > 0.05 + 1e-4 * before:
+                    raise SystemExit(f"{P.name} {op['name']}: body {s['name']} lost {dv:.2f} mm3, the tool "
+                                     f"covers {_vol(piece):.2f} of it -- a failed boolean, stopped")
+                s["solid"] = new
+                if s["orig"] is not None:
+                    cuts[s["orig"]].append(T)
+                removed += dv
+                pieces.append(piece)
+            news = [(p, op["colour"]) for p in pieces] if op["op"] == "swap" else op["new"]
+            added = 0.0
+            for k, (sol, col) in enumerate(news, 1):
+                sol = _solid_or_none(sol)
+                if sol is None:
+                    continue
+                state.append(dict(solid=sol, kind=col, rgb=P.rgb(col), orig=None, name=f"{op['name']}{k}"))
+                added += _vol(sol)
+            log.append(dict(name=op["name"], op=op["op"], removed=round(removed, 3), added=round(added, 3)))
+            continue
         if op["op"] == "press":
             reg = op["region"]
             # pressing an EXISTING inlay: the recess grows GROW into the body round it and the
@@ -433,6 +501,18 @@ def checks(P, ops, state):
     was = [b["solid"] for b in P.bodies]
     out = []
     for op in ops:
+        if op["op"] == "recolour":
+            out.append((op["name"], True, f"{len(op['names'])} bodies -> {op['colour']}"))
+            continue
+        if op["op"] in ("swap", "replace"):
+            # its new bodies must not overlap anything else in the part
+            mine = [s for s in state if s["orig"] is None and s["name"].startswith(op["name"])
+                    and s["name"][len(op["name"]):].isdigit()]
+            ids = {id(s) for s in mine}
+            ov = sum(inside(s["solid"], [t["solid"] for t in state if id(t) not in ids]) for s in mine)
+            out.append((op["name"], ov < 0.05, f"{len(mine)} new bodies, {sum(_vol(s['solid']) for s in mine):.2f} mm3, "
+                                               f"overlapping the rest {ov:.3f} mm3"))
+            continue
         F, reg = op["frame"], op["region"]
         if op["op"] == "press":
             # probes 0.05 INSIDE the region and off the face: a probe face lying on a body
@@ -552,15 +632,60 @@ def _auto_inlays(P, planes, d, t, kinds=("blue", "graphite", "dark", "white"), i
     return ops, skipped
 
 
+def _tail_strut():
+    """cad/aesthetics/parts/tail_strut.py -- the strut's source of truth (its band, chevrons, seam)."""
+    _aes()
+    p = os.path.normpath(os.path.join(HERE, "..", "aesthetics", "parts"))
+    if p not in sys.path:
+        sys.path.insert(0, p)
+    import tail_strut
+    return tail_strut
+
+
 def d_tailstrut(P):
-    """The strut's blue inlays (0.8 deep): the chevrons on the pad flanks, the lining round
-    the V window on both keel flanks, the tail facet's line -> 0.9 channels on blue floors.
-    NOT the dark crystal panels: they are most of their facets (pressing them just lowers
-    the facet) and the keel behind them is thinner than floor + MIN_WALL (checked: 0-85 %)."""
-    planes = [((0, -0.196, 0.981), 28.44, "pad flank R"), ((0, -0.196, -0.981), 28.44, "pad flank L"),
-              ((0, 0, 1), 16.0, "keel flank R"), ((0, 0, -1), 16.0, "keel flank L"),
+    """His call 2026-10-12: printed with the Front plane (XY) on the bed -- a layer is a z slice and a
+    colour costs a filament change in every layer it is in -- so colour boundaries run at z = const
+    (variant B of out/renders/tailstrut_print_colours.png; 230 multi-colour layers of 340 -> 39):
+      * the graphite crystal facet panels and teeth -> white (recolour; their shape reads by shading);
+      * |z| >= BAND_Z, the pad's outer band + the fangs -> replaced by tail_strut.band_bodies(): one
+        graphite body per side, the long pad flank and the fangs' outer face FLAT at z = +-32 (a face
+        to print on, both sides -- his pick), the blue chevrons flush 0.6 inlays in them;
+      * the window lining (keel flanks) and the tail facet line pressed 0.9 on 0.8 floors, as before;
+      * a blue seam: the 0.6 skin where the surface crosses |z| <= SEAM_H (the ridge line's layers),
+        the top face (mated to the floor) left white.
+    The keel hose went with the PP_ features (24's PIPES entry removed).
+    Round 2, same day (his ask; out/renders/tailstrut_trapezoids.png): blue trapezoids on both bed-parallel
+    faces -- on the flat flanks cut 2.0 deep on 0.6 floors, the chevron too (in band_bodies); on the keel
+    flanks (tail_strut.mid_accents) pressed 0.9 on 0.8 like the lining, so in its layers.  The band also
+    lost the V window through the fangs in round 1 (band_bodies did not cut it): back now."""
+    TS = _tail_strut()
+
+    def in_band(b):
+        bb = b["solid"].bounding_box()
+        return bb.min.Z >= TS.BAND_Z - 1e-3 or bb.max.Z <= -TS.BAND_Z + 1e-3
+    dark = [b["name"] for b in P.bodies if b["kind"] in ("dark", "graphite") and not in_band(b)]
+    ops = [recolour(dark, "white", "facets_white")] if dark else []     # (a body colour: stays after round 1)
+    g, bl = TS.band_bodies()
+    ops.append(replace(_fuse(TS.band_tool()), [(s, "dark") for s in g.solids()] + [(s, "blue") for s in bl.solids()],
+                       "band"))
+    planes = [((0, 0, 1), 16.0, "keel flank R"), ((0, 0, -1), 16.0, "keel flank L"),
               ((-0.779, 0.628, 0), 121.02, "tail facet")]
-    return _auto_inlays(P, planes, 0.9, 0.8, kinds=("blue",), inside=-1.0)
+    o, skipped = _auto_inlays(P, planes, 0.9, 0.8, kinds=("blue",), inside=-1.0)
+    ops += o
+    from shapely.geometry import Polygon
+    mid = TS.mid_accents(TS.body_shape())
+    for i, sz in ((0, 1), (1, -1)):
+        F = Frame(P, (0, 0, sz), TS.KEEL_Z_TOP, name=f"keel flank {'RL'[i]}")
+        have = F.footprint(kinds=["blue"]).buffer(0.05)            # inlays already there: _auto_inlays' job
+        for j, p in enumerate(mid):
+            uv = Polygon(F.to([(x, y, sz * TS.KEEL_Z_TOP) for x, y in p.exterior.coords])[:, :2]).difference(have)
+            for k, q in enumerate(getattr(uv, "geoms", [uv])):
+                if isinstance(q, Polygon) and q.area > 2.0:
+                    ops.append(press(F, q, 0.9, "blue", t=0.8, name=f"m{i}_blue{j + 1}{'' if not k else k}"))
+    solids = [b["solid"] for b in P.bodies]
+    sec = TS.section_xy(solids, TS.SEAM_H - 0.01).intersection(TS.section_xy(solids, -TS.SEAM_H + 0.01))
+    ops.append(swap(TS.seam_tool(sec), "blue", ("white",), "seam"))
+    return ops, skipped
 
 
 def d_encoder_carrier(P):
@@ -916,8 +1041,29 @@ def board(P, ops, state, path):
     before = [(b["solid"], b["rgb"]) for b in P.bodies]
     after = [(s["solid"], s["rgb"]) for s in state]
     tiles = []
+    if any("frame" not in op for op in ops):
+        # recolour / swap / replace change the part as a whole: whole-part views, ROBOT frame
+        from render3d import tessellate
+        for label, items in (("before", before), ("after", after)):
+            ms, allV = [], []
+            for solid, rgb in items:
+                if solid is None:
+                    continue
+                V, T, _ = tessellate(solid, 0.06)
+                if not len(T):
+                    continue
+                V = np.asarray(V) @ P.R.T
+                V = np.stack([V[:, 0], -V[:, 2], V[:, 1]], 1)        # ROBOT y up -> view()'s z up
+                ms.append((V, T, _rgb255(rgb)))
+                allV.append(V)
+            allV = np.vstack(allV)
+            for t, e, a in (("rear 3/4 low", -14, -145), ("under 3/4", -40, -120), ("side", 0.5, -90),
+                            ("top 3/4, from the front", 30, -40)):
+                tiles.append((f"whole part: {label}", t, view(ms, allV, (760, 520), e, a, light="camera")))
     frames = {}
     for op in ops:
+        if "frame" not in op:
+            continue
         frames.setdefault(op["frame"].name, (op["frame"], []))[1].append(op["region"])
     for fname, (F, regs) in frames.items():
         from shapely.ops import unary_union
@@ -963,7 +1109,11 @@ def cmd_preview(which):
         # (EncoderCarrier 2026-10-09: three floors never reached SolidWorks, left 0.4 mm voids)
         stepcolor.MIN_BODY_MM3 = 0.0
         rep = {"part": part, "ops": log, "checks": [dict(name=n, ok=o, text=t) for n, o, t in ck],
-               "changed": [], "new": []}
+               "changed": [], "new": [],
+               # original bodies a `recolour` op changed: `build` colours them before any cut
+               "recolour": [dict(name=P.bodies[s["orig"]]["name"], volume=P.bodies[s["orig"]]["volume"],
+                                 rgb=list(s["rgb"])) for s in state
+                            if s["orig"] is not None and s["kind"] != P.bodies[s["orig"]]["kind"]]}
         for i, tl in cuts.items():
             if not tl:
                 continue
@@ -1045,6 +1195,8 @@ def probe(part, step, n=40):
     rng = np.random.default_rng(1)
     out = []
     for op in ops:
+        if "frame" not in op:          # recolour / swap / replace: proven by body count + volumes
+            continue
         F = op["frame"]
         reg = op["region"].buffer(-0.12, join_style=2)
         if reg.is_empty:
@@ -1099,8 +1251,17 @@ def sw_build(which):
                              f"re-run `export` and `preview` first")
         pdoc = wrap(doc, sld.IPartDoc)
         expect = [b["volume"] for b in info["bodies"]]
+        # recoloured bodies first (by name -- equal volumes exist), so a later cut's pieces
+        # take the new colour as their own
+        for rc in rep.get("recolour", []):
+            tgt = next((b for b in S.bodies(doc) if b.Name == rc["name"]), None)
+            if tgt is None or abs(S.volume(tgt) - rc["volume"]) > 1e-4 * rc["volume"] + 0.01:
+                raise SystemExit(f"{part}: no body {rc['name']} of {rc['volume']} mm3 to recolour")
+            S.colour(tgt, rc["rgb"])
         for k, ch in enumerate(rep["changed"], 1):
-            tgt = min(S.bodies(doc), key=lambda b: abs(S.volume(b) - ch["volume"]))
+            # by NAME (export names = SolidWorks body names): by volume alone a mirror pair is a coin toss
+            tgt = next((b for b in S.bodies(doc) if b.Name == ch["name"]), None) or \
+                min(S.bodies(doc), key=lambda b: abs(S.volume(b) - ch["volume"]))
             v_sw = S.volume(tgt)
             if abs(v_sw - ch["volume"]) > 1e-4 * ch["volume"] + 0.01:
                 raise SystemExit(f"{part}: no body of {ch['volume']} mm3 to cut (nearest {v_sw:.4f})")
@@ -1115,6 +1276,7 @@ def sw_build(which):
                 S.last_feature(doc).Name = f"RL_gone{k}"
                 continue
             names0 = {b.Name for b in S.bodies(doc)}
+            tgt_name = tgt.Name
             tools = []
             for j, (v, body) in enumerate(_import_bodies(sw, doc, os.path.join(OUT, ch["tool"]))):
                 f = wrap(pdoc.CreateFeatureFromBody3(body, False, c.swCreateFeatureBodyCheck), sld.IFeature)
@@ -1122,7 +1284,7 @@ def sw_build(which):
                     raise SystemExit(f"{part}: SolidWorks refused cutter {ch['tool']}")
                 f.Name = f"RL_tool{k}_{j + 1}"
             tools = [b for b in S.bodies(doc) if b.Name not in names0]
-            tgt = min((b for b in S.bodies(doc) if b.Name in names0), key=lambda b: abs(S.volume(b) - v_sw))
+            tgt = next(b for b in S.bodies(doc) if b.Name == tgt_name)      # by name again (mirror pairs)
             others = {b.Name for b in S.bodies(doc)} - {tgt.Name}
             cf, _ = S.combine(doc, "cut", tgt, tools)
             cf.Name = f"RL_cut{k}"
@@ -1202,7 +1364,7 @@ def sw_build(which):
 # the print's up direction, part-local (the face on the bed is the opposite one) -- as each
 # part's own script printed it: 24 (box parts), 22 (hub face up), 26 (styled face up); links
 # in their part frame (show face up, as 11 / 24)
-PRINT_UP = {"FacetFront": (1, 0, 0), "FacetBack": (-1, 0, 0), "TailStrut": (0, -1, 0),
+PRINT_UP = {"FacetFront": (1, 0, 0), "FacetBack": (-1, 0, 0), "TailStrut": (0, 0, 1),   # TailStrut: Front plane on the bed (2026-10-12)
             "Wheel": (0, 0, -1), "EncoderCarrier": (0, -1, 0), "EncoderCableClamp": (0, 1, 0),
             "FacetHood": (0, 1, 0), "FacetRing": (0, 1, 0),           # skirt / flange down (box_facet_print)
             "BumperFront": (-1, 0, 0), "BumperBack": (1, 0, 0)}       # outer face down

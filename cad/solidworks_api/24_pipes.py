@@ -269,10 +269,8 @@ PIPES = {   # first set: the proposer's candidates (`routes`), ends chosen per p
         dict(name="spine", face="out", bend="spline", ends=("collar", "dive"),
              pts=[(63.76, -86.29), (62.94, -90.95), (62.01, -95.57), (60.81, -100.07), (59.26, -104.43), (58.11, -105.95)]),
     ],
-    "TailStrut": [
-        dict(name="keel", face="under", bend="spline", ends=('dive', 'collar'),
-             pts=[(-148.49, 11.65), (-144.87, 8.34), (-141.52, 4.82), (-138.97, 0.89), (-136.93, -3.27), (-134.34, -7.19), (-131.02, -10.82), (-130.24, -11.35)]),
-    ],
+    # TailStrut: the `keel` hose on the under facet is GONE (his call 2026-10-12): the strut prints with the
+    # Front plane on the bed and a hose there spans ~25 layers in two colours (28 d_tailstrut)
     "RobotMount": [   # his green mark (2026-10-12): the left field, under the graphite step-bar.  TRENCH again: the inner
         # femur plate passes 1.9 mm over ALL of this field (not just x > 85).  = extras.ROBOTMOUNT_HOSE (u = x, v = y)
         dict(name="trench", face="out", kind="trench", bend="spline", ends=("clamp", "clamp"),
