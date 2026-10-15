@@ -64,8 +64,7 @@ class Hood:
         self.outer = skirt_o + o1 + chan_o + self.o2
         self.void = skirt_i + i1 + chan_i + i2
         shell = self.outer - self.void
-        xb = min(p[0] for p in B.pts(self.S))
-        shell = shell - B.bore((xb + 1, B.Y_LEDGE + 3.0, 0), (1, 0, 0), 2.5, B.CHAN_WALL + 2)
+        shell = B.strip_channel(shell, self.S)       # strip slot, keeper, data-in passage
         for x, z, n in B.HOOD_SCREWS:
             p = B.skirt_point(x, z, n)
             d = -np.asarray(n, float)

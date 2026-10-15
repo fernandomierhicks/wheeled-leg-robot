@@ -1,7 +1,7 @@
 {
  "part": "BumperBack",
  "file": "Box\\Facet\\BumperBack.SLDPRT",
- "dirty": true,
+ "dirty": false,
  "relief_features": [],
  "bodies": [
   {

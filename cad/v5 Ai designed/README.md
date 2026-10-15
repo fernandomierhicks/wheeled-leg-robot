@@ -123,6 +123,53 @@ Femur` deletes RL_ and checks the body count -- delete MF_ first, re-run 32 afte
 white bodies, nothing merged, so no mate face changed; MirrorFemur follows (43 bodies);
 chain 0 mate errors.  Merge into the white body later if wanted (Combine add -- watch mates).
 
+## ▶ Strip seat in the FacetHood -- 2026-10-13 (`box_facet_print.strip_channel`)
+
+His asks: hide the NeoPixel strip from above (it showed 1.5 mm past the roof), a lip that keeps it
+from falling out, a real passage for its wires instead of the Ø5 hole (a ~7 mm gap, a 45-deg chamfer
+so the strip does not turn 90 deg at once).  His picks (questions with sections): wires only through
+the passage (no plug); strip 1 mm deeper + roof 1 mm wider; a keeper + the strip's adhesive.
+Constants at the top of `box_facet_print.py` (`STRIP_IN`, `ROOF_GROW`, `KEEP_*`, `PASS_*`).
+
+* **Roof:** `t2_planes` grows tier 2's base by `ROOF_GROW` 1.0 and every facet's inset by the same,
+  i.e. each facet turned about its TOP edge -- the deck, field, armour and hoses do not move; the
+  side-slope panels / vents / visor / exhaust regenerate on the slightly shallower facets.
+* **Strip:** its back face 1 mm into the back wall (4 -> 3 mm), so the roof edge is 0.5 past its
+  face all round (from straight above nothing of it shows; from the side the light band still does).
+  A 0.5 collar on the wall's top (inside, y 100..100.5) ties the wall to tier 2, whose overlap with
+  it dropped to ~0.6 mm.  Strip model: 598 mm of route, both ends at the passage mouth.
+* **Keeper:** a ridge on the ledge 0.3 in front of the strip, 0.8 tall, 0.55 on top, outer face
+  down to S + 3.25 -- inside the ledge's narrowest edge (front and back faces, 0.6 mm of ledge past
+  the old strip; there it continues tier 1's slope).  The strip slides in under the roof over it
+  with 0.1 to spare; the tape on the back wall does the holding.  Stopped +-11 round the mouth.
+* **Passage:** centred on S's back edge (x -156.7, z 14.3 -- clear of the ring's back-centre tab
+  at z 0), 7 wide at the wall's inside face, flared 45 deg each side out through the wall and 2.5 on
+  into the slot (mouth 18 wide), floor to ceiling (y 94..100, 6 tall); the collar bridges it.  The
+  wires drop through the ring's opening beside the tab (the ring needs no change).
+* **Fasteners checked (cached 86-pose sweep, a 6 mm driver 120 mm long on each screw axis):** the 9
+  ring screws go in from above, hood off; 9 of the 10 hood screws are clear at every hip angle,
+  (-120, +78) only from hip -11 up (the coupler is in the way below); the left side should match
+  (the sweep predates the live left leg).
+* **Print note:** the ceiling over the strip is now a 3.2 mm flat cantilever (was 1.2); expect a
+  little droop on the eave's edge -- paint supports into the slot if it sags.  `checks()` does not
+  see it (its probe of a ring-shaped face lands in the cavity).
+* **Checked:** `hood_variants.py B` -- 0 loose solids, envelope y <= 117.2 / |z| <= 78, nothing
+  below y 99.5 changed outside the channel; 156 of 190 colour bodies identical to the old STEP;
+  horizontal slices old vs new: y 78.3..93.95 (13 levels) identical, 0.000 mm2; y 96 / 99 differ by
+  ~650 mm2, all of it inside the channel ring (0.0000 elsewhere); sections + before/after close-ups.
+  (A whole-hood OCC boolean diff old vs new never finished -- slices instead.)
+* 3MFs regenerated (`28 export --all` + `print`): all but the Wheel -- see the open item below.
+* **Open, found here, NOT from this change:** the Wheel has no RL_ features in SolidWorks (23
+  bodies; 31 with its raised hub relief).  The 10-12 restyle to palette A (`22 --restyle`, commit
+  b2b15d4) needs them deleted first and they were not rebuilt, so `28 print` refuses it ("export has
+  no RL_ features").  Fix: `28 export Wheel`, `28 preview Wheel`, `28 build Wheel`, `28 print Wheel`.
+  Also: `28 print --all` crashed once on Side panel (an empty tessellation); `print "Side panel"`
+  alone then wrote it fine -- the others were printed one by one.
+  SolidWorks: `21 reimport FacetHood --remate-seats` (190 bodies = the STEP, worst 0.0005 mm3, 10 of
+  10 seat mates re-made), `21 reimport NeopixelStrip`, `16 --chain`, `24 export / preview / build
+  FacetHood` (the 3 hoses all OK on the new hood); 0 mate errors.
+* Backups: `_originals/pre_stripseat_2026-10-13/` (parts, STEPs, the 3MF, 24's hood export).
+
 ## ▶ TailStrut for printing on the Front plane -- 2026-10-12 (`28` `d_tailstrut`, `tail_strut.py`)
 
 His brief: the strut prints with the **Front plane (part XY) on the bed** -- a layer is a z slice, and a colour
@@ -832,7 +879,7 @@ filament 1 white / 2 graphite / 3 blue / 4 dark; TPU single) in
 | BumperFront/Back | grey TPU U: cheek posts + chin, 6 mm proud of the face (4 proud of the hood); 7 long M3 socket heads each through the bracket holes (12 x M3x20 + 2 x M3x25), counterbored, 3 mm TPU under the head | face down |
 | FacetRing | graphite; replaces Cap + NeopixelSupport + NeoPixelCage: the v3 Cap's 9 bracket screws (M3x8 csk), wall with 10 Ø2.8 self-tap bosses | flange down |
 | FacetHood | skirt + tier 1 + strip channel + tier 2 + armour, 2.5 mm wall; 10 x M3x10 csk through the skirt into the ring; 233 x 156 x 39. Top = hood B PLATES since 2026-10-08 (see above) | skirt down, tree supports INSIDE only |
-| NeopixelStrip | not printed: his 5.1 x 2.7 strip on its route -- round tier 2's base (the irregular crystal outline), above the legs; 623 of 975 mm, both ends + data wire (Ø5 hole) at the back centre | -- |
+| NeopixelStrip | not printed: his 5.1 x 2.7 strip on its route -- round tier 2's base (the irregular crystal outline), above the legs; 623 of 975 mm, both ends + data wire (Ø5 hole) at the back centre. **2026-10-13: 1 mm deeper, under a wider roof, behind a keeper; 598 mm, ends at a 7 mm flared passage -- see "Strip seat"** | -- |
 
 His rules it follows (2026-10-04): no heat-set inserts (captive nuts or Ø2.8
 self-tap), more screws, visible heads OK; bumpers front AND back in grey TPU;

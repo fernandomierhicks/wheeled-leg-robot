@@ -1,7 +1,7 @@
 {
  "part": "FacetFront",
  "file": "Box\\Facet\\FacetFront.SLDPRT",
- "dirty": true,
+ "dirty": false,
  "relief_features": [
   "RL_tool1_1",
   "RL_tool1_2",
@@ -17,42 +17,6 @@
   "RL_cheekL_blue1_2"
  ],
  "bodies": [
-  {
-   "name": "RL_cheekL_blue1_2",
-   "volume": 15.9654,
-   "rgb": [
-    0.1137,
-    0.4824,
-    1.0
-   ],
-   "colour_from": "body",
-   "box": [
-    62.603,
-    34.05,
-    -48.068,
-    63.697,
-    53.5561,
-    -46.8098
-   ]
-  },
-  {
-   "name": "RL_cheekR_blue1_1",
-   "volume": 15.9654,
-   "rgb": [
-    0.1137,
-    0.4824,
-    1.0
-   ],
-   "colour_from": "body",
-   "box": [
-    62.603,
-    34.05,
-    46.8098,
-    63.697,
-    53.5561,
-    48.068
-   ]
-  },
   {
    "name": "RL_cut2",
    "volume": 5548.736,
@@ -87,6 +51,42 @@
     65.0,
     75.0,
     80.0
+   ]
+  },
+  {
+   "name": "RL_cheekR_blue1_1",
+   "volume": 15.9654,
+   "rgb": [
+    0.1137,
+    0.4824,
+    1.0
+   ],
+   "colour_from": "body",
+   "box": [
+    62.603,
+    34.05,
+    46.8098,
+    63.697,
+    53.5561,
+    48.068
+   ]
+  },
+  {
+   "name": "RL_cheekL_blue1_2",
+   "volume": 15.9654,
+   "rgb": [
+    0.1137,
+    0.4824,
+    1.0
+   ],
+   "colour_from": "body",
+   "box": [
+    62.603,
+    34.05,
+    -48.068,
+    63.697,
+    53.5561,
+    -46.8098
    ]
   }
  ],

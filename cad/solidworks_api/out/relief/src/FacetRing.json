@@ -1,7 +1,7 @@
 {
  "part": "FacetRing",
  "file": "Box\\Facet\\FacetRing.SLDPRT",
- "dirty": true,
+ "dirty": false,
  "relief_features": [],
  "bodies": [
   {

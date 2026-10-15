@@ -79,6 +79,16 @@ STRIP_W, STRIP_T = 5.1, 2.7         # his strip incl. the silicone diffuser
 STRIP_Y0 = Y_LEDGE + 0.45
 CHAN_WALL = 4.0
 LIP = 1.2                           # tier 2 overhangs the strip's back by this much
+# the strip's seat, reworked 2026-10-13 (his asks: hide the strip from above, a lip that
+# keeps it in, a real passage for its wires instead of the Ø5 hole) -- strip_channel()
+STRIP_IN = 1.0                      # the strip sits this much deeper in the back wall (4 -> 3 mm)
+ROOF_GROW = 1.0                     # tier 2's base grows this much (each facet turned about its
+                                    # TOP edge: the deck is unchanged) -> the roof covers the
+                                    # strip's face by LIP + ROOF_GROW - (STRIP_T - STRIP_IN) = 0.5
+KEEP_H, KEEP_GAP, KEEP_TOP = 0.8, 0.3, 0.55   # keeper ridge: height (the strip slides in over it
+                                    # with 0.1 to spare under the roof), gap to the strip, top width
+PASS_W = 7.0                        # data-in passage: width at the wall's inside face
+PASS_FLARE = 2.5                    # the 45-deg flare runs on this far past the wall into the slot
 
 # front / back panel plans (x, z), half outlines, front to back
 FRONT_HALF = [(FACE_F, 0), (FACE_F, 46), (59, 64), (XF1, ZO), (XF0, ZO), (XF0, 0)]
@@ -352,10 +362,63 @@ def strip_wall():
 
 
 def t2_planes(S):
-    T2b = soff(S, LIP)
+    T2b = soff(S, LIP + ROOF_GROW)
     P = pts(T2b)
-    w = K.frustum_walls(P, Y_CHAN, Y_TOP, K.insets_by_direction(P, 12.0, 14.0, 12.0, 12.0), "t2")
+    g = ROOF_GROW                       # inset + g from a base grown by g: the same top edges
+    w = K.frustum_walls(P, Y_CHAN, Y_TOP, K.insets_by_direction(P, 12.0 + g, 14.0 + g, 12.0 + g, 12.0 + g), "t2")
     return w + [((0, Y_TOP, 0), (0, 1, 0), "top"), ((0, Y_CHAN, 0), (0, -1, 0), "base")]
+
+
+def back_edge(S):
+    """S's edge facing the back (outward normal nearest -x): (midpoint, unit along, unit out)."""
+    P = K.ccw(pts(S))
+    best = None
+    for i in range(len(P)):
+        a, b = P[i], P[(i + 1) % len(P)]
+        e = K.unit(b - a)
+        m = np.array([e[1], -e[0]])                       # outward for CCW
+        if best is None or m[0] < best[2][0]:
+            best = ((a + b) / 2, e, m)
+    return best
+
+
+def passage_plan(S):
+    """The data-in passage in plan, centred on S's back edge: PASS_W wide at the wall's
+    inside face, flared 45 deg each side out through the wall and PASS_FLARE on into the
+    strip's slot.  Returns (polygon, half-width of the mouth)."""
+    c, e, m = back_edge(S)
+    hw = PASS_W / 2
+    din = CHAN_WALL + 0.5                                  # past the wall's inside face
+    fl = CHAN_WALL - STRIP_IN + PASS_FLARE                 # flare length, inside face -> out
+    loc = [(-hw, -din), (hw, -din), (hw, -CHAN_WALL), (hw + fl, -CHAN_WALL + fl),
+           (-hw - fl, -CHAN_WALL + fl), (-hw, -CHAN_WALL)]  # (along, out) from the edge midpoint
+    return sg.Polygon([tuple(c + a * e + n * m) for a, n in loc]), hw + fl
+
+
+def strip_channel(shell, S):
+    """The strip's seat (his asks, 2026-10-13), on a shell built with the 4 mm back wall:
+    * the strip moves STRIP_IN into the wall (its back face at S - 1, the wall 3 mm), so
+      tier 2's grown base (t2_planes) covers its face by 0.5 seen from above;
+    * a 0.5 collar on the wall's top ties it to tier 2 (their overlap dropped to ~0.6 mm);
+      inside the cavity, which is empty above y 80;
+    * a keeper ridge on the ledge in front of the strip: KEEP_GAP off its face, KEEP_H tall,
+      KEEP_TOP wide on top, its outer face sloping down to S + 3.25 -- inside the ledge's
+      narrowest edge (S + STRIP_T + 0.6, the front and back faces), stopped at the mouth;
+    * the passage (passage_plan) replaces the Ø5 data-wire hole, floor to ceiling."""
+    def ring(a, b, y0, y1):
+        return prism_xz(soff(S, b), y0, y1) - prism_xz(soff(S, a), y0 - 1, y1 + 1)
+    shell = shell - ring(-STRIP_IN, 0.5, Y_LEDGE, Y_CHAN)
+    shell = shell + ring(-CHAN_WALL, 0.0, Y_CHAN, Y_CHAN + 0.5)
+    k_in = STRIP_T - STRIP_IN + KEEP_GAP
+    k_foot = STRIP_T + 0.6 - 0.05
+    keeper = K.polyhedron(K.frustum_walls(pts(soff(S, k_foot)), Y_LEDGE, Y_LEDGE + KEEP_H, k_foot - k_in - KEEP_TOP) +
+                          [((0, Y_LEDGE + KEEP_H, 0), (0, 1, 0), "top"), ((0, Y_LEDGE, 0), (0, -1, 0), "base")])
+    keeper = keeper - prism_xz(soff(S, k_in), Y_LEDGE - 1, Y_LEDGE + KEEP_H + 1)
+    pas, hm = passage_plan(S)
+    c, e, m = back_edge(S)
+    stop = [tuple(c + a * e + n * m) for a, n in ((-hm - 2, -5), (hm + 2, -5), (hm + 2, 8), (-hm - 2, 8))]
+    keeper = keeper - prism_xz(stop, Y_LEDGE - 1, Y_LEDGE + KEEP_H + 1)
+    return shell - prism_xz(pas, Y_LEDGE, Y_CHAN) + keeper
 
 
 def ring_part():
@@ -406,9 +469,7 @@ def hood_part():
     i2 = K.polyhedron(p2, WALL, skip=("base",)) & K.slab_y(Y_CHAN, BIG)
     outer = skirt_o + o1 + chan_o + o2
     shell = outer - skirt_i - i1 - chan_i - i2
-    # data wire: through the channel's back wall at the back centre
-    xb = min(p[0] for p in pts(S))
-    shell = shell - bore((xb + 1, Y_LEDGE + 3.0, 0), (1, 0, 0), 2.5, CHAN_WALL + 2)
+    shell = strip_channel(shell, S)                  # strip slot, keeper, data-in passage
     # hood screws: countersunk through the skirt
     for x, z, n in HOOD_SCREWS:
         p = skirt_point(x, z, n)
@@ -494,11 +555,16 @@ def hood_details(shell, p1, p2, S):
 
 
 def strip_part(S):
-    mid = soff(S, STRIP_T / 2)
-    band = prism_xz(soff(S, STRIP_T), STRIP_Y0, STRIP_Y0 + STRIP_W) - prism_xz(S, STRIP_Y0 - 1, STRIP_Y0 + STRIP_W + 1)
-    xb = min(p[0] for p in pts(S))
-    band = band - Pos(xb, STRIP_Y0 + STRIP_W / 2, 0) * Box(12, 10, 3.0)              # the data-wire seam
-    return band, mid.exterior.length
+    """The strip in its slot (back face on the wall at S - STRIP_IN), both ends at the
+    data-in passage's mouth -- where the input end turns in (not modelled)."""
+    mid = soff(S, STRIP_T / 2 - STRIP_IN)
+    band = prism_xz(soff(S, STRIP_T - STRIP_IN), STRIP_Y0, STRIP_Y0 + STRIP_W) - \
+        prism_xz(soff(S, -STRIP_IN), STRIP_Y0 - 1, STRIP_Y0 + STRIP_W + 1)
+    c, e, m = back_edge(S)
+    _, hm = passage_plan(S)
+    gap = [tuple(c + a * e + n * m) for a, n in ((-hm, -6), (hm, -6), (hm, 6), (-hm, 6))]
+    band = band - prism_xz(gap, STRIP_Y0 - 1, STRIP_Y0 + STRIP_W + 1)
+    return band, mid.exterior.length - 2 * hm
 
 
 # ------------------------------------------------------------------ fasteners
