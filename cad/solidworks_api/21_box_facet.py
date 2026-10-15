@@ -259,7 +259,12 @@ def do_reimport(sw, name, remate=False):
           f"{None if feat is None else feat.Name} (err {err}): {len(got)} bodies {sum(got) / 1000:.3f} cm3 vs the "
           f"STEP's {len(want)} {sum(want) / 1000:.3f} cm3, worst {worst:.4f} mm3  {'OK' if worst < 0.05 else 'FAIL'}")
     if worst >= 0.05:
-        raise SystemExit(f"{name}: bodies do not match the STEP -- nothing saved; reload the part from disk to undo")
+        # the two kernels can read the same solid a few ppm apart (BumperFront 2026-10-14: 0.16 of
+        # 17900 mm3, a conforming TPU shell) -- compare the geometry itself before refusing
+        ok, sd = same_geometry(doc, step)
+        print(f"  -> geometry against the STEP: worst symmetric difference {sd:.3f} mm3  {'OK' if ok else 'FAIL'}")
+        if not ok:
+            raise SystemExit(f"{name}: bodies do not match the STEP -- nothing saved; reload the part from disk to undo")
     colour_from_step(doc, step)
     if box is not None:
         sw.ActivateDoc3(box.GetTitle(), False, 0, 0)
@@ -267,6 +272,28 @@ def do_reimport(sw, name, remate=False):
         if seats and not remate_seats(sw, name, seats):
             raise SystemExit(f"{name}: not every seat mate was re-made -- nothing saved; look before saving")
         report(box)
+
+
+def same_geometry(doc, step, tol=1.0):
+    """The part as SolidWorks has it (a STEP copy, out/reimport_check.step) against the source STEP,
+    body for body (paired by centre + volume) by OCC symmetric difference -> (ok, worst mm3).
+    For when the volumes differ by more than do_reimport's check allows."""
+    from build123d import import_step
+    tmp = os.path.join(HERE, "out", "reimport_check.step")
+    doc.Extension.SaveAs3(tmp, 0, c.swSaveAsOptions_Silent | c.swSaveAsOptions_Copy, None, None, 0, 0)
+    a, b = list(import_step(tmp).solids()), list(import_step(step).solids())
+    if len(a) != len(b):
+        return False, float("inf")
+
+    def key(s):
+        c_ = s.center()
+        return np.array([c_.X, c_.Y, c_.Z])
+    worst = 0.0
+    for x in a:
+        y = min(b, key=lambda y: np.linalg.norm(key(x) - key(y)) + abs(x.volume - y.volume))
+        b.remove(y)
+        worst = max(worst, x.cut(y).volume + y.cut(x).volume)
+    return worst < tol, worst
 
 
 def colour_from_step(doc, step):
@@ -290,7 +317,9 @@ def colour_from_step(doc, step):
         k = min((i for i in range(len(ref)) if i not in used),
                 key=lambda i: np.linalg.norm(ref[i][0] - ctr) + abs(ref[i][1] - vol) / max(vol, 1.0))
         d = np.linalg.norm(ref[k][0] - ctr)
-        if d > 0.05 or abs(ref[k][1] - vol) > max(0.05, 2e-6 * vol) or ref[k][2] is None:
+        # 20 ppm: the kernels read a solid a few ppm apart (BumperFront 2026-10-14: 9 ppm, geometry
+        # identical by symmetric difference) -- the centre of mass is the discriminating test
+        if d > 0.05 or abs(ref[k][1] - vol) > max(0.05, 2e-5 * vol) or ref[k][2] is None:
             raise SystemExit(f"colour: body {b.Name} ({vol:.3f} mm3) has no match in the STEP (nearest {d:.3f} mm)")
         used.add(k)
         worst = max(worst, d)

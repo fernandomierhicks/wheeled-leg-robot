@@ -573,33 +573,158 @@ def _slash(uc, vc, w, h, skew):
                     (uc + w / 2 + skew / 2, vc + h / 2), (uc - w / 2 + skew / 2, vc + h / 2)])
 
 
-def d_facetback(P):
-    """His image 2: the blue brow trace (0.8 inlay) -> a 0.9 channel on a blue floor; the
-    graphite vent slashes (2.0 inlay, they run round the corner onto the left cheek) and the
-    dark linings round the I/O bay and the control pod -> pressed 1.0 into their own colour.
-    New: three dark raked slots pressed under the brow trace, right of the centre screw."""
+# ---- FacetFront / FacetBack, round 2 (his brief 2026-10-14) -------------------------
+# Both print plate down, so a colour costs a filament change in every layer it is in: every
+# accent is 0.6 mm of colour (3 layers), the dark well linings no longer run the full 12 mm
+# depth of the relief, colour the TPU bumper frame would hide is white, and the colour
+# shapes are pressed FACET_D on a FACET_T floor (the 10-09 relief look).  The bumper frames
+# themselves are box_facet_print.bumper() (TPU, their own parts).
+FACET_D, FACET_T = 1.0, 0.6
+
+
+def _bfp():
+    """cad/aesthetics/parts/box_facet_print.py -- the box parts' source of truth (bumper frames)."""
+    _aes()
+    p = os.path.normpath(os.path.join(HERE, "..", "aesthetics", "parts"))
+    if p not in sys.path:
+        sys.path.insert(0, p)
+    import box_facet_print
+    return box_facet_print
+
+
+def _zy_on(F, g):
+    """A (z, y) shape -- seen face-on along ROBOT x -- projected along x onto F's plane, in F's
+    (u, v).  The Facet parts are placed at identity, so part-local = ROBOT."""
+    from shapely.geometry import MultiPolygon, Polygon
+    if np.abs(F.P.R - np.eye(3)).max() > 1e-6:
+        raise SystemExit(f"{F.P.name}: not placed at identity -- _zy_on assumes part-local = ROBOT")
+
+    def ring(cs):
+        return [tuple(F.to([((F.d - F.w[1] * y - F.w[2] * z) / F.w[0], y, z)])[0][:2]) for z, y in cs]
+    out = []
+    for p in getattr(g, "geoms", [g]):
+        if isinstance(p, Polygon) and not p.is_empty:
+            out.append(Polygon(ring(p.exterior.coords), [ring(h.coords) for h in p.interiors]))
+    return MultiPolygon(out).buffer(0) if len(out) > 1 else (out[0] if out else Polygon())
+
+
+def _tpu_shadow(which):
+    """The bumper frame's footprint seen face-on, (z, y): its ring (box_facet_print FRONT/BACK_FRAME)."""
+    from shapely.geometry import Polygon, box
+    B = _bfp()
+    fr = B.FRONT_FRAME if which == "front" else B.BACK_FRAME
+    zo = 60.0 + B.TPU_W
+    return box(-zo, fr["y0"], zo, B.TPU_TOP).difference(Polygon(fr["hole"]))
+
+
+def _band(pts_, w):
+    from shapely.geometry import LineString
+    return LineString(pts_).buffer(w / 2, cap_style=2, join_style=2, mitre_limit=2.0)
+
+
+def _pad(c, a, ch=None):
+    """A square pad, side a, 45-degree corners."""
+    from shapely.geometry import Polygon
+    x, y = c
+    h, k = a / 2, (a / 4 if ch is None else ch)
+    return Polygon([(x - h + k, y - h), (x + h - k, y - h), (x + h, y - h + k), (x + h, y + h - k),
+                    (x + h - k, y + h), (x - h + k, y + h), (x - h, y + h - k), (x - h, y - h + k)])
+
+
+def _diamond(c, r):
+    from shapely.geometry import Polygon
+    x, y = c
+    return Polygon([(x - r, y), (x, y - r), (x + r, y), (x, y + r)])
+
+
+def _front_cheek_circuit():
+    """The blue circuit on one front cheek facet (his ask: bigger, wider, circuit-like), in
+    (a, y), a = |z| (mirrored onto both cheeks).  Free ground: a 47.2..58.8 (1.2 off the kink
+    with the flat face at 46 and off the bumper's side bar at 60), y 30.7..63.3 (1.2 off the
+    bars).  Each 3 mm of a costs 1 mm of print height (the facet is raked 18.4 deg off the bed):
+    the pattern keeps to a <= 57.6, so with the lining's floor ~20 multi-colour layers."""
     from shapely.ops import unary_union
-    F = Frame(P, (-1, 0, 0), 164.0, u=(0, 0, 1), name="back face")
-    Fc = Frame(P, (-0.949, 0, -0.316), 170.76, name="left cheek")
-    ops, skipped = press_inlays(F, ["blue"], 0.9, 0.8, "back")
-    o2, s2 = press_inlays(F, ["graphite", "dark"], 1.0, 0.8, "back", inside=-1.0)
-    o3, s3 = press_inlays(Fc, ["graphite"], 1.0, 0.8, "cheek", inside=-1.0)
-    slots = unary_union([_slash(u, 63.6, 1.6, 4.4, 1.6) for u in (5.5, 8.5, 11.5)])
-    o4 = [press(F, slots, 1.0, "dark", t=0.8, name="back_slots")]
-    return ops + o2 + o3 + o4, skipped + s2 + s3
+    a = _band([(48.6, 31.4), (48.6, 43.6), (51.0, 46.0), (51.0, 56.6), (49.2, 58.4), (49.2, 61.6)], 2.0)
+    a = unary_union([a, _pad((48.6, 32.6), 3.2), _diamond((49.2, 61.6), 1.7)])
+    b = _band([(55.4, 34.4), (55.4, 40.0), (56.8, 41.4), (56.8, 51.6), (55.0, 53.4), (55.0, 56.6)], 1.6)
+    b = unary_union([b, _pad((55.4, 34.4), 2.8), _diamond((55.0, 57.2), 1.5)])
+    comb = unary_union([_slash(55.0, 43.6 + 2.2 * k, 2.6, 1.0, 1.0) for k in range(4)])   # raked ticks off b, 1.2 clear of a
+    return {"blue": [a, unary_union([b, comb]), _pad((53.4, 61.2), 2.0, 0.5), _pad((52.4, 38.0), 1.8, 0.45)]}
 
 
 def d_facetfront(P):
-    """The dark lining round the screen well -> pressed 1.0 (a stepped rim); the two blue
-    traces on the cheek facets beside it -> 0.9 channels on blue floors."""
+    """Round 2 (his brief 2026-10-14):
+      * the dark lining round the screen well ran the whole 12 mm of the relief (60 layers):
+        it goes white, and the visible part of its face band comes back pressed FACET_D on a
+        FACET_T dark floor (the stepped rim, 0.6 of colour) -- the part under the bumper's top /
+        bottom bars stays white;
+      * the two small blue traces go white; a bigger blue circuit on each cheek facet
+        (_front_cheek_circuit), pressed the same."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
     F = Frame(P, (1, 0, 0), 65.0, u=(0, 0, -1), name="front face")
-    ops, skipped = press_inlays(F, ["dark"], 1.0, 0.8, "front", inside=-1.0)
+    gone = [b["name"] for b in P.bodies if b["kind"] in ("dark", "blue")]
+    ops = [recolour(gone, "white", "front_white")]
+    band = F.footprint(kinds=["dark"]).difference(_zy_on(F, _tpu_shadow("front")))
+    for j, p in enumerate(getattr(band, "geoms", [band])):
+        if isinstance(p, Polygon) and p.area > 2.0:
+            ops.append(press(F, p, FACET_D, "dark", t=FACET_T, grow=GROW, name=f"front_lining{j + 1}"))
     for s, nm in ((1, "right cheek"), (-1, "left cheek")):
         Fc = Frame(P, (0.949, 0, 0.316 * s), 76.21, name=nm)
-        o, sk = press_inlays(Fc, ["blue"], 0.9, 0.8, f"cheek{'R' if s > 0 else 'L'}")
-        ops += o
-        skipped += sk
-    return ops, skipped
+        for colour, shapes in _front_cheek_circuit().items():
+            for k, g in enumerate(shapes):
+                g = Polygon([(s * a, y) for a, y in g.exterior.coords]) if g.geom_type == "Polygon" else \
+                    unary_union([Polygon([(s * a, y) for a, y in q.exterior.coords]) for q in g.geoms])
+                for m, q in enumerate(getattr(_zy_on(Fc, g), "geoms", [_zy_on(Fc, g)])):
+                    ops.append(press(Fc, q, FACET_D, colour, t=FACET_T, name=f"cheek{'RL'[s < 0]}_{colour[0]}{k + 1}{m or ''}"))
+    return ops, []
+
+
+def _back_accents():
+    """FacetBack's moved accents, (z, y) on the back face (x -164): the graphite vents (they sat
+    beside the hose, one under it) and the blue brow trace (the bumper's top bar covers its old
+    place) go under the I/O bay -- free ground y 35.2..38.8 (1.2 off the face's lower edge at 34
+    and the bay lining at 40), z -46.8..-10 (the hose is on the left cheek past z -48; the
+    bumper's centre tab rises to y 35 at |z| <= 8) -- and a blue bus runs up the gap between the
+    bay and the control pod (z 11..16)."""
+    from shapely.ops import unary_union
+    trace = unary_union([_band([(-44.0, 36.2), (-37.0, 36.2), (-35.6, 37.6), (-30.4, 37.6)], 1.4),
+                         _pad((-44.6, 36.9), 2.4), _pad((-30.0, 37.2), 2.4)])
+    bus = unary_union([_band([(13.5, 37.4), (13.5, 61.6)], 1.4), _pad((13.5, 37.4), 2.4), _pad((13.5, 61.6), 2.4)])
+    vents = [_slash(z, 37.0, 1.5, 3.0, 1.5) for z in (-23.0, -19.0, -15.0)]
+    return {"blue": [trace, bus], "graphite": vents}
+
+
+def d_facetback(P):
+    """Round 2 (his brief 2026-10-14):
+      * the graphite vents (one ran under the hose) and the blue brow trace (under the new
+        bumper's top bar) go white; they come back elsewhere, pressed (_back_accents);
+      * the dark linings of the I/O bay and the control pod ran the full 11 mm of the relief:
+        white, and the visible part of their face bands pressed FACET_D on FACET_T dark floors;
+        where the pod's lining is on the right cheek / the lower facet (beside the bumper's bars)
+        a flush FACET_T dark skin -- under the bumper, white;
+      * the hose (PP_, proud of the face) is kept as it is."""
+    from shapely.geometry import Polygon
+    F = Frame(P, (-1, 0, 0), 164.0, u=(0, 0, 1), name="back face")
+    proud = [i for i, b in enumerate(P.bodies) if b["solid"].bounding_box().min.X < -164.05]      # the hose + collar
+    gone = [b["name"] for i, b in enumerate(P.bodies) if b["kind"] != "white" and i not in proud]
+    ops = [recolour(gone, "white", "back_white")]
+    lining = [i for i, b in enumerate(P.bodies) if b["kind"] == "dark" and i not in proud]
+    shadow = _tpu_shadow("back")
+    band = F.footprint(bodies=lining).difference(_zy_on(F, shadow))
+    for j, p in enumerate(getattr(band, "geoms", [band])):
+        if isinstance(p, Polygon) and p.area > 2.0:
+            ops.append(press(F, p, FACET_D, "dark", t=FACET_T, grow=GROW, name=f"back_lining{j + 1}"))
+    for n, d, nm in (((-0.949, 0, 0.316), 170.76, "right cheek"), ((-0.919, -0.394, 0), 137.35, "lower facet")):
+        Fx = Frame(P, n, d, name=nm)
+        g = Fx.footprint(bodies=lining).difference(_zy_on(Fx, shadow)).buffer(-0.05, join_style=2)
+        for j, p in enumerate(getattr(g, "geoms", [g])):
+            if isinstance(p, Polygon) and p.area > 1.0:
+                ops.append(swap(Fx.prism(p, -FACET_T, AIR), "dark", ("white",), name=f"{nm.split()[0]}_lining{j + 1}_"))
+    for colour, shapes in _back_accents().items():
+        for k, g in enumerate(shapes):
+            ops.append(press(F, _zy_on(F, g), FACET_D, colour, t=FACET_T, name=f"back_{colour[0]}{k + 1}"))
+    return ops, []
 
 
 def _auto_inlays(P, planes, d, t, kinds=("blue", "graphite", "dark", "white"), inside=0.2, raise_h=None):

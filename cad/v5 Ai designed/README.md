@@ -123,6 +123,61 @@ Femur` deletes RL_ and checks the body count -- delete MF_ first, re-run 32 afte
 white bodies, nothing merged, so no mate face changed; MirrorFemur follows (43 bodies);
 chain 0 mate errors.  Merge into the white body later if wanted (Combine add -- watch mates).
 
+## ▶ FacetFront / FacetBack round 2 + TPU frames -- 2026-10-14 (`28` `d_facetfront` / `d_facetback`, `box_facet_print.bumper`)
+
+His brief: both panels print widest face (the plate) down, so a colour should span as few layers as
+possible -- every accent 0.6 mm; the front's dark well lining only 0.6; the front's blue bigger, wider,
+circuit-like; on the back the hose stays and the grey vent it collided with moves, the USB-bay and
+switch-pod borders 0.6; both TPU protectors a full rectangle, 10 mm wide, 5 mm thick, hugging the
+face.  His picks (questions): a **conforming 5 mm shell** (not a flat front plane); the top bars **step
+up 45 deg** over the screen window and the back's LED; built as previewed
+(`cad/solidworks_api/out/renders/facet_round2_board.png`).
+
+* **Bumpers** (`box_facet_print.bumper`, `FRONT_FRAME` / `BACK_FRAME`, `TPU_T` 5, `TPU_W` 10): bars
+  centred on the bracket screws -- sides |z| 60..70, rows y 25 / 47.5 / 70.  Front y 19.5..74.5, the
+  top bar 8.5 wide over the screen window (to y 66; the window is y 29..66, |z| 27).  Back y 20..74.5,
+  a tab over the centre screw (to y 35), the top bar ~6 wide over the control pod (to y 68.5; the LED
+  top is 67.55).  The panel envelope's plan + side profile grown 5 (mitred) minus the envelope, so 5 mm
+  normal to every facet; over the wells it bridges at face level.  The back's top bar has a 3 mm channel
+  in its back face for the hose's top 8 mm (`back_hose_channel()`, from 24's pipe STEP): the hose dives
+  under the TPU.  Counterbore floors where they were (white surface + 3 mm), so **every screw kept its
+  place and length**: 6 x M3x20 + 1 x M3x25 per side, the BOM unchanged.  30.4 / 31.6 -> 17.9 / 17.8 cm3.
+  Over the raked cheeks the side bars' front is about level with the flat front face (x 61..65; the
+  top bar is at x 70), and a head stands up to ~2 mm proud on the low side of a raked counterbore
+  (visible heads OK, his rule).
+* **Into SolidWorks:** only the two bumper STEPs written to `Box/Facet/`, `21 reimport <Bumper>
+  --remate-seats`: 3 FX + 7 seat mates re-made each side, 0 mate errors.  **21 fixed on the way:** its
+  volume check failed on a 9 ppm kernel difference (0.16 of 17900 mm3) AFTER the mates had been
+  deleted -- BumperFront was finished by hand (FX re-planned with `swmate.plan`, as `install` made
+  them; the seats by geometry, the screws had not moved).  Now a failing volume check falls back to
+  `same_geometry()` (a STEP copy vs the source, OCC symmetric difference per body: 0.000 mm3 on both
+  bumpers), and `colour_from_step` matches volumes to 20 ppm (the centre of mass decides).
+* **Colour** (`28`, RL_ features at the end of the tree, no reimport, the panels' mates untouched; the
+  10-09 relief deleted first):
+  * FacetFront: the dark well lining (the full 12 mm depth = 60 layers) and the two small blue traces
+    -> white (body colour); the lining's visible face band pressed `FACET_D` 1.0 on a `FACET_T` 0.6 dark
+    floor (under the bumper's bars it stays white); a blue circuit on each cheek facet
+    (`_front_cheek_circuit`, mirrored: two traces with 45-deg doglegs, a raked comb, square / diamond
+    pads, vias) pressed the same, kept to |z| <= 57.6 -- each 3 mm across the raked cheek is 1 mm of
+    print height.
+  * FacetBack: the bay + pod linings, the 3 graphite vents (one ran under the hose) and the blue brow
+    trace (now under the top bar) -> white; the linings' visible face bands pressed 1.0 on 0.6; where
+    the pod's lining wraps onto the right cheek / the lower facet, a flush 0.6 dark skin (`swap`); the
+    vents (3 raked slashes) and a blue trace moved under the I/O bay, a blue bus up the gap between the
+    bay and the pod (`_back_accents`); the hose (PP_) as it was.
+* **Layers** (0.2, plate down), before -> now: FacetFront 60 multi-colour layers -> 22 (~66 -> 24 colour
+  switches); FacetBack 60 -> 28 (~92 -> 55) -- the hose + its collar alone are ~20 of those, and the pod
+  border on the right cheek ~7 (kept: the pod reads as framed).
+* **Built:** FacetFront 14 bodies = 14 predicted, probe 10 ops all right; FacetBack 18 = 18, probe 7 ops
+  all right; chains saved FacetFront, FacetBack, BumperFront, BumperBack, Box, ROBOT, 0 mate errors;
+  `28 export` + `28 print` of the four -> `out/print/*_bambu.3mf`.
+* **No sweep:** the bumpers' envelope only shrank (|z| <= 71.8, y >= 19.5, x 56.8..70 / -169..-155.8) and
+  the panels only lost material; nothing moves near either.
+* **Source of truth:** the panels' base is still `front_parts()` / `back_parts()` (the 10-04 import);
+  round 2 lives in 28 on top.  Re-importing a panel means rebuilding its RL_ features (`28 export /
+  preview / build`).
+* Backups: `_originals/pre_facet_round2_2026-10-14/` (the 4 parts, their STEPs, 3MFs and 28 exports).
+
 ## ▶ Strip seat in the FacetHood -- 2026-10-13 (`box_facet_print.strip_channel`)
 
 His asks: hide the NeoPixel strip from above (it showed 1.5 mm past the roof), a lip that keeps it
@@ -278,8 +333,8 @@ included, agree everywhere.
 | part | what | depth |
 |---|---|---|
 | RobotMount (image 1) | the field's graphite step-bar + the recipe bar it carries on from; the white slashes in its head stay as standing ribs; stops 2 mm short of the trench slot | 1.0 into its own (through-plate) graphite |
-| FacetBack (image 2) | blue brow trace -> channel on a blue floor; dark linings of the I/O bay + control pod stepped down; graphite vent slashes pressed on the back face AND the left cheek they wrap onto; NEW: 3 dark raked slots right of the centre screw | 0.9 / 1.0 |
-| FacetFront | dark lining of the screen well stepped (its thin sliver stays flush); the two blue cheek traces -> channels | 1.0 / 0.9 |
+| FacetBack (image 2) | blue brow trace -> channel on a blue floor; dark linings of the I/O bay + control pod stepped down; graphite vent slashes pressed on the back face AND the left cheek they wrap onto; NEW: 3 dark raked slots right of the centre screw.  **Superseded 2026-10-14** (round 2: 0.6 floors, vents moved off the hose) | 0.9 / 1.0 |
+| FacetFront | dark lining of the screen well stepped (its thin sliver stays flush); the two blue cheek traces -> channels.  **Superseded 2026-10-14** (round 2: 0.6 floors, cheek circuits) | 1.0 / 0.9 |
 | TailStrut | blue chevrons (pad flanks), blue window lining (both keel flanks), tail facet line -> channels.  NOT the dark crystal panels: most of their facet, and the keel behind is thinner than floor + 1 mm.  **Superseded 2026-10-12** ("TailStrut for printing on the Front plane"): lining + tail line still pressed, chevrons now flush in the graphite band | 0.9 |
 | EncoderCarrier / CableClamp | every inlay >= 0.9 mm wide (magnet ring, centre dot, arm pads; the clamp's frame band, chevrons, pad) | 0.4 on a 0.6 floor |
 | Wheel hub | the flush inlays >= 0.9 mm wide **RAISED** 0.6 (white chevron brackets + pads, blue traces): the hub face is a 0.8 mm floor that carries the wheel on its 4 screws -- nothing pressed into it; nothing in the robot is outboard of it | +0.6 |
@@ -876,7 +931,7 @@ filament 1 white / 2 graphite / 3 blue / 4 dark; TPU single) in
 |---|---|---|
 | FacetFront | the v3 FrontPanel ITSELF as a 3 mm plate (window, M2, 8 bracket holes exact) + solid faceted relief to x 65; screen at the bottom of a dark-lined well | plate down |
 | FacetBack | the v3 BackPanel itself (switch + notches, LED, buzzer, 2 USB slots, bracket holes) + relief to x -164; dark I/O bay (USB) and control pod (switch, LED, buzzer) down to plate depth, so plugs and the switch nut see 3 mm | plate down |
-| BumperFront/Back | grey TPU U: cheek posts + chin, 6 mm proud of the face (4 proud of the hood); 7 long M3 socket heads each through the bracket holes (12 x M3x20 + 2 x M3x25), counterbored, 3 mm TPU under the head | face down |
+| BumperFront/Back | grey TPU U: cheek posts + chin, 6 mm proud of the face (4 proud of the hood); 7 long M3 socket heads each through the bracket holes (12 x M3x20 + 2 x M3x25), counterbored, 3 mm TPU under the head.  **2026-10-14: a full 10 x 5 mm conforming frame, same screws** (round 2) | face down |
 | FacetRing | graphite; replaces Cap + NeopixelSupport + NeoPixelCage: the v3 Cap's 9 bracket screws (M3x8 csk), wall with 10 Ø2.8 self-tap bosses | flange down |
 | FacetHood | skirt + tier 1 + strip channel + tier 2 + armour, 2.5 mm wall; 10 x M3x10 csk through the skirt into the ring; 233 x 156 x 39. Top = hood B PLATES since 2026-10-08 (see above) | skirt down, tree supports INSIDE only |
 | NeopixelStrip | not printed: his 5.1 x 2.7 strip on its route -- round tier 2's base (the irregular crystal outline), above the legs; 623 of 975 mm, both ends + data wire (Ø5 hole) at the back centre. **2026-10-13: 1 mm deeper, under a wider roof, behind a keeper; 598 mm, ends at a 7 mm flared passage -- see "Strip seat"** | -- |
@@ -1187,6 +1242,7 @@ phases. Never save `ROBOT.SLDASM` while the `AI_HipDrive` helper mate exists
 | Tibia look | `cad/aesthetics/parts/tibia.py` | `09 --dry`, `09 --restyle` |
 | tail strut (Box/TailStrut) | colours, or the shape at \|z\| >= 25: `tail_strut.py` (band / chevrons / seam) + `d_tailstrut` in `28_relief.py`. The keel / pad / fork shape: `tail_strut.py` alone (its checks + old-vs-new preview run on every build) | **colours / band (2026-10-12 on):** delete the part's RL_ features, `28 export / preview / build / export / print TailStrut` -- the SolidWorks part keeps its 10-06 import, the new design is RL_ features on top (mates untouched).  **Shape:** `tail_strut.py "cad/v5 Ai designed/Box/TailStrut" --3mf cad/solidworks_api/out/print`, delete TailStrut.SLDPRT, `23 import`, then the 28 run above. NOT automated past the import: a re-imported part gets new face IDs, so check the 4 `TS_*` mates (`23 check`) and the 5 fastener mates (`25`) and re-make any in error by hand |
 | wheel hub (Wheel.SLDPRT outboard face) | `design()` in `22_style_wheel.py` | `22 preview` (2D, no SolidWorks; spokes from `out/styled/wheel_ctx.json`), `22 --restyle`, `22 verify`, `22 render` |
+| TPU bumpers (BumperFront / BumperBack) | `bumper()`, `FRONT_FRAME` / `BACK_FRAME`, `TPU_*` in `cad/aesthetics/parts/box_facet_print.py` | write ONLY the bumper STEPs to `Box/Facet/` (`stepcolor.write`, as `box_facet_print` main does), `21 reimport <Bumper> --remate-seats`, `16 --chain Box/Facet/<Bumper>.SLDPRT`, `28 export` + `28 print <Bumper>`.  Keep the counterbore floors where they are or the 7 screw seats move |
 | FacetHood top (hood B) | `variant_B()` in `cad/aesthetics/parts/hood_variants.py` (its pipes: `B_PIPES` there AND `PIPES["FacetHood"]` in 24) | `hood_variants.py <dir> B --sheets` (checks + 4 views), `box_facet_print.py <scratch>`, copy only `FacetHood.step` to `Box/Facet/`, `21 reimport FacetHood`, `16 --chain`, `24 export / preview / build / print FacetHood` |
 | corrugated pipes (any part) | `PIPES` in `24_pipes.py` (waypoints on a named face; `24 routes` proposes them) | `24 preview <Part>`, look at `out/pipes/<Part>_pipes.png`, `24 build <Part>`, `24 print <Part>`; a proud pipe on a moving part or a trench: `06_sweep.py`, copy `out/sweep_1deg.csv` to a named file, `sweep_diff.py <last> <new>` |
 | washers (BearingWasher, SmallBearingWahser, InsideFemurShaft) | `faces()` in `15_style_washers.py` | `15 preview` (2D, 1 s, no SolidWorks), `15 --restyle`, `15 render` |

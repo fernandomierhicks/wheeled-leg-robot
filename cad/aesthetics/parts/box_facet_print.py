@@ -60,7 +60,20 @@ Y0, Y1 = 15.0, 75.0                 # floor underside, box top
 XF0, XF1 = 50.0, 53.0               # front plate (v3 FrontPanel)
 XB0, XB1 = -150.0, -153.0           # back plate  (v3 BackPanel)
 FACE_F, FACE_B = 65.0, -164.0       # concept D lower-body faces
-TPU_T = 6.0                         # bumper stands this proud of the face
+# bumpers (his call 2026-10-14): a full rectangle frame, TPU_W-wide bars on the bracket screws
+# (sides |z| 65, rows y 25 / 47.5 / 70), TPU_T thick normal to every facet it lies on
+TPU_T = 5.0
+TPU_W = 10.0
+TPU_TOP = 74.5                      # 0.5 under the ring flange (Y1)
+TPU_UNDER_HEAD = 3.0                # TPU left under each screw head
+# the frames' inner outlines (z, y): 10 mm bars, except where a bar would cover an opening --
+# 45-degree steps (his pick): the front top bar clears the screen window (y 29..66, |z| 27),
+# the back top bar the control pod (the LED, y 62.45..67.55 at z 45); the back bottom bar has
+# a tab over the centre screw (y 30)
+FRONT_FRAME = dict(y0=19.5, hole=[(-60, 29.5), (60, 29.5), (60, 64.5), (29.5, 64.5), (28, 66), (-28, 66),
+                                  (-29.5, 64.5), (-60, 64.5)])
+BACK_FRAME = dict(y0=20.0, hole=[(-60, 30), (-13, 30), (-8, 35), (8, 35), (13, 30), (60, 30), (60, 68.5),
+                                 (16, 68.5), (12, 64.5), (-60, 64.5)])
 WALL = 2.5
 SELF_TAP = 1.4                      # Ø2.8 pilot -- his v3 Cap/Cage value for M3
 CLEAR = 1.7                         # Ø3.4 M3 clearance
@@ -241,7 +254,7 @@ def front_parts():
         accents.append(K.carve(f, band, 0.8))
     blue = union(accents) & white
     white = white - blue
-    tpu = bumper(env, FACE_F, +1, screws, cheek=(56.0, 74.0), chin_top=lambda z: 29.5)
+    tpu = bumper(FRONT_HALF, FRONT_SIDE, +1, screws, FRONT_FRAME)
     return {"white": white, "dark": dark, "blue": blue}, tpu, screws
 
 
@@ -274,61 +287,61 @@ def back_parts():
     vents = union([K.carve(bf, K.slash(uc, 0, 3.0, 22, 3), 2.0) for uc in (-55.0, -50.5, -46.0)]) & white
     trace = K.carve(bf, K.polyline_band([(-40, 19.5), (-10, 19.5), (-6, 23.5), (14, 23.5)], 1.4), 0.8) & white
     white = white - vents - trace
-
-    def chin_top(z):
-        return 34.5 if abs(z) < 14 else 28.0
-    tpu = bumper(env, FACE_B, -1, screws, cheek=(60.0, 74.0), chin_top=chin_top)
+    tpu = bumper(BACK_HALF, BACK_SIDE, -1, screws, BACK_FRAME, keep_out=back_hose_channel())
     return {"white": white, "dark": dark, "graphite": vents, "blue": trace}, tpu, screws
 
 
-def bumper(env, face, sx, screws, cheek, chin_top):
-    """Grey TPU U-frame: cheek posts |z| in cheek, full height, and a chin bar
-    between them, TPU_T proud of the face; back faces conform to the white part.
-    Held by long M3 socket heads through the side bracket holes (counterbored,
-    3 mm of TPU under each head)."""
-    half = FRONT_HALF if sx > 0 else BACK_HALF
-    grown = soff(spoly(full(half)), TPU_T).intersection(sg.box(-BIG, -ZO + 0.5, BIG, ZO - 0.5))
-    side = FRONT_SIDE if sx > 0 else BACK_SIDE
-    # side profile grown forward by TPU_T, bottom kept at y 15, top 0.5 under the ring
-    xs = [p[0] for p in side]
-    xf = max(xs) if sx > 0 else min(xs)
-    plate_x = XF1 if sx > 0 else XB1
-    prof = [(plate_x, Y0), (xf + sx * TPU_T, Y0), (xf + sx * TPU_T, Y1 - 0.5), (plate_x, Y1 - 0.5)]
-    outer = prism_xz(grown, Y0, Y1 - 0.5) & prism_xy(prof, -BIG / 4, BIG / 4)
-    c0, c1 = cheek
-    cheeks = union([prism_xz(sg.box(-BIG, s * c0, BIG, s * c1) if s > 0 else sg.box(-BIG, -c1, BIG, -c0), Y0, Y1)
-                    for s in (1, -1)])
-    zs = np.linspace(-c0, c0, 57)
-    # the chin's top edge, with 45-degree jogs where its height changes
-    chin_pts = [(-c0, Y0 - 1), (c0, Y0 - 1)]
-    tops = sorted({chin_top(z) for z in zs})
-    if len(tops) == 1:
-        chin_pts += [(c0, tops[0]), (-c0, tops[0])]
-    else:
-        lo, hi = tops
-        zj = 14.0
-        chin_pts += [(c0, lo), (zj + (hi - lo), lo), (zj, hi), (-zj, hi), (-zj - (hi - lo), lo), (-c0, lo)]
-    chin = prism_x(chin_pts, -BIG, BIG)
-    tpu = (outer & (cheeks + chin)) - env
-    # 1.5 mm chamfer round the outer face: four planes tilted 45 deg off the face rectangle
-    xface = xf + sx * TPU_T
-    cham = []
-    for n_zy, off in (((0, 1), Y1 - 0.5), ((0, -1), -Y0), ((1, 0), c1), ((-1, 0), c1)):
-        mz, my = n_zy
-        pt = (xface, off * my if my else 0.0, off * mz if mz else 0.0)
-        pt = (pt[0] - sx * 1.5, pt[1], pt[2])
-        cham.append((pt, (sx * 1.0, my * 1.0, mz * 1.0), "c"))
-    tpu = tpu & K.polyhedron(cham)
-    # screws: the six side bracket holes + the centre-bottom one under the chin
+def back_hose_channel():
+    """The FacetBack's corrugated hose (24_pipes `cheek`, on the left cheek) runs up under the
+    back bumper's top bar: a channel in the bar's back face, the hose's footprint on the
+    cheek + 0.5, from the cheek out to its crest + 0.5 (2.5 + 0.5; 2 mm of TPU over it).
+    None if 24's pipe STEP is not there."""
+    path = os.path.join(HERE, "..", "..", "solidworks_api", "out", "pipes", "FacetBack_pipes.step")
+    if not os.path.exists(path):
+        return None
+    from render3d import tessellate
+    hose = max(import_step(path).solids(), key=lambda s: s.volume)       # the hose, not its collar
+    w = K.unit(np.array([-18.0, 0.0, -6.0]))                              # the left cheek's outward normal
+    e1 = K.unit(np.cross([0.0, 1.0, 0.0], w))
+    e2 = np.cross(w, e1)
+    o = np.array([FACE_B, 0.0, -48.0])                                    # on the cheek (its edge with the back face)
+    V, T, _ = tessellate(hose, 0.05)
+    uv = (np.asarray(V) - o) @ np.array([e1, e2]).T
+    foot = unary_union([sg.Polygon(uv[t]).buffer(1e-3) for t in T if sg.Polygon(uv[t]).area > 1e-6]).buffer(0.5)
+    foot = max(getattr(foot, "geoms", [foot]), key=lambda g: g.area)
+    pl = Plane(origin=tuple(map(float, o - 0.1 * w)), x_dir=tuple(map(float, e1)), z_dir=tuple(map(float, w)))
+    return extrude(pl * make_face(Polyline(*pts(foot), close=True)), amount=3.1)
+
+
+def bumper(half, side, sx, screws, frame, keep_out=None):
+    """Grey TPU frame (his call 2026-10-14): a full rectangle of TPU_W-wide bars on the bracket
+    screws, TPU_T thick normal to every facet it lies on -- the panel envelope's plan and side
+    profile both grown TPU_T (mitred), minus the envelope -- so it hugs the faceted face; over
+    the wells it bridges at face level.  frame: its bottom y0 and inner outline (z, y), top at
+    TPU_TOP, sides at |z| 70.  Held by M3 socket heads through the side bracket holes and the
+    bottom centre one, counterbored, TPU_UNDER_HEAD of TPU under each head.  keep_out: a solid
+    the TPU stays out of (the back hose)."""
+    env = panel_envelope(half, side)
+    grown = prism_xz(soff(spoly(full(half)), TPU_T), Y0 - 1, Y1 + 1) & prism_xy(pts(soff(spoly(side), TPU_T)),
+                                                                                 -BIG / 4, BIG / 4)
+    plate_x = XF0 if sx > 0 else XB0
+    x0, x1 = sorted((plate_x, plate_x + sx * 60.0))
+    zo = 60.0 + TPU_W
+    ring = prism_x([(-zo, frame["y0"]), (zo, frame["y0"]), (zo, TPU_TOP), (-zo, TPU_TOP)], x0, x1) - \
+        prism_x(frame["hole"], x0 - 1, x1 + 1)
+    tpu = (grown & ring) - env
+    if keep_out is not None:
+        tpu = tpu - keep_out
+    # screws: the six side bracket holes + the bottom centre one
+    xf = FACE_F if sx > 0 else FACE_B
     for y, z in screws:
         if abs(z) > 1 or y < 35:
-            entry = np.array([xf + sx * TPU_T, y, z])
+            entry = np.array([xf + sx * (TPU_T + 10.0), y, z])
             tpu = tpu - bore(entry, (-sx, 0, 0), CLEAR, 40)
-            # TPU thickness along this axis: from the white surface to the face
-            col = (env & bore(entry, (-sx, 0, 0), 0.2, 40, back=0.5))
+            col = env & bore(entry, (-sx, 0, 0), 0.2, 40, back=0.5)
             bb = col.bounding_box()
-            white_x = bb.max.X if sx > 0 else bb.min.X
-            depth = abs(entry[0] - white_x) - 3.0
+            white_x = bb.max.X if sx > 0 else bb.min.X                    # the white surface on this axis
+            depth = abs(entry[0] - white_x) - TPU_UNDER_HEAD
             tpu = tpu - bore(entry, (-sx, 0, 0), CBORE, depth)
     return tpu
 

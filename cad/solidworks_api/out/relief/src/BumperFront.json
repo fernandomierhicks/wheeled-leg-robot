@@ -1,25 +1,25 @@
 {
  "part": "BumperFront",
  "file": "Box\\Facet\\BumperFront.SLDPRT",
- "dirty": false,
+ "dirty": true,
  "relief_features": [],
  "bodies": [
   {
-   "name": "BumperFront.step<1>",
-   "volume": 30424.0232,
+   "name": "BumperFront.step<2>",
+   "volume": 17900.6356,
    "rgb": [
     0.4314,
     0.451,
     0.4784
    ],
-   "colour_from": "part",
+   "colour_from": "body",
    "box": [
-    55.0,
-    15.0,
-    -74.0,
-    71.0,
+    56.75,
+    19.5,
+    -70.0,
+    70.0,
     74.5,
-    74.0
+    70.0
    ]
   }
  ],
