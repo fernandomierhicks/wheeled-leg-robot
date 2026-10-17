@@ -123,6 +123,220 @@ Femur` deletes RL_ and checks the body count -- delete MF_ first, re-run 32 afte
 white bodies, nothing merged, so no mate face changed; MirrorFemur follows (43 bodies);
 chain 0 mate errors.  Merge into the white body later if wanted (Combine add -- watch mates).
 
+## ▶ Session end 2026-10-15: save-all, every 3MF -- two traps caught
+
+Guarded save-all (`16`, "still unsaved: 0"), `28 export --all`, `28 print --all`: 19 of 20 3MFs (the Wheel
+still refused -- the 10-13 open item below).  Each part's export was then diffed against the committed one
+(body names, volumes, colours), and that caught two problems:
+* **FacetBack had lost 4 body colours in memory** (`FacetBack.step<1>[4..7]`, round 2's vents + trace
+  recoloured white -- a body appearance) and the save-all had written that.  They showed the part's
+  graphite.  The committed file loads them white, so they were lost during the session (cause not found;
+  nothing today edited FacetBack).  Fixed in place (the open file cannot be swapped from git): coloured
+  (241, 244, 246)/255 exactly as committed, `16 --chain`.  **After every save-all, diff the exports' colours
+  against the last committed ones.**
+* **SolidWorks' STEP writer leaves a valid body out**: FacetBack's `RL_back_g2_8` (one of three identical
+  2.7 mm3 vent floors, Check2 0) is missing from every export, and `28 print` silently wrote 17 of 18
+  bodies.  `Part()` now records `missing` (export bodies with no STEP solid) and `cmd_print` takes each
+  missing RL_ body from `<Part>_new.step` by volume and place, or refuses the part -- never drops one.
+  FacetBack's 3MF: 18 bodies, filaments identical to the committed one (1 x7 / 2 x3 / 3 x3 / 4 x5).
+
+## ▶ FacetHood: one grey, one blue, slots in the graphite re-coloured -- 2026-10-16 (`34_hood_one_grey.py`)
+
+His calls: "change all the grey colours to a single graphite (dark grey) -- we only have one type of
+grey", then "do the same with blue, make sure the accents still make sense with the new colours" (the
+front / back ridges had gone grey on grey).  Colour only -- geometry, mates, body count untouched.
+* **Greys:** the box graphite #7E8795 (filament 2: 41 bodies + the 3 hose collars) and the near-black
+  dark #2B2F36 (filament 4: 76 bodies) -> the **links' graphite (0.25, 0.27, 0.30)**, the FacetFront's
+  since round 5.  **Blue:** the box blue #1E7BFF (63 + the 3 hoses) -> the **links' blue (0.13, 0.45, 0.95)**.
+* **Contrast:** 56 of the 76 dark bodies are slot floors sunk INTO graphite and read graphite on
+  graphite.  Offline board `cad/solidworks_api/out/renders/hood_one_colour_closeups.png` (now / A all
+  blue / B skirt white); **his pick B**: the visor, the 8 exhaust slots, the 2 field windows and the 9
+  tier-1 front / corner plate slots -> blue (20); the 36 raked slots in the skirt plates -> white (they
+  read as see-through vents beside each plate's blue comb).  The other 20 dark floors sit in WHITE faces
+  (tier-1 pockets, front vents, armour windows) and stay graphite.  As built:
+  `out/renders/hood_one_colour_built.png`.
+* SolidWorks: `34_hood_one_grey.py [--dry] [--skirt blue|white]` -- finds the former dark floors by
+  name in 28's pre-change export (kept in the backup below; volumes checked), classifies them by place
+  (`on_graphite`), recolours, `16 --chain`: saved FacetHood, Box, ROBOT, 0 mate errors (twice).
+  `28 export` + `print FacetHood`: 196 bodies, names and volumes identical to before (0.0 mm3);
+  `FacetHood_bambu.3mf` **filament 1 x46 / 2 x64 / 3 x86 -- 3 filaments, no 4**.
+* Source of truth (`hood_variants.py`): `GRAPHITE = DARK` = the links' graphite, `BLUE` = the links'
+  blue (`box_facet_print.build()` writes the hood in them; `24._palette("FacetHood")` = the links'
+  palette); the slots in graphite press `"blue"` (`tail_exhaust(slot=)`, B passes blue -- A / C keep
+  dark), the skirt slot floors go to `white_adds` (kept out of the plate's graphite).  **Checked offline**
+  (`variant_B()` vs 28's export, centre + volume): 149 solids matched, 0 colour mismatches; the main white
+  = SolidWorks' main white + the 36 skirt floors to 0.01 mm3; two tier-1 front plate slots fuse with the
+  blue skirt comb bars they touch (2.26 + 4.16 mm3); 3 slivers < 1 mm3 that `stepcolor.write` always
+  drops.  So a regeneration has 38 fewer bodies than SolidWorks now, same shapes and colours -- fine for
+  `21 reimport`.
+* **`Box/Facet/FacetHood.step` is stale for the slot floors** (its grey / blue `COLOUR_RGB` entries
+  were edited, but the 56 floors share the dark group's colour there): never run `21 colour FacetHood`
+  on it -- regenerate with `box_facet_print.py` first (the documented hood flow does).
+* **Not done -- other parts still on filament 4 / the box shades:** FacetFront (the well lining, x2) and
+  FacetBack (bay + pod linings, x5) are dark; FacetRing / FacetBack graphite are the box's #7E8795 and
+  the box parts' blue #1E7BFF (both the same filaments 2 / 3).
+* Backups: `_originals/pre_one_grey_2026-10-16/` (part, its STEP, 3MF, 28's export before any change).
+
+## ▶ TPU bumpers: the lanes cut THROUGH + one more slot on the back -- 2026-10-16
+
+His ask: "make the shallow aesthetic extruded cuts all the way thru to make the part feel more squishy on
+impact; add one more on the BumperBack, a large area on the top with no accents".  `bumper()` now cuts
+the `frame_ring` lanes through the whole TPU (`_prism_zy(lanes)`, `LANE_D` gone): each slotted bar is two
+strips 2.25-2.75 mm wide that give on impact.  BACK_FRAME's `lanes` gains (-17, 9, y 70.5): the plain top
+bar between the notch (z -50..-20) and the pod's 6 mm bar (z > 12) -- y 69..72 keeps it 0.25 off the bolt
+well at (z 0, y 65, r 3.75).  Front 5 slots, back 4.
+* Checked offline: one solid each; counterbore floors = the 10-15 ones (every screw and seat unchanged);
+  0 mm2 of panel colour under a slot (+0.5, colours from the exports after the FacetBack fix); no TPU under
+  2 mm wide.  14.78 -> 12.78 cm3 (front), 15.38 -> 13.93 (back).  Print: still face down; the slots are
+  plain openings now (the 1 mm lanes needed 3 mm bridges).
+* SolidWorks: `21 reimport` both `--remate-seats` (10 of 10 mates each, geometry 0.000 mm3 off the
+  STEP), `16 --chain`, `28 export` + `print`.  Board: `out/renders/bumpers_slots_board.png`.
+* Backups: `_originals/pre_bumper_slots_2026-10-16/`.
+
+## ▶ TPU bumpers: trapezoid notches + sunk lanes -- 2026-10-15 (late) (`box_facet_print.frame_ring`)
+
+**The 1 mm lanes below became through slots on 2026-10-16 (above).**
+
+His ask: "trapezoidal profiles so they don't look as rectangular, ok to put shallow indents too".  His pick
+(board `cad/solidworks_api/out/renders/bumpers_A_board.png`; as built: `bumpers_final_board.png`): variant A,
+the face-on OUTLINE made trapezoidal -- not a bevelled bar section (offered, not built: OCC's chamfer fails
+on these conforming shells, and a 2 mm bevel breaks into the Ø6.5 counterbores, whose wall is 1.75).
+* `frame_ring(frame, screws)` (both bumpers): a square boss round each of the 7 screws (`BOSS` 6.5 each way
+  along its bar), the bars between stepped in `BAR_STEP` 2.5 with 45-deg ramps -- trapezoid notches in every
+  outer edge: the side bars between the side screws, the bottom bar between the centre boss (`centre_boss`:
+  front 6.5, back 13 = the tab) and the corner bosses, the top bar over `frame["top"]`'s spans (front |z|
+  30..58.5 -- never over the brim; back z -50..-20 only -- not over the control pod's 6 mm bar nor the hose's
+  dive under the bar at z -54.9..-50.8); outer corners chamfered `CORNER` 2.5 (a corner screw allows ~2.8);
+  parallelogram lanes (`LANE_W` 3, 45-deg ends, one lean for all) sunk `LANE_D` 1.0 normal to every facet in
+  the stepped bottom / top bars, + one over the front brim.  The hole is unchanged (a 2 mm hole-corner
+  chamfer came within 1 mm of the panels' colour -- dropped).
+* Checked offline: one solid each; counterbore floors identical to before (front x 61.7 / 65.03, back
+  -161.4 / -165.37), so every screw keeps its length and seat; 0 mm2 of TPU added, 0 mm2 of either panel's
+  colour uncovered by a notch; nothing under 4 mm wide.  17.90 -> 14.78 cm3 (front), 17.78 -> 15.38 (back).
+* Print: still face down; the lanes are 1 mm openings on the bed side bridged 3 mm wide.
+* SolidWorks: the two STEPs into `Box/Facet/`, `21 reimport <Bumper> --remate-seats` -- 7 seat + 3 FX mates
+  re-made each side, 0 mate errors (the volume check read 0.16 mm3 off, the geometry check 0.000 mm3) ->
+  `16 --chain` both, Box, ROBOT -> `28 export` + `print`: `Bumper*_bambu.3mf`, 1 body each.
+* **28's `_tpu_shadow()` still uses the pre-notch rectangle on purpose**: it decides where the panels'
+  dark lining band is pressed, and the notches only uncover white.  Using `frame_ring` there would press
+  small dark stubs into the notches on the next FacetFront / FacetBack relief build.
+* Backups: `_originals/pre_bumper_trapezoid_2026-10-15/` (both parts, STEPs, 3MFs).
+
+## ▶ FacetFront round 5: the links' look -- graphite plates, blue traces with combs, a hose -- 2026-10-15 (late)
+
+His ask (a screenshot of the Femur / Coupler): the FacetFront's accents were off from the rest of the
+robot -- "add some grey traces and the blue lines make it more [like] the other parts of robot, maybe a
+hose?".  The round-3 cheek circuits and round-4 floor circuits (chips, pads, vias, finger combs) are GONE.
+Board approved as rendered: `cad/solidworks_api/out/renders/facet_front_round5_board.png` (round 4 as
+built vs round 5, bumper on; close-ups).  His pick: the **links' dark graphite** (0.25, 0.27, 0.30) on
+this part, not the box's light #7E8795 -- the same filament 2 either way.
+* **The vocabulary, at the links' own size** (`accents.py` `circuit`: trace_t 3.2, raked hatch): a blue
+  trace (2.6 on the cheek, 2.2 on the floor) straight, one 45-deg dogleg, straight, square ends, crossed by
+  a raked comb (`_rake`: 2-3 bars, 1.3-1.4 tall, 5.4-8 across, rising 2.4-3); graphite as plates with
+  45-deg raked ends beside it.  28 `_cheek_accents(side)` / `_floor_accents(side)`, (a, y) with a = |z|,
+  all pressed `FACET_D` 1.0 on a `FACET_T` 0.6 floor of their colour; ground, widths (>= 1.0), gaps
+  (>= 1.2) and white notches inside a shape checked offline.
+  * left cheek: trace + comb + a graphite plate whose raked edge runs parallel to the dogleg;
+  * right cheek: the **hose** + a graphite plate outboard of it (the hose footprint + 1.2 cut off it);
+  * well floor R: plate against the wall, trace stepping in toward the window, 2-bar comb; L: plate by the
+    window between the M2 screws, trace stepping out toward the wall, 3-bar comb.
+* **Hose** (`24 PIPES["FacetFront"]`, `cheek` on `cheek_r`, collar at the top, dive at the bottom; the
+  proposer's candidate): 24.5 mm visible, 159 mm3 + a 43.8 mm3 collar, 0.00 mm2 off free ground, overhang
+  -0.32.  24's `_palette("FacetFront")` gives its collar the links' graphite too.  Diagonally opposite the
+  FacetBack's cheek hose.
+* **The pipe sweep cache was stale**: `out/pipes/sweep/bumperfront__Default.npz` was the 10-07 bumper
+  (cheek posts -- why 24 found no room here before).  Re-meshed from the current BumperFront export (the
+  box parts are static, placements unchanged); the old mesh is not kept in the repo.  BumperBack's mesh is
+  still the 10-07 one -- refresh it the same way before a new FacetBack pipe.
+* **Into SolidWorks, one session** (`_delete_rl` in memory -> `24` sw_build: PP_cheek + PP_cheek_collar1,
+  6 bodies = 6, 0.0000 mm3 -> base colours put back in memory, `28 export`, `preview` -> `28` sw_build ->
+  `16` chain), so the saved part never lacked its relief: 28 replaced 47 RL_ features, 3 bodies cut,
+  16 bodies = 16 predicted (worst 0.245 of tolerance), probe 10 ops all right; chain saved FacetFront,
+  Box, ROBOT, 0 mate errors.  `28 export` + `print` -> `FacetFront_bambu.3mf`: 16 bodies (filament 1 x5 /
+  2 x5 / 3 x4 / 4 x2), 69.0 cm3, 60 x 160 x 16 (the collar stands ~1 mm above the face's plane).
+* **Order for the next round** (the hose is under the relief now): the 28 base export must keep the PP_
+  bodies (delete RL_ only); `d_facetfront` recolours only the imported `FacetFront.step<1>[k]` bodies and
+  reads the hose's footprint from `out/pipes/FacetFront_pipes.step`.  A FacetFront that reloads from disk
+  inside ROBOT can stay flagged dirty though identical to disk -- compare bodies, not the flag.
+* Backups: `_originals/pre_facet_round5_2026-10-15/` (round-4 part, 3MF, as-built STEP, 24's old export).
+
+## ▶ FacetFront round 4: wider top brim + blue on the well floor -- 2026-10-15 (`28` `d_facetfront`)
+
+**The floor circuits below were replaced the same day by round 5 (above); the brim stays.**
+
+His asks: (1) a wider top brim so the TPU bumper's top bar has something to rest on in a fall; (2) blue
+accents on the face the screen pokes through.  Offline board approved as rendered
+(`cad/solidworks_api/out/relief/FacetFront_relief.png`, rows "well floor" / "front face").
+* **Brim:** the screen well ran up to y 73 (0.8 mm of face under the top chamfer), so the bumper's top
+  bar (y 66..74.5) bridged 7 mm of empty well.  The well above `WELL_TOP` = 66 (the window's top edge)
+  is now filled white floor-to-face (x 53..65): a `raise_` op `brim` from the well floor, a NEW body
+  (538 mm2 x 12 = 6.46 cm3) -- the well's walls and floor, and every mate face, untouched.  Its region is
+  the well outline (convex hull of the lining's face band, a U open at the bottom, minus the band)
+  above y 66; square corners (the bumper covers y >= 64.5 at |z| >= 29.5 anyway).  It covers the
+  v3 countersink at (70, 0) -- no screw there (`fastener_list`).  Clear of everything (read in
+  SolidWorks): the OLED stops at y 66.0, the four M2 screws at y 63.4, the bumper lies outside the envelope.
+* **Floor circuits** (`_floor_circuit(side)`, on the well floor x 53, (a, y) with a = |z|), a different one
+  each side like the cheeks: R a chip by the window with three legs out to a pad, a T-bar and a pad,
+  two vias; L a heavy trace (2.0) from a top pad to a T-bar with a raked comb, a finger comb (a flex
+  connector) by the window, two vias.  Pressed `FACET_D` 1.0 on a `FACET_T` 0.6 blue floor (1.4 mm of
+  the 3 mm plate behind); 1.2 off the window, the walls and the bottom chamfer, 3.2 round each M2 axis
+  (29, 33.5 / 61.5); every shape >= 1.0 wide, >= 1.2 apart.  Print cost: 3 more multi-colour layers
+  (plate height 1.4..2.0).
+* **Base export** (the round-3 gotcha again -- the recolour survives `_delete_rl`): RL_ features
+  deleted IN MEMORY, the lining (body [2]) put back dark and the two traces ([3], [4]) blue in memory,
+  `28 export`, part reloaded from disk (28 RL_, 17 bodies, clean) -- nothing saved.
+* **Built:** preview 20 ops all OK (the round-3 ops reproduce exactly); `28 build FacetFront` replaced the
+  28 round-3 RL_ features, 4 bodies cut, 27 bodies = 27 predicted (worst 0.261 of tolerance), probe 18
+  ops all right; chain saved FacetFront, Box, ROBOT, 0 mate errors; `28 export` + `print` ->
+  `FacetFront_bambu.3mf`, 27 bodies (filament 1 x8 / 3 x17 / 4 x2), 69.0 cm3 (was 62.7).
+* Source of truth: `box_facet_print.front_parts()` still has the well to y 73 (a comment there points
+  here) -- the brim lives in 28 like rounds 2-3.  Bumpers untouched.
+* Backups: `_originals/pre_facet_round4_2026-10-15/` (part, 3MF, round 3's built 28 export + board).
+
+## ▶ BottomPanel white + countersinks; FacetFront cheek circuits round 3 -- 2026-10-14 (late)
+
+**BottomPanel** (his ask: no aesthetics -- it is not seen -- but white, and a proper hole for every
+fastener that attaches to it; so it gets reprinted, the 10-06 "keep the v3 floor" no longer holds):
+* Every fastener of Box-1 near the floor checked offline against the floor solid (OCC, floor frame:
+  thin core along the shank = no hole; head / countersunk cone / standoff body = no seat; the floor's
+  bores on each axis).  Fine as they were: tail strut M3x14 x4, battery holder M3x6 csk x2, ODrive /
+  IMU M3 standoffs x9 (each a d 2.8 self-tap through the 5 mm plate -- a 6 mm male end stands 1 mm
+  proud of the underside), the front bumper's centre M3x20 (d 2.9 into the front edge), the M2
+  board standoffs (d 1.7).
+* **Wrong: the 5 M3 countersunk screws coming up through the floor into the corner brackets**
+  (CornerBracket-1..4 in BottomPanelWithAvionics, CornerBracket-27 in Box) sat in PLAIN d 3.4 / 3.2
+  holes, each head 10.7-12.2 mm3 into the plate.  `25 audit` missed it: its flathead "buried" test
+  looks only ABOVE the head's top.  Fix: feature **`Countersinks`** (+ `Countersinks_sketch`, Top Plane
+  = the underside), a 45-deg drafted cut, d 7.0 at the face down to r 1.7 at 1.8 deep (a real ISO
+  10642 M3 head is up to d 6.72); removed 118.926 mm3 = predicted 118.922; heads now 0.000 mm3.
+  The 5 bores are coaxial with their screws to 0.001 mm (the 0.229 mm left-hole offset of the
+  "Mirror fix" open list does NOT apply to the floor).  CornerBracket-27's head is under the
+  TailStrut pad: flush, but the strut must come off to reach it.
+* Colour: the single body coloured box white `#F2F4F7` (the part's appearance stays `blue.p2m`
+  underneath; the body colour wins; no component override in any assembly).
+* Chain-saved BottomPanel, BottomPanelWithAvionics, Box, ROBOT, 0 mate errors.  `BottomPanel` added to
+  28's `PRINT_ONLY` + `PRINT_UP` (plate down): `out/print/BottomPanel_bambu.3mf`, 1 body, filament 1,
+  150 x 200 x 15.
+
+**FacetFront cheek circuits, round 3** (his ask: round 2's blue was too symmetric side to side and
+its diamond trace ends read as arrows): `_front_cheek_circuit(side)` draws a DIFFERENT circuit per
+cheek, every trace ending on a square pad, a T-bar or a chip -- nothing pointed.  Right: a chip high
+up with two pins above it, a 3-line bus (1.0 wide, pitch 2.6) fanning down to staggered pads, a
+column of 3 vias.  Left: one heavy trace (2.0) from a top pad down to a T-bar, a raked comb off its
+inner side, a short dogleg trace, 2 vias.  Same press (1.0 on a 0.6 blue floor), same free ground
+(a <= 57.6), every shape >= 1.0 wide and >= 1.2 apart.  Board: `out/relief/FacetFront_relief.png`.
+* **Built:** preview 10 ops all OK; `28 build FacetFront` replaced the 28 round-2 RL_ features, 4 bodies
+  cut, 10 new, 17 bodies = 17 predicted (worst 0.211 of tolerance), probe 10 ops all right; chain saved
+  FacetFront, Box, ROBOT, 0 mate errors; `28 export` + `print` -> `FacetFront_bambu.3mf`, 17 bodies
+  (filament 1 x7 / 3 x8 / 4 x2), 62.73 cm3.  FacetBack and the bumpers untouched.
+* **Gotcha paid for -- the base export after a round is built:** the round-2 recolour (lining and the
+  two old traces -> white) is a body appearance, so after `_delete_rl` the bodies come back WHITE and
+  `d_facetfront` (which finds the lining by colour) would press nothing.  The base was exported
+  with the RL_ features deleted and the colours put back IN MEMORY (lining dark, traces blue), then
+  the part reloaded from disk; `28 build` itself works from the saved part (it matches by volume).
+  The round-2 base export was never kept -- the backup has the BUILT exports only.
+* Backups: `_originals/pre_facet_round3_2026-10-14/` (part, 3MF, round 2's 28 export + board).
+
 ## ▶ FacetFront / FacetBack round 2 + TPU frames -- 2026-10-14 (`28` `d_facetfront` / `d_facetback`, `box_facet_print.bumper`)
 
 His brief: both panels print widest face (the plate) down, so a colour should span as few layers as
@@ -750,7 +964,7 @@ All of it is `cad/solidworks_api/24_pipes.py`; the design (routes, ends) is the
 | FacetHood | hood B (2026-10-08): `hook` 43 mm collar -> dive and `sweep` 46 mm dive -> collar on the pressed `field`, `tier` 30 mm on tier 1 | `wave` / `corner` (the first hood's deck) removed with that top |
 | TailStrut | ~~`keel` 30 mm on the down-facing keel facet~~ removed 2026-10-12 (multicolour print, his call) | |
 | RobotMount | `trench` 46 mm, TRENCH: a slot round the bearing boss, flush graphite clamps | the inner femur plate passes 1.9 mm over this field |
-| skipped | Coupler (the tibia sweeps half its face, staggered slots fill the rest), Tibia (no 5 mm-wide flat run: pockets and rims), FacetFront (bumper posts over the cheeks, screen well), FacetRing (7.5-10 mm visible band), Femur_inside (inside the box), wheel, TPU bumpers | his call |
+| skipped | Coupler (the tibia sweeps half its face, staggered slots fill the rest), Tibia (no 5 mm-wide flat run: pockets and rims), FacetFront (bumper posts over the cheeks, screen well -- **since 2026-10-15 a hose on the right cheek**, "FacetFront round 5"), FacetRing (7.5-10 mm visible band), Femur_inside (inside the box), wheel, TPU bumpers | his call |
 
 **The pipe.** Core r 1.95 + a torus rib (minor r 0.55) every 1.7 mm: crest r 2.5.
 Proud pipes are clipped AT the face (the proud half only -- the FacetBack relief
@@ -1242,7 +1456,7 @@ phases. Never save `ROBOT.SLDASM` while the `AI_HipDrive` helper mate exists
 | Tibia look | `cad/aesthetics/parts/tibia.py` | `09 --dry`, `09 --restyle` |
 | tail strut (Box/TailStrut) | colours, or the shape at \|z\| >= 25: `tail_strut.py` (band / chevrons / seam) + `d_tailstrut` in `28_relief.py`. The keel / pad / fork shape: `tail_strut.py` alone (its checks + old-vs-new preview run on every build) | **colours / band (2026-10-12 on):** delete the part's RL_ features, `28 export / preview / build / export / print TailStrut` -- the SolidWorks part keeps its 10-06 import, the new design is RL_ features on top (mates untouched).  **Shape:** `tail_strut.py "cad/v5 Ai designed/Box/TailStrut" --3mf cad/solidworks_api/out/print`, delete TailStrut.SLDPRT, `23 import`, then the 28 run above. NOT automated past the import: a re-imported part gets new face IDs, so check the 4 `TS_*` mates (`23 check`) and the 5 fastener mates (`25`) and re-make any in error by hand |
 | wheel hub (Wheel.SLDPRT outboard face) | `design()` in `22_style_wheel.py` | `22 preview` (2D, no SolidWorks; spokes from `out/styled/wheel_ctx.json`), `22 --restyle`, `22 verify`, `22 render` |
-| TPU bumpers (BumperFront / BumperBack) | `bumper()`, `FRONT_FRAME` / `BACK_FRAME`, `TPU_*` in `cad/aesthetics/parts/box_facet_print.py` | write ONLY the bumper STEPs to `Box/Facet/` (`stepcolor.write`, as `box_facet_print` main does), `21 reimport <Bumper> --remate-seats`, `16 --chain Box/Facet/<Bumper>.SLDPRT`, `28 export` + `28 print <Bumper>`.  Keep the counterbore floors where they are or the 7 screw seats move |
+| TPU bumpers (BumperFront / BumperBack) | `bumper()`, `frame_ring()` (bosses / notches / through slots: `BOSS`, `BAR_STEP`, `CORNER`, `LANE_*`), `FRONT_FRAME` / `BACK_FRAME`, `TPU_*` in `cad/aesthetics/parts/box_facet_print.py` | write ONLY the bumper STEPs to `Box/Facet/` (`stepcolor.write`, as `box_facet_print` main does), `21 reimport <Bumper> --remate-seats`, `16 --chain Box/Facet/<Bumper>.SLDPRT`, `28 export` + `28 print <Bumper>`.  Keep the counterbore floors where they are or the 7 screw seats move |
 | FacetHood top (hood B) | `variant_B()` in `cad/aesthetics/parts/hood_variants.py` (its pipes: `B_PIPES` there AND `PIPES["FacetHood"]` in 24) | `hood_variants.py <dir> B --sheets` (checks + 4 views), `box_facet_print.py <scratch>`, copy only `FacetHood.step` to `Box/Facet/`, `21 reimport FacetHood`, `16 --chain`, `24 export / preview / build / print FacetHood` |
 | corrugated pipes (any part) | `PIPES` in `24_pipes.py` (waypoints on a named face; `24 routes` proposes them) | `24 preview <Part>`, look at `out/pipes/<Part>_pipes.png`, `24 build <Part>`, `24 print <Part>`; a proud pipe on a moving part or a trench: `06_sweep.py`, copy `out/sweep_1deg.csv` to a named file, `sweep_diff.py <last> <new>` |
 | washers (BearingWasher, SmallBearingWahser, InsideFemurShaft) | `faces()` in `15_style_washers.py` | `15 preview` (2D, 1 s, no SolidWorks), `15 --restyle`, `15 render` |
