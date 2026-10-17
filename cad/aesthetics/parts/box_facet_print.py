@@ -71,9 +71,28 @@ TPU_UNDER_HEAD = 3.0                # TPU left under each screw head
 # the back top bar the control pod (the LED, y 62.45..67.55 at z 45); the back bottom bar has
 # a tab over the centre screw (y 30)
 FRONT_FRAME = dict(y0=19.5, hole=[(-60, 29.5), (60, 29.5), (60, 64.5), (29.5, 64.5), (28, 66), (-28, 66),
-                                  (-29.5, 64.5), (-60, 64.5)])
+                                  (-29.5, 64.5), (-60, 64.5)],
+                   centre_boss=6.5,                 # the bottom-centre screw (z 0)
+                   top=[(30.0, None, 1), (30.0, None, -1)],   # top edge notched from |z| 30 out (not over the brim)
+                   lanes=[(-22.0, 22.0, 70.25)])    # + a slot over the brim (z0, z1, y centre)
 BACK_FRAME = dict(y0=20.0, hole=[(-60, 30), (-13, 30), (-8, 35), (8, 35), (13, 30), (60, 30), (60, 68.5),
-                                 (16, 68.5), (12, 64.5), (-60, 64.5)])
+                                 (16, 68.5), (12, 64.5), (-60, 64.5)],
+                  centre_boss=13.0,                 # the tab round the bottom-centre screw (y 30)
+                  top=[(20.0, 50.0, -1)],           # |z| 20..50 only: not over the control pod (z > 12: a 6 mm
+                                                    # bar) nor the hose's dive under the bar (z -54.9..-50.8)
+                  lanes=[(-17.0, 9.0, 70.5)])       # + a slot in the plain top bar between the notch and the
+                                                    # pod's bar (his ask 2026-10-16); y 69..72 keeps it 0.25 off
+                                                    # the bolt well at (z 0, y 65, r 3.75) and 2.5 under the top
+# 2026-10-15 (his ask: "trapezoidal profiles so they don't look as rectangular, ok to put shallow
+# indents"): a square boss round each screw, the bars between stepped in BAR_STEP with 45-degree
+# ramps (trapezoid notches in every outer edge), the outer corners chamfered, and parallelogram
+# lanes in the long bars.  2026-10-16 (his ask: "all the way thru to make the part feel more squishy
+# on impact"): the lanes are SLOTS cut through the TPU, two ~2.25 mm strips either side.  The hole,
+# the counterbores and every screw are unchanged.
+BOSS = 6.5                          # boss half-length along its bar, from the screw axis (counterbore 3.25 + 3.25)
+BAR_STEP = 2.5                      # the bar steps in this much between bosses
+CORNER = 2.5                        # outer corner chamfer (a corner screw allows ~2.8)
+LANE_W, LANE_END = 3.0, 2.5         # through slot: width, clearance to a ramp
 WALL = 2.5
 SELF_TAP = 1.4                      # Ø2.8 pilot -- his v3 Cap/Cage value for M3
 CLEAR = 1.7                         # Ø3.4 M3 clearance
@@ -235,7 +254,9 @@ def front_parts():
     env = panel_envelope(FRONT_HALF, FRONT_SIDE)
     relief = env - prism_xz(sg.box(XF0 - 1, -ZO - 1, XF1, ZO + 1), Y0 - 1, Y1 + 1)   # x >= 53 only
     screws = hole_axes(plate)                                 # 8 bracket holes (y, z)
-    # screen well: floor = the plate face (x 53), straight walls, dark lining
+    # screen well: floor = the plate face (x 53), straight walls, dark lining.  Since 2026-10-15 the
+    # part in SolidWorks has the well above y 66 filled (28_relief WELL_TOP, a wider brim under the
+    # bumper's top bar) -- this import is still the base it is built on
     WELL = (-41.0, 41.0, 29.5, 73.0, 6.0)
     well = prism_x(rect_zy(*WELL), XF1 - 0.01, FACE_F + 1)
     lining_zone = prism_x(rect_zy(WELL[0] - 2, WELL[1] + 2, WELL[2] - 2, min(WELL[3] + 2, Y1), WELL[4] + 1),
@@ -313,25 +334,87 @@ def back_hose_channel():
     return extrude(pl * make_face(Polyline(*pts(foot), close=True)), amount=3.1)
 
 
+def _notch(axis, edge, inward, a0, a1, depth=BAR_STEP):
+    """A trapezoid notch in a straight outer edge of a frame, (z, y): a0..a1 along the edge
+    ('z' or 'y'), a0 + depth .. a1 - depth at its floor, `depth` in toward `inward` (+1 / -1)."""
+    e, f = edge - 0.01 * inward, edge + inward * depth
+    q = [(a0, e), (a1, e), (a1 - depth, f), (a0 + depth, f)]
+    return sg.Polygon(q if axis == "z" else [(v, u) for u, v in q])
+
+
+def _lane(z0, z1, yc, w=LANE_W):
+    """A lane along z with 45-degree parallel ends (a parallelogram), (z, y)."""
+    return sg.Polygon([(z0, yc - w / 2), (z1 - w, yc - w / 2), (z1, yc + w / 2), (z0 + w, yc + w / 2)])
+
+
+def frame_ring(frame, screws):
+    """A bumper frame seen face-on, (z, y): (the ring, its through slots).  Square bosses round the
+    screws (the bumper's: |z| > 1, or the bottom centre one), the bars between them stepped in
+    BAR_STEP with 45-degree ramps -- the side bars between the side screws, the bottom bar between
+    the centre boss and the corner ones, the top bar over frame["top"]'s |z| spans -- the outer corners
+    chamfered CORNER, a LANE_W lane on each stepped bottom / top bar, plus frame["lanes"]."""
+    zo, y0, y1 = 60.0 + TPU_W, frame["y0"], TPU_TOP
+    hole = sg.Polygon(frame["hole"])
+    zs = max(abs(z) for y, z in screws)
+    zb = zs - BOSS                                          # where the corner bosses start along z
+    cb = frame["centre_boss"]
+    cut = [sg.Polygon([(s * zo, yc), (s * (zo - CORNER), yc), (s * zo, yc - t * CORNER)])
+           for s in (1, -1) for t, yc in ((1, y1), (-1, y0))]               # the four outer corners
+    lanes = [_lane(z0, z1, yc) for z0, z1, yc in frame["lanes"]]
+    y_bot = (y0 + BAR_STEP + min(y for z, y in frame["hole"])) / 2    # the stepped bottom bar's centre line
+    y_top = (TPU_TOP - BAR_STEP + 64.5) / 2                           # the top bar's (its lower edge y 64.5)
+    for s in (1, -1):
+        ys = sorted(y for y, z in screws if s * z > 1)
+        spans = [(max(y0, y - BOSS), min(y1, y + BOSS)) for y in ys]
+        for (a, b), (c, d) in zip(spans, spans[1:]):
+            if c - b >= 2 * BAR_STEP + 3.0:
+                cut.append(_notch("y", s * zo, -s, b, c))
+        cut.append(_notch("z", y0, +1, *sorted((s * cb, s * zb))))
+        lanes.append(_lane(*sorted((s * (cb + BAR_STEP + LANE_END), s * (zb - BAR_STEP - LANE_END))), y_bot))
+        for zt, zt_out, side in frame["top"]:
+            if side == s:
+                ze = zb if zt_out is None else zt_out
+                cut.append(_notch("z", y1, -1, *sorted((s * zt, s * ze))))
+                lanes.append(_lane(*sorted((s * (zt + BAR_STEP + LANE_END), s * (ze - BAR_STEP - LANE_END))), y_top))
+    ring = sg.box(-zo, y0, zo, y1).difference(unary_union(cut)).difference(hole)
+    return ring, unary_union(lanes)
+
+
+def _prism_zy(g, x0, x1):
+    """A (z, y) shapely (multi)polygon, holes included, extruded along x from x0 to x1."""
+    out = None
+    for p in getattr(g, "geoms", [g]):
+        s = prism_x(pts(p), x0, x1)
+        for h in p.interiors:
+            s = s - prism_x([(float(a), float(b)) for a, b in list(h.coords)[:-1]], x0 - 1, x1 + 1)
+        out = s if out is None else out + s
+    return out
+
+
+def _grown(half, side, t):
+    """The panel envelope's plan and side profile both grown t (mitred): t normal to every facet."""
+    return prism_xz(soff(spoly(full(half)), t), Y0 - 1, Y1 + 1) & prism_xy(pts(soff(spoly(side), t)), -BIG / 4, BIG / 4)
+
+
 def bumper(half, side, sx, screws, frame, keep_out=None):
-    """Grey TPU frame (his call 2026-10-14): a full rectangle of TPU_W-wide bars on the bracket
-    screws, TPU_T thick normal to every facet it lies on -- the panel envelope's plan and side
-    profile both grown TPU_T (mitred), minus the envelope -- so it hugs the faceted face; over
-    the wells it bridges at face level.  frame: its bottom y0 and inner outline (z, y), top at
-    TPU_TOP, sides at |z| 70.  Held by M3 socket heads through the side bracket holes and the
-    bottom centre one, counterbored, TPU_UNDER_HEAD of TPU under each head.  keep_out: a solid
-    the TPU stays out of (the back hose)."""
+    """Grey TPU frame (his call 2026-10-14): a frame of TPU_W-wide bars on the bracket screws,
+    TPU_T thick normal to every facet it lies on -- the panel envelope's plan and side profile
+    both grown TPU_T (mitred), minus the envelope -- so it hugs the faceted face; over the wells
+    it bridges at face level.  frame: its bottom y0, inner outline (z, y) and notch / slot plan
+    (frame_ring, 2026-10-15), top at TPU_TOP, sides at |z| 70.  Held by M3 socket heads through
+    the side bracket holes and the bottom centre one, counterbored, TPU_UNDER_HEAD of TPU under
+    each head.  keep_out: a solid the TPU stays out of (the back hose)."""
     env = panel_envelope(half, side)
-    grown = prism_xz(soff(spoly(full(half)), TPU_T), Y0 - 1, Y1 + 1) & prism_xy(pts(soff(spoly(side), TPU_T)),
-                                                                                 -BIG / 4, BIG / 4)
+    grown = _grown(half, side, TPU_T)
     plate_x = XF0 if sx > 0 else XB0
     x0, x1 = sorted((plate_x, plate_x + sx * 60.0))
-    zo = 60.0 + TPU_W
-    ring = prism_x([(-zo, frame["y0"]), (zo, frame["y0"]), (zo, TPU_TOP), (-zo, TPU_TOP)], x0, x1) - \
-        prism_x(frame["hole"], x0 - 1, x1 + 1)
-    tpu = (grown & ring) - env
+    ring2d, lanes = frame_ring(frame, [(y, z) for y, z in screws if abs(z) > 1 or y < 35])
+    tpu = (grown & _prism_zy(ring2d, x0, x1)) - env
     if keep_out is not None:
         tpu = tpu - keep_out
+    # the slots: through the whole TPU (2026-10-16 -- they were 1 mm sunk lanes; through, the bar
+    # becomes two strips that give on impact)
+    tpu = tpu - _prism_zy(lanes, x0, x1)
     # screws: the six side bracket holes + the bottom centre one
     xf = FACE_F if sx > 0 else FACE_B
     for y, z in screws:
@@ -629,8 +712,8 @@ def build():
         "BumperFront": [("tpu", ft, TPU_GREY)],
         "BumperBack": [("tpu", bt, TPU_GREY)],
         "FacetRing": [("graphite", ring, GRAPHITE)],
-        "FacetHood": [("white", hood["white"], WHITE), ("graphite", hood["graphite"], GRAPHITE),
-                      ("blue", hood["blue"], BLUE), ("dark", hood["dark"], DARK)],
+        "FacetHood": [("white", hood["white"], WHITE), ("graphite", hood["graphite"], HV.GRAPHITE),
+                      ("blue", hood["blue"], HV.BLUE), ("dark", hood["dark"], HV.DARK)],     # one grey, one blue (HV)
         "NeopixelStrip": [("strip", strip, STRIP)],
     }
     info = dict(strip_len=strip_len, front_screws=fscrews, back_screws=bscrews, S=S,

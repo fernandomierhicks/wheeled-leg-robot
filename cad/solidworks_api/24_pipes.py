@@ -243,6 +243,11 @@ PIPES = {   # first set: the proposer's candidates (`routes`), ends chosen per p
         dict(name="arc", face="out", bend="spline", ends=('collar', 'collar'),
              pts=[(8.33, 61.83), (12.56, 63.69), (16.74, 65.66), (21.35, 66.61), (26.18, 66.62), (30.75, 65.61), (34.79, 63.30), (38.50, 60.17), (39.91, 58.75)]),
     ],
+    "FacetFront": [   # his ask 2026-10-15 ("maybe a hose?", the links' look): the right cheek, diagonally
+        # opposite the FacetBack's; the proposer's candidate #0 once the sweep's bumper mesh was the 10 mm frame
+        dict(name="cheek", face="cheek_r", bend="spline", ends=("collar", "dive"),
+             pts=[(-31.33, 59.65), (-29.67, 55.34), (-29.37, 50.46), (-29.33, 45.48), (-29.31, 40.49), (-29.21, 35.53)]),
+    ],
     "FacetBack": [
         dict(name="cheek", face="cheek_l", bend="spline", ends=('dive', 'collar'),
              pts=[(1.79, 70.15), (1.15, 65.41), (0.93, 60.51), (0.81, 55.56), (0.79, 50.56), (0.79, 45.56), (0.78, 40.57), (0.38, 35.74)]),
@@ -1222,6 +1227,10 @@ def _palette(part):
     rgbs = [tuple(b["rgb"] or ()) for b in json.load(open(os.path.join(SRC, f"{part}.json")))["bodies"]]
     if any(r and abs(r[0] - 0.1294) < 0.01 and abs(r[2] - 0.949) < 0.01 for r in rgbs):
         return LINK_PAL
+    if part == "FacetHood":         # his call 2026-10-16: one grey, one blue -- the links' (filaments 2 / 3)
+        return LINK_PAL
+    if part == "FacetFront":        # his call 2026-10-15: the links' dark graphite on the front (still filament 2)
+        return dict(BOX_PAL, graphite=LINK_PAL["graphite"])
     return dict(BOX_PAL, graphite=TAIL_GRAPHITE) if part == "TailStrut" else BOX_PAL
 
 

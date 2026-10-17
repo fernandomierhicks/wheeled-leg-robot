@@ -1,0 +1,51 @@
+{
+ "part": "BottomPanel",
+ "file": "Box\\BottomPanel.SLDPRT",
+ "dirty": false,
+ "relief_features": [],
+ "bodies": [
+  {
+   "name": "Countersinks",
+   "volume": 151063.9444,
+   "rgb": [
+    0.949,
+    0.9569,
+    0.9686
+   ],
+   "colour_from": "body",
+   "box": [
+    -75.0,
+    0.0,
+    -100.0,
+    75.0,
+    15.0,
+    100.0
+   ]
+  }
+ ],
+ "instances": [
+  {
+   "name": "Box-1/BottomPanelWithAvionics-1/BottomPanel-1",
+   "placement": [
+    [
+     0.0,
+     -0.0,
+     -1.0,
+     -50.0
+    ],
+    [
+     -0.0,
+     1.0,
+     -0.0,
+     15.0
+    ],
+    [
+     1.0,
+     0.0,
+     0.0,
+     -0.0
+    ]
+   ]
+  }
+ ]
+}

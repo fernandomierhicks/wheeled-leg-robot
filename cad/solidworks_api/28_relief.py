@@ -66,7 +66,8 @@ PRINT_ONLY = {"FacetHood": r"Box\Facet\FacetHood.SLDPRT",
               "BumperBack": r"Box\Facet\BumperBack.SLDPRT",
               "BearingWasher": r"Links\BearingWasher.SLDPRT",
               "SmallBearingWahser": r"Body\SmallBearingWahser.SLDPRT",
-              "InsideFemurShaft": r"Body\InsideFemurShaft.SLDPRT"}
+              "InsideFemurShaft": r"Body\InsideFemurShaft.SLDPRT",
+              "BottomPanel": r"Box\BottomPanel.SLDPRT"}      # 2026-10-14: white, countersinks -- reprinted
 ALL_PARTS = {**PARTS, **PRINT_ONLY}
 
 
@@ -170,6 +171,7 @@ class Part:
             rgb = tuple(b["rgb"]) if b["rgb"] else (0.9, 0.9, 0.9)
             self.bodies.append({"solid": s, "rgb": rgb, "kind": kind(rgb), "name": b["name"],
                                 "volume": b["volume"]})
+        self.missing = left             # bodies SolidWorks has but its STEP left out (see cmd_print)
         P = np.array(self.info["instances"][0]["placement"])
         self.R = P[:, :3]               # part-local -> ROBOT rotation (saved pose)
         self.pal = {}
@@ -631,25 +633,68 @@ def _pad(c, a, ch=None):
                     (x + h - k, y + h), (x - h + k, y + h), (x - h, y + h - k), (x - h, y - h + k)])
 
 
-def _diamond(c, r):
+def _plate(a0, y0, a1, y1, ch=0.4, pin=None):
+    """A rectangle with 45-degree corners (ch); `pin` chamfers the (a1, y1) corner more (a chip's pin 1)."""
     from shapely.geometry import Polygon
-    x, y = c
-    return Polygon([(x - r, y), (x, y - r), (x + r, y), (x, y + r)])
+    p = ch if pin is None else pin
+    return Polygon([(a0 + ch, y0), (a1 - ch, y0), (a1, y0 + ch), (a1, y1 - p), (a1 - p, y1),
+                    (a0 + ch, y1), (a0, y1 - ch), (a0, y0 + ch)])
 
 
-def _front_cheek_circuit():
-    """The blue circuit on one front cheek facet (his ask: bigger, wider, circuit-like), in
-    (a, y), a = |z| (mirrored onto both cheeks).  Free ground: a 47.2..58.8 (1.2 off the kink
-    with the flat face at 46 and off the bumper's side bar at 60), y 30.7..63.3 (1.2 off the
-    bars).  Each 3 mm of a costs 1 mm of print height (the facet is raked 18.4 deg off the bed):
-    the pattern keeps to a <= 57.6, so with the lining's floor ~20 multi-colour layers."""
+def _rake(ac, vc, L, t, rise):
+    """A hatch bar across a vertical trace -- the links' raked comb (accents.py `circuit`, n_hatch):
+    L across, t tall, its right end `rise` higher, both ends square to the trace."""
+    from shapely.geometry import Polygon
+    return Polygon([(ac - L / 2, vc - rise / 2 - t / 2), (ac + L / 2, vc + rise / 2 - t / 2),
+                    (ac + L / 2, vc + rise / 2 + t / 2), (ac - L / 2, vc - rise / 2 + t / 2)])
+
+
+def _cheek_accents(side):
+    """One front cheek facet, in (a, y), a = |z|.  Round 5 (his ask 2026-10-15: the circuit
+    motifs -- chips, pads, vias -- were off from the rest of the robot; "grey traces and blue lines
+    like the links, maybe a hose"): the links' vocabulary at their own size -- a blue trace 2.6 wide
+    running straight, one 45-degree dogleg, straight again, square ends, crossed by a raked comb
+    of three bars; graphite as plates with 45-degree raked ends beside it.  R carries the hose
+    (24 PIPES "cheek") and a graphite plate outboard of it (the hose's footprint + 1.2 is cut off
+    the plate in d_facetfront); L the trace, its comb and a graphite plate.  Free ground: a
+    47.2..58.8 (1.2 off the kink with the flat face at 46 and the bumper's side bar at 60), y
+    30.7..63.3 (1.2 off the bars).  Each 3 mm of a is 1 mm of print height (the facet is raked
+    18.4 deg off the bed).  Shapes >= 1.0 wide, >= 1.2 apart."""
+    from shapely.geometry import Polygon
     from shapely.ops import unary_union
-    a = _band([(48.6, 31.4), (48.6, 43.6), (51.0, 46.0), (51.0, 56.6), (49.2, 58.4), (49.2, 61.6)], 2.0)
-    a = unary_union([a, _pad((48.6, 32.6), 3.2), _diamond((49.2, 61.6), 1.7)])
-    b = _band([(55.4, 34.4), (55.4, 40.0), (56.8, 41.4), (56.8, 51.6), (55.0, 53.4), (55.0, 56.6)], 1.6)
-    b = unary_union([b, _pad((55.4, 34.4), 2.8), _diamond((55.0, 57.2), 1.5)])
-    comb = unary_union([_slash(55.0, 43.6 + 2.2 * k, 2.6, 1.0, 1.0) for k in range(4)])   # raked ticks off b, 1.2 clear of a
-    return {"blue": [a, unary_union([b, comb]), _pad((53.4, 61.2), 2.0, 0.5), _pad((52.4, 38.0), 1.8, 0.45)]}
+    if side == "R":
+        return {"graphite": [Polygon([(54.6, 30.7), (58.8, 30.7), (58.8, 50.4), (54.6, 54.6)])], "blue": []}
+    trace = _band([(49.6, 63.3), (49.6, 52.0), (53.0, 48.6), (53.0, 30.7)], 2.6)
+    comb = [_rake(53.0, vc, 8.0, 1.4, 3.0) for vc in (36.0, 39.4, 42.8)]
+    plate = Polygon([(52.6, 63.3), (58.8, 63.3), (58.8, 46.4), (52.6, 52.6)])      # raked edge parallel to the dogleg
+    return {"graphite": [plate], "blue": [unary_union([trace] + comb)]}
+
+
+# round 4 (his ask 2026-10-15): the screen well's top wall comes down from y 73 to the window's top
+# edge, so the bumper's top bar (y 66..74.5) rests on white instead of bridging the well
+WELL_TOP = 66.0
+
+
+def _floor_accents(side):
+    """The well floor (x 53, the face the screen shows through) beside the window, in (a, y),
+    a = |z|.  Round 4 put circuit motifs here; round 5 (as _cheek_accents) the links' look: a
+    blue trace 2.2 wide with one 45-degree dogleg and a raked comb, and a graphite plate with
+    raked ends -- R the plate against the wall, the trace stepping in toward the window; L the
+    plate by the window between the M2 screws, the trace stepping out toward the wall.  Free
+    ground: a 28.2..39.8 (1.2 off the window at 27 and the wall at 41), y 30.7..64.8 (1.2 off
+    the walls), 1.2 off the bottom outer chamfer and 3.2 round each M2 screw's axis (29, 33.5 /
+    61.5: its head, r 2, + 1.2).  Shapes >= 1.0 wide, >= 1.2 apart."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    if side == "R":
+        plate = Polygon([(36.6, 64.8), (39.8, 64.8), (39.8, 44.0), (36.6, 40.8)])
+        trace = _band([(33.8, 64.8), (33.8, 50.6), (31.0, 47.8), (31.0, 36.8)], 2.2)
+        comb = [_rake(31.2, vc, 5.6, 1.3, 2.4) for vc in (39.4, 42.4)]
+        return {"graphite": [plate], "blue": [unary_union([trace] + comb)]}
+    plate = Polygon([(28.4, 41.0), (31.6, 37.8), (31.6, 54.0), (28.4, 57.2)])
+    trace = _band([(37.6, 64.8), (37.6, 53.0), (35.0, 50.4), (35.0, 34.0)], 2.2)
+    comb = [_rake(35.6, vc, 5.4, 1.3, 2.4) for vc in (39.0, 42.0, 45.0)]
+    return {"graphite": [plate], "blue": [unary_union([trace] + comb)]}
 
 
 def d_facetfront(P):
@@ -659,23 +704,46 @@ def d_facetfront(P):
         FACET_T dark floor (the stepped rim, 0.6 of colour) -- the part under the bumper's top /
         bottom bars stays white;
       * the two small blue traces go white; a bigger blue circuit on each cheek facet
-        (_front_cheek_circuit), pressed the same."""
-    from shapely.geometry import Polygon
+        (_front_cheek_circuit -- since round 3 a different one on each side), pressed the same.
+    Round 4 (his ask 2026-10-15):
+      * a wider top brim: the well above WELL_TOP filled white, floor to face (a new body, the
+        well's walls and floor untouched), so the bumper's top bar has white behind it;
+      * blue on the well floor beside the window, pressed the same.
+    Round 5 (his ask 2026-10-15, same day): the circuit motifs were off from the rest of the
+    robot -- the cheeks and the floor get the links' blue traces, raked combs and graphite plates
+    (_cheek_accents, _floor_accents), and the right cheek a hose (24 PIPES, PP_ bodies under these
+    RL_ ones: only the imported base bodies are recoloured, and the graphite keeps 1.2 off it)."""
+    from build123d import import_step
+    from shapely.geometry import Polygon, box
     from shapely.ops import unary_union
     F = Frame(P, (1, 0, 0), 65.0, u=(0, 0, -1), name="front face")
-    gone = [b["name"] for b in P.bodies if b["kind"] in ("dark", "blue")]
+    Ff = Frame(P, (1, 0, 0), 53.0, u=(0, 0, -1), name="well floor")         # same (u, v) as F
+    P.pal["graphite"] = KINDS["graphite"][0]       # his call: the links' dark graphite (24's collar too), filament 2
+    gone = [b["name"] for b in P.bodies if b["kind"] in ("dark", "blue") and b["name"].startswith("FacetFront.step")]
     ops = [recolour(gone, "white", "front_white")]
-    band = F.footprint(kinds=["dark"]).difference(_zy_on(F, _tpu_shadow("front")))
+    hose = import_step(os.path.join(HERE, "out", "pipes", "FacetFront_pipes.step"))
+    ring = F.footprint(kinds=["dark"])                     # the lining's face band: a U, open at the bottom
+    well = ring.convex_hull.difference(ring)
+    well = max(getattr(well, "geoms", [well]), key=lambda p: p.area)
+    ops.append(raise_(Ff, well.intersection(box(-1e3, WELL_TOP, 1e3, 1e3)), F.d - Ff.d, "white", name="brim"))
+    for s in (1, -1):
+        for colour, shapes in _floor_accents("RL"[s < 0]).items():
+            for k, g in enumerate(shapes):
+                g = unary_union([Polygon([(s * a, y) for a, y in q.exterior.coords]) for q in getattr(g, "geoms", [g])])
+                ops.append(press(Ff, _zy_on(Ff, g), FACET_D, colour, t=FACET_T, name=f"floor{'RL'[s < 0]}_{colour[0]}{k + 1}"))
+    band = ring.difference(_zy_on(F, _tpu_shadow("front")))
     for j, p in enumerate(getattr(band, "geoms", [band])):
         if isinstance(p, Polygon) and p.area > 2.0:
             ops.append(press(F, p, FACET_D, "dark", t=FACET_T, grow=GROW, name=f"front_lining{j + 1}"))
     for s, nm in ((1, "right cheek"), (-1, "left cheek")):
         Fc = Frame(P, (0.949, 0, 0.316 * s), 76.21, name=nm)
-        for colour, shapes in _front_cheek_circuit().items():
+        keep = _proj(hose, Fc).buffer(1.2, join_style=2) if s > 0 else Polygon()
+        for colour, shapes in _cheek_accents("RL"[s < 0]).items():
             for k, g in enumerate(shapes):
                 g = Polygon([(s * a, y) for a, y in g.exterior.coords]) if g.geom_type == "Polygon" else \
                     unary_union([Polygon([(s * a, y) for a, y in q.exterior.coords]) for q in g.geoms])
-                for m, q in enumerate(getattr(_zy_on(Fc, g), "geoms", [_zy_on(Fc, g)])):
+                g = _zy_on(Fc, g).difference(keep)
+                for m, q in enumerate(getattr(g, "geoms", [g])):
                     ops.append(press(Fc, q, FACET_D, colour, t=FACET_T, name=f"cheek{'RL'[s < 0]}_{colour[0]}{k + 1}{m or ''}"))
     return ops, []
 
@@ -1492,8 +1560,10 @@ def sw_build(which):
 PRINT_UP = {"FacetFront": (1, 0, 0), "FacetBack": (-1, 0, 0), "TailStrut": (0, 0, 1),   # TailStrut: Front plane on the bed (2026-10-12)
             "Wheel": (0, 0, -1), "EncoderCarrier": (0, -1, 0), "EncoderCableClamp": (0, 1, 0),
             "FacetHood": (0, 1, 0), "FacetRing": (0, 1, 0),           # skirt / flange down (box_facet_print)
-            "BumperFront": (-1, 0, 0), "BumperBack": (1, 0, 0)}       # outer face down
-BOX_NAMES = ("FacetFront", "FacetBack", "TailStrut", "FacetHood", "FacetRing", "BumperFront", "BumperBack")
+            "BumperFront": (-1, 0, 0), "BumperBack": (1, 0, 0),       # outer face down
+            "BottomPanel": (0, 1, 0)}                                 # plate down, bosses up
+BOX_NAMES = ("FacetFront", "FacetBack", "TailStrut", "FacetHood", "FacetRing", "BumperFront", "BumperBack",
+             "BottomPanel")
 TPU = ("BumperFront", "BumperBack")                                  # one filament, grey TPU
 FILAMENT = {"white": 1, "graphite": 2, "blue": 3, "dark": 4}
 
@@ -1515,8 +1585,38 @@ def cmd_print(which):
             print(f"{part}: the export has no RL_ features -- `build`, then `export {part}` first")
             continue
         try:
-            bodies = [(b["solid"], b["kind"]) for b in Part(part, built=True).bodies]
+            P_ = Part(part, built=True)
+            bodies = [(b["solid"], b["kind"]) for b in P_.bodies]
             src = "SolidWorks export"
+            if P_.missing:
+                # SolidWorks' STEP writer can leave a valid body out: FacetBack 2026-10-15, one of its
+                # three identical 2.7 mm3 vent floors on every export (Check2 0), and the print silently
+                # had 17 of 18 bodies.  Each missing RL_ body is taken from <Part>_new.step (the bodies
+                # `build` imported) by volume AND place; anything else missing refuses the part
+                import stepcolor
+                from build123d import Solid
+                new_s = [Solid(s) for s, _ in stepcolor.read(os.path.join(OUT, f"{part}_new.step"))] \
+                    if os.path.exists(os.path.join(OUT, f"{part}_new.step")) else []
+                got = []
+                for b in P_.missing:
+                    bx = b["box"]
+                    c0 = np.array([(bx[0] + bx[3]) / 2, (bx[1] + bx[4]) / 2, (bx[2] + bx[5]) / 2])
+
+                    def off(s):
+                        q = s.bounding_box()
+                        return np.linalg.norm(np.array([(q.min.X + q.max.X) / 2, (q.min.Y + q.max.Y) / 2,
+                                                        (q.min.Z + q.max.Z) / 2]) - c0)
+                    m = [s for s in new_s if abs(s.volume - b["volume"]) <= 1e-3 * b["volume"] + 0.05 and off(s) < 0.1]
+                    if not b["name"].startswith("RL_") or len(m) != 1:
+                        got = None
+                        break
+                    got.append((m[0], kind(b["rgb"] or (1, 1, 1))))
+                if got is None:
+                    print(f"{part}: {[b['name'] for b in P_.missing]} missing from SolidWorks' STEP and not all "
+                          f"found in {part}_new.step -- NOT printed")
+                    continue
+                bodies += got
+                src += f" + {len(got)} from {part}_new.step ({', '.join(b['name'] for b in P_.missing)}: not in the STEP)"
         except SystemExit as e:
             # SolidWorks' STEP of the wheel's raised chevrons reads 1.3 mm3 short in OCC while
             # SolidWorks holds them at exactly the predicted volume: the RL_ bodies are taken

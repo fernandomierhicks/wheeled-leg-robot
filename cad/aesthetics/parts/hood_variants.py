@@ -34,7 +34,12 @@ sys.path.insert(0, HERE)
 import box_facet_print as B
 import box_concept_facet as K
 
-WHITE, GRAPHITE, BLUE, DARK = K.WHITE, K.GRAPHITE, K.BLUE, K.DARK
+WHITE = K.WHITE
+# his calls 2026-10-16: one grey filament and one blue -- the hood's graphite AND dark are both
+# the links' graphite (0.25, 0.27, 0.30), as on the FacetFront, and its blue the links' blue
+# (swstyle.GROUPS); filaments 1 / 2 / 3, no 4
+GRAPHITE = DARK = (0.25 * 255, 0.27 * 255, 0.30 * 255)
+BLUE = (0.13 * 255, 0.45 * 255, 0.95 * 255)
 WALL, BIG = B.WALL, K.BIG
 Y_MAX = 117.2                     # today's armour top: the height cap (his call)
 Y_TOP = B.Y_TOP                   # 113, today's tier-2 roof
@@ -74,7 +79,7 @@ class Hood:
         self.gfx, self.blue, self.dark = [], [], []
         self.gfx_over = []            # graphite inlays ON raised white features (win over their white)
         self.pipes = []               # (24_pipes pipe dict, face height y): hoses on a horizontal face
-        self.white_adds = []          # raised white features (added, and kept white)
+        self.white_adds = []          # raised white features (added, and kept white); also white floors kept out of the graphite
 
     def add(self, s):
         self.ops.append(("+", s))
@@ -554,14 +559,15 @@ def tier1_today(h, relief=False):
         h.press(f, K.slash(uc, 2.6, 1.4, 3.4, 1.6), 0.8, "dark", floor_t=FLOOR_T, y_min=Y_T1_MIN)
     plate = [(14, -1.4), (40, -1.4), (43, -4.4), (17, -4.4)]
     h.press(f, plate, PRESS_D, "gfx", floor_t=FLOOR_T, y_min=Y_T1_MIN)
+    # (slots IN graphite: blue since 2026-10-16 -- dark = graphite now, one grey filament)
     for uc in (24.0, 27.0, 30.0):
-        h.press(sunk(f, PRESS_D), K.slash(uc, -2.9, 1.0, 2.2, 1.2), 0.5, "dark", floor_t=FLOOR_T, y_min=Y_T1_MIN)
-    # the front corner facets: a graphite plate with a dark vent row, raked back
+        h.press(sunk(f, PRESS_D), K.slash(uc, -2.9, 1.0, 2.2, 1.2), 0.5, "blue", floor_t=FLOOR_T, y_min=Y_T1_MIN)
+    # the front corner facets: a graphite plate with a (blue) vent row, raked back
     for zs in (1, -1):
         fc = h.t1((0.8, 0.5, 0.45 * zs), (63, ym1, 56 * zs), (0, 0, -zs))
         h.press(fc, [(-7.0, -3.0), (5.0, -3.0), (7.0, 2.6), (-5.0, 2.6)], PRESS_D, "gfx", floor_t=FLOOR_T, y_min=Y_T1_MIN)
         for uc in (-3.0, 0.0, 3.0):
-            h.press(sunk(fc, PRESS_D), K.slash(uc, -0.2, 1.0, 3.6, 1.6), 0.5, "dark", floor_t=FLOOR_T, y_min=Y_T1_MIN)
+            h.press(sunk(fc, PRESS_D), K.slash(uc, -0.2, 1.0, 3.6, 1.6), 0.5, "blue", floor_t=FLOOR_T, y_min=Y_T1_MIN)
 
 
 SKIRT_KEEP = 5.0     # mm round a hood screw (countersink r 3.2 + 1.8) nothing is pressed
@@ -571,8 +577,10 @@ SKIRT_D = 0.6        # the skirt has the ring wall 0.3 behind it: no backing, so
 def skirt_features(h):
     """The skirt (y 78..86, a 2.5 wall with the ring wall 0.3 behind it -- nothing can be
     backed, so everything is 0.6-1.0 deep), his image 3: on every facet between the hood
-    screws, a graphite armour plate pressed 0.6 with raked ends, a row of dark raked slots
-    sunk 0.4 further into its middle, and a blue hatch comb at its forward end."""
+    screws, a graphite armour plate pressed 0.6 with raked ends, a row of raked slots sunk
+    0.4 further into its middle, and a blue hatch comb at its forward end.  The slots' floors
+    were dark; WHITE since 2026-10-16 (one grey filament; his pick "B" of
+    out/renders/hood_one_colour_closeups.png): see-through vents next to the blue comb."""
     pts_ = B.pts(B.H0)
     cen = np.array(B.H0.centroid.coords[0])
     screws = [B.skirt_point(x, z, n) for x, z, n in B.HOOD_SCREWS]
@@ -627,7 +635,7 @@ def skirt_features(h):
                     uc = (p0 + p1) / 2 + (k - (nsl - 1) / 2) * 3.0
                     sl = K.slash(uc, 0.0, 1.3, 3.6, rake * 0.7)
                     h.cut(K.carve(sunk(f, SKIRT_D), sl, 0.4))
-                    h.dark.append(K.carve(sunk(f, SKIRT_D + 0.4), sl, 0.6, lift=0.3))
+                    h.white_adds.append(K.carve(sunk(f, SKIRT_D + 0.4), sl, 0.6, lift=0.3))   # kept out of the plate
 
 
 def face_poly(h, frame):
@@ -749,7 +757,7 @@ def nose_visor(h, half=27.0, band=11.0, slot=19.0, relief=False):
     fi = sunk(f, PRESS_D) if relief else f
     vc, hh = (v1 - 1.0 + bot) / 2, 1.9
     h.press(fi, [(-slot, vc), (-slot + 3, vc + hh), (slot - 3, vc + hh), (slot, vc), (slot - 3, vc - hh),
-                 (-slot + 3, vc - hh)], 1.0 if relief else 1.4, "dark", y_min=Y_T2_MIN)
+                 (-slot + 3, vc - hh)], 1.0 if relief else 1.4, "blue", y_min=Y_T2_MIN)   # dark until 2026-10-16
     for sg_ in (1, -1):
         for u in (slot + 2.5, slot + 4.5, slot + 6.5):
             for pts_ in clip_uv(K.slash(sg_ * u, vc, 1.0, 2 * hh + 1.6, 0.0), F, 1.0):
@@ -759,9 +767,10 @@ def nose_visor(h, half=27.0, band=11.0, slot=19.0, relief=False):
                     h.blue.append(K.carve(f, pts_, 1.0))
 
 
-def tail_exhaust(h, relief=False):
-    """Shared: the two back facets of tier 2 -- a graphite band with dark pressed
-    exhaust slots.  relief: the band is pressed too, the slots sink further into it."""
+def tail_exhaust(h, relief=False, slot="dark"):
+    """Shared: the two back facets of tier 2 -- a graphite band with pressed exhaust
+    slots, floors in `slot` (B: blue since 2026-10-16).  relief: the band is pressed too,
+    the slots sink further into it."""
     ym = (B.Y_CHAN + Y_TOP) / 2
     for d, t in (((-1, 0.93, 0.0), (-158, ym, 14)), ((-0.95, 0.93, -0.3), (-156, ym, -15))):
         f = h.t2(d, t, (0, 0, 1))
@@ -775,7 +784,7 @@ def tail_exhaust(h, relief=False):
         a, b = v0 + 4.0, v1 - 2.2                  # low end high enough that the backing clears y 100
         for uc in (-7.5, -2.5, 2.5, 7.5):
             h.press(sunk(f, PRESS_D) if relief else f, K.chamfer_rect(uc - 1.6, uc + 1.6, a, b, 0.8),
-                    1.0 if relief else 1.4, "dark", y_min=Y_T2_MIN)
+                    1.0 if relief else 1.4, slot, y_min=Y_T2_MIN)
 
 
 def variant_A():
@@ -1012,9 +1021,9 @@ def variant_B(relief=True):
             h.blue.append(B.union([K.carve(floor, cb, 1.0, lift=0.3) for cb in combs]))
     for x, z in ((-134, 26), (-18, -29.5), (14, -33)):
         h.raise_(floor, xz(K.chamfer_rect(x - 2.4, x + 2.4, z - 2.4, z + 2.4, 0.9)), 0.8, "white")
-    # dark windows in the front corners of the field
+    # windows in the front corners of the field (dark until 2026-10-16; blue: the field is graphite)
     for x, z in ((27, 25.5), (24, -23.0)):
-        h.press(floor, K.chamfer_rect(x - 4, x + 4, -z - 2.5, -z + 2.5, 1.2), 1.5, "dark")
+        h.press(floor, K.chamfer_rect(x - 4, x + 4, -z - 2.5, -z + 2.5, 1.2), 1.5, "blue")
     # corrugated half-pipes on the field where the two traces were (his marks, 2026-10-07):
     # 24_pipes' own hose, pts in 24's deck frame (u = x, v = -z) so they paste into PIPES
     # on a face at the field floor
@@ -1022,7 +1031,7 @@ def variant_B(relief=True):
         h.pipes.append((pd, yF))
     side_slopes(h, avoid=sg.MultiPolygon(bites).buffer(0), relief=relief)
     nose_visor(h, relief=relief)
-    tail_exhaust(h, relief=relief)
+    tail_exhaust(h, relief=relief, slot="blue")
     tier1_today(h, relief=relief)
     if relief:
         skirt_features(h)

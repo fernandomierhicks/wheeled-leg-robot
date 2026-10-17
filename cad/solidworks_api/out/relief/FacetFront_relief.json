@@ -8,13 +8,61 @@
    "bodies": 3
   },
   {
+   "name": "brim",
+   "op": "raise",
+   "area": 538.0,
+   "h": 12.0,
+   "colour": "white",
+   "added": 6455.995
+  },
+  {
+   "name": "floorR_g1",
+   "op": "press",
+   "area": 71.68,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 118.552,
+   "floor": 43.008
+  },
+  {
+   "name": "floorR_b1",
+   "op": "press",
+   "area": 72.99,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 116.865,
+   "floor": 43.795
+  },
+  {
+   "name": "floorL_g1",
+   "op": "press",
+   "area": 51.84,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "graphite",
+   "removed": 82.979,
+   "floor": 31.104
+  },
+  {
+   "name": "floorL_b1",
+   "op": "press",
+   "area": 82.61,
+   "d": 1.0,
+   "t": 0.6,
+   "colour": "blue",
+   "removed": 132.283,
+   "floor": 49.566
+  },
+  {
    "name": "front_lining1",
    "op": "press",
    "area": 75.5,
    "d": 1.0,
    "t": 0.6,
    "colour": "dark",
-   "removed": 124.16,
+   "removed": 120.432,
    "floor": 42.928
   },
   {
@@ -24,88 +72,38 @@
    "d": 1.0,
    "t": 0.6,
    "colour": "dark",
-   "removed": 120.391,
+   "removed": 120.425,
    "floor": 42.921
   },
   {
-   "name": "cheekR_b1",
+   "name": "cheekR_g1",
    "op": "press",
-   "area": 74.48,
+   "area": 83.71,
    "d": 1.0,
    "t": 0.6,
-   "colour": "blue",
-   "removed": 118.926,
-   "floor": 44.689
+   "colour": "graphite",
+   "removed": 133.596,
+   "floor": 50.252
   },
   {
-   "name": "cheekR_b2",
+   "name": "cheekL_g1",
    "op": "press",
-   "area": 58.07,
+   "area": 90.19,
    "d": 1.0,
    "t": 0.6,
-   "colour": "blue",
-   "removed": 92.728,
-   "floor": 34.842
-  },
-  {
-   "name": "cheekR_b3",
-   "op": "press",
-   "area": 3.69,
-   "d": 1.0,
-   "t": 0.6,
-   "colour": "blue",
-   "removed": 5.973,
-   "floor": 2.214
-  },
-  {
-   "name": "cheekR_b4",
-   "op": "press",
-   "area": 2.99,
-   "d": 1.0,
-   "t": 0.6,
-   "colour": "blue",
-   "removed": 4.699,
-   "floor": 1.793
+   "colour": "graphite",
+   "removed": 144.316,
+   "floor": 54.113
   },
   {
    "name": "cheekL_b1",
    "op": "press",
-   "area": 74.48,
+   "area": 117.11,
    "d": 1.0,
    "t": 0.6,
    "colour": "blue",
-   "removed": 119.126,
-   "floor": 44.689
-  },
-  {
-   "name": "cheekL_b2",
-   "op": "press",
-   "area": 58.07,
-   "d": 1.0,
-   "t": 0.6,
-   "colour": "blue",
-   "removed": 92.909,
-   "floor": 34.842
-  },
-  {
-   "name": "cheekL_b3",
-   "op": "press",
-   "area": 3.69,
-   "d": 1.0,
-   "t": 0.6,
-   "colour": "blue",
-   "removed": 5.964,
-   "floor": 2.214
-  },
-  {
-   "name": "cheekL_b4",
-   "op": "press",
-   "area": 2.99,
-   "d": 1.0,
-   "t": 0.6,
-   "colour": "blue",
-   "removed": 4.741,
-   "floor": 1.793
+   "removed": 187.231,
+   "floor": 70.267
   }
  ],
  "checks": [
@@ -113,6 +111,31 @@
    "name": "front_white",
    "ok": true,
    "text": "3 bodies -> white"
+  },
+  {
+   "name": "brim",
+   "ok": true,
+   "text": "raised"
+  },
+  {
+   "name": "floorR_g1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "floorR_b1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "floorL_g1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
+  },
+  {
+   "name": "floorL_b1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
   },
   {
    "name": "front_lining1",
@@ -125,44 +148,19 @@
    "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
   },
   {
-   "name": "cheekR_b1",
+   "name": "cheekR_g1",
+   "ok": true,
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.08 mm2"
+  },
+  {
+   "name": "cheekL_g1",
    "ok": true,
    "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
-  },
-  {
-   "name": "cheekR_b2",
-   "ok": true,
-   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
-  },
-  {
-   "name": "cheekR_b3",
-   "ok": true,
-   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
-  },
-  {
-   "name": "cheekR_b4",
-   "ok": true,
-   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
   },
   {
    "name": "cheekL_b1",
    "ok": true,
-   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
-  },
-  {
-   "name": "cheekL_b2",
-   "ok": true,
-   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
-  },
-  {
-   "name": "cheekL_b3",
-   "ok": true,
-   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
-  },
-  {
-   "name": "cheekL_b4",
-   "ok": true,
-   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9: -0.00 mm2"
+   "text": "wall behind 100.0% solid, on the face 100.0%, narrower than 0.9:  0.00 mm2"
   }
  ],
  "changed": [
@@ -171,9 +169,9 @@
    "name": "FacetFront.step<1>[1]",
    "kind": "white",
    "volume": 57355.9038,
-   "final": 56905.9829,
+   "final": 56436.4879,
    "pieces": [
-    56905.9829
+    56436.4879
    ],
    "gone": false,
    "tool": "FacetFront_tool0.step"
@@ -191,31 +189,79 @@
    "tool": "FacetFront_tool1.step"
   },
   {
-   "index": 2,
-   "name": "FacetFront.step<1>[3]",
-   "kind": "blue",
-   "volume": 3.7756,
-   "final": 2.5572,
-   "pieces": [
-    2.5572
-   ],
-   "gone": false,
-   "tool": "FacetFront_tool2.step"
-  },
-  {
    "index": 3,
    "name": "FacetFront.step<1>[4]",
    "kind": "blue",
    "volume": 3.7756,
-   "final": 2.5572,
+   "final": 3.7716,
    "pieces": [
-    2.5572
+    3.7716
    ],
    "gone": false,
    "tool": "FacetFront_tool3.step"
   }
  ],
  "new": [
+  {
+   "name": "brim",
+   "kind": "white",
+   "rgb": [
+    0.949,
+    0.9569,
+    0.9686
+   ],
+   "pieces": [
+    6455.9955
+   ]
+  },
+  {
+   "name": "floorR_g1",
+   "kind": "graphite",
+   "rgb": [
+    0.25,
+    0.27,
+    0.3
+   ],
+   "pieces": [
+    43.008
+   ]
+  },
+  {
+   "name": "floorR_b1",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    43.7949
+   ]
+  },
+  {
+   "name": "floorL_g1",
+   "kind": "graphite",
+   "rgb": [
+    0.25,
+    0.27,
+    0.3
+   ],
+   "pieces": [
+    31.104
+   ]
+  },
+  {
+   "name": "floorL_b1",
+   "kind": "blue",
+   "rgb": [
+    0.1176,
+    0.4824,
+    1.0
+   ],
+   "pieces": [
+    49.5656
+   ]
+  },
   {
    "name": "front_lining1",
    "kind": "dark",
@@ -241,51 +287,27 @@
    ]
   },
   {
-   "name": "cheekR_b1",
-   "kind": "blue",
+   "name": "cheekR_g1",
+   "kind": "graphite",
    "rgb": [
-    0.1176,
-    0.4824,
-    1.0
+    0.25,
+    0.27,
+    0.3
    ],
    "pieces": [
-    44.6889
+    50.2522
    ]
   },
   {
-   "name": "cheekR_b2",
-   "kind": "blue",
+   "name": "cheekL_g1",
+   "kind": "graphite",
    "rgb": [
-    0.1176,
-    0.4824,
-    1.0
+    0.25,
+    0.27,
+    0.3
    ],
    "pieces": [
-    34.8425
-   ]
-  },
-  {
-   "name": "cheekR_b3",
-   "kind": "blue",
-   "rgb": [
-    0.1176,
-    0.4824,
-    1.0
-   ],
-   "pieces": [
-    2.2136
-   ]
-  },
-  {
-   "name": "cheekR_b4",
-   "kind": "blue",
-   "rgb": [
-    0.1176,
-    0.4824,
-    1.0
-   ],
-   "pieces": [
-    1.793
+    54.1129
    ]
   },
   {
@@ -297,43 +319,7 @@
     1.0
    ],
    "pieces": [
-    44.6889
-   ]
-  },
-  {
-   "name": "cheekL_b2",
-   "kind": "blue",
-   "rgb": [
-    0.1176,
-    0.4824,
-    1.0
-   ],
-   "pieces": [
-    34.8425
-   ]
-  },
-  {
-   "name": "cheekL_b3",
-   "kind": "blue",
-   "rgb": [
-    0.1176,
-    0.4824,
-    1.0
-   ],
-   "pieces": [
-    2.2136
-   ]
-  },
-  {
-   "name": "cheekL_b4",
-   "kind": "blue",
-   "rgb": [
-    0.1176,
-    0.4824,
-    1.0
-   ],
-   "pieces": [
-    1.793
+    70.2669
    ]
   }
  ],
