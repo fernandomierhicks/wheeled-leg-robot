@@ -35,9 +35,13 @@
 #define LASERS_ENABLED    0     // set to 1 once VL53L1X sensors are wired up
 
 // --- Display personality ---
-// 0 = PERS_ENGINEERING (telemetry panels), 1 = PERS_FACE (animated eyes)
+// 0 = PERS_ENGINEERING (telemetry panels), 1 = PERS_FACE (cartoon eyes),
+// 2 = PERS_GLACIER (visor eyes + trace mouth, glacier_face.cpp)
 // Change this to switch the power-on default; later the Teensy can override live.
-#define DEFAULT_DISPLAY_PERSONALITY  0
+// Overridable via PLATFORMIO_BUILD_FLAGS (-D DEFAULT_DISPLAY_PERSONALITY=2) like the WiFi toggles.
+#ifndef DEFAULT_DISPLAY_PERSONALITY
+#define DEFAULT_DISPLAY_PERSONALITY  2
+#endif
 
 // --- WiFi telemetry campaign build-time toggles ---
 // All overridable via PLATFORMIO_BUILD_FLAGS (-D...) without editing this file,

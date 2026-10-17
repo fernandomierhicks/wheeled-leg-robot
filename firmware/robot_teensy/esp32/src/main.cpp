@@ -19,6 +19,7 @@
 #include "comm_protocol.h"
 #include "udp_stream.h"
 #include "wifi_config.h"
+#include "glacier_face.h"
 
 // ── NeoPixel ──────────────────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ static volatile uint16_t g_tof_front_min     = 0xFFFF;
 static volatile uint16_t g_tof_rear_min      = 0xFFFF;
 
 // ── Display personality ───────────────────────────────────────────────────────
-enum DisplayPersonality : uint8_t { PERS_ENGINEERING = 0, PERS_FACE = 1 };
+enum DisplayPersonality : uint8_t { PERS_ENGINEERING = 0, PERS_FACE = 1, PERS_GLACIER = 2 };
 static volatile DisplayPersonality g_display_personality =
     (DisplayPersonality)DEFAULT_DISPLAY_PERSONALITY;
 
@@ -2161,6 +2162,35 @@ static void initFaceDisplay() {
     g_face.pupil_retarget_ms= millis() + 2000;
 }
 
+// GLACIER visor face (glacier_face.cpp). Falls back to the data screen if its
+// 38 KB sprite can't be allocated.
+static void initGlacierDisplay() {
+    tft.fillScreen(TFT_BLACK);
+    if (!glacier_face_begin(&tft)) {
+        g_display_personality = PERS_ENGINEERING;
+        initEngineeringDisplay();
+    }
+}
+
+// Teensy state + link status -> the GLACIER face's expression.
+static GlacierState glacier_state_now() {
+    bool linked = g_teensy_ever_heard && ((millis() - g_last_teensy_ms) < TEENSY_LINK_TIMEOUT_MS);
+    if (!linked) return GF_OFFLINE;
+    switch (g_robot_state) {
+        case RS_STARTUP:     return GF_STARTUP;
+        case RS_CALIBRATION: return GF_CALIB;
+        case RS_STANDBY:     return GF_STANDBY;
+        case RS_RUNNING:     return GF_RUNNING;
+        case RS_ESTOP:       return GF_ESTOP;
+        case RS_MANUAL:      return GF_MANUAL;
+        case RS_CMD_REJECT:  return GF_REJECT;
+        case RS_JUMPING:     return GF_JUMP;
+        case RS_STANDING_UP: return GF_STANDUP;
+        case RS_DISARMING:   return GF_DISARM;
+        default:             return GF_STANDBY;
+    }
+}
+
 static void switch_personality(DisplayPersonality p) {
     if (p == g_display_personality) return;
 
@@ -2175,6 +2205,9 @@ static void switch_personality(DisplayPersonality p) {
             eye_sprite.deleteSprite();
             mouth_sprite.deleteSprite();
             break;
+        case PERS_GLACIER:
+            glacier_face_end();
+            break;
     }
 
     g_display_personality = p;
@@ -2183,6 +2216,7 @@ static void switch_personality(DisplayPersonality p) {
     switch (p) {
         case PERS_ENGINEERING: initEngineeringDisplay(); break;
         case PERS_FACE:        initFaceDisplay();        break;
+        case PERS_GLACIER:     initGlacierDisplay();     break;
     }
     g_display_dirty = true;
 }
@@ -2192,6 +2226,7 @@ static void initDisplay() {
     switch (g_display_personality) {
         case PERS_ENGINEERING: initEngineeringDisplay(); break;
         case PERS_FACE:        initFaceDisplay();        break;
+        case PERS_GLACIER:     initGlacierDisplay();     break;
     }
 }
 
@@ -2457,6 +2492,10 @@ static void update_face_display() {
 static void update_display() {
     if (g_display_personality == PERS_FACE) {
         update_face_display();
+        return;
+    }
+    if (g_display_personality == PERS_GLACIER) {   // ~30 fps via display_task's 33 ms gate
+        glacier_face_update(glacier_state_now(), millis());
         return;
     }
 
